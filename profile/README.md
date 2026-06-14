@@ -29,8 +29,31 @@ The Colliery structures its tools by the processing stages of raw digital coal:
 | Project | Stage | Status | Concept |
 | :--- | :--- | :--- | :--- |
 | **[CoalMine](https://github.com/HetCreep/CoalMine)** | *Extraction* | **Live** (`v3.7.1`) | Nine quality-**canary** skills (code-health, grounding, supply-chain, resilience, observability, testability, scaling, drift, completeness) that equip agents for raw, safe code extraction. |
-| **[CoalTipple](https://github.com/TheColliery/CoalTipple)** | *Sorting* | **Live** (`v1.0.0`, early) | A model/effort **router**: **delegation** (down, to save tokens) and **escalation** (up, for quality), a `qualityBar` staircase, and a fail-safe model-ranking **Lock**. Built and dogfooded on Claude Code. |
+| **[CoalTipple](https://github.com/TheColliery/CoalTipple)** | *Sorting* | **Live** (`v1.0.1`, early) | A model/effort **router**: **delegation** (down, to save tokens) and **escalation** (up, for quality), a `qualityBar` staircase, and a fail-safe model-ranking **Lock**. Built and dogfooded on Claude Code. |
 | **CoalFace** | *Active Front* | **Design** | An agent swarming and concurrent orchestration engine that splits a fixed token budget into parallel workers without logical collisions. *(Not yet public.)* |
+
+---
+
+## 📦 Install — pick your DLC
+
+Each tool installs on its own, or grab them together — like choosing DLC on a store page: take the whole pack, or just the pieces you want.
+
+**One-step selector** (needs `node` + `git` on PATH; the `claude` CLI for the CoalMine plugin):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/TheColliery/.github/main/install.mjs -o colliery-install.mjs
+node colliery-install.mjs all     # the whole suite
+node colliery-install.mjs 2       # just CoalTipple
+node colliery-install.mjs 1 2     # CoalMine + CoalTipple
+```
+
+**Or install each tool directly** — each repo's README has the authoritative, always-current steps:
+
+| # | Tool | How |
+| :--- | :--- | :--- |
+| 1 | **[CoalMine](https://github.com/HetCreep/CoalMine)** | a Claude Code **plugin** — `claude plugin install coalmine@coalmine` |
+| 2 | **[CoalTipple](https://github.com/TheColliery/CoalTipple)** | a **skill** — `git clone` then `node CoalTipple/scripts/install.mjs claude` |
+| 3 | CoalFace | *not yet public* |
 
 ---
 
