@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./thecolliery_banner.png" width="50%" alt="TheColliery Banner">
+  <img src="./thecolliery_banner.png" width="25%" alt="TheColliery Banner">
 </p>
 
 <p align="center">
