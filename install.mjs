@@ -10,11 +10,8 @@
 //
 // The authoritative, always-current install steps for each tool live in that
 // tool's own README; this runs the same commands. Needs node + git on PATH, and
-// (for CoalMine, a Claude Code plugin) the `claude` CLI.
+// (for the CoalMine and CoalTipple plugins) the `claude` CLI.
 import { spawnSync } from 'node:child_process';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 
 const sh = process.platform === 'win32';
 function run(cmd, args) {
@@ -28,11 +25,10 @@ function installCoalMine() {
   return run('claude', ['plugin', 'install', 'coalmine@coalmine']) && added;
 }
 function installCoalTipple() {
-  // CoalTipple ships as source: clone it, then run its own global installer.
-  const dir = path.join(os.tmpdir(), 'thecolliery-coaltipple-src');
-  try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
-  if (!run('git', ['clone', '--depth', '1', 'https://github.com/TheColliery/CoalTipple.git', dir])) return false;
-  return run('node', [path.join(dir, 'scripts', 'install.mjs'), 'claude']);
+  // CoalTipple ships as a Claude Code plugin (marketplace) — see its README; install.mjs
+  // remains in the repo for non-Claude agents.
+  const added = run('claude', ['plugin', 'marketplace', 'add', 'TheColliery/CoalTipple']);
+  return run('claude', ['plugin', 'install', 'coaltipple@coaltipple']) && added;
 }
 
 const DLC = [

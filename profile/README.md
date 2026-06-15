@@ -28,8 +28,8 @@ The Colliery structures its tools by the processing stages of raw digital coal:
 
 | Project | Stage | Status | Concept |
 | :--- | :--- | :--- | :--- |
-| **[CoalMine](https://github.com/HetCreep/CoalMine)** | *Extraction* | **Live** (`v3.7.1`) | Nine quality-**canary** skills (code-health, grounding, supply-chain, resilience, observability, testability, scaling, drift, completeness) that equip agents for raw, safe code extraction. |
-| **[CoalTipple](https://github.com/TheColliery/CoalTipple)** | *Sorting* | **Live** (`v1.0.1`, early) | A model/effort **router**: **delegation** (down, to save tokens) and **escalation** (up, for quality), a `qualityBar` staircase, and a fail-safe model-ranking **Lock**. Built and dogfooded on Claude Code. |
+| **[CoalMine](https://github.com/HetCreep/CoalMine)** | *Extraction* | **Live** (`v3.7.2`) | Nine quality-**canary** skills (code-health, grounding, supply-chain, resilience, observability, testability, scaling, drift, completeness) that equip agents for raw, safe code extraction. |
+| **[CoalTipple](https://github.com/TheColliery/CoalTipple)** | *Sorting* | **Live** (`v1.0.2`, early) | A model/effort **router**: **delegation** (down, to save tokens) and **escalation** (up, for quality), a `qualityBar` staircase, and a fail-safe model-ranking **Lock**. Built and validated in real use on Claude Code. |
 | **CoalFace** | *Active Front* | **Design** | An agent swarming and concurrent orchestration engine that splits a fixed token budget into parallel workers without logical collisions. *(Not yet public.)* |
 
 ---
@@ -38,7 +38,7 @@ The Colliery structures its tools by the processing stages of raw digital coal:
 
 Each tool installs on its own, or grab them together — like choosing DLC on a store page: take the whole pack, or just the pieces you want.
 
-**One-step selector** (needs `node` + `git` on PATH; the `claude` CLI for the CoalMine plugin):
+**One-step selector** (needs `node` + `git` on PATH; the `claude` CLI for the plugins):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/TheColliery/.github/main/install.mjs -o colliery-install.mjs
@@ -52,18 +52,18 @@ node colliery-install.mjs 1 2     # CoalMine + CoalTipple
 | # | Tool | How |
 | :--- | :--- | :--- |
 | 1 | **[CoalMine](https://github.com/HetCreep/CoalMine)** | a Claude Code **plugin** — `claude plugin install coalmine@coalmine` |
-| 2 | **[CoalTipple](https://github.com/TheColliery/CoalTipple)** | a **skill** — `git clone` then `node CoalTipple/scripts/install.mjs claude` |
+| 2 | **[CoalTipple](https://github.com/TheColliery/CoalTipple)** | a Claude Code **plugin** — `claude plugin marketplace add TheColliery/CoalTipple` then `claude plugin install coaltipple@coaltipple` (or `install.mjs` for other agents) |
 | 3 | CoalFace | *not yet public* |
 
 ---
 
 ## 📜 The 5 Doctrine Layers
 
-Every tool inside **TheColliery** is governed by our core constitution:
+Every tool inside **TheColliery** is governed by our core constitution — the **[full doctrine](https://github.com/TheColliery/.github/blob/main/DESIGN-PRINCIPLES.md)** spells out every Phoenix-13 and Quantum-11 point. The lines below are one-line digests:
 
 1. 🌐 **Works in Every Mine (Cross-Agent):** Vendor-agnostic universality — runs on Claude, Gemini, Cline, Cursor, Codex, and custom frameworks.
-2. 🦅 **Phoenix 13 Compliance:** Immortal hooks — silent failure, zero external dependencies, sandboxed, deterministic, and network-free.
-3. 🔬 **Quantum 11 Performance:** Maximum output, zero visible errors, and consent-gated updates.
+2. 🦅 **Phoenix 13 Compliance:** Immortal hooks, all **13** commandments — fail-silent · zero-dependency · zero-latency · zero-garbage · zero-side-effects · stateless · offline · deterministic · portable · sandboxed · future-proof · self-healing · zero-noise.
+3. 🔬 **Quantum 11 Performance:** All **11** principles — maximum output · zero visible errors · single brand · minimum power + consent · essential accessories · error correction · determinism · isolation · measurement · trust · entanglement.
 4. 🛡️ **Antivirus/ESET Heuristics:** Adaptive freshness checks, signature validation, and secure credential handling.
 5. 🔌 **Single Power Button:** Absolute minimal setup — a single command installs and runs the conductor.
 
