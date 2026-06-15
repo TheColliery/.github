@@ -30,7 +30,7 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add profile/README.md
+          git add profile/README.md README.md
           if ! git diff --cached --quiet; then
             git commit -m "ci: update traffic stats badges"
             git push origin main

@@ -31,6 +31,38 @@ function formatStat(num) {
   return `${num}+`;
 }
 
+function updateFileStats(filePath, stats) {
+  try {
+    let content = readFileSync(filePath, 'utf8');
+
+    // Replace global combined badges
+    const globalDownloadsRegex = /Downloads-[0-9a-zA-Z.%+]+-orange/g;
+    const globalDevelopersRegex = /Developers-[0-9a-zA-Z.%+]+-brightgreen/g;
+    
+    content = content.replace(globalDownloadsRegex, `Downloads-${encodeURIComponent(stats.combinedClones + ' / 14d')}-orange`);
+    content = content.replace(globalDevelopersRegex, `Developers-${encodeURIComponent(stats.combinedUniques + ' / 14d')}-brightgreen`);
+
+    // Replace CoalMine badges
+    const mineDownloadsRegex = /CoalMine_Downloads-[0-9a-zA-Z.%+]+-orange/g;
+    const mineDevelopersRegex = /CoalMine_Developers-[0-9a-zA-Z.%+]+-brightgreen/g;
+    
+    content = content.replace(mineDownloadsRegex, `CoalMine_Downloads-${encodeURIComponent(stats.mineClones + ' / 14d')}-orange`);
+    content = content.replace(mineDevelopersRegex, `CoalMine_Developers-${encodeURIComponent(stats.mineUniques + ' / 14d')}-brightgreen`);
+
+    // Replace CoalTipple badges
+    const tippleDownloadsRegex = /CoalTipple_Downloads-[0-9a-zA-Z.%+]+-orange/g;
+    const tippleDevelopersRegex = /CoalTipple_Developers-[0-9a-zA-Z.%+]+-brightgreen/g;
+
+    content = content.replace(tippleDownloadsRegex, `CoalTipple_Downloads-${encodeURIComponent(stats.tippleClones + ' / 14d')}-orange`);
+    content = content.replace(tippleDevelopersRegex, `CoalTipple_Developers-${encodeURIComponent(stats.tippleUniques + ' / 14d')}-brightgreen`);
+
+    writeFileSync(filePath, content, 'utf8');
+    console.log(`Updated stats in ${filePath} successfully.`);
+  } catch (err) {
+    console.error(`Error updating stats in ${filePath}:`, err.message);
+  }
+}
+
 async function main() {
   try {
     const mineData = await fetchRepoClones('HetCreep/CoalMine');
@@ -39,28 +71,25 @@ async function main() {
     const totalClones = (mineData.count || 0) + (tippleData.count || 0);
     const totalUniques = (mineData.uniques || 0) + (tippleData.uniques || 0);
 
-    console.log(`Combined Clones (14d): ${totalClones}`);
-    console.log(`Combined Uniques (14d): ${totalUniques}`);
+    const stats = {
+      combinedClones: formatStat(totalClones),
+      combinedUniques: formatStat(totalUniques),
+      mineClones: formatStat(mineData.count || 0),
+      mineUniques: formatStat(mineData.uniques || 0),
+      tippleClones: formatStat(tippleData.count || 0),
+      tippleUniques: formatStat(tippleData.uniques || 0)
+    };
 
-    const readmePath = join(process.cwd(), 'profile', 'README.md');
-    let content = readFileSync(readmePath, 'utf8');
+    console.log(`CoalMine - Clones: ${stats.mineClones}, Uniques: ${stats.mineUniques}`);
+    console.log(`CoalTipple - Clones: ${stats.tippleClones}, Uniques: ${stats.tippleUniques}`);
+    console.log(`Combined - Clones: ${stats.combinedClones}, Uniques: ${stats.combinedUniques}`);
 
-    const formattedClones = formatStat(totalClones);
-    const formattedUniques = formatStat(totalUniques);
+    // Update both profile/README.md and root README.md
+    const profileReadmePath = join(process.cwd(), 'profile', 'README.md');
+    const rootReadmePath = join(process.cwd(), 'README.md');
 
-    // Replace badge parameters using regex
-    // e.g. Downloads-1.4k%2B%20%2F%2014d-orange
-    const downloadsRegex = /Downloads-[0-9a-zA-Z.%+]+-orange/;
-    const developersRegex = /Developers-[0-9a-zA-Z.%+]+-brightgreen/;
-
-    const newDownloadsBadge = `Downloads-${encodeURIComponent(formattedClones + ' / 14d')}-orange`;
-    const newDevelopersBadge = `Developers-${encodeURIComponent(formattedUniques + ' / 14d')}-brightgreen`;
-
-    content = content.replace(downloadsRegex, newDownloadsBadge);
-    content = content.replace(developersRegex, newDevelopersBadge);
-
-    writeFileSync(readmePath, content, 'utf8');
-    console.log('README.md updated successfully with the latest stats.');
+    updateFileStats(profileReadmePath, stats);
+    updateFileStats(rootReadmePath, stats);
   } catch (error) {
     console.error('Execution failed:', error.message);
     process.exit(1);
