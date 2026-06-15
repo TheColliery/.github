@@ -8,6 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Suite-TheColliery-blueviolet?style=for-the-badge" alt="Suite">
+  <img src="https://img.shields.io/badge/Downloads-1.4k%2B%20%2F%2014d-orange?style=for-the-badge" alt="Downloads">
   <img src="https://img.shields.io/badge/Works_With-Any_Agent-cyan?style=for-the-badge" alt="Any Agent">
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License">
 </p>
@@ -28,9 +29,11 @@ The Colliery structures its tools by the processing stages of raw digital coal:
 
 | Project | Stage | Status | Concept |
 | :--- | :--- | :--- | :--- |
-| **[CoalMine](https://github.com/HetCreep/CoalMine)** | *Extraction* | **Live** (`v3.7.2`) | Nine quality-**canary** skills (code-health, grounding, supply-chain, resilience, observability, testability, scaling, drift, completeness) that equip agents for raw, safe code extraction. |
-| **[CoalTipple](https://github.com/TheColliery/CoalTipple)** | *Sorting* | **Live** (`v1.0.2`, early) | A model/effort **router**: **delegation** (down, to save tokens) and **escalation** (up, for quality), a `qualityBar` staircase, and a fail-safe model-ranking **Lock**. Built and validated in real use on Claude Code. |
+| **[CoalMine](https://github.com/HetCreep/CoalMine)** | *Extraction* | **Live** (`v3.7.3`) | Nine quality-**canary** skills (code-health, grounding, supply-chain, resilience, observability, testability, scaling, drift, completeness) that equip agents for raw, safe code extraction. |
+| **[CoalTipple](https://github.com/TheColliery/CoalTipple)** | *Sorting* | **Live** (`v1.0.3`, early) | A model/effort **router**: **delegation** (down, to save tokens) and **escalation** (up, for quality), a `qualityBar` staircase, and a fail-safe model-ranking **Lock**. Built and validated in real use on Claude Code. |
+| **CoalHearth** | *Session Storage* | **Design** | An ephemeral session memory and warm-resume engine that protects token budgets and logs handover states across session limits. *(Not yet public.)* |
 | **CoalFace** | *Active Front* | **Design** | An agent swarming and concurrent orchestration engine that splits a fixed token budget into parallel workers without logical collisions. *(Not yet public.)* |
+| **CoalBoard** | *Governance* | **Design** | A multi-agent consensus and debate engine (3 workers + 1 judge) that runs parallel checks on high-precision tasks before committing changes. *(Not yet public.)* |
 
 ---
 
@@ -53,7 +56,7 @@ node colliery-install.mjs 1 2     # CoalMine + CoalTipple
 | :--- | :--- | :--- |
 | 1 | **[CoalMine](https://github.com/HetCreep/CoalMine)** | a Claude Code **plugin** — `claude plugin install coalmine@coalmine` |
 | 2 | **[CoalTipple](https://github.com/TheColliery/CoalTipple)** | a Claude Code **plugin** — `claude plugin marketplace add TheColliery/CoalTipple` then `claude plugin install coaltipple@coaltipple` (or `install.mjs` for other agents) |
-| 3 | CoalFace | *not yet public* |
+| 3 | CoalHearth / CoalFace / CoalBoard | *not yet public* |
 
 ---
 
