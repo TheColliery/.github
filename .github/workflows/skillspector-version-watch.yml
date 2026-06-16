@@ -1,0 +1,45 @@
+name: skillspector-version-watch
+
+# SkillSpector ships versions via "Sync OSS release snapshot" commits, NOT GitHub
+# Releases or tags -- so a Release-watcher would never fire. This watches its
+# pyproject.toml `version` and opens an issue when it moves past the version we
+# last scanned with (kept in .skillspector-version). Generalizes to any
+# referenced tool: add another step that diffs a pinned baseline vs an upstream file.
+
+on:
+  schedule:
+    - cron: '30 1 * * 1'   # Mondays 01:30 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - name: Compare SkillSpector version vs the version we scanned with
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          upstream=$(curl -fsSL https://raw.githubusercontent.com/NVIDIA/skillspector/main/pyproject.toml 2>/dev/null \
+            | grep -m1 -E '^[[:space:]]*version[[:space:]]*=' \
+            | sed -E 's/.*"([^"]+)".*/\1/' || true)
+          pinned=$(tr -d '[:space:]' < .skillspector-version 2>/dev/null || true)
+          echo "upstream='$upstream'  pinned='$pinned'"
+          if [ -z "$upstream" ] || [ -z "$pinned" ]; then
+            echo "version unreadable -- skipping (no false alert)"; exit 0
+          fi
+          if [ "$upstream" = "$pinned" ]; then
+            echo "up to date ($pinned)"; exit 0
+          fi
+          title="SkillSpector $upstream is out (we scanned with $pinned) -- re-scan + re-sync SECURITY.md"
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "in:title SkillSpector $upstream" --json number --jq 'length')
+          if [ "${open:-0}" -gt 0 ]; then
+            echo "issue already open for $upstream"; exit 0
+          fi
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body \
+          "NVIDIA/skillspector is now at \`$upstream\` (its pyproject.toml); CoalMine and CoalTipple \`SECURITY.md\` cite \`$pinned\`. Action: re-run the SkillSpector static scan with $upstream, update the score + findings in each SECURITY.md (the consent-gated version-transition marker flags this), and bump \`.skillspector-version\` to $upstream. SkillSpector ships versions via 'Sync OSS release snapshot' commits, not Releases/tags -- this workflow watches its pyproject.toml."
