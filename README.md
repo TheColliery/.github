@@ -56,15 +56,15 @@ Evaluates code defect detection recall and precision on 16 test fixtures (12 wit
 ### 2. CoalTipple (Output-Quality Escalation)
 Evaluates dynamic model escalation and output correctness across five high-complexity domains (Crypto, Proof, Research, Legal, Voice).
 
-**Escalation Success & Correctness (Run: 2026-06-15, CoalTipple v1.0.3):**
-| Main Model | Routing Escalation | Task Deliverables (T1–T5) | Pass Rate |
+**Escalation Success & Correctness (Run: 2026-06-15, CoalTipple v1.0.3, on Claude Code):**
+| Main Model | Routing Escalation | Task Deliverables (T1-T5) | Pass Rate |
 |---|---|---|---|
-| `gemini-1.5-flash` (Haiku equivalent) | ➡️ `claude-3-5-sonnet` (+1 Rung) | T1, T2, T3, T4, T5 | **100%** (5/5) |
-| `claude-3-5-sonnet` (Sonnet equivalent) | ➡️ `claude-3-opus` (+1 Rung) | T1, T2, T3, T4, T5 | **100%** (5/5) |
-| `claude-3-opus-4.6` (Opus equivalent) | ➡️ Self-inline (Top tier) | T1, T2, T3, T4, T5 | **100%** (5/5) |
-| `claude-3-opus-4.7` (Opus equivalent) | ➡️ Self-inline (Top tier) | T1, T2, T3, T4, T5 | **100%** (5/5) |
+| `Haiku` | -> `Sonnet` (+1 rung) | T1, T2, T3, T4, T5 | **100%** (5/5) |
+| `Sonnet` | -> `Opus` (+1 rung) | T1, T2, T3, T4, T5 | **100%** (5/5) |
+| `Opus 4.6` | -> Self-inline (top tier) | T1, T2, T3, T4, T5 | **100%** (5/5) |
+| `Opus 4.7` | -> Self-inline (top tier) | T1, T2, T3, T4, T5 | **100%** (5/5) |
 
-*Total: 20/20 PASS deliverables generated correctly.*
+*Total: 20/20 PASS deliverables generated correctly (Fable/reasoning disabled, Opus = top tier). Source: [benchmarks/CoalTipple/RESULTS.md](benchmarks/CoalTipple/RESULTS.md).*
 
 ---
 
