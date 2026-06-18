@@ -34,7 +34,7 @@ The Colliery structures its tools by the processing stages of raw digital coal:
 | **[CoalTipple](https://github.com/TheColliery/CoalTipple)** | *Sorting* | **Live** ![ver](https://img.shields.io/github/v/tag/TheColliery/CoalTipple?sort=semver&label=&color=success&style=flat-square) | A model/effort **router**: **delegation** (down, to save tokens) and **escalation** (up, for quality), a `qualityBar` staircase, and a fail-safe model-ranking **Lock**. Built and validated in real use on Claude Code (across the 2.1.x line). |
 | **CoalHearth** | *Session Storage* | **Design** | An ephemeral session memory and warm-resume engine that protects token budgets and logs handover states across session limits. *(Not yet public.)* |
 | **CoalFace** | *Active Front* | **Design** | An agent swarming and concurrent orchestration engine that splits a fixed token budget into parallel workers without logical collisions. *(Not yet public.)* |
-| **CoalBoard** | *Governance* | **Design** | A multi-agent consensus and debate engine (3 workers + 1 judge) that runs parallel checks on high-precision tasks before committing changes. *(Not yet public.)* |
+| **[CoalBoard](https://github.com/TheColliery/CoalBoard)** | *Governance* | **Live** ![ver](https://img.shields.io/github/v/tag/TheColliery/CoalBoard?sort=semver&include_prereleases&label=&color=orange&style=flat-square), beta | A consensus & debate board: on an error-not-allowed task, with consent, diverse epistemic lenses debate in parallel, a judge synthesizes on VERIFIED inputs, an independent solver breaks ties, and the human signs off. Bounded cost + zero-breakage. |
 
 ---
 
@@ -57,7 +57,8 @@ node colliery-install.mjs 1 2     # CoalMine + CoalTipple
 | :--- | :--- | :--- |
 | 1 | **[CoalMine](https://github.com/HetCreep/CoalMine)** | a Claude Code **plugin** — `claude plugin install coalmine@coalmine` |
 | 2 | **[CoalTipple](https://github.com/TheColliery/CoalTipple)** | a Claude Code **plugin** — `claude plugin marketplace add TheColliery/CoalTipple` then `claude plugin install coaltipple@coaltipple` (or `install.mjs` for other agents) |
-| 3 | CoalHearth / CoalFace / CoalBoard | *not yet public* |
+| 3 | **[CoalBoard](https://github.com/TheColliery/CoalBoard)** | a Claude Code **plugin** (beta) — `claude plugin marketplace add TheColliery/CoalBoard` then `claude plugin install coalboard@coalboard` |
+| 4 | CoalHearth / CoalFace | *not yet public* |
 
 ---
 
