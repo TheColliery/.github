@@ -6,7 +6,7 @@ This document outlines the design standards for Node.js-based terminal hooks, gi
 
 ## 1. Exception Isolation & Graceful Fallbacks
 
-- **No Blocking Failures:** All hooks must wrap their core execution logic in try-catch blocks. If a hook fails (e.g., due to file system permission issues or missing dependencies), it must log a warning and exit gracefully with code `0`. It must never cause the parent process (git, CLI, or agent) to fail or abort.
+- **No Blocking Failures:** All hooks must wrap their core execution logic in try-catch blocks. If a hook fails (e.g., due to file system permission issues or missing dependencies), it must SWALLOW the error and exit gracefully with code `0`, producing NO output (per Phoenix #13 — Zero Noise; a logged warning would violate it, and the shipped hooks are silent). It must never cause the parent process (git, CLI, or agent) to fail or abort.
 - **Graceful degradation:** If external binaries (e.g., `git`, `node`, or stack-specific compilers) are missing or fail, the script should fallback to reporting mode or a safe default state rather than throwing unhandled exceptions.
 
 ## 2. Execution Latency & Performance
@@ -23,8 +23,8 @@ This document outlines the design standards for Node.js-based terminal hooks, gi
 
 ## 4. Output Formatting & Verbosity
 
-- **No Log Clutter:** Minimize terminal output during normal operation. Only log warnings or actionable suggestions.
-- **Clear Indicators:** Use clean, standard prefixes (e.g., `[CoalMine]`) when logging from hooks so the user understands where the message originated.
+- **No Log Clutter:** Produce NO output during normal operation — the hooks are silent (Phoenix #13). The ONLY sanctioned outputs are the two channels named in §13 (the Stop hook's structured JSON block when an action is required, and SessionStart context injection); never emit incidental logs, warnings, or status lines.
+- **Clear Indicators:** When a hook DOES emit on one of those sanctioned channels, use a clean, standard prefix (e.g., `[CoalMine]`) so the user knows the source.
 
 ## 5. Localization & Adaptive Language
 
@@ -46,7 +46,7 @@ All CoalMine hooks and canary skill scripts must conform to the Phoenix Canary p
 | 7 | ไม่พึ่งพาใคร | **Offline-capable** | No network calls ever. All lookups must be local filesystem only. |
 | 8 | ไม่กลายพันธุ์ | **Deterministic** | Same input → same output, always. No random IDs, no time-based branching outside timestamp stamps. |
 | 9 | ไม่จำกัดร่าง | **Portable** | Runs on Windows, macOS, Linux without modification. Use `path.join()`, `os.homedir()`, `os.tmpdir()`. |
-| 10 | ไม่ล้ำเส้น | **Sandbox Compliant** | Never read or write outside `os.tmpdir()` (session state) and `os.homedir()/.claude/` (mode config). |
+| 10 | ไม่ล้ำเส้น | **Sandbox Compliant** | Never read or write outside `os.tmpdir()` (session state) and `os.homedir()/.claude/` (mode config) — EXCEPT reading the project config (`.coalmine.json` / `.coaltipple.json` / `.coalboard.json`) from the project git root. (Writes stay strictly inside the two sandbox roots.) |
 | 11 | ไม่แก่ตัว | **Future-proof** | Use stable Node.js built-ins only. No deprecated APIs. Compatible with Node 18+. |
 | 12 | ไม่ต้องการผู้ดูแล | **Self-healing** | On any unexpected state (corrupt temp file, missing session ID), silently skip and return cleanly. |
 | 13 | ไม่ส่งเสียง | **Zero Noise** | Hooks output NOTHING to stdout/stderr except the two sanctioned channels: the Stop hook's structured JSON block when an action is required, and SessionStart context injection (conductor). Everything else is silent. |

@@ -33,6 +33,11 @@ jobs:
           if [ -z "$upstream" ] || [ -z "$pinned" ]; then
             echo "version unreadable -- skipping (no false alert)"; exit 0
           fi
+          # $upstream comes from a mutable external file -> validate it is a plain numeric
+          # version BEFORE it reaches any gh argument (no flag/quote/newline injection).
+          if ! [[ "$upstream" =~ ^[0-9]+(\.[0-9]+){1,3}$ ]]; then
+            echo "upstream version failed the numeric format check ('$upstream') -- skipping"; exit 0
+          fi
           if [ "$upstream" = "$pinned" ]; then
             echo "up to date ($pinned)"; exit 0
           fi

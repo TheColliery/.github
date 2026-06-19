@@ -5,7 +5,7 @@ The eleven binding principles of the **TheColliery** series. Every skill, hook, 
 | # | Principle | Meaning across the series |
 |---|---|---|
 | 1 | **Maximum performance** | Detection/routing depth and accuracy are uniform across every tier, platform, and tool. Per-stack/per-platform procedures live in `references/`; behavior is rubric-driven, never mood-driven. |
-| 2 | **Zero visible errors** | Bugs die before users see them: unit + integration tests and a two-direction verify gate run on every commit and push; each tool scans its own code. |
+| 2 | **Zero visible errors** | Bugs die before users see them: unit + integration tests and a two-direction verify gate run before every release — via local pre-commit/pre-push hooks where installed (CoalMine), a manual release gate elsewhere (CoalTipple, CoalBoard), plus CI on every push to `main` and every PR; each tool scans its own code. |
 | 3 | **Single brand, single color, single company** | Total internal consistency — one naming pattern, one section structure, one voice, and exactly one source of truth for every fact (a config schema, a keyword list, a render core). No two definitions of the same thing. |
 | 4 | **Minimum necessary power** | Tokens are spent only when and where needed: lean always-loaded surfaces, progressive disclosure, tiers that scale cost to scope. **Spending the user's tokens always requires consent** — per-instance (a question menu) or standing (capped, opt-out-able). A silent expensive operation is theft, not a feature. |
 | 5 | **Only essential accessories** | Every auxiliary file must earn its place. Anything unused, duplicated, or decorative is removed — an accessory that ships is one someone must maintain and trust. |

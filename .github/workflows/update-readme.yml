@@ -5,12 +5,11 @@ on:
     - cron: '15 0 * * *' # Daily at 00:15 UTC (07:15 AM Thailand time)
   workflow_dispatch: # Allows manual trigger from the GitHub Actions UI
 
-permissions:
-  contents: write
-
 jobs:
   update-stats:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # least-privilege: granted at the JOB, not the whole workflow
     steps:
       - name: Checkout Repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -22,8 +21,10 @@ jobs:
 
       - name: Run Stats Update Script
         env:
+          # Only PAT_TOKEN — the traffic API needs a user PAT; GITHUB_TOKEN can't satisfy it
+          # (403), so exposing it only enabled a silent wrong-token fallback. Missing PAT now
+          # fails loud in the script. The push step below uses checkout's own git auth.
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/update-readme.mjs
 
       - name: Commit and Push Changes
