@@ -9,7 +9,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Suite-TheColliery-blueviolet?style=for-the-badge" alt="Suite">
   <img src="https://img.shields.io/badge/Downloads-2.5k%2B%20%2F%2014d-orange?style=for-the-badge" alt="Downloads">
-  <img src="https://img.shields.io/badge/Developers-562%2B%20%2F%2014d-brightgreen?style=for-the-badge" alt="Developers">
+  <img src="https://img.shields.io/badge/Developers-570%2B%20%2F%2014d-brightgreen?style=for-the-badge" alt="Developers">
   <img src="https://img.shields.io/badge/Works_With-Any_Agent-cyan?style=for-the-badge" alt="Any Agent">
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License">
 </p>
