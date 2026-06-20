@@ -46,8 +46,15 @@ for (const f of fixtures) {
   }
 }
 
+// ── args ──────────────────────────────────────────────────────────────────────
+// `--write` is opt-in: without it the scorer only PRINTS the report, so a scoring
+// run never clobbers the committed RESULTS.md. The first non-flag arg = the run file.
+const argv = process.argv.slice(2);
+const writeResults = argv.includes('--write');
+const positional = argv.filter((a) => !a.startsWith('--'));
+
 // ── load the run ─────────────────────────────────────────────────────────────
-let runPath = process.argv[2];
+let runPath = positional[0];
 if (!runPath) {
   if (!fs.existsSync(RESULTS_DIR)) die(`no results dir at ${RESULTS_DIR} — pass a run file`);
   const runs = fs.readdirSync(RESULTS_DIR).filter((x) => x.endsWith('.json')).sort();
@@ -88,7 +95,10 @@ for (const f of fixtures) {
   for (const want of expected[f]) {
     const hit = pool.find((g) =>
       !g.used && g.fixture === f && g.file === want.file &&
-      g.category === want.category && Math.abs((g.line ?? 0) - want.line) <= LINE_TOLERANCE);
+      g.category === want.category &&
+      // A finding missing `line` is NOT a match — coercing it to 0 would falsely
+      // match defects planted at lines 1-3 (within ±tolerance of 0) and inflate recall.
+      Number.isFinite(g.line) && Math.abs(g.line - want.line) <= LINE_TOLERANCE);
     if (hit) {
       hit.used = true;
       tp++; cat(want.category).tp++;
@@ -144,19 +154,25 @@ lines.push('');
 lines.push(`${fixtures.length} fixtures (${fixtures.length - decoys} with planted, line-labeled defects · ${decoys} clean decoys). The agent runs rot-canary QUICK over each fixture and emits structured findings; this scorer matches them mechanically (fixture + file + category, line ±${LINE_TOLERANCE}) — no judgment calls at scoring time. Results are model-dependent, like antivirus detection rates are engine-dependent: re-run on model or skill changes and compare. Caveat for this baseline: fixtures and the first run were authored in the same project — treat the numbers as a regression floor, not an independent benchmark.`);
 lines.push('');
 
-// Preserve any hand-authored sections that follow the scored block.
-// Convention: sections starting at "## Cross-engine" (or any H2 after
-// "## Methodology") are hand-authored and must not be clobbered on re-run.
-const resultsPath = path.join(repo, 'RESULTS.md');
-const HAND_AUTHORED_MARKER = /^## Cross-engine\b/m;
-let tail = '';
-if (fs.existsSync(resultsPath)) {
-  const existing = fs.readFileSync(resultsPath, 'utf8');
-  const m = HAND_AUTHORED_MARKER.exec(existing);
-  if (m) tail = '\n' + existing.slice(m.index);
-}
-fs.writeFileSync(resultsPath, lines.join('\n') + tail);
 console.log(lines.slice(2, 12).join('\n'));
-console.log(`\nWrote RESULTS.md`);
+// The RESULTS.md rewrite is OPT-IN (`--write`) — a default scoring run prints the
+// report only and never clobbers the committed RESULTS.md.
+if (writeResults) {
+  // Preserve any hand-authored sections that follow the scored block.
+  // Convention: sections starting at "## Cross-engine" (or any H2 after
+  // "## Methodology") are hand-authored and must not be clobbered on re-run.
+  const resultsPath = path.join(repo, 'RESULTS.md');
+  const HAND_AUTHORED_MARKER = /^## Cross-engine\b/m;
+  let tail = '';
+  if (fs.existsSync(resultsPath)) {
+    const existing = fs.readFileSync(resultsPath, 'utf8');
+    const m = HAND_AUTHORED_MARKER.exec(existing);
+    if (m) tail = '\n' + existing.slice(m.index);
+  }
+  fs.writeFileSync(resultsPath, lines.join('\n') + tail);
+  console.log(`\nWrote RESULTS.md`);
+} else {
+  console.log(`\n(report only — pass --write to update RESULTS.md)`);
+}
 // Exit 0 even with misses/false-positives — the scorer is informational; the
 // numbers in RESULTS.md are the judgment, not the exit code.

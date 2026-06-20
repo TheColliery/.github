@@ -19,21 +19,23 @@ function run(cmd, args) {
   return spawnSync(cmd, args, { stdio: 'inherit', shell: sh }).status === 0;
 }
 
+// install runs ONLY if the marketplace add succeeded — `&&` short-circuits, so a
+// failed add never reaches install, and the function still returns false (→ exit 1).
 function installCoalMine() {
   // CoalMine ships as a Claude Code plugin (marketplace git URL) — see its README.
-  const added = run('claude', ['plugin', 'marketplace', 'add', 'HetCreep/CoalMine']);
-  return run('claude', ['plugin', 'install', 'coalmine@coalmine']) && added;
+  return run('claude', ['plugin', 'marketplace', 'add', 'HetCreep/CoalMine'])
+    && run('claude', ['plugin', 'install', 'coalmine@coalmine']);
 }
 function installCoalTipple() {
   // CoalTipple ships as a Claude Code plugin (marketplace) — see its README; install.mjs
   // remains in the repo for non-Claude agents.
-  const added = run('claude', ['plugin', 'marketplace', 'add', 'TheColliery/CoalTipple']);
-  return run('claude', ['plugin', 'install', 'coaltipple@coaltipple']) && added;
+  return run('claude', ['plugin', 'marketplace', 'add', 'TheColliery/CoalTipple'])
+    && run('claude', ['plugin', 'install', 'coaltipple@coaltipple']);
 }
 function installCoalBoard() {
   // CoalBoard ships as a Claude Code plugin (marketplace) — see its README.
-  const added = run('claude', ['plugin', 'marketplace', 'add', 'TheColliery/CoalBoard']);
-  return run('claude', ['plugin', 'install', 'coalboard@coalboard']) && added;
+  return run('claude', ['plugin', 'marketplace', 'add', 'TheColliery/CoalBoard'])
+    && run('claude', ['plugin', 'install', 'coalboard@coalboard']);
 }
 
 const DLC = [

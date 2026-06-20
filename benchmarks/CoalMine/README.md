@@ -24,7 +24,8 @@ benchmarks/CoalMine/
    silent-failure · input-boundary · doc-rot`.
 2. Save the run as `results/<YYYY-MM-DD>-<model>.json`:
    `{ "model": "...", "date": "...", "skillVersion": "...", "findings": [...] }`
-3. Score it: `node score.mjs` (newest run by default).
+3. Score it: `node score.mjs` (newest run by default) — prints the report.
+   Add `--write` to (re)generate `RESULTS.md`: `node score.mjs --write`.
 
 A match = same fixture + file + category, line within ±3. Severity is scored
 separately. Findings on decoys are false positives.

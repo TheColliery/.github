@@ -1,6 +1,6 @@
 # Hook Safety and Robustness Rules
 
-<!-- coalmine: verified 2026-06-12 · exemplar Claude Code hooks contract + husky · revalidate 90d -->
+<!-- coalmine: verified 2026-06-20 · exemplar Claude Code hooks contract (args exec-form) + husky · revalidate 90d -->
 
 This document outlines the design standards for Node.js-based terminal hooks, git hooks, and pre/post-tool execution scripts.
 
@@ -19,7 +19,7 @@ This document outlines the design standards for Node.js-based terminal hooks, gi
 
 - **Path Normalization:** Never hardcode directory separators (`/` or `\`). Always use Node's `path` library.
 - **Case-Insensitive Windows Path Checks:** Remember that Windows paths are case-insensitive. When comparing paths on `win32` platform (e.g., checking if a file is already in a list of touched files), normalize them to lowercase to avoid duplicate detections.
-- **Shell Escaping:** Properly escape file paths passed to child processes using platform-specific escaping rules (e.g., `cmd.exe` double-quotes vs PowerShell backticks vs bash single-quotes).
+- **Prefer the no-shell exec form over escaping:** When a hook spawns a child process with a dynamic path, pass arguments as an ARRAY to a no-shell spawn (Node `spawn(cmd, [args])` without `shell: true`; or a hook's `args: []` exec form) — a path containing quotes, `$`, or backticks then never reaches a shell parser. Per-platform hand-escaping (`cmd.exe` double-quotes vs PowerShell backticks vs bash single-quotes) is the FALLBACK only when a shell is unavoidable; it is error-prone and a common injection vector.
 
 ## 4. Output Formatting & Verbosity
 

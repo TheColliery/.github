@@ -9,11 +9,40 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 const [task, file] = process.argv.slice(2);
 const need = (f) => { if (!f) { console.error(`usage: node score.mjs ${task} <file>`); process.exit(1); } return f; };
 const readOrDie = (f) => { try { return fs.readFileSync(need(f), 'utf8'); } catch (e) { console.error(`cannot read ${f}: ${e.message}`); process.exit(1); } };
+
+// Import the candidate + run the three HMAC vectors in a SEPARATE node process,
+// returning only booleans. Keeps any module-level code in the submission OUT of
+// the scorer's own process. The child code touches no fs/net — it only imports
+// the submission (by file URL) and prints the three results as JSON.
+function runVectorsIsolated(absFile, v) {
+  const child = [
+    'const u = process.argv[1], v = JSON.parse(process.argv[2]);',
+    'const out = (o) => { process.stdout.write(JSON.stringify(o)); };',
+    'try {',
+    '  const m = await import(u);',
+    '  const fn = m.hmacVerify || (m.default && (m.default.hmacVerify || m.default)) || (typeof m === "function" ? m : null);',
+    '  if (typeof fn !== "function") { out({ error: "no hmacVerify export found" }); }',
+    '  else {',
+    '    const r = (k, msg, t) => { try { return fn(k, msg, t) === true; } catch { return null; } };',
+    '    out({ valid: r(v.key, v.msg, v.tag), tampered: r(v.key, v.msg, v.flip), short: r(v.key, v.msg, v.short) });',
+    '  }',
+    '} catch (e) { out({ error: "cannot import (" + e.message + ")" }); }',
+  ].join('\n');
+  const res = spawnSync(
+    process.execPath,
+    ['--input-type=module', '-e', child, pathToFileURL(absFile).href, JSON.stringify(v)],
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 10_000 },
+  );
+  if (res.error) return { error: `cannot run probe (${res.error.message})` };
+  if (res.status !== 0 && !res.stdout) return { error: `probe exited ${res.status}: ${(res.stderr || '').trim() || 'no output'}` };
+  try { return JSON.parse(res.stdout); } catch { return { error: `probe gave no parseable result: ${(res.stdout || res.stderr || '').trim()}` }; }
+}
 
 async function scoreT1(file) {
   const src = readOrDie(file);
@@ -24,22 +53,22 @@ async function scoreT1(file) {
   // false-positive); a var-stored naive compare has no timingSafeEqual, so the gate below catches it anyway.
   const rawEqualityOnTag = /\.digest\([^)]*\)\s*[!=]==/.test(src) || /[!=]==\s*[\w.]*\.digest\(/.test(src);
   // functional vectors
-  let fn = null;
-  try {
-    const mod = await import(pathToFileURL(path.resolve(file)).href);
-    fn = mod.hmacVerify || (mod.default && (mod.default.hmacVerify || mod.default)) || (typeof mod === 'function' ? mod : null); // ESM named | CJS module.exports.hmacVerify | default fn | module fn
-  } catch (e) { console.log(`T1 crypto: FAIL — cannot import (${e.message})`); process.exit(1); }
-  if (typeof fn !== 'function') { console.log('T1 crypto: FAIL — no hmacVerify export found'); process.exit(1); }
   const key = 'benchmark-secret-key', msg = 'the quick brown fox';
   const tag = crypto.createHmac('sha256', key).update(msg).digest('hex');
   const flip = tag.slice(0, -1) + (tag.slice(-1) === 'a' ? 'b' : 'a');
   const short = tag.slice(0, 32);
+  // Run the candidate's hmacVerify in an ISOLATED CHILD PROCESS, never via a
+  // top-level `await import()` in THIS process — a dynamic import executes the
+  // submission's module-level code in the scorer (arbitrary-code-execution).
+  // The child imports the submission, runs the three vectors, and prints ONLY
+  // the boolean results as JSON; the scorer reads that output as DATA. The child
+  // gets no stdin and a minimal env so the submission has nothing to lean on.
+  const probe = runVectorsIsolated(path.resolve(file), { key, msg, tag, flip, short });
   let functional = true; const notes = [];
-  try {
-    if (fn(key, msg, tag) !== true) { functional = false; notes.push('valid tag not accepted'); }
-    if (fn(key, msg, flip) !== false) { functional = false; notes.push('tampered tag not rejected'); }
-    if (fn(key, msg, short) !== false) { functional = false; notes.push('wrong-length tag not rejected (or threw)'); }
-  } catch (e) { functional = false; notes.push(`threw: ${e.message}`); }
+  if (probe.error) { console.log(`T1 crypto: FAIL — ${probe.error}`); process.exit(1); }
+  if (probe.valid !== true)    { functional = false; notes.push('valid tag not accepted'); }
+  if (probe.tampered !== false) { functional = false; notes.push('tampered tag not rejected'); }
+  if (probe.short !== false)    { functional = false; notes.push('wrong-length tag not rejected (or threw)'); }
   // An impl that mentions timingSafeEqual but still compares the tag with === leaks timing.
   // rawEqualityOnTag + usesTimingSafe = likely written in the same digest comparison, so FAIL.
   const pass = functional && usesTimingSafe && !rawEqualityOnTag;
