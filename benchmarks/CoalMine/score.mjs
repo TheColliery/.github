@@ -62,6 +62,19 @@ try {
 }
 if (!Array.isArray(run.findings)) die('run file has no findings[]');
 
+// ── validate run findings against known fixtures ─────────────────────────────
+// A finding whose fixture field matches no fixture dir is a bug or an orphan;
+// silently ignoring it inflates precision — fail-loud instead.
+const fixtureSet = new Set(fixtures);
+let unknownFixtureFail = false;
+for (const g of run.findings) {
+  if (!fixtureSet.has(g.fixture)) {
+    console.error(`FAIL: run finding references unknown fixture "${g.fixture}" (file: ${g.file ?? '?'})`);
+    unknownFixtureFail = true;
+  }
+}
+if (unknownFixtureFail) process.exit(1);
+
 // ── match ────────────────────────────────────────────────────────────────────
 const perCategory = {}; // cat → { tp, fn }
 const cat = (c) => (perCategory[c] ??= { tp: 0, fn: 0 });
@@ -131,7 +144,18 @@ lines.push('');
 lines.push(`${fixtures.length} fixtures (${fixtures.length - decoys} with planted, line-labeled defects · ${decoys} clean decoys). The agent runs rot-canary QUICK over each fixture and emits structured findings; this scorer matches them mechanically (fixture + file + category, line ±${LINE_TOLERANCE}) — no judgment calls at scoring time. Results are model-dependent, like antivirus detection rates are engine-dependent: re-run on model or skill changes and compare. Caveat for this baseline: fixtures and the first run were authored in the same project — treat the numbers as a regression floor, not an independent benchmark.`);
 lines.push('');
 
-fs.writeFileSync(path.join(repo, 'RESULTS.md'), lines.join('\n'));
+// Preserve any hand-authored sections that follow the scored block.
+// Convention: sections starting at "## Cross-engine" (or any H2 after
+// "## Methodology") are hand-authored and must not be clobbered on re-run.
+const resultsPath = path.join(repo, 'RESULTS.md');
+const HAND_AUTHORED_MARKER = /^## Cross-engine\b/m;
+let tail = '';
+if (fs.existsSync(resultsPath)) {
+  const existing = fs.readFileSync(resultsPath, 'utf8');
+  const m = HAND_AUTHORED_MARKER.exec(existing);
+  if (m) tail = '\n' + existing.slice(m.index);
+}
+fs.writeFileSync(resultsPath, lines.join('\n') + tail);
 console.log(lines.slice(2, 12).join('\n'));
 console.log(`\nWrote RESULTS.md`);
 // Exit 0 even with misses/false-positives — the scorer is informational; the

@@ -24,6 +24,17 @@ async function fetchRepoClones(repo) {
   return res.json();
 }
 
+// Returns the empty-clone sentinel so the caller can continue with the other repos.
+async function fetchRepoClonesSafe(repo) {
+  try {
+    return await fetchRepoClones(repo);
+  } catch (err) {
+    console.error(`FAIL fetch ${repo}: ${err.message}`);
+    process.exitCode = 1;
+    return { count: 0, uniques: 0 };
+  }
+}
+
 function formatStat(num) {
   if (num >= 1000) {
     return `${(num / 1000).toFixed(1)}k+`;
@@ -66,45 +77,44 @@ function updateFileStats(filePath, stats) {
     writeFileSync(filePath, content, 'utf8');
     console.log(`Updated stats in ${filePath} successfully.`);
   } catch (err) {
-    console.error(`Error updating stats in ${filePath}:`, err.message);
+    console.error(`FAIL updating stats in ${filePath}: ${err.message}`);
+    process.exitCode = 1;
   }
 }
 
 async function main() {
-  try {
-    const mineData = await fetchRepoClones('HetCreep/CoalMine');
-    const tippleData = await fetchRepoClones('TheColliery/CoalTipple');
-    const boardData = await fetchRepoClones('TheColliery/CoalBoard');
+  // Per-repo fetch: failures are non-fatal (logged + exitCode=1) so the other repos still update.
+  const [mineData, tippleData, boardData] = await Promise.all([
+    fetchRepoClonesSafe('HetCreep/CoalMine'),
+    fetchRepoClonesSafe('TheColliery/CoalTipple'),
+    fetchRepoClonesSafe('TheColliery/CoalBoard'),
+  ]);
 
-    const totalClones = (mineData.count || 0) + (tippleData.count || 0) + (boardData.count || 0);
-    const totalUniques = (mineData.uniques || 0) + (tippleData.uniques || 0) + (boardData.uniques || 0);
+  const totalClones = (mineData.count || 0) + (tippleData.count || 0) + (boardData.count || 0);
+  const totalUniques = (mineData.uniques || 0) + (tippleData.uniques || 0) + (boardData.uniques || 0);
 
-    const stats = {
-      combinedClones: formatStat(totalClones),
-      combinedUniques: formatStat(totalUniques),
-      mineClones: formatStat(mineData.count || 0),
-      mineUniques: formatStat(mineData.uniques || 0),
-      tippleClones: formatStat(tippleData.count || 0),
-      tippleUniques: formatStat(tippleData.uniques || 0),
-      boardClones: formatStat(boardData.count || 0),
-      boardUniques: formatStat(boardData.uniques || 0)
-    };
+  const stats = {
+    combinedClones: formatStat(totalClones),
+    combinedUniques: formatStat(totalUniques),
+    mineClones: formatStat(mineData.count || 0),
+    mineUniques: formatStat(mineData.uniques || 0),
+    tippleClones: formatStat(tippleData.count || 0),
+    tippleUniques: formatStat(tippleData.uniques || 0),
+    boardClones: formatStat(boardData.count || 0),
+    boardUniques: formatStat(boardData.uniques || 0)
+  };
 
-    console.log(`CoalMine - Clones: ${stats.mineClones}, Uniques: ${stats.mineUniques}`);
-    console.log(`CoalTipple - Clones: ${stats.tippleClones}, Uniques: ${stats.tippleUniques}`);
-    console.log(`CoalBoard - Clones: ${stats.boardClones}, Uniques: ${stats.boardUniques}`);
-    console.log(`Combined - Clones: ${stats.combinedClones}, Uniques: ${stats.combinedUniques}`);
+  console.log(`CoalMine - Clones: ${stats.mineClones}, Uniques: ${stats.mineUniques}`);
+  console.log(`CoalTipple - Clones: ${stats.tippleClones}, Uniques: ${stats.tippleUniques}`);
+  console.log(`CoalBoard - Clones: ${stats.boardClones}, Uniques: ${stats.boardUniques}`);
+  console.log(`Combined - Clones: ${stats.combinedClones}, Uniques: ${stats.combinedUniques}`);
 
-    // Update both profile/README.md and root README.md
-    const profileReadmePath = join(process.cwd(), 'profile', 'README.md');
-    const rootReadmePath = join(process.cwd(), 'README.md');
+  // Update both profile/README.md and root README.md.
+  const profileReadmePath = join(process.cwd(), 'profile', 'README.md');
+  const rootReadmePath = join(process.cwd(), 'README.md');
 
-    updateFileStats(profileReadmePath, stats);
-    updateFileStats(rootReadmePath, stats);
-  } catch (error) {
-    console.error('Execution failed:', error.message);
-    process.exit(1);
-  }
+  updateFileStats(profileReadmePath, stats);
+  updateFileStats(rootReadmePath, stats);
 }
 
 main();

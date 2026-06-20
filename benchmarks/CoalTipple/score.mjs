@@ -40,11 +40,13 @@ async function scoreT1(file) {
     if (fn(key, msg, flip) !== false) { functional = false; notes.push('tampered tag not rejected'); }
     if (fn(key, msg, short) !== false) { functional = false; notes.push('wrong-length tag not rejected (or threw)'); }
   } catch (e) { functional = false; notes.push(`threw: ${e.message}`); }
-  const pass = functional && usesTimingSafe;
+  // An impl that mentions timingSafeEqual but still compares the tag with === leaks timing.
+  // rawEqualityOnTag + usesTimingSafe = likely written in the same digest comparison, so FAIL.
+  const pass = functional && usesTimingSafe && !rawEqualityOnTag;
   console.log(`T1 crypto: ${pass ? 'PASS' : 'FAIL'}`);
   console.log(`  functional vectors : ${functional ? 'ok' : 'FAIL — ' + notes.join('; ')}`);
   console.log(`  constant-time      : ${usesTimingSafe ? 'timingSafeEqual present' : 'MISSING timingSafeEqual = the timing-leak failure'}`);
-  if (rawEqualityOnTag) console.log('  WARNING            : raw ===/!== near a tag-like name — review for a timing leak');
+  if (rawEqualityOnTag) console.log('  FAIL               : raw ===/!== near a digest = timing leak (timingSafeEqual must be the compare, not decoration)');
   if (!pass) process.exit(1);
 }
 
@@ -59,7 +61,9 @@ function scoreT5(file) {
   let all = true;
   console.log('T5 voice — fact checklist:');
   for (const f of facts) { const ok = f.re.test(t); if (!ok) all = false; console.log(`  ${ok ? 'ok     ' : 'MISSING'} ${f.name}`); }
-  const sentences = t.split(/[.!?]+/).filter((s) => s.trim()).length;
+  // Strip decimal numbers (e.g. "99.9%", "1.5k") before splitting on "." so
+  // they don't inflate the sentence count.
+  const sentences = t.replace(/\d+\.\d+/g, (m) => m.replace('.', '\x00')).split(/[.!?]+/).filter((s) => s.trim()).length;
   console.log(`  sentences: ${sentences} ${sentences <= 2 ? '(ok, <=2)' : '(OVER 2 — voice constraint broken)'}`);
   console.log(`  => facts ${all ? 'all present + exact' : 'INCOMPLETE'}; voice (terse / no marketing adjective) = judge manually`);
   if (!all) process.exit(1);

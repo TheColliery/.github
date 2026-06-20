@@ -1,3 +1,5 @@
+# TheColliery
+
 <p align="center">
   <img src="./thecolliery_banner.png" width="25%" alt="TheColliery Banner">
 </p>
@@ -55,7 +57,7 @@ node colliery-install.mjs 1 2     # CoalMine + CoalTipple
 
 | # | Tool | How |
 | :--- | :--- | :--- |
-| 1 | **[CoalMine](https://github.com/HetCreep/CoalMine)** | a Claude Code **plugin** — `claude plugin install coalmine@coalmine` |
+| 1 | **[CoalMine](https://github.com/HetCreep/CoalMine)** | a Claude Code **plugin** — `claude plugin marketplace add HetCreep/CoalMine` then `claude plugin install coalmine@coalmine` |
 | 2 | **[CoalTipple](https://github.com/TheColliery/CoalTipple)** | a Claude Code **plugin** — `claude plugin marketplace add TheColliery/CoalTipple` then `claude plugin install coaltipple@coaltipple` (or `install.mjs` for other agents) |
 | 3 | **[CoalBoard](https://github.com/TheColliery/CoalBoard)** | a Claude Code **plugin** — `claude plugin marketplace add TheColliery/CoalBoard` then `claude plugin install coalboard@coalboard` |
 | 4 | CoalHearth / CoalFace | *not yet public* |

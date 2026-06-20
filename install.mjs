@@ -5,7 +5,7 @@
 //
 //   node install.mjs              show the menu
 //   node install.mjs all          install every live tool
-//   node install.mjs 1 2          by number (CoalMine + CoalTipple)
+//   node install.mjs 1 2 3        by number (CoalMine + CoalTipple + CoalBoard)
 //   node install.mjs coaltipple   by name
 //
 // The authoritative, always-current install steps for each tool live in that
@@ -30,11 +30,17 @@ function installCoalTipple() {
   const added = run('claude', ['plugin', 'marketplace', 'add', 'TheColliery/CoalTipple']);
   return run('claude', ['plugin', 'install', 'coaltipple@coaltipple']) && added;
 }
+function installCoalBoard() {
+  // CoalBoard ships as a Claude Code plugin (marketplace) — see its README.
+  const added = run('claude', ['plugin', 'marketplace', 'add', 'TheColliery/CoalBoard']);
+  return run('claude', ['plugin', 'install', 'coalboard@coalboard']) && added;
+}
 
 const DLC = [
   { n: 1, key: 'coalmine',   name: 'CoalMine',   blurb: '9 quality-canary skills (code-health, grounding, supply-chain, resilience, more)', live: true,  install: installCoalMine },
   { n: 2, key: 'coaltipple', name: 'CoalTipple', blurb: 'model/effort router (delegate-down to save tokens, escalate-up for quality)',      live: true,  install: installCoalTipple },
-  { n: 3, key: 'coalface',   name: 'CoalFace',   blurb: 'agent swarming + concurrent orchestration',                                         live: false, install: null },
+  { n: 3, key: 'coalboard',  name: 'CoalBoard',  blurb: 'consensus & debate board (multi-lens review, bounded cost, zero-breakage)',        live: true,  install: installCoalBoard },
+  { n: 4, key: 'coalface',   name: 'CoalFace',   blurb: 'agent swarming + concurrent orchestration',                                        live: false, install: null },
 ];
 
 function menu() {
