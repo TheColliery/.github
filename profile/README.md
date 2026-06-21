@@ -67,7 +67,7 @@ node colliery-install.mjs 1 2     # CoalMine + CoalTipple
 
 ## 📊 Benchmarks
 
-Headline results — **CoalMine** 100% recall · 100% precision (rot-canary, 16 fixtures) · **CoalTipple** 20/20 output-correctness on +1-rung escalation + ~70–75% routing-cost savings · **CoalBoard** 10/10 vs an un-primed solo ~13/20 on error-not-allowed tasks. Small, dated samples; the full tables + caveats (including CoalBoard's honest correlated-blind-spot ceiling) stay in each tool's `RESULTS.md` — the single source of truth, never duplicated. See **[the benchmark records](https://github.com/TheColliery/.github/tree/main/benchmarks)**.
+Headline results — **CoalMine** 100% recall · 100% precision (rot-canary, 16 fixtures) · **CoalTipple** 20/20 output-correctness on +1-rung escalation + ~70–75% routing-cost savings · **CoalBoard** 10/10 vs an un-primed solo ~13/20 on error-not-allowed tasks. Small, dated samples; the full tables + caveats (including CoalBoard's honest correlated-blind-spot ceiling) stay in each tool's benchmark docs — the single source of truth, never duplicated. See **[the benchmark records](https://github.com/TheColliery/.github/tree/main/benchmarks)**.
 
 ---
 

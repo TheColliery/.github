@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 function authHeaders() {
   const token = process.env.PAT_TOKEN;
   if (!token) {
-    console.error('Error: No authentication token (PAT_TOKEN or GITHUB_TOKEN) detected.');
+    console.error('Error: No authentication token (PAT_TOKEN) detected.');
     process.exit(1);
   }
   return {

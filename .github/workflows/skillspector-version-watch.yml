@@ -47,4 +47,4 @@ jobs:
             echo "issue already open for $upstream"; exit 0
           fi
           gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body \
-          "NVIDIA/skillspector is now at \`$upstream\` (its pyproject.toml); CoalMine and CoalTipple \`SECURITY.md\` cite \`$pinned\`. Action: re-run the SkillSpector static scan with $upstream, update the score + findings in each SECURITY.md (the consent-gated version-transition marker flags this), and bump \`.skillspector-version\` to $upstream. SkillSpector ships versions via 'Sync OSS release snapshot' commits, not Releases/tags -- this workflow watches its pyproject.toml."
+          "NVIDIA/skillspector is now at \`$upstream\` (its pyproject.toml); CoalMine, CoalTipple, and CoalBoard \`SECURITY.md\` cite \`$pinned\`. Action: re-run the SkillSpector static scan with $upstream, update the score + findings in each SECURITY.md (the consent-gated version-transition marker flags this), and bump \`.skillspector-version\` to $upstream. SkillSpector ships versions via 'Sync OSS release snapshot' commits, not Releases/tags -- this workflow watches its pyproject.toml."
