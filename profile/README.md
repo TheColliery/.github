@@ -58,8 +58,8 @@ node colliery-install.mjs 1 2     # CoalMine + CoalTipple
 
 | # | Tool | How |
 | :--- | :--- | :--- |
-| 1 | **[CoalMine](https://github.com/HetCreep/CoalMine)** | a Claude Code **plugin** — `claude plugin marketplace add HetCreep/CoalMine` then `claude plugin install coalmine@coalmine` |
-| 2 | **[CoalTipple](https://github.com/TheColliery/CoalTipple)** | a Claude Code **plugin** — `claude plugin marketplace add TheColliery/CoalTipple` then `claude plugin install coaltipple@coaltipple` (or `install.mjs` for other agents) |
+| 1 | **[CoalMine](https://github.com/HetCreep/CoalMine)** | a Claude Code **plugin** — `claude plugin marketplace add HetCreep/CoalMine` then `claude plugin install coalmine@coalmine`; **other agents** — `node scripts/install.mjs <agent>` (Antigravity/Cursor/Codex/…; auto-trigger hooks are Claude-Code-only — see the [README](https://github.com/HetCreep/CoalMine#-universal-agent-support)) |
+| 2 | **[CoalTipple](https://github.com/TheColliery/CoalTipple)** | a Claude Code **plugin** — `claude plugin marketplace add TheColliery/CoalTipple` then `claude plugin install coaltipple@coaltipple` — **Claude Code only** (routing can't actuate where an agent can't pick a worker's model) |
 | 3 | **[CoalBoard](https://github.com/TheColliery/CoalBoard)** | a Claude Code **plugin** — `claude plugin marketplace add TheColliery/CoalBoard` then `claude plugin install coalboard@coalboard`; **Antigravity** (validated) — copy `skills/coalboard` into `~/.gemini/config/skills` (see the [README](https://github.com/TheColliery/CoalBoard#-install)) |
 | 4 | CoalHearth / CoalFace / CoalPortal | *not yet public* |
 
@@ -67,7 +67,15 @@ node colliery-install.mjs 1 2     # CoalMine + CoalTipple
 
 ## 📊 Benchmarks
 
-Headline results — **CoalMine** 100% recall · 100% precision (rot-canary, 16 fixtures) · **CoalTipple** 20/20 output-correctness on +1-rung escalation + ~70–75% routing-cost savings · **CoalBoard** 10/10 vs an un-primed solo ~13/20 on error-not-allowed tasks. Small, dated samples; the full tables + caveats (including CoalBoard's honest correlated-blind-spot ceiling) stay in each tool's benchmark docs — the single source of truth, never duplicated. See **[the benchmark records](https://github.com/TheColliery/.github/tree/main/benchmarks)**.
+Headline results — small, dated samples. Full tables + caveats live in each tool's benchmark docs (the single source of truth, never duplicated):
+
+| Tool | Result |
+| :--- | :--- |
+| **CoalMine** | 100% recall · 100% precision (rot-canary, 16 fixtures) |
+| **CoalTipple** | 20/20 output-correctness on +1-rung escalation · ~70–75% routing-cost savings |
+| **CoalBoard** | 10/10 vs an un-primed solo ~13/20 on error-not-allowed tasks (honest correlated-blind-spot ceiling noted in its docs) |
+
+See **[the benchmark records](https://github.com/TheColliery/.github/tree/main/benchmarks)**.
 
 ---
 
@@ -75,7 +83,7 @@ Headline results — **CoalMine** 100% recall · 100% precision (rot-canary, 16 
 
 Every tool inside **TheColliery** is governed by our core constitution — the **[full doctrine](https://github.com/TheColliery/.github/blob/main/DESIGN-PRINCIPLES.md)** spells out every Phoenix-13 and Quantum-11 point. The lines below are one-line digests:
 
-1. 🌐 **Works in Every Mine (Cross-Agent):** Vendor-agnostic by design — CoalMine and CoalBoard run on Claude, Gemini, Cline, Cursor, Codex, and custom frameworks. (CoalTipple is the deliberate exception: model/effort routing only actuates where an agent can pick a spawned worker's model, which today is **Claude Code only**.)
+1. 🌐 **Works in Every Mine (Cross-Agent):** Vendor-agnostic by design — CoalMine and CoalBoard run on any concurrent-subagent agent (Claude Code, Antigravity, Cursor, Codex, Cline, …). **Validated on Claude Code**; **CoalBoard** is also **validated on Antigravity** (2026-06-22); every other platform is design-supported (re-verify subagent support on yours). (CoalTipple is the deliberate exception: model/effort routing only actuates where an agent can pick a spawned worker's model — **Claude Code only**.)
 2. 🦅 **Phoenix 13 Compliance:** Immortal hooks, all **13** commandments — fail-silent · zero-dependency · zero-latency · zero-garbage · zero-side-effects · stateless · offline · deterministic · portable · sandboxed · future-proof · self-healing · zero-noise.
 3. 🔬 **Quantum 11 Performance:** All **11** principles — maximum output · zero visible errors · single brand · minimum power + consent · essential accessories · error correction · determinism · isolation · measurement · trust · entanglement.
 4. 🛡️ **Antivirus/ESET Heuristics:** Adaptive freshness checks, signature validation, and secure credential handling.
