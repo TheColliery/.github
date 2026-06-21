@@ -121,6 +121,10 @@ const recall = pct(tp, tp + fn);
 const precision = pct(tp, tp + fp);
 const sevAcc = pct(severityHits, tp);
 const decoys = fixtures.filter((f) => expected[f].length === 0).length;
+// Planted = the actual ground-truth count, NOT (fixtures - decoys): a single
+// fixture can plant >1 defect (f01-dead-code plants 2), so the dir count undercounts.
+const planted = Object.values(expected).reduce((n, arr) => n + arr.length, 0);
+const plantedFixtures = fixtures.length - decoys;
 
 // ── report ───────────────────────────────────────────────────────────────────
 const lines = [];
@@ -151,7 +155,7 @@ if (fpList.length) {
 lines.push('');
 lines.push('## Methodology');
 lines.push('');
-lines.push(`${fixtures.length} fixtures (${fixtures.length - decoys} with planted, line-labeled defects · ${decoys} clean decoys). The agent runs rot-canary QUICK over each fixture and emits structured findings; this scorer matches them mechanically (fixture + file + category, line ±${LINE_TOLERANCE}) — no judgment calls at scoring time. Results are model-dependent, like antivirus detection rates are engine-dependent: re-run on model or skill changes and compare. Caveat for this baseline: fixtures and the first run were authored in the same project — treat the numbers as a regression floor, not an independent benchmark.`);
+lines.push(`${fixtures.length} fixtures (${plantedFixtures} with ${planted} planted, line-labeled defects · ${decoys} clean decoys). The agent runs rot-canary QUICK over each fixture and emits structured findings; this scorer matches them mechanically (fixture + file + category, line ±${LINE_TOLERANCE}) — no judgment calls at scoring time. Results are model-dependent, like antivirus detection rates are engine-dependent: re-run on model or skill changes and compare. Caveat for this baseline: fixtures and the first run were authored in the same project — treat the numbers as a regression floor, not an independent benchmark.`);
 lines.push('');
 
 console.log(lines.slice(2, 12).join('\n'));

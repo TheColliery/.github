@@ -1,23 +1,24 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const token = process.env.PAT_TOKEN;
-
-if (!token) {
-  console.error('Error: No authentication token (PAT_TOKEN or GITHUB_TOKEN) detected.');
-  process.exit(1);
+function authHeaders() {
+  const token = process.env.PAT_TOKEN;
+  if (!token) {
+    console.error('Error: No authentication token (PAT_TOKEN or GITHUB_TOKEN) detected.');
+    process.exit(1);
+  }
+  return {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'TheColliery-Stats-Updater',
+    'Authorization': `token ${token}`
+  };
 }
-
-const headers = {
-  'Accept': 'application/vnd.github.v3+json',
-  'User-Agent': 'TheColliery-Stats-Updater',
-  'Authorization': `token ${token}`
-};
 
 async function fetchRepoClones(repo) {
   const url = `https://api.github.com/repos/${repo}/traffic/clones`;
   console.log(`Fetching clones for ${repo}...`);
-  const res = await fetch(url, { headers });
+  const res = await fetch(url, { headers: authHeaders() });
   if (!res.ok) {
     throw new Error(`Failed to fetch clones for ${repo} (${res.status}: ${res.statusText})`);
   }
@@ -42,42 +43,55 @@ function formatStat(num) {
   return `${num}+`;
 }
 
+// Each badge token, its drift-detecting regex, and the replacement value builder.
+// The two READMEs carry DIFFERENT badge sets (profile = global combined only;
+// root = per-tool only), so a per-file "every regex must match" check is wrong.
+// Instead each replacement returns its hit count; main() asserts the AGGREGATE
+// across both files equals the expected total — a drifted regex (0 hits everywhere)
+// then fails loud instead of silently no-op'ing.
+function badgeSpecs(stats) {
+  return [
+    { name: 'Downloads (global)', re: /(?<![\w_])Downloads-[0-9a-zA-Z.%+]+-orange/g, val: `Downloads-${encodeURIComponent(stats.combinedClones + ' / 14d')}-orange` },
+    { name: 'Developers (global)', re: /(?<![\w_])Developers-[0-9a-zA-Z.%+]+-brightgreen/g, val: `Developers-${encodeURIComponent(stats.combinedUniques + ' / 14d')}-brightgreen` },
+    { name: 'CoalMine_Downloads', re: /CoalMine_Downloads-[0-9a-zA-Z.%+]+-orange/g, val: `CoalMine_Downloads-${encodeURIComponent(stats.mineClones + ' / 14d')}-orange` },
+    { name: 'CoalMine_Developers', re: /CoalMine_Developers-[0-9a-zA-Z.%+]+-brightgreen/g, val: `CoalMine_Developers-${encodeURIComponent(stats.mineUniques + ' / 14d')}-brightgreen` },
+    { name: 'CoalTipple_Downloads', re: /CoalTipple_Downloads-[0-9a-zA-Z.%+]+-orange/g, val: `CoalTipple_Downloads-${encodeURIComponent(stats.tippleClones + ' / 14d')}-orange` },
+    { name: 'CoalTipple_Developers', re: /CoalTipple_Developers-[0-9a-zA-Z.%+]+-brightgreen/g, val: `CoalTipple_Developers-${encodeURIComponent(stats.tippleUniques + ' / 14d')}-brightgreen` },
+    { name: 'CoalBoard_Downloads', re: /CoalBoard_Downloads-[0-9a-zA-Z.%+]+-orange/g, val: `CoalBoard_Downloads-${encodeURIComponent(stats.boardClones + ' / 14d')}-orange` },
+    { name: 'CoalBoard_Developers', re: /CoalBoard_Developers-[0-9a-zA-Z.%+]+-brightgreen/g, val: `CoalBoard_Developers-${encodeURIComponent(stats.boardUniques + ' / 14d')}-brightgreen` },
+  ];
+}
+
+// Returns a map of badge name → hit count in this file (0 = not present here).
 function updateFileStats(filePath, stats) {
+  const hits = {};
   try {
     let content = readFileSync(filePath, 'utf8');
-
-    // Replace global combined badges
-    const globalDownloadsRegex = /(?<![\w_])Downloads-[0-9a-zA-Z.%+]+-orange/g;
-    const globalDevelopersRegex = /(?<![\w_])Developers-[0-9a-zA-Z.%+]+-brightgreen/g;
-    
-    content = content.replace(globalDownloadsRegex, `Downloads-${encodeURIComponent(stats.combinedClones + ' / 14d')}-orange`);
-    content = content.replace(globalDevelopersRegex, `Developers-${encodeURIComponent(stats.combinedUniques + ' / 14d')}-brightgreen`);
-
-    // Replace CoalMine badges
-    const mineDownloadsRegex = /CoalMine_Downloads-[0-9a-zA-Z.%+]+-orange/g;
-    const mineDevelopersRegex = /CoalMine_Developers-[0-9a-zA-Z.%+]+-brightgreen/g;
-    
-    content = content.replace(mineDownloadsRegex, `CoalMine_Downloads-${encodeURIComponent(stats.mineClones + ' / 14d')}-orange`);
-    content = content.replace(mineDevelopersRegex, `CoalMine_Developers-${encodeURIComponent(stats.mineUniques + ' / 14d')}-brightgreen`);
-
-    // Replace CoalTipple badges
-    const tippleDownloadsRegex = /CoalTipple_Downloads-[0-9a-zA-Z.%+]+-orange/g;
-    const tippleDevelopersRegex = /CoalTipple_Developers-[0-9a-zA-Z.%+]+-brightgreen/g;
-
-    content = content.replace(tippleDownloadsRegex, `CoalTipple_Downloads-${encodeURIComponent(stats.tippleClones + ' / 14d')}-orange`);
-    content = content.replace(tippleDevelopersRegex, `CoalTipple_Developers-${encodeURIComponent(stats.tippleUniques + ' / 14d')}-brightgreen`);
-
-    // Replace CoalBoard badges
-    const boardDownloadsRegex = /CoalBoard_Downloads-[0-9a-zA-Z.%+]+-orange/g;
-    const boardDevelopersRegex = /CoalBoard_Developers-[0-9a-zA-Z.%+]+-brightgreen/g;
-
-    content = content.replace(boardDownloadsRegex, `CoalBoard_Downloads-${encodeURIComponent(stats.boardClones + ' / 14d')}-orange`);
-    content = content.replace(boardDevelopersRegex, `CoalBoard_Developers-${encodeURIComponent(stats.boardUniques + ' / 14d')}-brightgreen`);
-
+    for (const spec of badgeSpecs(stats)) {
+      const matched = content.match(spec.re);
+      hits[spec.name] = matched ? matched.length : 0;
+      content = content.replace(spec.re, spec.val);
+    }
     writeFileSync(filePath, content, 'utf8');
     console.log(`Updated stats in ${filePath} successfully.`);
   } catch (err) {
     console.error(`FAIL updating stats in ${filePath}: ${err.message}`);
+    process.exitCode = 1;
+  }
+  return hits;
+}
+
+// Fail loud if any badge was replaced NOWHERE across all files: a regex that
+// stops matching (badge markup drifted) would otherwise silently no-op.
+function assertEveryBadgeMatched(perFileHits, stats) {
+  const totals = {};
+  for (const spec of badgeSpecs(stats)) totals[spec.name] = 0;
+  for (const hits of perFileHits) {
+    for (const [name, n] of Object.entries(hits)) totals[name] += n;
+  }
+  const missing = Object.entries(totals).filter(([, n]) => n === 0).map(([name]) => name);
+  if (missing.length) {
+    console.error(`FAIL: badge regex matched nothing in any file — markup drifted? Unmatched: ${missing.join(', ')}`);
     process.exitCode = 1;
   }
 }
@@ -113,8 +127,14 @@ async function main() {
   const profileReadmePath = join(process.cwd(), 'profile', 'README.md');
   const rootReadmePath = join(process.cwd(), 'README.md');
 
-  updateFileStats(profileReadmePath, stats);
-  updateFileStats(rootReadmePath, stats);
+  const profileHits = updateFileStats(profileReadmePath, stats);
+  const rootHits = updateFileStats(rootReadmePath, stats);
+  assertEveryBadgeMatched([profileHits, rootHits], stats);
 }
 
-main();
+// Run only when invoked directly (not when imported by the test).
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  main();
+}
+
+export { badgeSpecs, updateFileStats, assertEveryBadgeMatched };
