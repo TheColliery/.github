@@ -31,7 +31,7 @@ T5. Anything wrong with this doc outline?
     # Reference
 
 WRITE both arms' answers to this file (relative to the TheColliery repo root):
-  CoalBoard/eval/results/antigravity-raw.md
+  .github/benchmarks/CoalBoard/results/antigravity-raw.md
 If you're in a different project and can't write there, write the file anywhere you can and tell me the full path.
 Format the file as:
   # Antigravity raw answers (date: <today>; ARM1 model: <model>; ARM2 model(s): <model(s)>)

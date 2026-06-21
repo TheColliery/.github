@@ -1,6 +1,6 @@
 # CoalBoard eval — task prompts (exact, fed identically to WITHOUT and WITH, on both platforms)
 
-Give each prompt verbatim. WITHOUT = one agent, one pass. WITH = `/coalboard` at `rigor: high`.
+Give each prompt verbatim. WITHOUT = one agent, one pass. WITH = `/coalboard` at `rigor: high`. Each arm may instead be run **K times** and scored as a **pass-rate** (the sanctioned reliability variant — rigor is what's variable; see [`README.md`](README.md)). Tasks are **judgment-scored by prose** (the rubric below, applied by a strong judge) — no executable scorer by design.
 
 ---
 
@@ -10,7 +10,7 @@ Give each prompt verbatim. WITHOUT = one agent, one pass. WITH = `/coalboard` at
 
 **Gold:** constant-time compare — `crypto.timingSafeEqual` on equal-length buffers (length checked first, since `timingSafeEqual` throws on length mismatch).
 **Trap:** `provided === expected`, or `Buffer.compare(...) === 0` on the secret — a **timing side-channel** that passes every functional test.
-**Scorer (objective):** PASS iff it uses a constant-time primitive AND guards length; raw `===` / `Buffer.compare` on the secret = FAIL.
+**Scoring rubric (judge-run):** PASS iff it uses a constant-time primitive AND guards length; raw `===` / `Buffer.compare` on the secret = FAIL.
 
 ---
 
@@ -20,7 +20,7 @@ Give each prompt verbatim. WITHOUT = one agent, one pass. WITH = `/coalboard` at
 
 **Gold:** `1000000 × (1 + 0.05/12)^(12×30)` ≈ **4,467,744.31**.
 **Trap:** simple interest (`1,000,000 × (1 + 0.05×30)` = 2,500,000) or annual compounding (`×1.05^30` ≈ 4,321,942.38) — plausible-but-wrong.
-**Scorer:** PASS iff the final figure is within ±0.5% of 4,467,744.31 AND the formula is monthly-compound (n=12). RUN the calc to score — do not eyeball.
+**Scoring rubric (judge-run):** PASS iff the final figure is within ±0.5% of 4,467,744.31 AND the formula is monthly-compound (n=12). RUN the calc to score — do not eyeball.
 
 ---
 
@@ -30,7 +30,7 @@ Give each prompt verbatim. WITHOUT = one agent, one pass. WITH = `/coalboard` at
 
 **Gold:** the *current* Active-LTS major + its EOL date, **fetched at scoring time** (nodejs.org/en/about/previous-releases or endoflife.date/nodejs).
 **Trap:** answered from training memory → a stale major and/or no source.
-**Scorer:** PASS iff the version + EOL match the current authoritative source at scoring time AND an authoritative source is cited. (Re-fetch the gold the day you score — this task's gold is intentionally time-varying.)
+**Scoring rubric (judge-run):** PASS iff the version + EOL match the current authoritative source at scoring time AND an authoritative source is cited. (Re-fetch the gold the day you score — this task's gold is intentionally time-varying.)
 
 ---
 
@@ -49,7 +49,7 @@ Give each prompt verbatim. WITHOUT = one agent, one pass. WITH = `/coalboard` at
 
 **Gold:** identify the **check-then-act race** — two concurrent calls with the same `id` both see a miss (the `await` gap), both hit `db.fetchUser`, so the fetch is duplicated (and any per-fetch side effect runs twice). Fix: cache the **in-flight Promise** (`cache.set(id, db.fetchUser(id))` before awaiting; await the cached promise), evicting on reject.
 **Trap:** "looks fine — it caches the result" (misses the await-gap interleaving).
-**Scorer:** PASS iff it names the concurrent double-fetch / check-then-act race AND proposes the promise-caching fix.
+**Scoring rubric (judge-run):** PASS iff it names the concurrent double-fetch / check-then-act race AND proposes the promise-caching fix.
 
 ---
 
@@ -66,4 +66,4 @@ Give each prompt verbatim. WITHOUT = one agent, one pass. WITH = `/coalboard` at
 
 **Gold:** two defects — (1) the **H2→H4 skip** (`## Installation` → `#### Windows`, the H3 level is skipped); (2) a **second top-level `#`** (`# Reference` — a document should have one H1).
 **Trap:** skim-misses one or both (commonly catches the skip, misses the duplicate H1).
-**Scorer:** PASS iff BOTH defects are flagged.
+**Scoring rubric (judge-run):** PASS iff BOTH defects are flagged.

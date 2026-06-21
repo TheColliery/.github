@@ -10,7 +10,7 @@
 
 "NASA-tier" here = **error-not-allowed + subtle-failure**, not "large". Each task is small to state but has a failure mode that *looks right* until you verify it — the exact case where a solo pass ships a plausible-but-wrong answer and a board (show-me + adversary + run-the-check) does not. The set spans domains on purpose: the board's edge is *general* (it is about how you know, not about code).
 
-| # | Domain | Task (prompt given to both arms) | Gold (correct) | The trap a solo pass falls for | Objective scorer |
+| # | Domain | Task (prompt given to both arms) | Gold (correct) | The trap a solo pass falls for | Scoring rubric (judge-run) |
 |---|---|---|---|---|---|
 | T1 | code / crypto | "Implement `verifyToken(provided, expected)` comparing two hex API tokens, return boolean." | constant-time compare (`crypto.timingSafeEqual` after a length guard) | `provided === expected` or `Buffer.compare`/`===` on the digest → **timing leak** (passes every functional test) | uses a constant-time primitive AND length-guards; raw `===`/`Buffer.compare` on the secret = FAIL |
 | T2 | math / precision | "A 1,000,000 principal at 5% annual interest **compounded monthly** for 30 years — exact final balance?" | `1000000 × (1+0.05/12)^(12×30)` ≈ **4,467,744.31** | simple interest (2.5M) or annual-compound (4,321,942) → plausible-but-wrong | final number within ±0.5% of the gold; the formula must be monthly-compound |
@@ -20,12 +20,14 @@
 
 The exact prompts + the buggy code snippets for T4/T5 live in [`tasks.md`](tasks.md) (identical bytes fed to both arms and both platforms — apples-to-apples).
 
+> Unlike the sibling CoalMine / CoalTipple benchmarks (which ship an executable `score.mjs`), CoalBoard's tasks are **judgment-scored by prose** — a strong judge applies the rubric above by hand; there is no executable scorer by design (the deliverables here are reasoning/answers, not a runnable artifact).
+
 ## Method (identical on both platforms)
 
 For each task, on each platform:
 1. **WITHOUT** — give the bare task prompt to one agent, one pass, no board skill active. Record the answer.
 2. **WITH** — invoke CoalBoard (`/coalboard` Audit/Generate at `rigor: high` so the adversary lens + ground-truth verify are on). Record the answer.
-3. **Score** each answer against the gold with the objective scorer above (the *judge runs the check* — never eyeballs). Mark trap-caught (✅) or trap-missed (❌).
+3. **Score** each answer against the gold with the scoring rubric above (the *judge runs the check* — never eyeballs). Mark trap-caught (✅) or trap-missed (❌). **Reliability variant (equivalent):** because the board's real edge is applying the rigor *every* time, an arm may instead be run **K times** and scored as a **pass-rate** (e.g. solo M/N, board K/K) — rigor is exactly what's variable, so a K-run pass-rate is a sanctioned scoring mode alongside the single-pass M/5 (the Claude Code result file uses it).
 
 Same five tasks, same prompts, scored the same way → the only variable is *board / no board* (and, across the two result files, *platform*).
 
@@ -36,7 +38,7 @@ Same five tasks, same prompts, scored the same way → the only variable is *boa
 
 ## Reading the result
 
-A result file is the scored table + the one honest headline:
-> *Solo M/5 · Board 5/5 — the board caught the {list} traps the solo pass shipped. Dated YYYY-MM-DD; a 5-task sample, not a guarantee.*
+A result file is the scored table + the one honest headline, in either the single-pass or the K-run pass-rate form:
+> *Solo M/5 · Board 5/5* — single-pass, **or** *Solo ~M/N (~X%) · Board K/K (100%)* — K-run reliability — *the board caught the {list} traps the solo pass shipped. Dated YYYY-MM-DD; a 5-task sample, not a guarantee.*
 
 If the board ever scores **below** solo on a task, that is a real finding (record it — an honest benchmark reports its losses).

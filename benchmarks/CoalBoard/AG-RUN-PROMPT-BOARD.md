@@ -33,7 +33,7 @@ T5. Anything wrong with this doc outline?
     # Reference
 
 Write the board's final answer per task to (relative to the TheColliery repo root):
-  CoalBoard/eval/results/antigravity-board-raw.md
+  .github/benchmarks/CoalBoard/results/antigravity-board-raw.md
 At the top of the file, note: today's date, the lens model(s), and HOW MANY subagents you actually spawned.
 Reply "done" when the file is written.
 ```

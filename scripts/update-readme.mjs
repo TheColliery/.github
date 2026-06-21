@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const token = process.env.PAT_TOKEN || process.env.GITHUB_TOKEN;
+const token = process.env.PAT_TOKEN;
 
 if (!token) {
   console.error('Error: No authentication token (PAT_TOKEN or GITHUB_TOKEN) detected.');
@@ -47,8 +47,8 @@ function updateFileStats(filePath, stats) {
     let content = readFileSync(filePath, 'utf8');
 
     // Replace global combined badges
-    const globalDownloadsRegex = /Downloads-[0-9a-zA-Z.%+]+-orange/g;
-    const globalDevelopersRegex = /Developers-[0-9a-zA-Z.%+]+-brightgreen/g;
+    const globalDownloadsRegex = /(?<![\w_])Downloads-[0-9a-zA-Z.%+]+-orange/g;
+    const globalDevelopersRegex = /(?<![\w_])Developers-[0-9a-zA-Z.%+]+-brightgreen/g;
     
     content = content.replace(globalDownloadsRegex, `Downloads-${encodeURIComponent(stats.combinedClones + ' / 14d')}-orange`);
     content = content.replace(globalDevelopersRegex, `Developers-${encodeURIComponent(stats.combinedUniques + ' / 14d')}-brightgreen`);

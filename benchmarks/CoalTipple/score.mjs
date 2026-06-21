@@ -44,14 +44,91 @@ function runVectorsIsolated(absFile, v) {
   try { return JSON.parse(res.stdout); } catch { return { error: `probe gave no parseable result: ${(res.stdout || res.stderr || '').trim()}` }; }
 }
 
+// Strip comments + string/template literals so a `timingSafeEqual` (or a forbidden compare) that lives only
+// in a COMMENT or a STRING can never satisfy / trip a code check. Returns code-only text (literals blanked,
+// length preserved roughly) for the static analysis below.
+function stripCommentsAndStrings(src) {
+  let out = '';
+  let i = 0;
+  const n = src.length;
+  let state = 'code'; // code | line | block | sq | dq | tpl
+  while (i < n) {
+    const c = src[i], d = src[i + 1];
+    if (state === 'code') {
+      if (c === '/' && d === '/') { state = 'line'; i += 2; continue; }
+      if (c === '/' && d === '*') { state = 'block'; i += 2; continue; }
+      if (c === "'") { state = 'sq'; i++; continue; }
+      if (c === '"') { state = 'dq'; i++; continue; }
+      if (c === '`') { state = 'tpl'; i++; continue; }
+      out += c; i++; continue;
+    }
+    if (state === 'line') { if (c === '\n') { state = 'code'; out += c; } i++; continue; }
+    if (state === 'block') { if (c === '*' && d === '/') { state = 'code'; i += 2; } else { if (c === '\n') out += c; i++; } continue; }
+    // inside a string/template: blank the content, honour escapes, keep newlines
+    if (c === '\\') { i += 2; continue; }
+    if (state === 'sq' && c === "'") { state = 'code'; i++; continue; }
+    if (state === 'dq' && c === '"') { state = 'code'; i++; continue; }
+    if (state === 'tpl' && c === '`') { state = 'code'; i++; continue; }
+    if (c === '\n') out += c;
+    i++;
+  }
+  return out;
+}
+
+// Real data-flow / structural check (not string-presence): the tag comparison on the return path must be
+// crypto.timingSafeEqual on the digest+tag, and must NOT use ===/==/!==/!=, indexOf, localeCompare, or
+// Buffer.compare on the digest/tag (TASKS.md gold). Operates on COMMENT/STRING-STRIPPED code so a
+// `timingSafeEqual` mention in a comment is worthless and a `got === tag` in code is caught.
+function staticCryptoCheck(src) {
+  const code = stripCommentsAndStrings(src);
+  const fail = [];
+
+  // timingSafeEqual must be actually CALLED in code (presence-in-comment no longer counts).
+  const calledTimingSafe = /timingSafeEqual\s*\(/.test(code);
+  if (!calledTimingSafe) fail.push('no crypto.timingSafeEqual(...) call on the comparison path');
+
+  // Track identifiers assigned from a `.digest(` expression (the computed HMAC) — the "tainted" digest vars.
+  const digestVars = new Set();
+  const declRe = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*[^;\n]*\.digest\s*\(/g;
+  let m;
+  while ((m = declRe.exec(code))) digestVars.add(m[1]);
+
+  // Forbidden tag comparisons anywhere in code:
+  // (a) ===/==/!==/!= where one side is a `.digest(` expression directly,
+  if (/\.digest\s*\([^)]*\)\s*[!=]==?/.test(code) || /[!=]==?\s*[\w.$]*\.digest\s*\(/.test(code)) {
+    fail.push('raw equality on a .digest(...) expression = timing leak');
+  }
+  // (b) ===/==/!==/!= between a digest-derived var (as a VALUE) and any operand — the var-stored naive
+  // compare H3 misses. A `.length`/`.byteLength` accessor is a legitimate length GUARD, not a value
+  // compare, so the negative-lookahead excludes `got.length !== tag.length` (the old false-positive).
+  const notLen = '(?!\\s*\\.\\s*(?:length|byteLength)\\b)';
+  for (const v of digestVars) {
+    const vEsc = v.replace(/[$]/g, '\\$&');
+    if (new RegExp(`\\b${vEsc}\\b${notLen}\\s*[!=]==?`).test(code) ||
+        new RegExp(`[!=]==?\\s*\\b${vEsc}\\b${notLen}`).test(code)) {
+      fail.push(`raw equality on digest-derived '${v}' = timing leak`);
+    }
+    // (c) indexOf / localeCompare / Buffer.compare touching the digest var.
+    if (new RegExp(`\\b${vEsc}\\b\\s*\\.\\s*(indexOf|localeCompare)\\s*\\(`).test(code) ||
+        new RegExp(`\\.(indexOf|localeCompare)\\s*\\(\\s*${vEsc}\\b`).test(code) ||
+        new RegExp(`Buffer\\s*\\.\\s*compare\\s*\\([^)]*\\b${vEsc}\\b`).test(code)) {
+      fail.push(`indexOf/localeCompare/Buffer.compare on digest-derived '${v}' = non-constant-time compare`);
+    }
+  }
+  // (d) indexOf/localeCompare directly on a .digest(...) result.
+  if (/\.digest\s*\([^)]*\)\s*\.\s*(indexOf|localeCompare)\s*\(/.test(code)) {
+    fail.push('indexOf/localeCompare on a .digest(...) result = non-constant-time compare');
+  }
+
+  return { pass: fail.length === 0 && calledTimingSafe, calledTimingSafe, fail };
+}
+
 async function scoreT1(file) {
   const src = readOrDie(file);
-  // static signals
-  const usesTimingSafe = /timingSafeEqual/.test(src);
-  // Flag a computed digest compared directly with ===/!== (the timing leak); the safe pattern routes it
-  // through timingSafeEqual. `.length !==` / `typeof tag !==` guards are NOT flagged (that was the old
-  // false-positive); a var-stored naive compare has no timingSafeEqual, so the gate below catches it anyway.
-  const rawEqualityOnTag = /\.digest\([^)]*\)\s*[!=]==/.test(src) || /[!=]==\s*[\w.]*\.digest\(/.test(src);
+  // static signals — a REAL data-flow check (see staticCryptoCheck): timingSafeEqual must be CALLED on the
+  // comparison path and no ===/==/!==/!= · indexOf · localeCompare · Buffer.compare may touch the digest/tag.
+  // A `timingSafeEqual` that appears only in a comment/string does NOT satisfy the gate.
+  const crypGate = staticCryptoCheck(src);
   // functional vectors
   const key = 'benchmark-secret-key', msg = 'the quick brown fox';
   const tag = crypto.createHmac('sha256', key).update(msg).digest('hex');
@@ -69,13 +146,13 @@ async function scoreT1(file) {
   if (probe.valid !== true)    { functional = false; notes.push('valid tag not accepted'); }
   if (probe.tampered !== false) { functional = false; notes.push('tampered tag not rejected'); }
   if (probe.short !== false)    { functional = false; notes.push('wrong-length tag not rejected (or threw)'); }
-  // An impl that mentions timingSafeEqual but still compares the tag with === leaks timing.
-  // rawEqualityOnTag + usesTimingSafe = likely written in the same digest comparison, so FAIL.
-  const pass = functional && usesTimingSafe && !rawEqualityOnTag;
+  // Constant-time gate: a CALLED timingSafeEqual on the digest/tag AND no forbidden compare on the return
+  // path (a timingSafeEqual sitting only in a comment/decoration fails — staticCryptoCheck strips those).
+  const pass = functional && crypGate.pass;
   console.log(`T1 crypto: ${pass ? 'PASS' : 'FAIL'}`);
   console.log(`  functional vectors : ${functional ? 'ok' : 'FAIL — ' + notes.join('; ')}`);
-  console.log(`  constant-time      : ${usesTimingSafe ? 'timingSafeEqual present' : 'MISSING timingSafeEqual = the timing-leak failure'}`);
-  if (rawEqualityOnTag) console.log('  FAIL               : raw ===/!== near a digest = timing leak (timingSafeEqual must be the compare, not decoration)');
+  console.log(`  constant-time      : ${crypGate.calledTimingSafe ? 'crypto.timingSafeEqual called' : 'MISSING a crypto.timingSafeEqual call = the timing-leak failure'}`);
+  for (const reason of crypGate.fail) console.log(`  FAIL               : ${reason}`);
   if (!pass) process.exit(1);
 }
 
@@ -85,7 +162,7 @@ function scoreT5(file) {
     { name: '10,000 events/sec', re: /10[,.]?000/ },
     { name: '99.9% uptime',      re: /99\.9\s*%/ },
     { name: '30-day money-back', re: /30[-\s]?day/i },
-    { name: '50+ tools',         re: /\b50\b/ },
+    { name: '50+ tools',         re: /\b50\+?\s*tools?\b/i },
   ];
   let all = true;
   console.log('T5 voice — fact checklist:');

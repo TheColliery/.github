@@ -15,7 +15,7 @@ Run by the maintainer in Antigravity (Claude Code cannot actuate AG — these ar
 
 **Solo 1/5 → Board 4/5** on Gemini 3.1 Pro (Low). The board's discipline fixed the **three dangerous errors a casual pass shipped**: a token compare with a **timing side-channel**, a **stale Node version** (answered from memory), and an **unspotted race condition** — exactly the error-not-allowed cases. Both arms caught the obvious doc-skip; **both missed the debatable duplicate-H1** (the weaker model didn't apply the MD025 check even under the discipline — the board *improves*, it does not *perfect*).
 
-**Cross-platform reading (with the Claude Code arm).** On strong Opus (Claude Code) the board edge was *modest* (3.5→5 — a strong solo already knows the textbook traps). On a weaker, **different-vendor** model (Gemini, here) the edge is *large* (1→4). So the board's value **scales inversely with model strength** — it lifts a weaker/cheaper model toward correctness — and the discipline is **not Claude-specific** (it works on Gemini). Single-run, dated; a 5-task sample, not a guarantee.
+**Cross-platform reading (with the Claude Code arm).** On strong Opus (Claude Code) the board edge was *modest* (un-primed solo ~13/20 ~65% → board 10/10 100% — a strong solo already knows the textbook traps, the board makes the rigor consistent). On a weaker, **different-vendor** model (Gemini, here) the edge is *large* (1→4). So the board's value **scales inversely with model strength** — it lifts a weaker/cheaper model toward correctness — and the discipline is **not Claude-specific** (it works on Gemini). Single-run, dated; a 5-task sample, not a guarantee.
 
 ## Full board (real subagents) — follow-up run
 
