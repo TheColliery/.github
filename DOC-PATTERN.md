@@ -1,0 +1,68 @@
+# Public-Doc Pattern (TheColliery)
+
+> The shared writing pattern for every series repo's public docs — `README.md`, `SECURITY.md`, `CONTRIBUTING.md`, `PRIVACY.md`. Extracted from the live CoalMine / CoalTipple / CoalBoard docs so a new repo (and an edit to an old one) ships sibling-consistent.
+> Three standing doc rules govern all of them: **trim the fat** (say each thing once, cut filler), **correct heading hierarchy** (clean `H1 → H2 → H3`, no skipped or duplicated levels), and **a README matches the code** (every claim = shipped behaviour, re-verified against the source, never aspirational).
+
+## Cross-cutting rules (all four docs)
+
+- **One `H1` per file** (the title), then `H2` sections, then `H3` sub-sections. Never skip a level (no `H1 → H3`) and never repeat the `H1`.
+- **Platform-neutral** — these tools are cross-agent. A user-facing instruction is COMPLETE for every platform (Claude Code plugin command AND the other-agent path) or it points to the README's per-platform section. Never a single-vendor-only line. (CoalTipple is the one exception that is *correctly* Claude-Code-only — and it says so explicitly, with the reason.)
+- **Data is verbatim from its source, never invented.** A version = `plugin.json`; a benchmark figure = the `.github/benchmarks/<tool>/` record (LINK to it, never copy the number into the doc — a copied number drifts); a behaviour claim = the code. If you cannot source it, do not write it.
+- **Number-free where it rots.** A README status line is a dynamic shields.io badge or `Status: stable` + a link to CHANGELOG/Releases — never a hardcoded version. The live version lives in `plugin.json` / the GitHub releases.
+- **Clean-clone:** benchmarks and process docs live in the org `.github/`, not the skill repo. The repo's docs LINK out to them.
+- **Emoji section icons are optional but consistent within a file** — if the README uses them, use them on every `H2`; if not, none. Do not half-decorate.
+
+## README.md
+
+The shop window. Lead with what the tool IS and the one install command; push depth down the page.
+
+| # | Section (`H2`) | Holds |
+|---|---|---|
+| 1 | Title + tagline (`H1` + bold one-liner) | Name, a one-sentence "what it does", a badge row (version via dynamic tag badge, license, status), a links row (Changelog · Security · Privacy · Releases), and the "Part of TheColliery" sibling line. |
+| 2 | What it is | The metaphor + the core idea in 2–4 sentences. For a router/board, a small table of the core decision (delegate-down / escalate-up; the lens roles). |
+| 3 | How it works | The mechanism: the canary table, the two knobs, the board's phases. One table beats three paragraphs. |
+| 4 | Compatibility / platform support | Which agents, what ports where. A matrix when the tool is cross-agent; an explicit `[!CAUTION]` + reason when it is single-platform. |
+| 5 | Install | The one-command plugin path first, then the universal/other-agent path. |
+| 6 | Configure | The config file, precedence, and a key table (key · type · default · what it does) sourced from the `config-schema.mjs` SSoT. Point to the schema for the full set. |
+| 7 | Benchmark | A short honest framing + a LINK to `.github/benchmarks/<tool>/`. Never inline the figures. Keep the honest-scope caveat (dated, small samples). |
+| 8 | Part of TheColliery | The sibling links + the shared doctrine (Phoenix-13, SSoT config, no-overkill). |
+| 9 | License | `MIT License. See [LICENSE](LICENSE).` |
+
+## SECURITY.md
+
+Title is `# Verifying <Tool>`. Same section order across the family.
+
+| # | Section (`H2`) | Holds |
+|---|---|---|
+| 1 | Intro (no heading) | One line: "verified under the same framework as [sibling]" — Phoenix-13 hooks, reproducible builds, periodic scans. |
+| 2 | Reporting a Vulnerability | Open an issue / request a private channel for sensitive PoC. |
+| 3 | Commit & Tag Signatures | SSH-signed; the local `git verify-commit` / `git tag -v` snippet. |
+| 4 | Dist Integrity | `plugin/` is generated; `verify.mjs` byte-checks dist-sync; `build-plugin.mjs` reproduces it; `test.mjs` runs the zero-dep tests. |
+| 5 | Independent Scanning — NVIDIA SkillSpector | The scan result, behind a `<!-- version-transition: ... -->` marker. **Scanning is event-driven** (a new SkillSpector version or a genuinely new attack surface), NOT per-release — the static rules are stable, so a content bump does not change what they read; a scan-pin lagging the ship version is BY DESIGN. Every finding gets a per-finding false-positive reason. Never bump the scanner version / score / date without a real re-scan. |
+| 6 | Structural Safety (Phoenix-13) | The hook is zero-dep, no-network, no-child-process, fail-silent, advise-only. No data-exfiltration path. |
+
+## CONTRIBUTING.md
+
+| # | Section (`H2`) | Holds |
+|---|---|---|
+| 1 | Intro (no heading) | One line: what the tool is + "issues, bug reports, and PRs welcome". |
+| 2 | Proposing a Change | Open an issue first (especially for a `SKILL.md` edit) → make the change, keep the gates green → validate behaviour against a real fixture / dogfood it live. |
+| 3 | Developing & Testing | Zero-dependency (Node 18+, no `npm install`). The green-gate commands (`build-plugin` → `verify` → `test`). A **Development Rules** `H3`: the SSoT file, rebuild `plugin/` after a source edit, keep hooks Phoenix-pure + hermetic-tested, add unit tests, code style, English-only source. |
+| 4 | Supported Platforms | Mirror the README's stance (cross-agent matrix, or the single-platform statement + reason). |
+| 5 | Project Layout | A path → purpose table. |
+| 6 | Releasing (Maintainers) | The bump → CHANGELOG → green gates → signed tag → push → GitHub Release (stable tags only) chain. |
+| 7 | License & Conduct | MIT, good faith, report security per SECURITY.md. |
+
+## PRIVACY.md
+
+Title is `# <Tool> Privacy Policy`, then a bold one-liner, then one bullet list — no sub-headings.
+
+- **Lead:** **`<Tool> collects nothing and phones nowhere.`**
+- **The bullets (bold lead-in each):** No telemetry · No network calls from the hook (Phoenix #7) · It runs inside YOUR agent (no servers, your account, your platform's permission gate) · the tool-specific honesty note (a local-estimate stat figure, a best-effort secret-scrub that is NOT a guarantee, propose-never-execute staging) · Error reports are manual (offered, never auto-submitted, you edit first) · Local files only (name the exact files the user can read).
+- **Close:** `Questions: open an issue at <repo-issues-url>.`
+
+## When you touch any of these docs
+
+1. Re-verify every claim against the current code/schema before calling it done (a README is the easiest doc to let rot).
+2. Run the per-version doc sweep in [scripts-quality.md](./scripts-quality.md) — the `version-transition` spots (SECURITY scan pin, About, this landing's suite table, any hardcoded version).
+3. Keep it lean: if cutting a line changes nothing the reader does, cut it.

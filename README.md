@@ -56,6 +56,7 @@ This specific repository (`.github`) manages the following internal assets:
 * **[`DESIGN-PRINCIPLES.md`](DESIGN-PRINCIPLES.md)**: The **Quantum 11** performance & design guidelines governing all series projects.
 * **[`hooks-safety.md`](hooks-safety.md)**: The **Phoenix 13** safety hook commandments (sandboxing, fail-silent execution).
 * **[`scripts-quality.md`](scripts-quality.md)**: The CLI and script quality rules for release-gating.
+* **[`DOC-PATTERN.md`](DOC-PATTERN.md)**: The shared public-doc pattern (README / SECURITY / CONTRIBUTING / PRIVACY) that keeps every repo's docs sibling-consistent.
 
 ---
 
