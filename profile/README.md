@@ -68,7 +68,7 @@ node colliery-install.mjs coalmine  # by name, too
 
 ## 📊 Benchmarks
 
-Headline results — small, dated samples. Full tables + caveats live in each tool's benchmark docs (the single source of truth, never duplicated):
+Headline results — small, dated samples. Full tables, tested versions, + caveats live in each tool's benchmark docs (the single source of truth, never duplicated):
 
 | Tool | Result |
 | :--- | :--- |
