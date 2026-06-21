@@ -49,9 +49,10 @@ Each tool installs on its own, or grab them together — like choosing DLC on a 
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/TheColliery/.github/main/install.mjs -o colliery-install.mjs
-node colliery-install.mjs all     # the whole suite
-node colliery-install.mjs 2       # just CoalTipple
-node colliery-install.mjs 1 2     # CoalMine + CoalTipple
+node colliery-install.mjs all       # the whole suite
+node colliery-install.mjs 3         # just CoalBoard
+node colliery-install.mjs 1 2 3     # CoalMine + CoalTipple + CoalBoard
+node colliery-install.mjs coalmine  # by name, too
 ```
 
 **Or install each tool directly** — each repo's README has the authoritative, always-current steps:

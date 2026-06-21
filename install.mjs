@@ -48,7 +48,7 @@ const DLC = [
 function menu() {
   console.log('\nTheColliery — pick your DLC:\n');
   for (const d of DLC) console.log(`  [${d.n}] ${d.name.padEnd(11)} ${d.blurb}${d.live ? '' : '   (not yet public)'}`);
-  console.log('\nInstall:  node install.mjs all   |   node install.mjs 1 2   |   node install.mjs coaltipple\n');
+  console.log('\nInstall:  node install.mjs all   |   node install.mjs 1 2 3   |   node install.mjs coalboard\n');
 }
 
 const args = process.argv.slice(2).map((a) => a.toLowerCase());
