@@ -18,9 +18,7 @@ locked methodology — paired design + stochastic repeat, arXiv 2411.00640).
 | **claude-sonnet-5** (skill ON) | 5 | 100·92·100·100·92 | **100%** | 96.9% | 100% ×5 | 0/4 ×5 | 95% |
 | **claude-sonnet-5** (vanilla, skill OFF) | 5 | 92·100·100·100·100 | **100%** | 98.5% | 100% ×5 | 0/4 ×5 | 84.6% |
 | **claude-haiku-4.5** (skill ON) | 5 | 85·92·92·85·92 | **92%** | 89.2% | 2 FPs (r1,r2) | 0/4 ×5 | 79.4% |
-| Antigravity — Gemini 3.5 Flash Medium (skill ON) | 1 of 3 | 92 | — | — | 100% | 0/4 | 75% |
-
-AG arm partial: rounds 2-3 pending (`AG-RUN-PROMPT.md`).
+| **Antigravity — Gemini 3.5 Flash Medium** (skill ON) | 3 | 92·100·92 | **92%** | 94.7% | 100% ×3 | 0/4 ×3 | 86.3% |
 
 ## Key findings
 
@@ -76,18 +74,24 @@ corpus unambiguous-by-design → ceiling effect at sonnet+ tier; engine-dependen
 like AV detection rates. This file is the hand-authored K-rep aggregate — do NOT
 regenerate with `score.mjs --write` (that emits a single-run block).
 
-## Cross-engine comparison (2026-07-03, in progress)
+## Cross-engine comparison (2026-07-03, K=3 both vendors)
 
-Two vendors over the same corpus, blind. AG rounds 2-3 pending; the 2026-06-13
-single-run AG baseline (13/13, engine of that era, skill v3.4.0) is superseded by
+Two vendors over the same corpus, blind (fixtures + ground truth authored on the
+CC side; expected.json off-limits to every scanning agent). The 2026-06-13
+single-run AG baseline (13/13, that era's engine, skill v3.4.0) is superseded by
 this K=3 protocol.
 
-| Engine | Recall | Precision | Decoy FPs | Severity acc |
-|---|---|---|---|---|
-| claude-fable-5 (K=3) | 13/13 ×3 | 100% | 0/4 | 100% |
-| Antigravity Gemini 3.5 Flash Medium (r1) | 12/13 | 100% | 0/4 | 75% |
+| Engine | Recall per rep | Median | Precision | Decoy FPs | Severity acc |
+|---|---|---|---|---|---|
+| claude-fable-5 (K=3) | 100·100·100 | **100%** | 100% | 0/4 ×3 | 100% |
+| Antigravity Gemini 3.5 Flash Medium (K=3) | 92·100·92 | **92%** | 100% | 0/4 ×3 | 86.3% |
 
-Sole AG-r1 miss: f01:5 (the zero-ref dead function — the same item that separates
-the Claude tiers). Severity divergence concentrates in the judgment band, same
-shape as the 2026-06-13 cross-engine result (detection converges, severity
-diverges) — consistent with the cross-model convergence theory.
+AG's only recall misses: f01:5 (1/3 found — the zero-ref dead function, the same
+item that separates the Claude tiers: fable 3/3 · sonnet 3/5 · haiku 0/5). AG
+flips on it exactly like sonnet does — per the flip rule this arm would extend
+to K=5 (2 more user-run rounds) to settle the item; K=3 medians stand either
+way. Severity divergence again concentrates in the judgment band (86% vs
+fable's 100%), the same shape as the 2026-06-13 result: detection converges
+across vendors, severity judgment diverges — consistent with the cross-model
+convergence theory. AG protocol note: all 3 reps ran as fresh scanning contexts
+(fresh conversations), matching the CC arms' fresh-sub-per-rep design.
