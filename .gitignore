@@ -1,0 +1,7 @@
+# machine-local agent state (one-flock ignore class)
+.claude/
+.agents/
+CLAUDE.md
+AGENTS.md
+MEMORY.md
+skillspector-*.json
