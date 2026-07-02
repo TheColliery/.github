@@ -48,9 +48,10 @@ Each tool installs on its own, or grab them together — like choosing DLC on a 
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/TheColliery/.github/main/install.mjs -o colliery-install.mjs
-node colliery-install.mjs all       # the whole suite
+node colliery-install.mjs all       # the whole suite (all 5)
 node colliery-install.mjs 3         # just CoalBoard
 node colliery-install.mjs 1 2 3     # CoalMine + CoalTipple + CoalBoard
+node colliery-install.mjs 4 5       # CoalHearth + CoalFace (beta)
 node colliery-install.mjs coalmine  # by name, too
 ```
 
@@ -73,7 +74,7 @@ Headline results — small, dated samples. Full tables, tested versions, + cavea
 | Tool | Result |
 | :--- | :--- |
 | **CoalMine** | 100% recall · 100% precision (rot-canary, 16 fixtures) |
-| **CoalTipple** | 20/20 output-correctness on +1-rung escalation · ~70–75% routing-cost savings |
+| **CoalTipple** | delegate-down quality-safe on mechanical/verifiable work; escalate-up justified on high-precision sensitive work (mid tier reproducibly errs) · ~70–75% routing-cost savings — [see the matrix](https://github.com/TheColliery/.github/blob/main/benchmarks/CoalTipple/RESULTS.md) |
 | **CoalBoard** | 10/10 vs an un-primed solo ~13/20 on error-not-allowed tasks (honest correlated-blind-spot ceiling noted in its docs) |
 
 See **[the benchmark records](https://github.com/TheColliery/.github/tree/main/benchmarks)**.

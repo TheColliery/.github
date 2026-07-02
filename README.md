@@ -29,13 +29,14 @@ This repository houses the global configuration, landing page profile, central i
 
 ## 📦 How to Install the Suite
 
-You can install any or all tools in the series (`CoalMine`, `CoalTipple`, `CoalBoard`) using the central installer located in this repository:
+You can install any or all tools in the series (`CoalMine`, `CoalTipple`, `CoalBoard`, `CoalHearth` (beta), `CoalFace` (beta)) using the central installer located in this repository:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/TheColliery/.github/main/install.mjs -o colliery-install.mjs
-node colliery-install.mjs all       # the whole suite
-node colliery-install.mjs 3         # just CoalBoard
-node colliery-install.mjs 1 2 3     # CoalMine + CoalTipple + CoalBoard
+node colliery-install.mjs all         # the whole suite (all 5)
+node colliery-install.mjs 3           # just CoalBoard
+node colliery-install.mjs 1 2 3       # CoalMine + CoalTipple + CoalBoard
+node colliery-install.mjs 4 5         # CoalHearth + CoalFace (beta)
 ```
 
 ---

@@ -93,6 +93,11 @@ A dir a tool type doesn't need is ABSENT, not empty — no scaffolding "for late
 - **The first CI push is not just a drift-catch — it is the FIRST REAL EXECUTION of capability-gated tests** the dev box silently skips (symlinks/admin, case-sensitivity, CRLF). Expect first-push reds; they are the pattern working, not the workflow failing.
 - **A capability-gated test must skip VISIBLY** (`t.skip(...)`) — never a bare `return` inside a `catch`: a silent vacuous pass reads as green while the assertion has never run (this hid a real symlink-escape bug). Use the unprivileged capability shim where one exists (symlink type `'junction'` on Windows; the type arg is ignored on POSIX).
 - **Lexical resolve-and-contain (`path.resolve` + `path.relative`) is NOT symlink-safe.** Any sweep that DELETES or WRITES through a checked path needs **realpath-and-contain**: `fs.realpathSync` BOTH sides (the root too — macOS's `/private`-symlinked tmpdir otherwise no-ops legitimate work), unresolvable candidate = fail-closed.
+- **The same applies to read-only PATH COMPARES — the stop-at-home walk.** On macOS `process.cwd()` returns the physical path (`/private/var/...`) while `os.homedir()` returns the raw symlink (`/var/...`), so a lexical `dir === home` NEVER matches and the walk escapes above home. Canonical fix (CF v0.1.0-beta.2, swept to CB + CH same day — one-flock): `function physical(p) { try { return fs.realpathSync(p); } catch { return path.resolve(p); } }` applied to BOTH sides before the compare; walk stays lexical after (fail-open is correct here — a compare, not a delete).
+
+## One flock, one color (series law — USER 2026-07-02)
+
+Siblings share ONE canonical shape on EVERY shared surface (workflows · paths-ignore · scripts · config/walk idioms · doc shapes · hook patterns · fix classes) — not only the surface where a divergence was first noticed. A fix on one sibling is grep-swept to ALL siblings carrying that surface in the same batch. An intentional divergence is NAMED with its reason where it lives; unnamed divergence = drift to fix. New surfaces copy this pattern doc, never a hand-rolled variant.
 
 ## New-repo checklist
 
