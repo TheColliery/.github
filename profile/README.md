@@ -75,7 +75,7 @@ Headline results — small, dated samples. Full tables, tested versions, + cavea
 | :--- | :--- |
 | **CoalMine** | 7 canaries × 4 engines, 3-5 repeated runs each: 100% recall on 6/7 suites for every engine · 0 decoy false alarms batch-wide · drift-canary 88% median (the discriminating suite) — measured 2026-07-03 |
 | **CoalTipple** | ON-vs-OFF paired (4 tasks × 3 tiers × K=3, 2026-07-03): routing ON = 4/4 task quality on both baselines, OFF = 3/4 on both (each failing a different task) · ON is ~23% cheaper from an Opus main, cost-neutral from a Sonnet main · never-delegate-sensitive-down re-confirmed on the new lineup — [see the record](https://github.com/TheColliery/.github/blob/main/benchmarks/CoalTipple/RESULTS.md) |
-| **CoalBoard** | 10/10 vs an un-primed solo ~13/20 on error-not-allowed tasks (honest correlated-blind-spot ceiling noted in its docs) |
+| **CoalBoard** | solo-vs-board redo (2026-07-03, Opus 4.8): solo 4/5 · board 5/5 — a strong solo model now catches the reasoning traps unaided; the board's irreducible edge is the version-sensitive FACT (T3), where only RUN-the-check (a live fetch) beats stale memory. Board = solo + ground-truth execution — honest ceiling in its docs |
 
 See **[the benchmark records](https://github.com/TheColliery/.github/tree/main/benchmarks)**.
 
