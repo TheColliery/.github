@@ -4,11 +4,13 @@
 locked methodology — paired design + stochastic repeat, arXiv 2411.00640).
 **Date: 2026-07-03 · Skill version: 3.8.4 · Corpus: 16 fixtures (13 planted defects + 4 clean decoys), scored mechanically by `score.mjs`.**
 
-> **TL;DR (plain language):** ทดสอบนกขมิ้น rot-canary กับโมเดลรุ่นใหม่ รันซ้ำ 3-5 รอบต่อรุ่น —
-> Fable 5 จับครบ 13/13 ทุกรอบไม่แกว่งเลย · Sonnet 5 จับ ~97% · Haiku 4.5 จับ ~89% ·
-> ไม่มีรุ่นไหน false-alarm บนไฟล์สะอาดแม้แต่ครั้งเดียว (0 จาก 72 โอกาส) ·
-> ที่ corpus ง่ายระดับนี้ Sonnet เปล่า ๆ ก็จับได้เกือบเท่ากัน แต่**สกิลช่วยให้ตัดสินความรุนแรงแม่นขึ้น ~10 จุด**
-> (95% vs 85%) · โจทย์เดียวที่แยกรุ่นเก่ง-อ่อนได้จริงคือ dead function ที่ต้องไล่ reachability ทั้งไฟล์
+> **TL;DR (plain language):** rot-canary re-tested on the current model line-up, 3-5 repeated
+> runs per model — Fable 5 catches 13/13 every run with zero variance · Sonnet 5 ~97% ·
+> Haiku 4.5 ~89% · no model raised a single false alarm on the clean decoy files (0 of 72
+> opportunities) · on a corpus this unambiguous, plain Sonnet detects almost as well as
+> skill-on Sonnet — but **the skill improves severity judgment by ~10 points** (95% vs 85%) ·
+> the one item that truly separates strong from weak models is the dead function that
+> requires whole-file reachability reasoning.
 
 ## Aggregate by arm (recall = planted defects found)
 
@@ -76,11 +78,13 @@ regenerate with `score.mjs --write` (that emits a single-run block).
 
 ## Multi-canary matrix (2026-07-03 — 6 new fixture suites, 3 engines)
 
-> **TL;DR:** ขยาย benchmark จาก rot-canary ตัวเดียวเป็น 7 นกขมิ้น (66 fixtures ใหม่, สร้าง+review ด้วย
-> org 3-sub flow). ผล: 5 ใน 6 suite ใหม่ ทุก engine จับครบ 100% ทุกรอบ (corpus ชัดโดยดีไซน์ = regression
-> floor) · **drift-canary = suite เดียวที่แยก engine ได้จริง** (fable 93 > AG 84 ≈ sonnet 80 mean) —
-> ทุก engine "เห็น" ความขัดแย้งครบ แต่เลือกฝั่งผิดหรือ hedge ทิ้งต่างกัน · false alarm บนไฟล์สะอาด = **0
-> จากทุกโอกาสของทุก engine** ทั้ง batch.
+> **TL;DR:** the benchmark now covers 7 canaries instead of rot-canary alone (66 new
+> fixtures, built + adversarially reviewed via the org 3-sub flow). Result: on 5 of the 6
+> new suites every engine catches 100% on every rep (unambiguous-by-design corpus =
+> regression floor) · **drift-canary is the only suite that truly separates engines**
+> (fable 93 > AG 84 ≈ sonnet 80 mean) — every engine SEES each disagreement but they split
+> on which side is authoritative, or hedge the finding away · false alarms on clean decoy
+> files: **0 across every opportunity for every engine** in the whole batch.
 
 Recall per suite (median over K reps; K=3 extended to 5 on any flip):
 
