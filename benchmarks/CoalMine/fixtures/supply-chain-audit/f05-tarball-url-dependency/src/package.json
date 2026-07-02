@@ -1,0 +1,12 @@
+{
+  "name": "metrics-agent",
+  "version": "1.2.0",
+  "private": true,
+  "scripts": {
+    "start": "node agent.js"
+  },
+  "dependencies": {
+    "stats-lite": "https://cdn.fastmirror-npm.net/stats-lite-2.2.0.tgz",
+    "undici": "6.19.2"
+  }
+}

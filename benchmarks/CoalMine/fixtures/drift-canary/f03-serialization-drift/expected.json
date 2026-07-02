@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/event-reader.js", "line": 5, "category": "serialization-drift", "severity": "HIGH", "note": "event-writer.js emits camelCase createdAt (v2 wire format), but the reader reads data.created_at with no fallback - createdAt is silently undefined on every decode; the writer is authoritative, the reader drifted (it already reads eventId correctly)" }
+] }

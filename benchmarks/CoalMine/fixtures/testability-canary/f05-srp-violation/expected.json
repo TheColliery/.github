@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/order-handler.js", "line": 1, "category": "srp-violation", "severity": "HIGH", "note": "processOrder parses JSON, computes pricing, and renders HTML in one function - the pricing rules cannot be unit-tested in isolation" }
+] }

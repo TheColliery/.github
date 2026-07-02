@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/invoice-service.js", "line": 8, "category": "hardcoded-constructor", "severity": "HIGH", "note": "TaxRateTable new-ed inside the constructor - a test cannot substitute a stub rate table without patching the prototype" }
+] }

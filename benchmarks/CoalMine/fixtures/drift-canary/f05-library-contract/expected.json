@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/billing.js", "line": 4, "category": "library-contract", "severity": "HIGH", "note": "money.js v2 defines formatMoney({ amount, currency }) and removed the v1 positional form; billing.js still calls formatMoney(item.priceCents, item.currency), so opts.amount is undefined and every invoice line silently renders NaN - the library defines the contract, the caller drifted" }
+] }

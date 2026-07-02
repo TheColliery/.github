@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/order-sync.js", "line": 10, "category": "partial-as-success", "severity": "CRITICAL", "note": "returns status complete and full synced count even when pushes failed; partial completion reported as success" }
+] }

@@ -1,0 +1,16 @@
+{
+  "name": "@acme/config-schema",
+  "version": "2.3.0",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepare": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@acme/validation-core": "1.8.2"
+  },
+  "devDependencies": {
+    "typescript": "5.5.3"
+  }
+}

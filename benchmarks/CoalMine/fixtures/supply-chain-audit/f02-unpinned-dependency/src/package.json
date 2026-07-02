@@ -1,0 +1,13 @@
+{
+  "name": "report-scheduler",
+  "version": "2.0.1",
+  "private": true,
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "cron-parser": "4.9.0",
+    "csv-stringify": "*",
+    "pino": "9.1.0"
+  }
+}

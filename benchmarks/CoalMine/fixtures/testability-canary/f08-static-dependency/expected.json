@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/refund.js", "line": 12, "category": "static-dependency", "severity": "LOW", "note": "applyRefund reaches the AuditLog singleton via getInstance() - a minor static dependency (logging only, the refund math stays assertable)" }
+] }

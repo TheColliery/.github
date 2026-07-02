@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/inventory-client.js", "line": 6, "category": "no-correlation-id", "severity": "MEDIUM", "note": "outbound HTTP call omits traceparent propagation; the incoming trace context (req.headers.traceparent) is available but never forwarded" }
+] }

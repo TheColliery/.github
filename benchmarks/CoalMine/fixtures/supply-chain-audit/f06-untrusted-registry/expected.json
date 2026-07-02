@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/.npmrc", "line": 2, "category": "untrusted-registry", "severity": "HIGH", "note": "registry overridden to a non-official host over plain http — every install pulls packages through an unauthenticated mirror" }
+] }

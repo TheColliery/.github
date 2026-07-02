@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/upload-consumer.js", "line": 7, "category": "no-correlation-id", "severity": "LOW", "note": "queue consumer logs without the requestId that arrived in the message; the trace breaks at the queue boundary (structured log otherwise fine)" }
+] }

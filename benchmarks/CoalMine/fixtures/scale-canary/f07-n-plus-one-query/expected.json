@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/enrich-users.js", "line": 7, "category": "n-plus-one-query", "severity": "HIGH", "note": "one logins query per user row after the list fetch — N+1 round-trips (Promise.all parallelism does not batch it); use a GROUP BY join" }
+] }

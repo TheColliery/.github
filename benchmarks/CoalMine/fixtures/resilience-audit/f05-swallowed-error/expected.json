@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/queue-consumer.js", "line": 5, "category": "swallowed-error", "severity": "CRITICAL", "note": "empty catch swallows the insert failure and the message is still acked; failed job silently lost" }
+] }

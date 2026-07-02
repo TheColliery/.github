@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/orders-api.js", "line": 7, "category": "unstructured-log", "severity": "MEDIUM", "note": "string-concatenation log at an API boundary; should be structured key-value, e.g. logger.info({ userId, orderId }, 'order created')" }
+] }

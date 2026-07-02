@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/uploader.js", "line": 2, "category": "config-drift", "severity": "MEDIUM", "note": "limits.js declares MAX_UPLOAD_MB = 25 as the single source of truth; uploader.js hardcodes its own 25 instead of importing it - the values still agree today, but the duplicate silently diverges on the next limit change; limits.js is authoritative, the uploader drifted" }
+] }

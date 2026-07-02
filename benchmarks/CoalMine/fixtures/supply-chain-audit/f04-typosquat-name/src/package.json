@@ -1,0 +1,13 @@
+{
+  "name": "session-api",
+  "version": "3.1.0",
+  "private": true,
+  "scripts": {
+    "start": "node app.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "expresss": "4.19.2",
+    "jsonwebtoken": "9.0.2"
+  }
+}

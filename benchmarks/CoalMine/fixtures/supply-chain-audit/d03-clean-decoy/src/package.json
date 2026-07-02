@@ -1,0 +1,12 @@
+{
+  "name": "billing-worker",
+  "version": "4.2.1",
+  "private": true,
+  "scripts": {
+    "start": "node worker.js"
+  },
+  "dependencies": {
+    "bullmq": "5.8.3",
+    "ioredis": "5.4.1"
+  }
+}

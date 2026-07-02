@@ -11,6 +11,8 @@
 //
 // Usage:
 //   node score.mjs [results/<run>.json]   (default: newest in results/)
+// The suite comes from the run file's "suite" field (default: rot-canary, so
+// pre-multi-suite run files score unchanged).
 // Fail-loud CLI per scripts-quality.md: bad inputs exit 1.
 
 import fs from 'node:fs';
@@ -18,32 +20,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repo = path.dirname(fileURLToPath(import.meta.url));
-const FIXTURES = path.join(repo, 'fixtures', 'rot-canary');
 const RESULTS_DIR = path.join(repo, 'results');
 const LINE_TOLERANCE = 3;
 
 function die(msg) {
   console.error(`FAIL: ${msg}`);
   process.exit(1);
-}
-
-// ── load ground truth ────────────────────────────────────────────────────────
-if (!fs.existsSync(FIXTURES)) die(`no fixtures at ${FIXTURES}`);
-const fixtures = fs.readdirSync(FIXTURES, { withFileTypes: true })
-  .filter((e) => e.isDirectory())
-  .map((e) => e.name)
-  .sort();
-if (!fixtures.length) die('fixture suite is empty');
-
-const expected = {};
-for (const f of fixtures) {
-  const p = path.join(FIXTURES, f, 'expected.json');
-  if (!fs.existsSync(p)) die(`${f}: expected.json missing`);
-  try {
-    expected[f] = JSON.parse(fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, '')).findings ?? [];
-  } catch (e) {
-    die(`${f}: expected.json unreadable: ${e.message}`);
-  }
 }
 
 // ── args ──────────────────────────────────────────────────────────────────────
@@ -63,11 +45,35 @@ if (!runPath) {
 }
 let run;
 try {
-  run = JSON.parse(fs.readFileSync(runPath, 'utf8').replace(/^\uFEFF/, ''));
+  run = JSON.parse(fs.readFileSync(runPath, 'utf8').replace(/^﻿/, ''));
 } catch (e) {
   die(`run file unreadable: ${e.message}`);
 }
 if (!Array.isArray(run.findings)) die('run file has no findings[]');
+
+// ── load ground truth ────────────────────────────────────────────────────────
+// Suite from the run file ("suite": "scale-canary"); absent = the original
+// rot-canary corpus, so pre-multi-suite run files score unchanged.
+const suite = run.suite ?? 'rot-canary';
+if (!/^[a-z0-9-]+$/.test(suite)) die(`invalid suite name "${suite}"`);
+const FIXTURES = path.join(repo, 'fixtures', suite);
+if (!fs.existsSync(FIXTURES)) die(`no fixtures at ${FIXTURES}`);
+const fixtures = fs.readdirSync(FIXTURES, { withFileTypes: true })
+  .filter((e) => e.isDirectory())
+  .map((e) => e.name)
+  .sort();
+if (!fixtures.length) die('fixture suite is empty');
+
+const expected = {};
+for (const f of fixtures) {
+  const p = path.join(FIXTURES, f, 'expected.json');
+  if (!fs.existsSync(p)) die(`${f}: expected.json missing`);
+  try {
+    expected[f] = JSON.parse(fs.readFileSync(p, 'utf8').replace(/^﻿/, '')).findings ?? [];
+  } catch (e) {
+    die(`${f}: expected.json unreadable: ${e.message}`);
+  }
+}
 
 // ── validate run findings against known fixtures ─────────────────────────────
 // A finding whose fixture field matches no fixture dir is a bug or an orphan;
@@ -128,7 +134,7 @@ const plantedFixtures = fixtures.length - decoys;
 
 // ── report ───────────────────────────────────────────────────────────────────
 const lines = [];
-lines.push('# CoalMine Eval Results — rot-canary');
+lines.push(`# CoalMine Eval Results — ${suite}`);
 lines.push('');
 lines.push(`**Run:** ${path.basename(runPath)} · **Model:** ${run.model ?? 'unknown'} · **Date:** ${run.date ?? 'unknown'} · **Skill version:** ${run.skillVersion ?? 'unknown'}`);
 lines.push('');
@@ -155,13 +161,16 @@ if (fpList.length) {
 lines.push('');
 lines.push('## Methodology');
 lines.push('');
-lines.push(`${fixtures.length} fixtures (${plantedFixtures} with ${planted} planted, line-labeled defects · ${decoys} clean decoys). The agent runs rot-canary QUICK over each fixture and emits structured findings; this scorer matches them mechanically (fixture + file + category, line ±${LINE_TOLERANCE}) — no judgment calls at scoring time. Results are model-dependent, like antivirus detection rates are engine-dependent: re-run on model or skill changes and compare. Caveat for this baseline: fixtures and the first run were authored in the same project — treat the numbers as a regression floor, not an independent benchmark.`);
+lines.push(`${fixtures.length} fixtures (${plantedFixtures} with ${planted} planted, line-labeled defects · ${decoys} clean decoys). The agent runs the ${suite} skill over each fixture and emits structured findings; this scorer matches them mechanically (fixture + file + category, line ±${LINE_TOLERANCE}) — no judgment calls at scoring time. Results are model-dependent, like antivirus detection rates are engine-dependent: re-run on model or skill changes and compare. Caveat for this baseline: fixtures and the first run were authored in the same project — treat the numbers as a regression floor, not an independent benchmark.`);
 lines.push('');
 
 console.log(lines.slice(2, 12).join('\n'));
 // The RESULTS.md rewrite is OPT-IN (`--write`) — a default scoring run prints the
-// report only and never clobbers the committed RESULTS.md.
+// report only and never clobbers the committed RESULTS.md. Multi-suite guard:
+// RESULTS.md is the rot-canary flagship aggregate; other suites are hand-authored
+// aggregates, so --write refuses for them rather than clobbering the flagship.
 if (writeResults) {
+  if (suite !== 'rot-canary') die(`--write is rot-canary-only; the ${suite} aggregate is hand-authored`);
   // Preserve any hand-authored sections that follow the scored block.
   // Convention: sections starting at "## Cross-engine" (or any H2 after
   // "## Methodology") are hand-authored and must not be clobbered on re-run.

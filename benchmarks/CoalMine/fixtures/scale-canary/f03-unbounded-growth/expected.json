@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/session-cache.js", "line": 6, "category": "unbounded-growth", "severity": "MEDIUM", "note": "module-level cache only ever inserts — no eviction, TTL, or size cap, so memory grows with every unique session id" }
+] }

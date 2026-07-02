@@ -1,0 +1,12 @@
+{
+  "name": "asset-pipeline",
+  "version": "0.8.0",
+  "private": true,
+  "scripts": {
+    "build": "node build.js"
+  },
+  "dependencies": {
+    "image-tools": "git+http://github.com/acme-forks/image-tools.git",
+    "sharp": "0.33.4"
+  }
+}

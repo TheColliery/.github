@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/session-store.js", "line": 8, "category": "non-atomic-write", "severity": "CRITICAL", "note": "writeFileSync overwrites the live store in place; a crash mid-write corrupts the only copy (no temp+rename)" }
+] }

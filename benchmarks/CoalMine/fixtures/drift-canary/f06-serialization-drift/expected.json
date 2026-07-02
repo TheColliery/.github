@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/prefs-reader.js", "line": 6, "category": "serialization-drift", "severity": "HIGH", "note": "prefs-writer.js stores the payload under prefs, but the reader reads doc.preferences - always {} - and then persists that back on line 7, silently wiping saved prefs on every normal load; the writer owns the stored format, the reader drifted" }
+] }

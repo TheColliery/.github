@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/login-route.js", "line": 8, "category": "blocking-main-loop", "severity": "HIGH", "note": "pbkdf2Sync burns ~100ms of CPU on the event loop per login request, stalling every concurrent client; use the async crypto.pbkdf2" }
+] }

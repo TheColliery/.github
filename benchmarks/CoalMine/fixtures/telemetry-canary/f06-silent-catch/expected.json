@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/account-close.js", "line": 7, "category": "silent-catch", "severity": "CRITICAL", "note": "session-revocation failure swallowed with no log after account status was already mutated; 'account closed' is then logged as if fully successful" }
+] }

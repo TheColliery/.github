@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/config.js", "line": 5, "category": "config-drift", "severity": "MEDIUM", "note": "config.js introduces WEBHOOK_URL as a hard-required key, but env-defaults.js (the catalog of provided keys) carries no default or fallback for it - boot crashes on any environment not yet updated; the defaults catalog is authoritative, the new requirement drifted" }
+] }

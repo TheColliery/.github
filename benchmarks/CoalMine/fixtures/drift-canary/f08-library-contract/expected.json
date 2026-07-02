@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/tax.js", "line": 4, "category": "library-contract", "severity": "LOW", "note": "the JSDoc documents rate as a percentage 0-100, but the implementation (subtotal * (1 + rate)) and its caller (checkout.js passes 0.07) both treat rate as a 0-1 fraction - runtime behavior agrees, so the code is authoritative and the doc comment drifted" }
+] }
