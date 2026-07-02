@@ -6,17 +6,18 @@ locked methodology — paired design + stochastic repeat, arXiv 2411.00640).
 
 > **TL;DR (plain language):** rot-canary re-tested on the current model line-up, 3-5 repeated
 > runs per model — Fable 5 catches 13/13 every run with zero variance · Sonnet 5 ~97% ·
-> Haiku 4.5 ~89% · no model raised a single false alarm on the clean decoy files (0 of 72
-> opportunities) · on a corpus this unambiguous, plain Sonnet detects almost as well as
-> skill-on Sonnet — but **the skill improves severity judgment by ~10 points** (95% vs 85%) ·
-> the one item that truly separates strong from weak models is the dead function that
-> requires whole-file reachability reasoning.
+> Opus 4.8 ~95% · Haiku 4.5 ~89% · no model raised a single false alarm on the clean decoy
+> files · on a corpus this unambiguous, plain Sonnet detects almost as well as skill-on
+> Sonnet — but **the skill improves severity judgment by ~10 points** (95% vs 85%) · the one
+> item that truly separates models is the dead function that requires whole-file
+> reachability reasoning.
 
 ## Aggregate by arm (recall = planted defects found)
 
 | Arm | K | Recall per rep | Median | Mean | Precision | Decoy FPs | Severity acc (mean) |
 |---|---|---|---|---|---|---|---|
 | **claude-fable-5** (skill ON) | 3 | 100·100·100 | **100%** | 100% | 100% ×3 | 0/4 ×3 | **100%** |
+| **claude-opus-4.8** (skill ON) | 5 | 100·92·92·100·92 | **92%** | 95.2% | 100% ×5 | 0/4 ×5 | 88.8% |
 | **claude-sonnet-5** (skill ON) | 5 | 100·92·100·100·92 | **100%** | 96.9% | 100% ×5 | 0/4 ×5 | 95% |
 | **claude-sonnet-5** (vanilla, skill OFF) | 5 | 92·100·100·100·100 | **100%** | 98.5% | 100% ×5 | 0/4 ×5 | 84.6% |
 | **claude-haiku-4.5** (skill ON) | 5 | 85·92·92·85·92 | **92%** | 89.2% | 2 FPs (r1,r2) | 0/4 ×5 | 79.4% |
@@ -76,7 +77,7 @@ corpus unambiguous-by-design → ceiling effect at sonnet+ tier; engine-dependen
 like AV detection rates. This file is the hand-authored K-rep aggregate — do NOT
 regenerate with `score.mjs --write` (that emits a single-run block).
 
-## Multi-canary matrix (2026-07-03 — 6 new fixture suites, 3 engines)
+## Multi-canary matrix (2026-07-03 — 6 new fixture suites, 4 engines)
 
 > **TL;DR:** the benchmark now covers 7 canaries instead of rot-canary alone (66 new
 > fixtures, built + adversarially reviewed via the org 3-sub flow). Result: on 5 of the 6
@@ -88,17 +89,17 @@ regenerate with `score.mjs --write` (that emits a single-run block).
 
 Recall per suite (median over K reps; K=3 extended to 5 on any flip):
 
-| Suite (8 planted + 3 decoys each) | claude-fable-5 | claude-sonnet-5 | AG Gemini 3.5 Flash |
-|---|---|---|---|
-| scale-canary | **100** ×3 | **100** med (95.2 mean, K=5) | **100** ×3 |
-| resilience-audit | **100** ×3 | **100** ×3 | **100** ×3 |
-| telemetry-canary | **100** ×3 | **100** ×3 | **100** ×3 |
-| testability-canary | **100** ×3 | **100** ×3 | **100** ×3 |
-| **drift-canary** | **88** med (92.8 mean, K=5) | **88** med (80.4 mean, K=5) | **88** med (83.7 mean) |
-| supply-chain-audit | **100** ×3 | **100** ×3 | **100** ×3 |
+| Suite (8 planted + 3 decoys each) | claude-fable-5 | claude-opus-4.8 | claude-sonnet-5 | AG Gemini 3.5 Flash |
+|---|---|---|---|---|
+| scale-canary | **100** ×3 | **100** ×3 | **100** med (95.2 mean, K=5) | **100** ×3 |
+| resilience-audit | **100** ×3 | **100** ×3 | **100** ×3 | **100** ×3 |
+| telemetry-canary | **100** ×3 | **100** ×3 | **100** ×3 | **100** ×3 |
+| testability-canary | **100** ×3 | **100** ×3 | **100** ×3 | **100** ×3 |
+| **drift-canary** | **88** med (92.8 mean, K=5) | **88** med (92.8 mean, K=5) | **88** med (80.4 mean, K=5) | **88** med (83.7 mean) |
+| supply-chain-audit | **100** ×3 | **100** ×3 (precision 73–100, see below) | **100** ×3 | **100** ×3 |
 
-Severity accuracy (mean): fable 89% · sonnet 84% · AG 79% — the judgment ladder from the
-rot-canary run holds across all suites (fable ≥ sonnet ≈ AG).
+Severity accuracy (mean): fable 89% · opus 84% · sonnet 84% · AG 79% — the judgment ladder
+from the rot-canary run holds across all suites (fable ≥ opus ≈ sonnet ≈ AG).
 
 ### What separates engines — the discriminating items
 
@@ -116,7 +117,16 @@ Detection saturates; **judgment items** discriminate:
   reps, fable at the mutation line every time — an anchor-convention split, not a detection
   gap (both describe the same defect).
 - **rot f01:5** (zero-ref dead function): the original discriminator — fable 3/3 · sonnet 3/5 ·
-  haiku 0/5 · AG 1/3.
+  opus 2/5 · haiku 0/5 · AG 1/3. Opus adds a THIRD failure mode: it SEES the defect every rep
+  (its reasoning names it) but strategically WITHHOLDS it 3/5 ("the fixture is named for one
+  defect; false positives are penalized") — distinct from sonnet's occasional misread and
+  haiku's stable blindness. Detection ≠ reporting.
+- **supply f08 phantom findings (opus only)**: in 2/3 reps opus reported the caret dependencies
+  of decoy d02 under fault fixture f08's name — the file itself has no carets (verified). A
+  working-memory aliasing error across many small, similar manifests: the only precision break
+  in the entire batch (73–80% on those reps). The decoys themselves still scored zero false
+  positives for every engine — decoy discipline held batch-wide; the phantoms landed on a
+  fault fixture.
 
 ### Corpus lessons (for the next fixture rev)
 
