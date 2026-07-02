@@ -24,7 +24,7 @@ This repository houses the global configuration, landing page profile, central i
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalBoard?style=flat-square&logo=github)](https://github.com/TheColliery/CoalBoard/network/members)
   [![Downloads](https://img.shields.io/badge/CoalBoard_Downloads-701%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalBoard)
   [![Developers](https://img.shields.io/badge/CoalBoard_Developers-194%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalBoard)
-* **[CoalHearth](https://github.com/TheColliery/CoalHearth)** *(beta)*: Session warm-resume — journals state so an interrupted session resumes from a recovery block instead of a manual rebuild.
+* **[CoalHearth](https://github.com/TheColliery/CoalHearth)**: Session warm-resume — journals state so an interrupted session resumes from a recovery block instead of a manual rebuild.
   <br>
   [![Stars](https://img.shields.io/github/stars/TheColliery/CoalHearth?style=flat-square&logo=github)](https://github.com/TheColliery/CoalHearth/stargazers)
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalHearth?style=flat-square&logo=github)](https://github.com/TheColliery/CoalHearth/network/members)
@@ -41,14 +41,14 @@ This repository houses the global configuration, landing page profile, central i
 
 ## 📦 How to Install the Suite
 
-You can install any or all tools in the series (`CoalMine`, `CoalTipple`, `CoalBoard`, `CoalHearth` (beta), `CoalFace` (beta)) using the central installer located in this repository:
+You can install any or all tools in the series (`CoalMine`, `CoalTipple`, `CoalBoard`, `CoalHearth`, `CoalFace` (beta)) using the central installer located in this repository:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/TheColliery/.github/main/install.mjs -o colliery-install.mjs
 node colliery-install.mjs all         # the whole suite (all 5)
 node colliery-install.mjs 3           # just CoalBoard
 node colliery-install.mjs 1 2 3       # CoalMine + CoalTipple + CoalBoard
-node colliery-install.mjs 4 5         # CoalHearth + CoalFace (beta)
+node colliery-install.mjs 4 5         # CoalHearth + CoalFace (CoalFace beta)
 ```
 
 ---

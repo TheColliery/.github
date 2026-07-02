@@ -38,7 +38,7 @@ function installCoalBoard() {
     && run('claude', ['plugin', 'install', 'coalboard@coalboard']);
 }
 function installCoalHearth() {
-  // CoalHearth ships as a Claude Code plugin (beta; hook-only — Claude Code only).
+  // CoalHearth ships as a Claude Code plugin (hook-only — Claude Code only).
   return run('claude', ['plugin', 'marketplace', 'add', 'TheColliery/CoalHearth'])
     && run('claude', ['plugin', 'install', 'coalhearth@coalhearth']);
 }
@@ -53,7 +53,7 @@ const DLC = [
   { n: 1, key: 'coalmine',   name: 'CoalMine',   blurb: '9 quality-canary skills (code-health, grounding, supply-chain, resilience, more)', live: true,  install: installCoalMine },
   { n: 2, key: 'coaltipple', name: 'CoalTipple', blurb: 'model/effort router (delegate-down to save tokens, escalate-up for quality)',      live: true,  install: installCoalTipple },
   { n: 3, key: 'coalboard',  name: 'CoalBoard',  blurb: 'consensus & debate board (multi-lens review, bounded cost, zero-breakage)',        live: true,  install: installCoalBoard },
-  { n: 4, key: 'coalhearth', name: 'CoalHearth', blurb: 'session warm-resume + advisory budget nudge (beta; reduces limit-hit loss)',       live: true,  install: installCoalHearth },
+  { n: 4, key: 'coalhearth', name: 'CoalHearth', blurb: 'session warm-resume + advisory budget nudge (reduces limit-hit loss)',              live: true,  install: installCoalHearth },
   { n: 5, key: 'coalface',   name: 'CoalFace',   blurb: 'fan-out discipline (beta; scout -> waves -> QC -> one writer, solo-cost bound)',   live: true,  install: installCoalFace },
 ];
 
