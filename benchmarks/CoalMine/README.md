@@ -6,13 +6,19 @@ scored mechanically.
 
 ```
 benchmarks/CoalMine/
-  fixtures/rot-canary/
-    f01-dead-code/ … f12-doc-rot/   ← tiny code samples, each with expected.json
+  fixtures/<suite>/                 ← 7 suites: rot-canary (16 fixtures) +
+    f01-… f08/f12-…                    scale-canary · resilience-audit ·
+                                       telemetry-canary · testability-canary ·
+                                       drift-canary · supply-chain-audit
+                                       (8 fault fixtures + 3 clean decoys each),
+                                       every fixture with expected.json
                                        (ground truth: file, line, category, severity)
-    d01-…-d04-clean-decoy/          ← zero-defect files; any finding = false positive
-  results/<date>-<model>.json       ← one agent run: structured findings
-  score.mjs                         ← mechanical matcher → RESULTS.md
-  RESULTS.md                        ← latest scored run
+    d01-…-clean-decoy/              ← zero-defect files; any finding = false positive
+  results/<date>[-<suite>]-<model>-r<N>.json ← one agent run (rep N): structured findings
+                                       + a "suite" field (absent = rot-canary)
+  score.mjs                         ← mechanical matcher (suite-aware) → report
+  RESULTS.md                        ← K-rep aggregate across suites + engines
+  AG-RUN-PROMPT.md                  ← the Antigravity arm's copy-paste protocol
 ```
 
 ## Running an eval

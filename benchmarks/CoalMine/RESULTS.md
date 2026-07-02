@@ -74,6 +74,63 @@ corpus unambiguous-by-design → ceiling effect at sonnet+ tier; engine-dependen
 like AV detection rates. This file is the hand-authored K-rep aggregate — do NOT
 regenerate with `score.mjs --write` (that emits a single-run block).
 
+## Multi-canary matrix (2026-07-03 — 6 new fixture suites, 3 engines)
+
+> **TL;DR:** ขยาย benchmark จาก rot-canary ตัวเดียวเป็น 7 นกขมิ้น (66 fixtures ใหม่, สร้าง+review ด้วย
+> org 3-sub flow). ผล: 5 ใน 6 suite ใหม่ ทุก engine จับครบ 100% ทุกรอบ (corpus ชัดโดยดีไซน์ = regression
+> floor) · **drift-canary = suite เดียวที่แยก engine ได้จริง** (fable 93 > AG 84 ≈ sonnet 80 mean) —
+> ทุก engine "เห็น" ความขัดแย้งครบ แต่เลือกฝั่งผิดหรือ hedge ทิ้งต่างกัน · false alarm บนไฟล์สะอาด = **0
+> จากทุกโอกาสของทุก engine** ทั้ง batch.
+
+Recall per suite (median over K reps; K=3 extended to 5 on any flip):
+
+| Suite (8 planted + 3 decoys each) | claude-fable-5 | claude-sonnet-5 | AG Gemini 3.5 Flash |
+|---|---|---|---|
+| scale-canary | **100** ×3 | **100** med (95.2 mean, K=5) | **100** ×3 |
+| resilience-audit | **100** ×3 | **100** ×3 | **100** ×3 |
+| telemetry-canary | **100** ×3 | **100** ×3 | **100** ×3 |
+| testability-canary | **100** ×3 | **100** ×3 | **100** ×3 |
+| **drift-canary** | **88** med (92.8 mean, K=5) | **88** med (80.4 mean, K=5) | **88** med (83.7 mean) |
+| supply-chain-audit | **100** ×3 | **100** ×3 | **100** ×3 |
+
+Severity accuracy (mean): fable 89% · sonnet 84% · AG 79% — the judgment ladder from the
+rot-canary run holds across all suites (fable ≥ sonnet ≈ AG).
+
+### What separates engines — the discriminating items
+
+Detection saturates; **judgment items** discriminate:
+
+- **drift f08** (a library whose JSDoc contradicts its own code): every engine flips on WHICH
+  side is authoritative — fable 2/5 · sonnet 1/5 · AG ~1/3 pick the planted side. Genuinely
+  ambiguous-authority; kept as a known-ambiguous item, not a defect of any engine.
+- **drift f04** (required config key missing from the defaults catalog): sonnet reads the
+  CATALOG as the wrong side 4/5 reps (systematic alternative reading, not noise); fable and
+  AG read the planted side.
+- **drift f07** (duplicated constant, values still equal): sonnet drops it as "no behavioral
+  break yet" 3/5 reps — the FN-trap the corpus review predicted verbatim.
+- **scale f03** (unbounded cache): sonnet anchors the finding at the DECLARATION line 2/5
+  reps, fable at the mutation line every time — an anchor-convention split, not a detection
+  gap (both describe the same defect).
+- **rot f01:5** (zero-ref dead function): the original discriminator — fable 3/3 · sonnet 3/5 ·
+  haiku 0/5 · AG 1/3.
+
+### Corpus lessons (for the next fixture rev)
+
+1. Defects with two legitimate anchor lines (declaration vs occurrence) need either a
+   single-anchor plant or scorer alternate-line support.
+2. Two-sided drift pairs must state the authoritative side IN-FILE beyond doubt — f04/f08
+   show that "objectively decidable" to a reviewer is not always unambiguous to a scanner.
+3. Not-yet-diverged duplication is a legitimate FN-trap — keep, but expect engine-dependent
+   recall on it.
+4. All corpora were built by 6 builder subs and adversarially verified by 2 review subs
+   (severity reconciled to each skill's OWN rubric; 1 accidental second defect removed;
+   1 decoy hardened) before freezing at commit `c943fcc`.
+
+Provenance: 42 CC runs (this section) + 18 AG runs, every run blind + fresh-context, scored
+mechanically by the suite-aware `score.mjs`. AG drift flipped 75↔88 at K=3; the extension to
+K=5 is optional — its two misses are the same systematic classes (wrong-side f04-shape +
+f07 drop), not sampling noise.
+
 ## Cross-engine comparison (2026-07-03, K=3 both vendors)
 
 Two vendors over the same corpus, blind (fixtures + ground truth authored on the

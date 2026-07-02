@@ -72,6 +72,20 @@ slashes. line = the defect's line number in that file. After writing the file,
 reply with only the file path and the finding count.
 ```
 
+## Multi-suite run — the 6 new canaries (2026-07-03 corpora)
+
+Same 3-round loop, but ONE paste covers all 6 suites (scale-canary ·
+resilience-audit · telemetry-canary · testability-canary · drift-canary ·
+supply-chain-audit) and writes 6 result files per round — 18 files total for
+K=3. Fixed suite order every round (a within-round ordering bias is constant
+and comparable across rounds; noted in RESULTS methodology). Corpus must be
+FROZEN (committed) before round 1 — never scan mid-review corpora.
+
+Paste block: see the session hand-off (REP=N header + the 6-suite loop with
+per-suite slug lists + the same blind protocol; result files named
+`<date>-<suite>-antigravity-r<REP>.json` and carrying `"suite"` +
+`"rep"` fields so `score.mjs` resolves the right ground truth).
+
 ## Provenance rules
 
 - The AG arm is **blind** (fixtures + ground truth authored on the CC side;
