@@ -37,12 +37,24 @@ function installCoalBoard() {
   return run('claude', ['plugin', 'marketplace', 'add', 'TheColliery/CoalBoard'])
     && run('claude', ['plugin', 'install', 'coalboard@coalboard']);
 }
+function installCoalHearth() {
+  // CoalHearth ships as a Claude Code plugin (beta; hook-only — Claude Code only).
+  return run('claude', ['plugin', 'marketplace', 'add', 'TheColliery/CoalHearth'])
+    && run('claude', ['plugin', 'install', 'coalhearth@coalhearth']);
+}
+function installCoalFace() {
+  // CoalFace ships as a Claude Code plugin (beta) — see its README; other agents
+  // install by copying skills/coalface into the agent's skills root.
+  return run('claude', ['plugin', 'marketplace', 'add', 'TheColliery/CoalFace'])
+    && run('claude', ['plugin', 'install', 'coalface@coalface']);
+}
 
 const DLC = [
   { n: 1, key: 'coalmine',   name: 'CoalMine',   blurb: '9 quality-canary skills (code-health, grounding, supply-chain, resilience, more)', live: true,  install: installCoalMine },
   { n: 2, key: 'coaltipple', name: 'CoalTipple', blurb: 'model/effort router (delegate-down to save tokens, escalate-up for quality)',      live: true,  install: installCoalTipple },
   { n: 3, key: 'coalboard',  name: 'CoalBoard',  blurb: 'consensus & debate board (multi-lens review, bounded cost, zero-breakage)',        live: true,  install: installCoalBoard },
-  { n: 4, key: 'coalface',   name: 'CoalFace',   blurb: 'agent swarming + concurrent orchestration',                                        live: false, install: null },
+  { n: 4, key: 'coalhearth', name: 'CoalHearth', blurb: 'session warm-resume + advisory budget nudge (beta; reduces limit-hit loss)',       live: true,  install: installCoalHearth },
+  { n: 5, key: 'coalface',   name: 'CoalFace',   blurb: 'fan-out discipline (beta; scout -> waves -> QC -> one writer, solo-cost bound)',   live: true,  install: installCoalFace },
 ];
 
 function menu() {
