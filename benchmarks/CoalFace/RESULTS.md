@@ -96,6 +96,33 @@ Not raw-token savings. On a right-sized fan-out CF delivers:
    no write conflicts by construction.)
 3. **Digest amortization** — real, but only above the shared-context threshold shown above.
 
+## The token-hack: fan out COARSER (measured)
+
+"Can we hack the token cost down?" — yes, and the lever is **worker count, not spot count**. Since
+the per-worker baseline (~25k) is the whole cost and content is ~free (~27 tokens per extra spot),
+packing the same 6 spots into FEWER workers collapses the bill:
+
+| Partition | Workers | Total tokens | vs ad-hoc | $ proxy | Parallelism |
+|---|---|---|---|---|---|
+| ad-hoc (naive) | 6 × 1 spot | 150,562 | — | $0.753 (Haiku) | 6× |
+| **coarse (the hack)** | **2 × 3 spots** | **50,360** | **−67%** | **$0.252 (Haiku)** | 2× |
+| solo | 1 × 6 spots | 35,538 | −76% | $0.888 (Opus) | 1× |
+
+A worker doing 3 functions cost **25,173 / 25,187** — statistically identical to one doing 1
+(~25,090); the 3 extra spots added ~80 tokens. So naive 1-spot-per-worker fan-out pays the ~25k
+baseline **6× for no reason**. **Token cost ≈ worker_count × 25k.** The token-optimal fan-out is the
+**COARSEST partition that still delivers the parallelism you need** — exactly what CF's **min-unit
+floor** (merge a unit smaller than the spawn overhead) and **granularity optimizer** (don't slice
+finer than ~2-4× the wave width) enforce. Naive ad-hoc UNDER-packs; CF forces the packing.
+
+**The real sweet spot = coarse × cheap tier:** 2×3 Haiku = **$0.25, 2× parallel** — cheaper than
+BOTH naive ad-hoc ($0.75) AND solo-Opus ($0.89), while staying parallel. That is CF's wallet,
+precisely located: not "more workers," but "**fewest cheap workers for the needed parallelism**."
+
+**Ceiling:** you still cannot beat **solo's single baseline** (35.5k) in raw tokens — fan-out's win
+is wall-clock + dollars, never fewer tokens than solo. If raw tokens are the only metric, don't fan
+out at all.
+
 ## Honest scope
 
 - **Benchmark ≠ graduation.** This measures CF's token/$ claims on a **synthetic** worksite. CF
