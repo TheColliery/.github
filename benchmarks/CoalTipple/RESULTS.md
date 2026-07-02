@@ -1,3 +1,4 @@
+<!-- lang-exempt: this record quotes scored Thai model-output as DATA (the legal-nuance translation task); the Thai is the measured artifact, not prose -->
 # Output-quality benchmark — results
 
 > Run per [README.md](README.md): each task run at **EACH tier directly** (no escalation — measures raw tier

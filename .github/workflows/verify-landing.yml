@@ -1,0 +1,35 @@
+name: verify-landing
+
+# Mechanical gate for the landing repo's LOCAL marks — the recurring "shipped X without sweeping Y"
+# class. Fails the run (red X) when: a visitor front door (profile/ · benchmarks/ · root README.md)
+# carries unmarked Thai, a benchmark has no org-landing row, or a benchmark record is undated.
+# Runs on every push + PR so a miss is caught by the machine, not the human's eye.
+# SCOPE: .github-local only. Cross-repo README front doors + prose judgment are NOT gated —
+# see SWEEP-MARKS.md + the human. A green run is NOT "all SWEEP-MARKS swept".
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 20
+
+      - name: Unit-test the gate
+        run: node --test scripts/verify-landing.test.mjs
+
+      - name: Verify the landing (no-Thai · org-row · dated)
+        run: node scripts/verify-landing.mjs

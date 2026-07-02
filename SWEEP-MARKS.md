@@ -10,6 +10,22 @@ headline, the org-landing benchmark row, and Thai prose reaching a public doc.)
 gets the event's mark list embedded verbatim in its contract; the review lane verifies
 every mark was touched (or explicitly N/A); the main gates the push on mark-complete.
 
+## Mechanically gated (no longer swept by eye)
+
+`scripts/verify-landing.mjs` — run in CI on every push + PR (`.github/workflows/verify-landing.yml`)
+— FAILS the build on the subset a machine can check in THIS repo, so a human never has to catch it:
+
+- **Event 1 mark 3** — every `benchmarks/<Tool>/` has a row in the profile Benchmarks table.
+- **Event 1 mark 4 (date half)** — every benchmark record carries a `YYYY-MM-DD`.
+- **Language-universal** — no unmarked Thai in the visitor front doors (`profile/` · `benchmarks/` ·
+  root `README.md`); intentional Thai (translation-benchmark DATA, e.g. scored Thai output) declares
+  `<!-- lang-exempt: reason -->` (the "name the intentional divergence" rule).
+
+The gate sees only THIS repo, so everything else stays MANUAL: cross-repo README front doors
+(Event 1 mark 2 — each tool's own repo), version provenance, prose judgment, and Events 2–4's
+cross-repo marks. **A green gate is NOT "all marks swept"** — it clears only the local mechanical
+subset. The rest is still the review lane + the human reading the rendered landing.
+
 ---
 
 ## Event 1 — Benchmark re-run (per tool) · 4 marks
@@ -21,8 +37,9 @@ every mark was touched (or explicitly N/A); the main gates the push on mark-comp
 | 3 | The org landing Benchmarks table row | `.github/profile/README.md` § Benchmarks |
 | 4 | Provenance on every figure: test DATE + tested tool VERSION + engine labels | inside marks 1-3 |
 
-Rules: public docs are language-universal (English) — sweep `grep -P '[\x{0E00}-\x{0E7F}]'`
-over tracked files before pushing prose. A figure without date+version is not publishable.
+Rules: public docs are language-universal (English) — marks 3, 4-date, and the Thai rule are now
+CI-gated (see "Mechanically gated" above); mark 2 (the tool repo's own README) and the tested-VERSION
+half of provenance are still manual. A figure without date+version is not publishable.
 
 ## Event 2 — Version release (per repo) · 8 marks (+1 anti-mark)
 
