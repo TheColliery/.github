@@ -74,7 +74,7 @@ Headline results — small, dated samples. Full tables, tested versions, + cavea
 | Tool | Result |
 | :--- | :--- |
 | **CoalMine** | 7 canaries × 4 engines, 3-5 repeated runs each: 100% recall on 6/7 suites for every engine · 0 decoy false alarms batch-wide · drift-canary 88% median (the discriminating suite) — measured 2026-07-03 |
-| **CoalTipple** | delegate-down quality-safe on mechanical/verifiable work; escalate-up justified on high-precision sensitive work (mid tier reproducibly errs) · ~70–75% routing-cost savings — [see the matrix](https://github.com/TheColliery/.github/blob/main/benchmarks/CoalTipple/RESULTS.md) |
+| **CoalTipple** | ON-vs-OFF paired (4 tasks × 3 tiers × K=3, 2026-07-03): routing ON = 4/4 task quality on both baselines, OFF = 3/4 on both (each failing a different task) · ON is ~23% cheaper from an Opus main, cost-neutral from a Sonnet main · never-delegate-sensitive-down re-confirmed on the new lineup — [see the record](https://github.com/TheColliery/.github/blob/main/benchmarks/CoalTipple/RESULTS.md) |
 | **CoalBoard** | 10/10 vs an un-primed solo ~13/20 on error-not-allowed tasks (honest correlated-blind-spot ceiling noted in its docs) |
 
 See **[the benchmark records](https://github.com/TheColliery/.github/tree/main/benchmarks)**.

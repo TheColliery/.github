@@ -108,3 +108,33 @@ voice to a cheaper model). The trap is fact-drift under a style rewrite.
   (Semi-automated: check each is present and numerically exact.)
 - Voice: terse + technical, marketing adjective ("blazing-fast") removed, ≤2 sentences. (Rubric → judge.)
 - **Score = pass** iff all four facts are exact AND the voice constraints hold.
+
+---
+
+## M1 — `coding` (scaffold) · grade 1, delegate-down
+
+**Prompt to the main:**
+> Implement a Node.js (CommonJS) in-memory REST-style store module exposing CRUD functions for THREE
+> resources (users, products, orders). For each resource provide `createX`, `getX`, `listX`, `updateX`,
+> `deleteX` (15 functions total). Each function: validate its arguments (throw a `TypeError` with a message
+> on bad input), operate on a module-level `Map`, and carry a one-line JSDoc comment. Export all 15.
+
+**Why this is the cost-saving cell (the OPPOSITE of T1-T5):** pure mechanical bulk — boilerplate scaffold,
+no subtle correctness trap, no sensitive logic. A cheap tier does it correctly, so routing it DOWN saves
+tokens with no quality loss. The signal is bulk tokens + objectively-checkable structure, not a hidden trap.
+**No subtle failure by design:** the only way to fail is to omit a function, skip validation, or drop the
+JSDoc — all mechanically visible, no judge needed.
+
+**Gold (AUTOMATED — structural):** score = **pass** iff:
+- All 15 expected functions are exported (exact names):
+  `createUser`, `getUser`, `listUsers`, `updateUser`, `deleteUser`,
+  `createProduct`, `getProduct`, `listProducts`, `updateProduct`, `deleteProduct`,
+  `createOrder`, `getOrder`, `listOrders`, `updateOrder`, `deleteOrder`.
+- Each exported value is `typeof === 'function'`.
+- Validation present: the module source contains arg-validation `throw`s (`TypeError`/`Error`) — a mechanical
+  proxy for "validates args". A correct DRY answer factors validation into shared helpers, so this is checked
+  as a scaffold-scaled throw count (≥ ⌈present/3⌉, min 3), NOT one literal throw per function.
+- JSDoc present: at least **12 of 15** functions are preceded by a `/** ... */` block (a little slack).
+- **Score = PASS iff ≥ 14/15 functions are exported and function-typed AND arg-validation throws are present
+  (scaffold-scaled) AND ≥ 12/15 functions carry a preceding JSDoc.** (Fully automated — parse the exports in
+  an isolated child, static-check `throw`/JSDoc on the comment-stripped source; no judge.)

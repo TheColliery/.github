@@ -4,6 +4,72 @@
 > capability; CoalTipple routing then picks the cheapest *sufficient* tier). Scored against the objective gold
 > ([`score.mjs`](score.mjs)) or a judge — never the main's eyeball.
 
+## ON-vs-OFF benchmark — routing savings AND quality, paired (2026-07-03)
+
+**Measured:** 2026-07-03 · CoalTipple **v1.0.23** (the routing policy under test) · engines: Haiku 4.5 / Sonnet 5 / Opus 4.8 · K=3 stochastic repeats per task×tier cell (fresh worker per rep), majority ≥2/3 = the cell verdict.
+<!-- version-frozen: measured against v1.0.23's routing table; re-run to update. -->
+
+> **TL;DR:** the same 4 tasks were run at every tier (36 runs), then the skill-ON and skill-OFF
+> arms were derived from CoalTipple's routing table against two baselines. **Routing ON scored
+> 4/4 task quality on BOTH baselines; OFF scored 3/4 on both — and failed a DIFFERENT task each.**
+> From an Opus main, ON is also **~23% cheaper** (the mechanical task rides Haiku). From a Sonnet
+> main, ON is cost-neutral (+3%) and fixes a real legal-liability translation error.
+
+**Method.** 4 tasks × 3 tiers × K=3 = 36 fresh worker runs, no skill contract in any worker
+prompt (the worker measures the TIER; ON/OFF is derived from the routing table afterwards —
+routing = which tier runs which task). Tasks: `M1` mechanical CRUD scaffold (grade 1 —
+delegate-down cell, structural scorer) · `S1` webhook HMAC verify (grade 5 sensitive — the
+timing-side-channel + wrong-length-tag traps, script-scored) · `S2` legal clause → Thai
+(grade 4 sensitive — the *"to the extent"* proportional carve-out trap, ONE fixed judge over
+all 9 outputs) · `V1` marketing→technical rewrite (preserveVoice — 4-fact checklist,
+script-scored). Blind: workers ran with a no-tools clause (one early S1 batch that could read
+the gold was invalidated and re-run — contamination QC).
+
+**Raw quality per cell (PASS reps /3):**
+
+| Task | Haiku 4.5 | Sonnet 5 | Opus 4.8 |
+|---|---|---|---|
+| M1 mechanical scaffold | **3/3** | **3/3** | 1/3 † |
+| S1 crypto (sensitive) | **0/3** ‡ | 3/3 | 3/3 |
+| S2 legal→Thai (sensitive) | 2/3 | **1/3** ¶ | **3/3** |
+| V1 voice/facts | 3/3 | 2/3 | 3/3 |
+
+† Opus twice answered the mechanical spec with a DRY factory (computed names, shared JSDoc) —
+better engineering, but the spec's letter said 15 functions each with a JSDoc: an
+instruction-compliance miss, not a capability one. The cheap tier followed the boring spec
+perfectly every rep. ‡ All three Haiku runs missed the length guard — a wrong-length tag makes
+`timingSafeEqual` throw instead of returning false (the planted trap). ¶ Sonnet collapsed the
+proportional *"to the extent"* into a blanket carve-out (`เว้นแต่ในกรณีที่`) in 2/3 reps —
+reproducing the 2026-06-22 finding under a new model version (Sonnet 5 vs 4.6); Opus held
+`เว้นแต่ในขอบเขตที่` in 3/3.
+
+**The derived arms** (majority-verdict quality · cost = mean tokens × representative output
+rates $5/$15/$25 per MTok, fetched 2026-06-19/30):
+
+| Arm | Routing | Quality | Cost | Failing task |
+|---|---|---|---|---|
+| Opus-main **OFF** | opus does all 4 | 3/4 | $3.59 | M1 (spec compliance) |
+| Opus-main **ON** | M1→haiku, rest opus | **4/4** | **$2.78 (−23%)** | none |
+| Sonnet-main **OFF** | sonnet does all 4 | 3/4 | $2.42 | S2 (legal liability) |
+| Sonnet-main **ON** | M1→haiku, S1/S2→opus, V1 stays | **4/4** | $2.49 (+3%) | none |
+
+**Findings.**
+1. **Both OFF arms fail — at different tasks.** An expensive main fails the boring spec
+   (over-engineering past the letter); a mid main fails the sensitive nuance. Routing closes
+   both: delegate-down puts the letter-follower on the boring work, escalate-up puts the
+   nuance-holder on the sensitive work.
+2. **Savings and quality are not a trade-off here.** From Opus, ON is cheaper AND better.
+   From Sonnet, ON converts ~2% extra spend into removing a material liability error.
+3. **The sensitive gate is re-confirmed on the new lineup**: Haiku 0/3 on crypto, Sonnet 1/3
+   on the legal nuance — never-delegate-sensitive-down survives the model refresh.
+
+**Honest scope.** n=3 per cell (majority verdicts; a 2/3 cell is not a rate). The S2 judge is
+one fixed Claude judge (self-family bias risk; the objective cells avoid it). Cost uses
+`subagent_tokens` × output-rate as a representative price, not metered billing. Two infra
+null-runs (empty/garbled returns) were respawned and noted; one scorer gold bug (a static
+throw-count that punished correctly-DRY validation) was fixed mid-run and ALL cells re-scored
+under the fixed gold.
+
 **Measured:** 2026-06-22 · CoalTipple **v1.0.20** (the version under test) · raw deliverables in `dogfood/output/` (local)
 <!-- version-frozen: 'CoalTipple v1.0.20' = the version UNDER TEST when measured. A benchmark is pinned to the version measured: do NOT bump on release; update ONLY when the benchmark is re-run (re-measured). Supersedes the 2026-06-15 / v1.0.3 run (which was the older +1-rung design + predated the v1.0.18 sensitive-path grading change). -->
 **Ladder:** low (Haiku 4.5) < mid (Sonnet 4.6) < heavy (Opus 4.8) — Fable disabled, so Opus is the top.

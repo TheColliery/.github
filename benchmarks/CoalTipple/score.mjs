@@ -5,6 +5,7 @@
 // Zero-dep: Node built-ins only. Usage:
 //   node score.mjs T1 <path/to/hmacVerify.(m)js>   crypto: functional vectors + constant-time static check
 //   node score.mjs T5 <path/to/rewrite.txt>        voice: the 4-fact checklist (+ sentence-count)
+//   node score.mjs M1 <path/to/store.(c)js>        scaffold: 15 CRUD exports + throw/JSDoc static check
 //   node score.mjs T2 | T3 | T4                    print the rubric (a strong judge scores it)
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -175,6 +176,107 @@ function scoreT5(file) {
   if (!all) process.exit(1);
 }
 
+// The 15 expected CRUD exports: {create,get,list,update,delete} x {User,Product,Order}.
+const M1_EXPORTS = [
+  'createUser', 'getUser', 'listUsers', 'updateUser', 'deleteUser',
+  'createProduct', 'getProduct', 'listProducts', 'updateProduct', 'deleteProduct',
+  'createOrder', 'getOrder', 'listOrders', 'updateOrder', 'deleteOrder',
+];
+
+// Import the candidate in a SEPARATE node process (same isolation as runVectorsIsolated — never a top-level
+// await import() in the scorer, arbitrary-code-execution risk) and report which of the 15 names resolve to a
+// function. Handles CJS (.cjs/.js) — import() of a CommonJS module surfaces its exports on the namespace and
+// on .default. The child touches no fs/net; it prints ONLY {present:[...], missing:[...]} as JSON.
+function runExportsIsolated(absFile, names) {
+  const child = [
+    'const u = process.argv[1], names = JSON.parse(process.argv[2]);',
+    'const out = (o) => { process.stdout.write(JSON.stringify(o)); };',
+    'try {',
+    '  const m = await import(u);',
+    '  const src = (m && typeof m === "object" && m.default && typeof m.default === "object") ? m.default : m;',
+    '  const has = (n) => typeof (src && src[n]) === "function" || typeof (m && m[n]) === "function";',
+    '  const present = names.filter(has), missing = names.filter((n) => !has(n));',
+    '  const fn = (n) => (src && typeof src[n] === "function") ? src[n] : m[n];',
+    '  const throwsOn = (n, ...args) => { try { fn(n)(...args); return false; } catch (e) { return e instanceof TypeError; } };',
+    '  const validates = present.includes("createUser") && present.includes("getUser")',
+    '    ? (throwsOn("createUser", null) || throwsOn("getUser", null)) : false;',
+    '  out({ present, missing, validates });',
+    '} catch (e) { out({ error: "cannot import (" + e.message + ")" }); }',
+  ].join('\n');
+  const res = spawnSync(
+    process.execPath,
+    ['--input-type=module', '-e', child, pathToFileURL(absFile).href, JSON.stringify(names)],
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 10_000 },
+  );
+  if (res.error) return { error: `cannot run probe (${res.error.message})` };
+  if (res.status !== 0 && !res.stdout) return { error: `probe exited ${res.status}: ${(res.stderr || '').trim() || 'no output'}` };
+  try { return JSON.parse(res.stdout); } catch { return { error: `probe gave no parseable result: ${(res.stdout || res.stderr || '').trim()}` }; }
+}
+
+async function scoreM1(file) {
+  const src = readOrDie(file);
+  // Runtime: which of the 15 named exports resolve to a function (isolated child — the submission's
+  // module-level code never runs in the scorer's process).
+  const probe = runExportsIsolated(path.resolve(file), M1_EXPORTS);
+  if (probe.error) { console.log(`M1 scaffold: FAIL — ${probe.error}`); process.exit(1); }
+  const present = new Set(probe.present || []);
+
+  // Static: count throws (validation proxy) and JSDoc-preceded function definitions, on COMMENT/STRING-
+  // STRIPPED code so a `throw` inside a comment/string never counts. The JSDoc check runs on the RAW source
+  // (we need the /** */ blocks) but pairs each block to a nearby function keyword.
+  const code = stripCommentsAndStrings(src);
+  const throwCount = (code.match(/\bthrow\b/g) || []).length;
+
+  // JSDoc coverage: count named functions whose definition is preceded (within ~3 lines) by a /** ... */
+  // block. Match each expected export's definition site (function decl OR an assigned function/arrow) and
+  // check the text just above it for a JSDoc close `*/`. Simple line-window scan — no AST, zero-dep.
+  const rawLines = src.split(/\r?\n/);
+  const isDefLine = (line, name) => {
+    const n = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`\\bfunction\\s+${n}\\b`).test(line) ||          // function createUser(
+           new RegExp(`\\b${n}\\s*[:=]\\s*(async\\s+)?function\\b`).test(line) || // createUser = function / createUser: function
+           new RegExp(`\\b${n}\\s*[:=]\\s*(async\\s+)?\\([^)]*\\)\\s*=>`).test(line) || // createUser = (a) =>
+           new RegExp(`\\b${n}\\s*\\([^)]*\\)\\s*\\{`).test(line);      // createUser(a) {   (method shorthand)
+  };
+  let jsdocCount = 0;
+  const seen = new Set();
+  for (let i = 0; i < rawLines.length; i++) {
+    for (const name of M1_EXPORTS) {
+      if (seen.has(name)) continue;
+      if (!isDefLine(rawLines[i], name)) continue;
+      // look back up to 3 non-blank lines for a JSDoc close `*/`
+      let has = false;
+      for (let j = i - 1, budget = 3; j >= 0 && budget > 0; j--) {
+        const t = rawLines[j].trim();
+        if (t === '') continue;
+        budget--;
+        if (t.endsWith('*/')) { has = true; break; }
+        if (!t.startsWith('*') && !t.startsWith('/*')) break; // hit real code before a JSDoc → none
+      }
+      if (has) jsdocCount++;
+      seen.add(name);
+    }
+  }
+
+  const presentCount = present.size;
+  const okPresent = presentCount >= 14;
+  // Validation proxy: the module must actually throw on bad input somewhere. A CORRECT DRY answer factors
+  // validation into shared helpers (reqId/reqObj) — so a "one throw per function" rule would punish the good
+  // scaffold. Require throws present AND scaled to the scaffold (>= present/3 covers both a per-function and a
+  // helper-based style) rather than a literal 14-per-function count.
+  // Behavioral first (the child called createUser(null)/getUser(null) and saw a TypeError) — a maximally
+  // DRY answer routes every check through ONE assert helper (1 literal throw), which a static count punishes.
+  // The static scaled count stays as the fallback for shapes the behavioral probe cannot reach.
+  const okThrows = probe.validates === true || throwCount >= Math.max(3, Math.ceil(presentCount / 3));
+  const okJsdoc = jsdocCount >= 12;
+  const pass = okPresent && okThrows && okJsdoc;
+  console.log(`M1 scaffold: ${pass ? 'PASS' : 'FAIL'}`);
+  console.log(`  exports (function-typed) : ${presentCount}/15 ${okPresent ? 'ok (>=14)' : 'FAIL (<14)'}${(probe.missing && probe.missing.length) ? ' — missing: ' + probe.missing.join(', ') : ''}`);
+  console.log(`  validation               : behavioral=${probe.validates === true ? 'TypeError on bad input' : 'none'} · static throws=${throwCount} ${okThrows ? '— ok' : '— FAIL (no arg validation)'}`);
+  console.log(`  JSDoc-preceded functions : ${jsdocCount}/15 ${okJsdoc ? 'ok (>=12)' : 'FAIL (<12)'}`);
+  if (!pass) process.exit(1);
+}
+
 const RUBRICS = {
   T2: 'T2 proof (judge): (1) states the bound C + r*T; (2) argues admitted <= consumed <= (available at start, <= C) + (refilled in T, = r*T), each <= justified; (3) handles starts-full + continuous refill. PASS iff the bound is correct AND the accumulation step AND the boundary are justified, not asserted.',
   T3: 'T3 research (judge, with web): (1) the stated default + mechanism + Node version match the official Node.js docs (verify NOW); (2) an authoritative citation (nodejs.org), not a blog or memory. PASS iff current-correct AND authoritatively sourced — an unsourced answer is FAIL even if it happens to be right.',
@@ -183,5 +285,6 @@ const RUBRICS = {
 
 if (task === 'T1') await scoreT1(file);
 else if (task === 'T5') scoreT5(file);
+else if (task === 'M1') await scoreM1(file);
 else if (RUBRICS[task]) console.log(RUBRICS[task]);
-else { console.error('usage: node score.mjs <T1 file | T2 | T3 | T4 | T5 file>'); process.exit(1); }
+else { console.error('usage: node score.mjs <T1 file | T2 | T3 | T4 | T5 file | M1 file>'); process.exit(1); }
