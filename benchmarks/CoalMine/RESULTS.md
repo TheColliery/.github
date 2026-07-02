@@ -1,37 +1,93 @@
 # CoalMine Eval Results — rot-canary
 
-**Run:** 2026-06-13-antigravity.json · **Model:** Antigravity · **Date:** 2026-06-13 · **Skill version:** 3.4.0
+**Benchmark loop: K=3 repeated runs per arm, extended to K=5 on any flip** (per the
+locked methodology — paired design + stochastic repeat, arXiv 2411.00640).
+**Date: 2026-07-03 · Skill version: 3.8.4 · Corpus: 16 fixtures (13 planted defects + 4 clean decoys), scored mechanically by `score.mjs`.**
 
-| Metric | Value |
-|---|---|
-| Recall (planted defects found) | **100%** (13/13) |
-| Precision | **100%** (13 true / 0 false) |
-| False positives on clean decoys | **0/4 decoys** |
-| Severity accuracy (among matches) | 92% (12/13) |
+> **TL;DR (plain language):** ทดสอบนกขมิ้น rot-canary กับโมเดลรุ่นใหม่ รันซ้ำ 3-5 รอบต่อรุ่น —
+> Fable 5 จับครบ 13/13 ทุกรอบไม่แกว่งเลย · Sonnet 5 จับ ~97% · Haiku 4.5 จับ ~89% ·
+> ไม่มีรุ่นไหน false-alarm บนไฟล์สะอาดแม้แต่ครั้งเดียว (0 จาก 72 โอกาส) ·
+> ที่ corpus ง่ายระดับนี้ Sonnet เปล่า ๆ ก็จับได้เกือบเท่ากัน แต่**สกิลช่วยให้ตัดสินความรุนแรงแม่นขึ้น ~10 จุด**
+> (95% vs 85%) · โจทย์เดียวที่แยกรุ่นเก่ง-อ่อนได้จริงคือ dead function ที่ต้องไล่ reachability ทั้งไฟล์
 
-## Per category
+## Aggregate by arm (recall = planted defects found)
 
-| Category | Found | Planted | Recall |
+| Arm | K | Recall per rep | Median | Mean | Precision | Decoy FPs | Severity acc (mean) |
+|---|---|---|---|---|---|---|---|
+| **claude-fable-5** (skill ON) | 3 | 100·100·100 | **100%** | 100% | 100% ×3 | 0/4 ×3 | **100%** |
+| **claude-sonnet-5** (skill ON) | 5 | 100·92·100·100·92 | **100%** | 96.9% | 100% ×5 | 0/4 ×5 | 95% |
+| **claude-sonnet-5** (vanilla, skill OFF) | 5 | 92·100·100·100·100 | **100%** | 98.5% | 100% ×5 | 0/4 ×5 | 84.6% |
+| **claude-haiku-4.5** (skill ON) | 5 | 85·92·92·85·92 | **92%** | 89.2% | 2 FPs (r1,r2) | 0/4 ×5 | 79.4% |
+| Antigravity — Gemini 3.5 Flash Medium (skill ON) | 1 of 3 | 92 | — | — | 100% | 0/4 | 75% |
+
+AG arm partial: rounds 2-3 pending (`AG-RUN-PROMPT.md`).
+
+## Key findings
+
+1. **Skill ON vs OFF (sonnet-5, K=5 paired): detection saturates, severity judgment separates.**
+   Recall ON 96.9% vs OFF 98.5% — no measurable detection gain on this corpus (discordant
+   reps: 3; McNemar n/s). The corpus is unambiguous-by-design → ceiling effect at the
+   sonnet+ tier. BUT severity accuracy: **ON 95% vs OFF 84.6%** — the vanilla arm
+   systematically over-rates severity (f06/f07 → CRITICAL where ground truth is HIGH,
+   stable across 4/5 reps = systematic, not noise). The skill's severity rubric
+   (CRITICAL = crash/security on the normal path · HIGH = real bug on a reachable path)
+   calibrates the judgment even where raw detection is saturated.
+2. **Tier ladder confirmed (skill ON): fable 100% (zero variance) > sonnet 96.9% > haiku 89.2%.**
+   Detection is engine-dependent, AV-style. Fable-5 is the only arm with ZERO flips
+   across all reps — 13/13, severity 13/13, every run.
+3. **The discriminating item: `f01` line 5 (zero-ref dead function).** Needs whole-file
+   reachability reasoning, not line-local pattern-match. Found: fable 3/3 · sonnet-ON 3/5 ·
+   sonnet-OFF 4/5 · haiku 0/5 (stable miss = tier ceiling, not variance) · AG-r1 miss.
+   Every other planted defect is found by every Claude arm in ≥4/5 reps.
+4. **Zero decoy false positives in all 18 runs (72 decoy-file opportunities).** The
+   "report only what the code shows" discipline held on every engine, with and without
+   the skill. The only FPs anywhere: haiku r1/r2 flagged `f02/src/main.js:1` (wrong file
+   for the real f02 defect).
+5. **No regression vs the old baseline.** fable-5 @ skill v3.4.0 (K=1, 2026-06-12) = 13/13;
+   fable-5 @ v3.8.4 (K=3) = 13/13 stable. Skill evolution 3.4.0 → 3.8.4 did not move
+   detection.
+
+## Per category (union across Claude skill-ON arms — all 100% except)
+
+| Category | fable | sonnet-ON | haiku |
 |---|---|---|---|
-| bug-prone | 2 | 2 | 100% |
-| concurrency | 2 | 2 | 100% |
-| dead-code | 3 | 3 | 100% |
-| doc-rot | 1 | 1 | 100% |
-| input-boundary | 1 | 1 | 100% |
-| resource-leak | 2 | 2 | 100% |
-| silent-failure | 2 | 2 | 100% |
+| dead-code (3 planted) | 3/3 ×3 | 2.6/3 mean (f01:5 flips) | 1.8/3 mean (f01:5 never, f02 flips) |
+| all other 6 categories (10 planted) | 10/10 every rep | 10/10 every rep | 10/10 every rep* |
+
+\* haiku r4 dropped f02 entirely (hedged out of the JSON) — its only non-dead-code miss.
 
 ## Methodology
 
-16 fixtures (12 with planted, line-labeled defects — 13 in total, one fixture plants 2 · 4 clean decoys). The agent runs rot-canary QUICK over each fixture and emits structured findings; this scorer matches them mechanically (fixture + file + category, line ±3) — no judgment calls at scoring time. Results are model-dependent, like antivirus detection rates are engine-dependent: re-run on model or skill changes and compare. Caveat for this baseline: fixtures and the first run were authored in the same project — treat the numbers as a regression floor, not an independent benchmark.
+K=3 stochastic repeats per arm, same prompt verbatim per arm, each rep a FRESH
+agent (no shared context); any item flipping within K=3 extends that arm to K=5
+(fired for both sonnet arms — f01:5 — and haiku — f02). Blind protocol: workers
+read ONLY `fixtures/*/src/*`; `expected.json`/results/scorer off-limits. One run
+was invalidated live (a cross-tree grep leaked expected.json into a sonnet
+worker's context) and re-run clean with an added no-cross-tree-grep clause —
+contamination QC works. Scoring is mechanical (`score.mjs`: fixture + file +
+category, line ±3; severity scored separately). Vanilla arm gets the same output
+contract and 7-slug category vocabulary but no skill contract (its ~15-line scan
+discipline, category definitions, severity rubric, and "confirmed-only" rules are
+the treatment). Statistic frame: paired per-fixture comparison, majority (≥3/5)
+verdict per item, per Miller 2024 (arXiv 2411.00640) — a 13-defect corpus can
+credibly show only LARGE differences; small edges need hundreds of items.
+Caveats: fixtures authored in this project (regression floor, not independent);
+corpus unambiguous-by-design → ceiling effect at sonnet+ tier; engine-dependent
+like AV detection rates. This file is the hand-authored K-rep aggregate — do NOT
+regenerate with `score.mjs --write` (that emits a single-run block).
 
-## Cross-engine comparison (13-Jun-2026)
+## Cross-engine comparison (2026-07-03, in progress)
 
-Two independent engines over the same corpus — the Antigravity run was blind (fixtures authored by Claude; expected.json off-limits):
+Two vendors over the same corpus, blind. AG rounds 2-3 pending; the 2026-06-13
+single-run AG baseline (13/13, engine of that era, skill v3.4.0) is superseded by
+this K=3 protocol.
 
-| Engine | Recall | Precision | Decoy FPs | Severity accuracy |
+| Engine | Recall | Precision | Decoy FPs | Severity acc |
 |---|---|---|---|---|
-| claude-fable-5 (author baseline) | 13/13 | 100% | 0/4 | 13/13 |
-| Antigravity (blind) | 13/13 | 100% | 0/4 | 12/13 |
+| claude-fable-5 (K=3) | 13/13 ×3 | 100% | 0/4 | 100% |
+| Antigravity Gemini 3.5 Flash Medium (r1) | 12/13 | 100% | 0/4 | 75% |
 
-Sole disagreement: f09-bug-prone (`i <= items.length` walks past the array) — ground truth CRITICAL (TypeError on every non-empty call = crash on the normal path), Antigravity rated HIGH. Detection layer identical; divergence appears exactly in the severity-judgment band, consistent with the cross-model convergence theory. Caveat: this corpus is unambiguous by design — real-world code with murkier rot will diverge more.
+Sole AG-r1 miss: f01:5 (the zero-ref dead function — the same item that separates
+the Claude tiers). Severity divergence concentrates in the judgment band, same
+shape as the 2026-06-13 cross-engine result (detection converges, severity
+diverges) — consistent with the cross-model convergence theory.
