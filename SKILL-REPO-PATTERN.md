@@ -79,14 +79,20 @@ Every shipped hook follows Phoenix-13 ([hooks-safety.md](./hooks-safety.md) — 
 
 A dir a tool type doesn't need is ABSENT, not empty — no scaffolding "for later".
 
-## Live divergences (2026-07-02 — the conform backlog, not part of the pattern)
+## Live divergences (updated 2026-07-02 post-batch — the conform backlog, not part of the pattern)
 
 | Repo | Missing / off-pattern | Weight |
 |---|---|---|
-| CoalHearth | no `CONTRIBUTING.md` / `PRIVACY.md` / `.markdownlint.json` · **no `.github/` at all** (workflows, dependabot, issue templates) · no self-update mechanism (`commands/update.md` + conductor scheduling) · `package.json` present (siblings ship none — zero-dep needs no manifest; it exists only for `npm test` convenience) | beta backlog — close before 1.0 |
+| CoalHearth | ~~docs/CI/self-update/package.json~~ **closed at v0.1.0-beta.2** · remaining: `SECURITY.md` uses `# Security Policy`, not the pattern's `# Verifying <Tool>` shape | cosmetic; align on next doc touch |
 | CoalMine | no `scripts/test.mjs` (tests enumerated in git-hook scripts instead — predates the pattern) | cosmetic; consolidate on next touch |
-| CoalBoard | no `scripts/lib/jsonc.mjs` (parse inlined in the conductor) · no `install.mjs`/`configure.mjs` (deferred by decision) | deliberate/deferred |
-| CoalTipple | none — closest to the full pattern | — |
+| CoalBoard | no `scripts/lib/jsonc.mjs` (parse inlined in the conductor) · no `install.mjs`/`configure.mjs` (deferred by decision) · no `platform-report.yml` (cross-agent tool without one) | deliberate/deferred |
+| CoalTipple / CoalFace | none — at the full pattern | — |
+
+## CI hard-won rules (2026-07-02 — from CoalHearth's first CI run)
+
+- **The first CI push is not just a drift-catch — it is the FIRST REAL EXECUTION of capability-gated tests** the dev box silently skips (symlinks/admin, case-sensitivity, CRLF). Expect first-push reds; they are the pattern working, not the workflow failing.
+- **A capability-gated test must skip VISIBLY** (`t.skip(...)`) — never a bare `return` inside a `catch`: a silent vacuous pass reads as green while the assertion has never run (this hid a real symlink-escape bug). Use the unprivileged capability shim where one exists (symlink type `'junction'` on Windows; the type arg is ignored on POSIX).
+- **Lexical resolve-and-contain (`path.resolve` + `path.relative`) is NOT symlink-safe.** Any sweep that DELETES or WRITES through a checked path needs **realpath-and-contain**: `fs.realpathSync` BOTH sides (the root too — macOS's `/private`-symlinked tmpdir otherwise no-ops legitimate work), unresolvable candidate = fail-closed.
 
 ## New-repo checklist
 
