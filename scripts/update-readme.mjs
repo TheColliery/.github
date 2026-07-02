@@ -59,6 +59,10 @@ function badgeSpecs(stats) {
     { name: 'CoalTipple_Developers', re: /CoalTipple_Developers-[0-9a-zA-Z.%+]+-brightgreen/g, val: `CoalTipple_Developers-${encodeURIComponent(stats.tippleUniques + ' / 14d')}-brightgreen` },
     { name: 'CoalBoard_Downloads', re: /CoalBoard_Downloads-[0-9a-zA-Z.%+]+-orange/g, val: `CoalBoard_Downloads-${encodeURIComponent(stats.boardClones + ' / 14d')}-orange` },
     { name: 'CoalBoard_Developers', re: /CoalBoard_Developers-[0-9a-zA-Z.%+]+-brightgreen/g, val: `CoalBoard_Developers-${encodeURIComponent(stats.boardUniques + ' / 14d')}-brightgreen` },
+    { name: 'CoalHearth_Downloads', re: /CoalHearth_Downloads-[0-9a-zA-Z.%+]+-orange/g, val: `CoalHearth_Downloads-${encodeURIComponent(stats.hearthClones + ' / 14d')}-orange` },
+    { name: 'CoalHearth_Developers', re: /CoalHearth_Developers-[0-9a-zA-Z.%+]+-brightgreen/g, val: `CoalHearth_Developers-${encodeURIComponent(stats.hearthUniques + ' / 14d')}-brightgreen` },
+    { name: 'CoalFace_Downloads', re: /CoalFace_Downloads-[0-9a-zA-Z.%+]+-orange/g, val: `CoalFace_Downloads-${encodeURIComponent(stats.faceClones + ' / 14d')}-orange` },
+    { name: 'CoalFace_Developers', re: /CoalFace_Developers-[0-9a-zA-Z.%+]+-brightgreen/g, val: `CoalFace_Developers-${encodeURIComponent(stats.faceUniques + ' / 14d')}-brightgreen` },
   ];
 }
 
@@ -98,14 +102,16 @@ function assertEveryBadgeMatched(perFileHits, stats) {
 
 async function main() {
   // Per-repo fetch: failures are non-fatal (logged + exitCode=1) so the other repos still update.
-  const [mineData, tippleData, boardData] = await Promise.all([
+  const [mineData, tippleData, boardData, hearthData, faceData] = await Promise.all([
     fetchRepoClonesSafe('HetCreep/CoalMine'),
     fetchRepoClonesSafe('TheColliery/CoalTipple'),
     fetchRepoClonesSafe('TheColliery/CoalBoard'),
+    fetchRepoClonesSafe('TheColliery/CoalHearth'),
+    fetchRepoClonesSafe('TheColliery/CoalFace'),
   ]);
 
-  const totalClones = (mineData.count || 0) + (tippleData.count || 0) + (boardData.count || 0);
-  const totalUniques = (mineData.uniques || 0) + (tippleData.uniques || 0) + (boardData.uniques || 0);
+  const totalClones = (mineData.count || 0) + (tippleData.count || 0) + (boardData.count || 0) + (hearthData.count || 0) + (faceData.count || 0);
+  const totalUniques = (mineData.uniques || 0) + (tippleData.uniques || 0) + (boardData.uniques || 0) + (hearthData.uniques || 0) + (faceData.uniques || 0);
 
   const stats = {
     combinedClones: formatStat(totalClones),
@@ -115,12 +121,18 @@ async function main() {
     tippleClones: formatStat(tippleData.count || 0),
     tippleUniques: formatStat(tippleData.uniques || 0),
     boardClones: formatStat(boardData.count || 0),
-    boardUniques: formatStat(boardData.uniques || 0)
+    boardUniques: formatStat(boardData.uniques || 0),
+    hearthClones: formatStat(hearthData.count || 0),
+    hearthUniques: formatStat(hearthData.uniques || 0),
+    faceClones: formatStat(faceData.count || 0),
+    faceUniques: formatStat(faceData.uniques || 0)
   };
 
   console.log(`CoalMine - Clones: ${stats.mineClones}, Uniques: ${stats.mineUniques}`);
   console.log(`CoalTipple - Clones: ${stats.tippleClones}, Uniques: ${stats.tippleUniques}`);
   console.log(`CoalBoard - Clones: ${stats.boardClones}, Uniques: ${stats.boardUniques}`);
+  console.log(`CoalHearth - Clones: ${stats.hearthClones}, Uniques: ${stats.hearthUniques}`);
+  console.log(`CoalFace - Clones: ${stats.faceClones}, Uniques: ${stats.faceUniques}`);
   console.log(`Combined - Clones: ${stats.combinedClones}, Uniques: ${stats.combinedUniques}`);
 
   // Update both profile/README.md and root README.md.

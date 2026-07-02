@@ -24,6 +24,18 @@ This repository houses the global configuration, landing page profile, central i
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalBoard?style=flat-square&logo=github)](https://github.com/TheColliery/CoalBoard/network/members)
   [![Downloads](https://img.shields.io/badge/CoalBoard_Downloads-701%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalBoard)
   [![Developers](https://img.shields.io/badge/CoalBoard_Developers-194%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalBoard)
+* **[CoalHearth](https://github.com/TheColliery/CoalHearth)** *(beta)*: Session warm-resume — journals state so an interrupted session resumes from a recovery block instead of a manual rebuild.
+  <br>
+  [![Stars](https://img.shields.io/github/stars/TheColliery/CoalHearth?style=flat-square&logo=github)](https://github.com/TheColliery/CoalHearth/stargazers)
+  [![Forks](https://img.shields.io/github/forks/TheColliery/CoalHearth?style=flat-square&logo=github)](https://github.com/TheColliery/CoalHearth/network/members)
+  [![Downloads](https://img.shields.io/badge/CoalHearth_Downloads-0%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalHearth)
+  [![Developers](https://img.shields.io/badge/CoalHearth_Developers-0%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalHearth)
+* **[CoalFace](https://github.com/TheColliery/CoalFace)** *(beta)*: Fan-out discipline — scout → waves → QC → one writer, the whole swarm bounded by the estimated solo cost.
+  <br>
+  [![Stars](https://img.shields.io/github/stars/TheColliery/CoalFace?style=flat-square&logo=github)](https://github.com/TheColliery/CoalFace/stargazers)
+  [![Forks](https://img.shields.io/github/forks/TheColliery/CoalFace?style=flat-square&logo=github)](https://github.com/TheColliery/CoalFace/network/members)
+  [![Downloads](https://img.shields.io/badge/CoalFace_Downloads-0%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalFace)
+  [![Developers](https://img.shields.io/badge/CoalFace_Developers-0%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalFace)
 
 ---
 

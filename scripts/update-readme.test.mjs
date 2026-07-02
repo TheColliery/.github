@@ -16,6 +16,8 @@ const STATS = {
   mineClones: '1.8k+', mineUniques: '398+',
   tippleClones: '959+', tippleUniques: '200+',
   boardClones: '286+', boardUniques: '84+',
+  hearthClones: '40+', hearthUniques: '12+',
+  faceClones: '31+', faceUniques: '9+',
 };
 
 function withTmp(name, content, fn) {
@@ -29,8 +31,8 @@ function withTmp(name, content, fn) {
   }
 }
 
-test('badgeSpecs covers all 8 badges (2 global + 6 per-tool)', () => {
-  assert.equal(badgeSpecs(STATS).length, 8);
+test('badgeSpecs covers all 12 badges (2 global + 10 per-tool)', () => {
+  assert.equal(badgeSpecs(STATS).length, 12);
 });
 
 test('updateFileStats replaces a present badge and counts the hit', () => {
