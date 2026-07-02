@@ -24,6 +24,27 @@ The earlier result (solo ~65%, board 10/10) was on a weaker/mixed solo model. On
 
 **So the board's value, precisely stated:** board = solo **+ ground-truth execution**. Its edge is largest exactly where the answer is external to the model (live facts, run tests, computed numbers) and smallest on pure reasoning a strong model already handles. This is the same frame as the skill's honest ceiling — the board is not an omniscient LLM, it is a harness that RUNS the check.
 
+## Cross-vendor arm (Antigravity / Gemini 3.5 Flash) — the mirror image
+
+Run separately ([`results/antigravity-onoff-2026-07-03.md`](antigravity-onoff-2026-07-03.md);
+verified against the same golds — the T3 fact (Node 24 / EOL 2028-04-30) and T2 (`$4,467,744.31`)
+match the authoritative sources on independent check, no fabrication). On the **weak** solo model
+the board's value **inverts** the Opus finding:
+
+| Base model | Solo | Board | Board's added value |
+|---|---|---|---|
+| Opus 4.8 (strong) | 4/5 | 5/5 | **small** — only T3 (the external fact) |
+| Gemini 3.5 Flash (weak) | ~4/15 (27%) | 5/5 | **large** — all four reasoning traps + T3 |
+
+**The unified finding:** the board's margin scales **inversely with solo-model strength**. A strong
+solo catches the reasoning traps unaided (the board only confirms), so its one irreducible win is the
+external fact (T3, run-the-check). A weak solo misses the reasoning traps too, so the board's
+lens-debate recovers those as well (27% → 100%). At **both** ends, the single task the board wins
+regardless of base model is **T3, the version-sensitive fact** — no model, strong or weak, reasons
+its way past a training-cutoff gap; only RUN-the-check does. That is the board's engine-independent
+core, and it is the same honest ceiling the skill states: the board is a harness that runs the
+check, not an omniscient LLM.
+
 ## Honest scope
 
 n small (K=1–3, majority verdicts — a 0/3 or 2/2 is a direction, not a rate). Both arms are Opus (same-family; the correlated-blind-spot limit applies to the board's lenses too — its reasoning-trap coverage cannot exceed what an Opus lens can see). The cross-vendor arm (Antigravity / Gemini 3.5 Flash, where the solo model is weaker and the board's reasoning-lens value is expected to be larger) is run separately per `AG-RUN-PROMPT-ONOFF.md` → `results/antigravity-onoff-2026-07-03.md`. The T3 gold is time-varying (re-fetch to re-score): Node 24 Active LTS, EOL 2028-04-30, per nodejs.org/endoflife.date on 2026-07-03.
