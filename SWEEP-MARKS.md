@@ -1,0 +1,73 @@
+# SWEEP-MARKS — the event → doc-spot registry
+
+Every recurring event below silently rots a FIXED set of surfaces. This file is the
+canonical mark list: when the event fires, EVERY mark gets swept in the same batch —
+no mark is optional, and the reader-facing "front doors" come before the archives.
+(Born 2026-07-03 after three front-door misses in one day: the tool README benchmark
+headline, the org-landing benchmark row, and Thai prose reaching a public doc.)
+
+**Integration with the org dispatch model:** any sub dispatched for one of these events
+gets the event's mark list embedded verbatim in its contract; the review lane verifies
+every mark was touched (or explicitly N/A); the main gates the push on mark-complete.
+
+---
+
+## Event 1 — Benchmark re-run (per tool) · 4 marks
+
+| # | Mark | Where |
+|---|---|---|
+| 1 | The benchmark record (full tables, method, caveats) | `.github/benchmarks/<Tool>/RESULTS.md` |
+| 2 | The tool repo's README benchmark headline (the front door) | `<Tool>/README.md` § Benchmark |
+| 3 | The org landing Benchmarks table row | `.github/profile/README.md` § Benchmarks |
+| 4 | Provenance on every figure: test DATE + tested tool VERSION + engine labels | inside marks 1-3 |
+
+Rules: public docs are language-universal (English) — sweep `grep -P '[\x{0E00}-\x{0E7F}]'`
+over tracked files before pushing prose. A figure without date+version is not publishable.
+
+## Event 2 — Version release (per repo) · 8 marks (+1 anti-mark)
+
+| # | Mark | Where |
+|---|---|---|
+| 1 | `version-pin:` lines match plugin.json (mechanical gate) | `verify.mjs checkVersionPins` |
+| 2 | CHANGELOG entry (keep-a-changelog) | `CHANGELOG.md` |
+| 3 | Annotated tag pushed | `git tag -a vX.Y.Z` + `--follow-tags` |
+| 4 | GitHub Release — STABLE tags only (beta = tag-only) | `gh`/REST release |
+| 5 | Repo About description (canary/feature counts) | repo settings |
+| 6 | Org landing suite table (version/status per tool) | `.github/profile/README.md` |
+| 7 | Mirror refresh ("push offline") | `clean-export.ps1` |
+| 8 | Installed + cross-agent copies | `update-tools.ps1` |
+
+**Anti-mark:** `SECURITY.md`'s SkillSpector pin is NEVER bumped on a release — it names
+the last ACTUAL scan (Event 3 owns it). Bumping it without a scan fabricates coverage.
+
+## Event 3 — SkillSpector re-scan (new scanner version, SATURATED builds only) · 3 marks
+
+| # | Mark | Where |
+|---|---|---|
+| 1 | SECURITY.md scan pin: scanner version + score + verified finding classes | every scanned repo's `SECURITY.md` (×5) |
+| 2 | Scan reports stay local | `skillspector-*.json` gitignored, never committed |
+| 3 | The scan record (dated, per-repo scores, FP verdicts) | machine-local registry/memory |
+
+Rules: scan LAST — on the version a batch declared done, never a mid-batch snapshot.
+Verify every finding before writing a verdict; a sub's clean-scan claim is suspect input.
+
+## Event 4 — New skill/tool launch (a new sibling) · 8 marks
+
+| # | Mark | Where |
+|---|---|---|
+| 1 | Org landing "Active Repositories" badge list | `.github/profile/README.md` |
+| 2 | Org landing suite/profile table row | `.github/profile/README.md` |
+| 3 | Traffic workflow repo list + badge specs + its test | `.github/.github/workflows/update-readme.mjs` (+ test) |
+| 4 | Installer menu + install prose/table | `colliery-install.mjs` + org README install section |
+| 5 | EVERY sibling repo's "Part of TheColliery — siblings:" line + doctrine paragraph | all N tool READMEs |
+| 6 | Flock-canonical shapes conform (workflows, gitignore, doc shapes) | `SKILL-REPO-PATTERN.md` checklist |
+| 7 | Tool registry entry | machine-local `SKILL_REGISTRY.md` |
+| 8 | Updater registration | machine-local `update-tools.ps1` |
+
+Rule: a suite-size number (tool count, sibling list) is a one-flock invariant — grep-sweep
+every surface that enumerates the suite, then read the RENDERED landing as a human.
+
+---
+
+Companion shapes live in [`SKILL-REPO-PATTERN.md`](SKILL-REPO-PATTERN.md); the release
+mechanics live in each repo's release gate. This file only answers: *which spots, how many.*
