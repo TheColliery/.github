@@ -123,6 +123,23 @@ precisely located: not "more workers," but "**fewest cheap workers for the neede
 is wall-clock + dollars, never fewer tokens than solo. If raw tokens are the only metric, don't fan
 out at all.
 
+## Cross-vendor arm (Antigravity / Gemini 3.5 Flash)
+
+Run separately ([`results/antigravity-2026-07-03.md`](antigravity-2026-07-03.md)). The worker-count
+shape reproduces: **solo 26,311 · ad-hoc 155,018 (5.9×) · coarse 52,718 (−66% vs ad-hoc)** — the
+coarse-pack hack lands within a point of the CC result (−66% vs −67%), and AG carried the honest
+**"no cheap-tier dollar offset on AG"** caveat (no per-worker tier-pick → the $-flip is a CC-only
+privilege, confirmed cross-vendor).
+
+**Measurement caveat (weaker than the CC arm — stated honestly).** AG v2.2.1 does not expose real
+per-sub token counts, so the run ESTIMATED them as measured prompt/response char-counts (÷3.8) **plus
+an ASSUMED flat 25k baseline per worker**. Consequence: the "worker-count × baseline" scaling is
+partly baked into the estimation *method*, not independently measured the way CC's real
+`subagent_tokens` are (and the 25k figure may even have been read from this repo's CC record). What
+the char-counts DO independently confirm is that the per-worker CONTENT is small (~1,000–1,500
+tokens), matching the CC finding that content is ~free and the fixed baseline is the whole cost. So:
+directional cross-vendor confirmation, on an estimate — not an independent magnitude proof.
+
 ## Honest scope
 
 - **Benchmark ≠ graduation.** This measures CF's token/$ claims on a **synthetic** worksite. CF
