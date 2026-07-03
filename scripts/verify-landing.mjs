@@ -80,8 +80,10 @@ export function verifyLanding(root) {
     for (const relPath of SURFACES) {
       const p = join(root, relPath);
       if (!existsSync(p)) continue;
-      // the "… Benchmark(s)" section (table OR "Series Benchmarks" list) → to the next "## " or EOF
-      const sec = readFileSync(p, 'utf8').match(/##[^\n]*Benchmarks?\b[\s\S]*?(?=\n##\s|$)/i);
+      // the "… Benchmarks" section (the "## Benchmarks" table OR "## Series Benchmarks" list) →
+      // to the next "## " or EOF. Precise: require the exact heading word "Benchmarks" (plural,
+      // no /i) so a future lowercase/singular "## Benchmarking notes" heading can't hijack the match.
+      const sec = readFileSync(p, 'utf8').match(/##[^\n]*Benchmarks\b[\s\S]*?(?=\n##\s|$)/);
       if (!sec) continue; // this file does not enumerate benchmarks
       enumerated = true;
       for (const tool of tools) {

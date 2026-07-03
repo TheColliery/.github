@@ -84,6 +84,25 @@ Verify every finding before writing a verdict; a sub's clean-scan claim is suspe
 Rule: a suite-size number (tool count, sibling list) is a one-flock invariant — grep-sweep
 every surface that enumerates the suite, then read the RENDERED landing as a human.
 
+### GitHub repo settings — the creation-time setup (the marks above keep enumeration IN SYNC; this is the one-time repo CONFIG the mark registry did not cover)
+
+The 8 marks above sweep the enumeration surfaces so a new sibling is *listed* everywhere. Separately, a new repo needs its GitHub SETTINGS set once — the mark registry covers up-to-date drift, NOT creation. Apply these (API-scriptable via `PATCH /repos/{owner}/{repo}` + the code-security/actions endpoints):
+
+| Setting | Value | Field / where |
+|---|---|---|
+| Features: Issues · Discussions | ON | `has_issues` · `has_discussions` (bug reports · community Q&A — owner auto-watches → post notifies) |
+| Features: Projects · Wiki | OFF | `has_projects` · `has_wiki` (unused; docs live in README/references) |
+| PR: auto-delete head branch | ON | `delete_branch_on_merge` (tidy after a merged Dependabot PR) |
+| PR: auto-merge | OFF | `allow_auto_merge` (a human merges Dependabot — never gateless) |
+| Security & analysis | ALL ON | secret-scanning · push-protection · Dependabot alerts + security-updates · private-vulnerability-reporting |
+| Actions: workflow token | read | `default_workflow_permissions=read` (least-privilege GITHUB_TOKEN) |
+| Actions: can approve PRs | OFF | `can_approve_pull_request_reviews=false` |
+| Default branch | `main` | |
+| FUNDING.yml | `github: HetCreep` | the org-wide default (`.github` repo) reaches ORG repos; a repo OUTSIDE the org (e.g. HetCreep-owned) needs its OWN `.github/FUNDING.yml` |
+| Scorecard posture findings | dismiss-with-reason | BranchProtection / Fuzzing / CIIBestPractices = solo-repo not-fixable, dismissed per repo |
+
+The repo FILES (SHA-pinned CI workflows · gitignore private-governance ignores · markdownlint · LICENSE · SECURITY/CONTRIBUTING/PRIVACY · dependabot.yml · codeql.yml · scorecard.yml) live in [`SKILL-REPO-PATTERN.md`](SKILL-REPO-PATTERN.md) — copy that shape. This table = the API/UI settings that file-shape does not carry. (Scriptable end-to-end: a `repo-setup.mjs` could PATCH all of these in one shot; a checklist is the honest floor for a rare event.)
+
 ---
 
 Companion shapes live in [`SKILL-REPO-PATTERN.md`](SKILL-REPO-PATTERN.md); the release
