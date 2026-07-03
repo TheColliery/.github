@@ -65,32 +65,37 @@ export function verifyLanding(root) {
     });
   }
 
-  // --- 2 & 3. Every benchmark dir has an org-row + a dated record ---
+  // --- 2 & 3. Every benchmark dir is listed in EVERY surface that ENUMERATES benchmarks,
+  //     and carries a dated record. Enumerating surfaces = the profile table (## Benchmarks) AND
+  //     the repo README's list (## Series Benchmarks). A benchmark missing from ANY of them is a
+  //     SWEEP-MARKS Event-1 miss — the earlier profile-only check silently skipped README.md's
+  //     "Series Benchmarks" list, which is exactly how CoalHearth/CoalFace stayed unlisted there.
   const benchDir = join(root, 'benchmarks');
-  const profile = join(root, 'profile', 'README.md');
   if (existsSync(benchDir)) {
-    if (!existsSync(profile)) {
-      fail('profile/README.md is missing — cannot verify benchmark org-rows');
-    } else {
-      const profileText = readFileSync(profile, 'utf8');
-      // isolate the Benchmarks table section: its heading line → the next "## " heading or EOF.
-      // NOTE: no /m flag — with /m, `$` matches every line-end and truncates the section to the heading.
-      const sec = profileText.match(/##[^\n]*Benchmarks\b[\s\S]*?(?=\n##\s|$)/);
-      if (!sec) {
-        fail('profile/README.md has no "## … Benchmarks" table section (the org-landing table is gone)');
+    const tools = readdirSync(benchDir).filter((t) => {
+      try { return statSync(join(benchDir, t)).isDirectory(); } catch { return false; }
+    });
+    const SURFACES = ['profile/README.md', 'README.md'];
+    let enumerated = false;
+    for (const relPath of SURFACES) {
+      const p = join(root, relPath);
+      if (!existsSync(p)) continue;
+      // the "… Benchmark(s)" section (table OR "Series Benchmarks" list) → to the next "## " or EOF
+      const sec = readFileSync(p, 'utf8').match(/##[^\n]*Benchmarks?\b[\s\S]*?(?=\n##\s|$)/i);
+      if (!sec) continue; // this file does not enumerate benchmarks
+      enumerated = true;
+      for (const tool of tools) {
+        if (!sec[0].includes(`**${tool}**`)) {
+          fail(`benchmark '${tool}' is NOT listed in the Benchmarks section of ${relPath} (SWEEP-MARKS Event-1 enumeration miss — every enumerating surface must list every benchmark)`);
+        }
       }
-      const benchSection = sec ? sec[0] : '';
-      for (const tool of readdirSync(benchDir)) {
-        const td = join(benchDir, tool);
-        if (!statSync(td).isDirectory()) continue;
-        // org-row: the tool named as a bold row (**Tool**, not the repo table's **[Tool](url)**)
-        if (!benchSection.includes(`**${tool}**`)) {
-          fail(`benchmark '${tool}' has NO org-landing row in the profile Benchmarks table (SWEEP-MARKS Event-1 miss)`);
-        }
-        // dated record: some .md in the dir carries a YYYY-MM-DD
-        if (!mdFiles(td).some((f) => DATE.test(readFileSync(f, 'utf8')))) {
-          fail(`benchmark '${tool}' has NO dated record (a benchmark must carry its test date)`);
-        }
+    }
+    if (!enumerated) {
+      fail('no "## … Benchmarks" section in profile/README.md or README.md (the org-landing enumeration is gone)');
+    }
+    for (const tool of tools) {
+      if (!mdFiles(join(benchDir, tool)).some((f) => DATE.test(readFileSync(f, 'utf8')))) {
+        fail(`benchmark '${tool}' has NO dated record (a benchmark must carry its test date)`);
       }
     }
   }

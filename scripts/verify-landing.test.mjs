@@ -39,9 +39,27 @@ test('catches Thai leak, missing org-row, and undated record', () => {
   try {
     const f = verifyLanding(root).join('\n');
     assert.match(f, /THAI in front-door/, 'catches the Thai leak');
-    assert.match(f, /'NoRow' has NO org-landing row/, 'catches the missing org-row');
+    assert.match(f, /'NoRow' is NOT listed in the Benchmarks section/, 'catches the missing org-row');
     assert.match(f, /'Undated' has NO dated record/, 'catches the undated record');
     assert.doesNotMatch(f, /'HasRow' has NO/, 'a compliant benchmark is not flagged');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('catches a benchmark missing from a SECOND enumerating surface (README.md, not just profile)', () => {
+  const root = fixture((r) => {
+    // profile lists BOTH tools...
+    write(r, 'profile/README.md',
+      '# Org\n\n## 📊 Benchmarks\n\n| Tool | Result |\n|---|---|\n| **Listed** | 2026-07-03 |\n| **DroppedFromReadme** | 2026-07-03 |\n');
+    // ...but the repo README "Series Benchmarks" lists only ONE (the drift the profile-only check missed)
+    write(r, 'README.md',
+      '# Repo\n\n## 📊 Series Benchmarks\n\n* **Listed** -- ok. Results: [x](x).\n\n## Next\n');
+    write(r, 'benchmarks/Listed/RESULTS.md', '# ok\nmeasured 2026-07-03\n');
+    write(r, 'benchmarks/DroppedFromReadme/RESULTS.md', '# ok\nmeasured 2026-07-03\n');
+  });
+  try {
+    const f = verifyLanding(root).join('\n');
+    assert.match(f, /'DroppedFromReadme' is NOT listed in the Benchmarks section of README\.md/, 'catches the README.md enumeration miss');
+    assert.doesNotMatch(f, /'Listed' is NOT listed/, 'the tool present in both surfaces is not flagged');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
