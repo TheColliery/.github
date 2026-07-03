@@ -74,7 +74,7 @@ Verify every finding before writing a verdict; a sub's clean-scan claim is suspe
 |---|---|---|
 | 1 | Org landing "Active Repositories" badge list | `.github/profile/README.md` |
 | 2 | Org landing suite/profile table row | `.github/profile/README.md` |
-| 3 | Traffic workflow repo list + badge specs + its test | `.github/.github/workflows/update-readme.mjs` (+ test) |
+| 3 | Traffic workflow repo list + badge specs + its test | `scripts/update-readme.mjs` (+ `scripts/update-readme.test.mjs`), run by `.github/workflows/update-readme.yml` |
 | 4 | Installer menu + install prose/table | `colliery-install.mjs` + org README install section |
 | 5 | EVERY sibling repo's "Part of TheColliery — siblings:" line + doctrine paragraph | all N tool READMEs |
 | 6 | Flock-canonical shapes conform (workflows, gitignore, doc shapes) | `SKILL-REPO-PATTERN.md` checklist |

@@ -24,9 +24,9 @@ The shop window. Lead with what the tool IS and the one install command; push de
 | 4 | Compatibility / platform support | Which agents, what ports where. A matrix when the tool is cross-agent; an explicit `[!CAUTION]` + reason when it is single-platform. |
 | 5 | Install | The one-command plugin path first, then the universal/other-agent path. |
 | 6 | Configure | The config file, precedence, and the keys. EITHER a key table (key · type · default · what it does) **that must match the `config-schema.mjs` SSoT** — gate it, or re-verify on every config change (an un-gated table drifts silently) — OR, when the key set is large, the headline dial + key-groups in prose with a link to the **commented factory template** (the gated SSoT). Always point to the schema/template for the full set. |
-| 7 | Benchmark | A short honest framing + a LINK to `.github/benchmarks/<tool>/`. Never inline the figures. **A headline figure MUST name the tested VERSION + date** — LOAD-BEARING (sourced from the benchmark record, never a copied number): a version-less figure silently rots as releases ship past it, and if a later release changed the measured behaviour, say it is *not re-benchmarked* rather than implying a current-version result. Keep the honest-scope caveat (dated, small samples). |
+| 7 | Benchmark | A short honest framing + a LINK to `.github/benchmarks/<tool>/`. Never inline the figures. **A headline figure MUST name the tested VERSION + date** — LOAD-BEARING (sourced from the benchmark record, never a copied number): a version-less figure silently rots as releases ship past it, and if a later release changed the measured behaviour, say it is *not re-benchmarked* rather than implying a current-version result. Keep the honest-scope caveat (dated, small samples). **Attribute each figure to the exact arm/condition it was measured on** — never credit a number measured on one arm (e.g. cheap-tier ad-hoc fan-out) to a different subject (e.g. the skill itself). |
 | 8 | Part of TheColliery | The sibling links + the shared doctrine (Phoenix-13, SSoT config, no-overkill). |
-| 9 | License | `MIT License. See [LICENSE](LICENSE).` |
+| 9 | License | `MIT License. See [LICENSE](LICENSE).` — **the LICENSE file MUST exist in the repo** (a `License: MIT` badge or claim with no backing file is a false claim). |
 
 ## SECURITY.md
 
