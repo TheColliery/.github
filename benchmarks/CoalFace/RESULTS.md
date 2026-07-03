@@ -125,7 +125,7 @@ out at all.
 
 ## Cross-vendor arm (Antigravity / Gemini 3.5 Flash)
 
-Run separately ([`results/antigravity-2026-07-03.md`](antigravity-2026-07-03.md)). The worker-count
+Run separately ([`results/antigravity-2026-07-03.md`](results/antigravity-2026-07-03.md)). The worker-count
 shape reproduces: **solo 26,311 · ad-hoc 155,018 (5.9×) · coarse 52,718 (−66% vs ad-hoc)** — the
 coarse-pack hack lands within a point of the CC result (−66% vs −67%), and AG carried the honest
 **"no cheap-tier dollar offset on AG"** caveat (no per-worker tier-pick → the $-flip is a CC-only
