@@ -37,6 +37,7 @@ This repository houses the global configuration, landing page profile, central i
   [![Downloads](https://img.shields.io/badge/CoalFace_Downloads-0%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalFace)
   [![Developers](https://img.shields.io/badge/CoalFace_Developers-0%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalFace)
 * 🔵 **CoalWash** *(in design · blueprint)*: Memory-defragment engine — cleans + compacts an agent's persistent memory (notes + governance) under a hard **zero-fact-loss** guarantee. The 6th sibling; spec in design, build deferred.
+* 🔵 **CoalLedger** *(in design · blueprint)*: Docs-health canary suite — the docs-side mirror of CoalMine (grounding · completeness · rot · consistency · structure · quality · leak), cross-agent + multilingual. The 7th sibling; spec in design, build deferred.
 
 ---
 
