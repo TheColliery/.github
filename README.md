@@ -36,6 +36,7 @@ This repository houses the global configuration, landing page profile, central i
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalFace?style=flat-square&logo=github)](https://github.com/TheColliery/CoalFace/network/members)
   [![Downloads](https://img.shields.io/badge/CoalFace_Downloads-0%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalFace)
   [![Developers](https://img.shields.io/badge/CoalFace_Developers-0%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalFace)
+* 🔵 **CoalWash** *(in design · blueprint)*: Memory-defragment engine — cleans + compacts an agent's persistent memory (notes + governance) under a hard **zero-fact-loss** guarantee. The 6th sibling; spec in design, build deferred.
 
 ---
 
