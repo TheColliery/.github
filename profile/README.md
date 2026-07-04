@@ -98,6 +98,17 @@ Every tool inside **TheColliery** is governed by our core constitution — the *
 
 ---
 
+## 🧩 The 4 Standard Systems
+
+Beyond the doctrine, each tool is built like a proper program — it ships the same four standard systems, so any tool feels familiar the moment you open it (the **[full doctrine](https://github.com/TheColliery/.github/blob/main/DESIGN-PRINCIPLES.md#the-4-standard-systems)** has the detail):
+
+1. ⚙️ **Config** — every knob a user might reasonably change lives in a `.<tool>.json` file (project overrides global); nothing load-bearing is hard-coded out of reach.
+2. 🌍 **Language** — output auto-detects the conversation's language (English is the always-safe fallback — zero setup) and can be locked via config. Prose is translated; technical terms — commands, paths, identifiers, config keys, model/tier/severity names — are kept **verbatim** (a translated command is a broken command).
+3. 🔄 **Self-Update** — a tool checks for and applies its own updates (consent-gated, offline-graceful), and every version transition leaves **no old-version leftover** — stale caches and renamed files are swept, never abandoned.
+4. 🐛 **Problem-Report** — one command offers to file an issue upstream, with any memory content scrubbed first; nothing is ever submitted without your say-so.
+
+---
+
 <p align="center">
   <em>More tools and skills are still deep underground. 🔦</em>
 </p>

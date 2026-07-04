@@ -19,3 +19,16 @@ The eleven binding principles of the **TheColliery** series. Every skill, hook, 
 **No external assumption (series rule).** None of the above may HARD-require a system the user might not have — git, GitHub, a network, or a specific CLI are *optional enhancements with a graceful fallback*, never a runtime requirement. A non-git, offline user must still get full function. Phoenix #7 ("offline-capable") is the hook-layer instance of this rule; CoalTipple's damage control is the skill-layer instance (a git worktree/commit is a bonus, the sandbox journal is the universal recovery).
 
 Relationship to the other rule layers: the **[Phoenix 13 Commandments](./hooks-safety.md)** implement principles 6–8 and 10 for hooks; **[scripts-quality](./scripts-quality.md)** implements 2 and 6 for CLI scripts; this file governs the whole series. Each tool re-validates its stamped copies of those layers through the gold-standard lifecycle.
+
+## The 4 Standard Systems
+
+Where principles 1–11 describe *how* each tool must behave, these four are *what every tool ships* — the standard subsystems that make a Coal\* skill a complete program, not a loose prompt. A tool missing any of the four is unfinished; every new tool inherits all four by construction.
+
+| System | What it is |
+|---|---|
+| **1. Config** | Every user-tunable value is exposed in a `.<tool>.json` cascade (project overrides global) — a single source of truth, CLI-settable, verify-validated. Nothing load-bearing is hard-coded out of reach. |
+| **2. Language** | Factory default is **auto** — output follows the conversation's language, with English as the always-safe fallback (no setup). It is lockable to a fixed language via the `language` key. Only **prose** is translated; technical terms — commands, paths, identifiers, config keys, tier/lens/model/severity names — are kept **verbatim** (a translated identifier is a broken one). |
+| **3. Self-Update** | A tool can check for and apply its own updates — consent-gated, cross-agent-aware, offline-graceful. **Hard rule: every version transition leaves NO old-version leftover** — stale cache dirs, renamed/retired files, and tombstoned config keys are swept, never abandoned. |
+| **4. Problem-Report** | A single command offers to file an issue upstream, with memory content scrubbed for privacy — never auto-submitted. Field reports are how the tools calibrate (principle 9). |
+
+These four are the practical face of principle 11 (**Entanglement**) — the shared layers (config schema, language policy, update + report channels) that bind the suite into one machine.
