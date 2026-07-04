@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Downloads-2.2k%2B%20%2F%2014d-orange?style=for-the-badge" alt="Downloads">
   <img src="https://img.shields.io/badge/Developers-632%2B%20%2F%2014d-brightgreen?style=for-the-badge" alt="Developers">
   <img src="https://img.shields.io/badge/Works_With-Mostly_Cross--Agent-cyan?style=for-the-badge" alt="Mostly Cross-Agent">
-  <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License">
+  <img src="https://img.shields.io/badge/License-Apache_2.0-green?style=for-the-badge" alt="License">
 </p>
 
 ---
