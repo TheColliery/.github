@@ -1,6 +1,6 @@
 # Public-Doc Pattern (TheColliery)
 
-> The shared writing pattern for every series repo's public docs — `README.md`, `SECURITY.md`, `CONTRIBUTING.md`, `PRIVACY.md`. Extracted from the live CoalMine / CoalTipple / CoalBoard docs so a new repo (and an edit to an old one) ships sibling-consistent.
+> The shared writing pattern for every series repo's public docs — `README.md`, `SECURITY.md`, `CONTRIBUTING.md`, `PRIVACY.md` — and the org `benchmarks/<Tool>/` dir shape. Extracted from the live CoalMine / CoalTipple / CoalBoard docs so a new repo (and an edit to an old one) ships sibling-consistent.
 > Three standing doc rules govern all of them: **trim the fat** (say each thing once, cut filler), **correct heading hierarchy** (clean `H1 → H2 → H3`, no skipped or duplicated levels), and **a README matches the code** (every claim = shipped behaviour, re-verified against the source, never aspirational).
 
 ## Cross-cutting rules (all four docs)
@@ -60,6 +60,19 @@ Title is `# <Tool> Privacy Policy`, then a bold one-liner, then one bullet list 
 - **Lead:** **`<Tool> collects nothing and phones nowhere.`**
 - **The bullets (bold lead-in each):** No telemetry · No network calls from the hook (Phoenix #7) · It runs inside YOUR agent (no servers, your account, your platform's permission gate) · the tool-specific honesty note (a local-estimate stat figure, a best-effort secret-scrub that is NOT a guarantee, propose-never-execute staging) · Error reports are manual (offered, never auto-submitted, you edit first) · Local files only (name the exact files the user can read).
 - **Close:** `Questions: open an issue at <repo-issues-url>.`
+
+## benchmarks/\<Tool\>/ (the org benchmark dir — two layers, same shape every tool)
+
+Decided 2026-07-04: **`RESULTS.md` = the OVERVIEW (short digest) · `results/` = the DETAIL.** One shape for all tools:
+
+| File | Role |
+|---|---|
+| `README.md` | The protocol — what is measured, the task/fixture table, method, how to run both arms. Evergreen: no result figures, no dates (except inside task golds). |
+| `RESULTS.md` | The digest + entry point — a `**Measured:**` line (date · tested tool VERSION · engines) + a `<!-- version-frozen -->` marker, a TL;DR blockquote, the headline table, LINKS down to `results/`, and an honest-scope close. **Short — detail lives below, never duplicated up.** The org-landing row and the tool repo's README § Benchmark link HERE, never deeper. |
+| `results/` | The detailed dated records — one `.md` per platform/run (`<topic>-<platform>-YYYY-MM-DD.md`) with full per-task tables and analysis, plus raw machine files (`.json` / `.tsv` / logs). Anything a stranger needs to reproduce the digest. |
+| inputs + scorer | `fixtures/` or `tasks.md`; `score.mjs` where scoring is executable (CM/CT). A judgment-scored bench says so in its README (CB does). |
+
+Named divergences (grandfathered — conform at each tool's next benchmark re-run, not by churning public links today): **CoalTipple** raw lives in `dogfood/output/` + top-level `ROUTING-SAVINGS.md` (publicly linked 4×) → fold into `results/` at the next re-run · **CoalMine** raw is machine `.json` only (fine — its RESULTS.md carries the narrative) · **CoalHearth** is a single-run bench, RESULTS.md serves both layers until a second run exists.
 
 ## When you touch any of these docs
 
