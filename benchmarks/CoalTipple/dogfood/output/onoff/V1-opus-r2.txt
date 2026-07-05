@@ -1,0 +1,1 @@
+The Widget processes up to 10,000 events per second at 99.9% uptime and includes out-of-the-box integrations with more than 50 tools. It carries a 30-day money-back guarantee.
