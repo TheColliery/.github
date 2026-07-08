@@ -49,7 +49,7 @@ half of provenance are still manual. A figure without date+version is not publis
 | 2 | CHANGELOG entry (keep-a-changelog) | `CHANGELOG.md` |
 | 3 | Annotated tag pushed | `git tag -a vX.Y.Z` + `--follow-tags` |
 | 4 | GitHub Release — STABLE tags only (beta = tag-only) | `gh`/REST release |
-| 5 | Repo About description (canary/feature counts) | repo settings |
+| 5 | **Repo details — the front-MOST door, checked BEFORE the README** (About description incl. counts/status · topics · website link · Releases panel shows the new stable · license auto-detect) | repo settings + the rendered repo page |
 | 6 | Org landing suite table (version/status per tool) | `.github/profile/README.md` |
 | 7 | Mirror refresh ("push offline") | `clean-export.ps1` |
 | 8 | Installed + cross-agent copies | `update-tools.ps1` |
@@ -81,8 +81,15 @@ Verify every finding before writing a verdict; a sub's clean-scan claim is suspe
 | 7 | Tool registry entry | machine-local `SKILL_REGISTRY.md` |
 | 8 | Updater registration | machine-local `update-tools.ps1` |
 
+| 9 | New repo's own repo-details (About description + topics + website per DOC-PATTERN's repo-details shape; Releases panel seeded) | repo settings |
+
 Rule: a suite-size number (tool count, sibling list) is a one-flock invariant — grep-sweep
 every surface that enumerates the suite, then read the RENDERED landing as a human.
+
+**Front-most rule (USER 2026-07-08):** the repo-details surface (About · topics · Releases
+panel) is the gate a visitor passes BEFORE ever seeing the README — it outranks the README
+in sweep order, and the review lane verifies it FIRST on every release/launch. A polished
+README behind a stale About loses the visitor before the README loads.
 
 ### GitHub repo settings — the creation-time setup (the marks above keep enumeration IN SYNC; this is the one-time repo CONFIG the mark registry did not cover)
 

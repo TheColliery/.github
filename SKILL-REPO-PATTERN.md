@@ -65,6 +65,23 @@ All workflows **SHA-pinned** (40-char, with a `# vX` comment): `ci.yml` (the gre
 
 Every shipped hook follows Phoenix-13 ([hooks-safety.md](./hooks-safety.md) — fail-silent, zero-dep, no network, sandboxed, deterministic, silent except sanctioned channels) and ships with a hermetic spawn test per its §7. Self-update, where present, is the split pattern: the HOOK only schedules (offline, crash-safe stamp), the AGENT verifies + offers the update, consent-gated (`updateMode` ask/auto/remind/off + clamped `updateCheckDays`).
 
+## Layer 7 — the activation ladder (capability-keyed, never platform-keyed)
+
+Every skill's automation ships as a THREE-TIER ladder, resolved per platform by CAPABILITY at run time — never a hardcoded platform→tier table (tables rot; the stale parallel-subagent footer proved it):
+
+1. **auto** — the platform runs lifecycle hooks → the shipped Phoenix-13 hooks drive it (CC today).
+2. **best-effort agent-driven** — no hooks → an ALWAYS-LOADED instruction (the platform's AGENTS.md-equivalent, NOT the SKILL.md — it must act before invocation) tells the agent to detect the trigger condition itself and offer the ask-box. Honest label: probabilistic, never claimed as hook parity. Convert only the classes whose job is already "offer" (conductor nudges, canary offers); NEVER per-tool-call bookkeeping (a journal via instructions = token-huge + unreliable — CoalHearth stays hook-only by design).
+3. **manual** — the user invokes the skill themselves.
+
+Ship-text states the CONDITION ("has hooks → wire hooks; no hooks → agent-driven"), and the moment a platform ADDS a hook layer it moves UP (wire the snippet, retire the emulation — no-leftover). The monthly what's-new sweep is the catch. Compat matrices name the tier per platform with the honest label.
+
+## Layer 8 — the chokepoint lesson (temporal coverage design)
+
+When a skill must govern a substrate's PAST + PRESENT + FUTURE, look for the substrate's **chokepoint** — a point every unit, of every age, must flow through:
+
+- **Chokepoint exists** → ONE standing gauge there covers all three axes by construction (CoalWash: memory is LOADED every session, so a session-start caliper sees the accumulated past, measures the present, and inescapably catches everything written later). No phases, no sweeps.
+- **No chokepoint** → three explicit motions, gold-standard style: install-scan the past + trigger on the present + template-bind the future (CoalLedger: docs are not loaded per-session; gold-standard: rules aren't either).
+
 ## Variant matrix — which layers a tool type ships
 
 | Layer | CoalMine (skill suite) | CoalTipple (skill + router) | CoalBoard (skill) | CoalHearth (hook-only) |

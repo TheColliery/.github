@@ -61,6 +61,18 @@ Title is `# <Tool> Privacy Policy`, then a bold one-liner, then one bullet list 
 - **The bullets (bold lead-in each):** No telemetry · No network calls from the hook (Phoenix #7) · It runs inside YOUR agent (no servers, your account, your platform's permission gate) · the tool-specific honesty note (a local-estimate stat figure, a best-effort secret-scrub that is NOT a guarantee, propose-never-execute staging) · Error reports are manual (offered, never auto-submitted, you edit first) · Local files only (name the exact files the user can read).
 - **Close:** `Questions: open an issue at <repo-issues-url>.`
 
+## Repo details (the front-MOST door — outranks the README)
+
+A visitor decides in seconds from the repo card/About BEFORE the README ever renders: name · description · topics · language · release recency. A stale About loses them before the page loads (the "5 canaries" description once sat 4 versions stale). The review lane verifies this surface FIRST — before the README — on every release and launch (USER rule 2026-07-08).
+
+| Piece | Shape |
+|---|---|
+| About description | ONE sentence, ≤ ~120 chars: what it does + the load-bearing count/status if any ("9 quality canaries…", "…live beta"). Any number in it joins the Event-2 sweep — prefer number-free. |
+| Topics | The flock base set `claude-code` `claude` `ai-agents` `skills` + per-tool specifics (e.g. `code-quality`/`linter` for CM, `model-routing` for CT, `multi-agent`/`consensus` for CB, `memory` for CW). Keep ≈ 6-10; they are search surface. |
+| Website field | The org landing (`github.com/TheColliery`) unless the tool has a better front door. |
+| Releases panel | Never empty on a stable tool (= reads abandoned); the latest stable visible. Policy: tags = beta+stable, Releases = stable-only. |
+| License tag | Auto-detected `Apache-2.0` — a missing/odd detect means the LICENSE file drifted (caught live: `.github` showed MIT after the relicense missed its own LICENSE). |
+
 ## benchmarks/\<Tool\>/ (the org benchmark dir — two layers, same shape every tool)
 
 Decided 2026-07-04: **`RESULTS.md` = the OVERVIEW (short digest) · `results/` = the DETAIL.** One shape for all tools:
