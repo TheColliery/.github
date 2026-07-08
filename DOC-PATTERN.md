@@ -11,6 +11,15 @@
 - **Number-free where it rots.** A README status line is a dynamic shields.io badge or `Status: stable` + a link to CHANGELOG/Releases — never a hardcoded version. The live version lives in `plugin.json` / the GitHub releases.
 - **Clean-clone:** benchmarks and process docs live in the org `.github/`, not the skill repo. The repo's docs LINK out to them.
 - **Emoji section icons are optional but consistent within a file** — if the README uses them, use them on every `H2`; if not, none. Do not half-decorate.
+- **Callout semantics are FIXED flock-wide (decided 2026-07-09 — one gate, one grammar):**
+  | callout | means | exemplar |
+  |---|---|---|
+  | `[!CAUTION]` | a hard constraint / absolute prohibition — violating it breaks, loses data, or spends real money | CoalTipple's platform lock · CoalWash's loop prohibition + fact-loss zone |
+  | `[!WARNING]` | a real risk that degrades or needs care, not an absolute | an unverified platform · a best-effort mode |
+  | `[!IMPORTANT]` | load-bearing information the reader must not skip | CoalHearth's recovery block |
+  | `[!TIP]` | a recommendation with no penalty for ignoring | CoalWash's install-globally hint |
+  | `[!NOTE]` | supplementary context | scope notes |
+  Pick by CONSEQUENCE, not by mood; the same consequence class uses the same callout in every repo.
 
 ## README.md
 
