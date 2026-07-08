@@ -16,7 +16,7 @@ CC side.
 
 ## How to run (the human's 3 steps)
 
-1. Open a **FRESH Antigravity conversation** at `C:\Users\zxc59\source\repos\TheColliery`,
+1. Open a **FRESH Antigravity conversation** at `<repo-root>`,
    model = **Gemini 3.5 Flash (Medium)**.
 2. Paste the block below, replacing `REP=1` on the first line with the round
    number (`1`, `2`, or `3`).
@@ -36,12 +36,12 @@ BENCHMARK SCAN WORKER (CoalMine rot-canary eval — non-interactive, report-only
 Single pass, no questions, no fix offers, no subagents.
 
 STEP 1 — Load the skill contract: read
-C:\Users\zxc59\source\repos\TheColliery\CoalMine\plugin\skills\rot-canary\SKILL.md
+<repo-root>\CoalMine\plugin\skills\rot-canary\SKILL.md
 and apply its rot-canary scan contract at DEPTH=QUICK, single-agent, report-only
 (no fix menu, no tier question).
 
 STEP 2 — Scan scope: the 16 fixture directories under
-C:\Users\zxc59\source\repos\TheColliery\.github\benchmarks\CoalMine\fixtures\rot-canary\
+<repo-root>\.github\benchmarks\CoalMine\fixtures\rot-canary\
 For EACH fixture directory, read ONLY the files under its src\ subfolder and
 scan them for defects per the skill contract.
 
@@ -52,7 +52,7 @@ yields NO findings — do not invent findings to look thorough; false positives
 are scored against the run.
 
 STEP 3 — Write the result file (create it yourself):
-C:\Users\zxc59\source\repos\TheColliery\.github\benchmarks\CoalMine\results\<TODAY YYYY-MM-DD>-antigravity-r<REP>.json
+<repo-root>\.github\benchmarks\CoalMine\results\<TODAY YYYY-MM-DD>-antigravity-r<REP>.json
 with EXACTLY this shape (UTF-8, no BOM):
 {
   "model": "Antigravity (<engine/model name as precisely as you know it>)",

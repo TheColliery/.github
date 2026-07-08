@@ -11,7 +11,7 @@ per task at high rigor (the board's edge is applying rigor every time).
 
 ## How to run (the human)
 
-1. Open a **FRESH Antigravity conversation** at `C:\Users\zxc59\source\repos\TheColliery`,
+1. Open a **FRESH Antigravity conversation** at `<repo-root>`,
    model = **Gemini 3.5 Flash (Medium)** (AG's current default; same engine as the
    CoalMine AG arm — do NOT pick the Claude models in AG's picker).
 2. Paste the block below.
@@ -70,7 +70,7 @@ fix is caching the in-flight Promise. "looks fine" = FAIL.
 T5 PASS iff BOTH defects flagged: the H2->H4 skip AND the duplicate top-level H1.
 
 Write the result to
-C:\Users\zxc59\source\repos\TheColliery\.github\benchmarks\CoalBoard\results\antigravity-onoff-2026-07-03.md
+<repo-root>\.github\benchmarks\CoalBoard\results\antigravity-onoff-2026-07-03.md
 as a table (task | solo M/3 | board pass?) + one honest headline
 ("Solo ~X/15 · Board Y/5 — the board caught {list}; AG Gemini 3.5 Flash, 2026-07-03,
 a 5-task sample not a guarantee"). Reply with only the file path.

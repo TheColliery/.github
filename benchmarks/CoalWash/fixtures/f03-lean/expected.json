@@ -1,0 +1,18 @@
+{
+  "fixture": "f03-lean",
+  "description": "An all-muscle lean store — zero planted fat. THE post-fat-exhaustion probe: the only correct run is a NO-OP (LEAN band, silent). Any change here is over-compression; any lost needle is the exact fact-loss the infinity-loop benchmark exists to measure.",
+  "expectNoOp": true,
+  "muscle": [
+    { "id": "m01", "needle": "[[conventions]]", "note": "index link" },
+    { "id": "m02", "needle": "[[incidents]]", "note": "index link" },
+    { "id": "m03", "needle": "Result-returns for expected failures", "note": "error-style convention kernel" },
+    { "id": "m04", "needle": "project .app.json (project wins)", "note": "config precedence fact" },
+    { "id": "m05", "needle": "feat fix refactor docs test chore perf ci", "note": "commit prefix set" },
+    { "id": "m06", "needle": "deprecation window of one minor version", "note": "API policy" },
+    { "id": "m07", "needle": "2026-03-08", "note": "incident date" },
+    { "id": "m08", "needle": "capped exponential backoff with full jitter", "note": "incident fix kernel" },
+    { "id": "m09", "needle": "2026-05-21", "note": "incident date" },
+    { "id": "m10", "needle": "no empty catch, wrap with cause", "note": "incident rule kernel" }
+  ],
+  "fat": []
+}

@@ -1,0 +1,19 @@
+{
+  "fixture": "f02-superseded",
+  "description": "Superseded verbiage (the superseding fact + version history survive as muscle in the SAME file, so the cut is gate-clean), token-free point-in-time entries, and one wholly-deletable scratch file (its deletion entails removing the [[scratch-2026-05]] index link — a gate-shown, human-approved drop; that is the designed flow).",
+  "expectNoOp": false,
+  "muscle": [
+    { "id": "m01", "needle": "current: v1.4.0 (2026-06-28)", "note": "the live release fact" },
+    { "id": "m02", "needle": "history: v1.2.0 -> v1.3.0 -> v1.4.0", "note": "version history line — keeps every version token alive in versions.md" },
+    { "id": "m03", "needle": "always disable triggers before bulk-loading", "note": "durable lesson kernel" },
+    { "id": "m04", "needle": "2026-04-19 outage", "note": "the lesson's dated provenance" },
+    { "id": "m05", "needle": "run VACUUM ANALYZE after any table rewrite", "note": "durable lesson kernel" },
+    { "id": "m06", "needle": "[[versions]]", "note": "index link" },
+    { "id": "m07", "needle": "[[migration-log]]", "note": "index link (also survives the scratch-file delete via MEMORY.md)" }
+  ],
+  "fat": [
+    { "id": "f01", "needle": "everyone should treat it as the deployment target until further notice", "class": "superseded", "note": "the superseded directive paragraph in versions.md; v1.2.0 survives via the history line" },
+    { "id": "f02", "needle": "purely for completeness at the time", "class": "done-point-in-time", "note": "two token-free completed-event entries in migration-log.md" },
+    { "id": "f03", "needle": "Temporary working notes for the May deploy window", "class": "done-point-in-time", "note": "the whole scratch-2026-05.md file is deletable (human-gated delete + approved index-link drop)" }
+  ]
+}

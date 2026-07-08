@@ -18,7 +18,7 @@ solo vs naive ad-hoc fan-out vs a coarse-packed fan-out**, on Antigravity with G
 
 ## How to run (the human)
 
-1. Open a **FRESH Antigravity conversation** at `C:\Users\zxc59\source\repos\TheColliery`,
+1. Open a **FRESH Antigravity conversation** at `<repo-root>`,
    model = **Gemini 3.5 Flash** (same engine as the other AG arms).
 2. Paste the block below.
 3. Let AG write the result file itself; hand back to CC for the merged cross-vendor headline.
@@ -57,7 +57,7 @@ plus the spawn/orchestration if AG exposes it). If per-sub tokens are not availa
 give AG's best total-token estimate per arm and note the limitation.
 
 Write the result to
-C:\Users\zxc59\source\repos\TheColliery\.github\benchmarks\CoalFace\results\antigravity-2026-07-03.md
+<repo-root>\.github\benchmarks\CoalFace\results\antigravity-2026-07-03.md
 as a table (arm | subs | total tokens | vs ad-hoc) + one honest headline of the form
 "Solo X · ad-hoc Y (Nx) · coarse Z (−M% vs ad-hoc) — AG Gemini 3.5 Flash, 2026-07-03;
 fan-out cost is worker-count × baseline, no cheap-tier dollar offset on AG". Reply with
