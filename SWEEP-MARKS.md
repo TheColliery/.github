@@ -53,6 +53,7 @@ half of provenance are still manual. A figure without date+version is not publis
 | 6 | Org landing suite table (version/status per tool) | `.github/profile/README.md` |
 | 7 | Mirror refresh ("push offline") | `clean-export.ps1` |
 | 8 | Installed + cross-agent copies | `update-tools.ps1` |
+| 9 | **CI green on the release commit + Code scanning 0 new alerts — checked AFTER the push** (the release is not "done" at the push; a red check sits on the repo front door). The review lane owns this; a local-green/CI-red split usually means the PUSHED content differs from the working tree (e.g. a `git add` pathspec that missed a source dir — hit live at CT v1.2.0). | Actions runs + Security tab, via REST/`gh` |
 
 **Anti-mark:** `SECURITY.md`'s SkillSpector pin is NEVER bumped on a release — it names
 the last ACTUAL scan (Event 3 owns it). Bumping it without a scan fabricates coverage.

@@ -102,7 +102,7 @@ Every tool inside **TheColliery** is governed by our core constitution — the *
 
 Beyond the doctrine, each tool is built like a proper program — it ships the same five standard systems, so any tool feels familiar the moment you open it (the **[full doctrine](https://github.com/TheColliery/.github/blob/main/DESIGN-PRINCIPLES.md#the-5-standard-systems)** has the detail):
 
-1. ⚙️ **Config** — every knob a user might reasonably change lives in a `.<tool>.json` file (project overrides global); nothing load-bearing is hard-coded out of reach.
+1. ⚙️ **Config** — **two levels**: a global `~/.claude/.<tool>.json` plus a per-project `.<tool>.json` override (project wins). Install a tool globally, then re-tune — **or shut it off entirely** — in any single project: a coding skill never needs to keep loading (and burning tokens) inside your docs or translation projects. Schema-validated, range-clamped; nothing load-bearing is hard-coded out of reach.
 2. 🌍 **Language** — output auto-detects the conversation's language (English is the always-safe fallback — zero setup) and can be locked via config. Prose is translated; technical terms — commands, paths, identifiers, config keys, model/tier/severity names — are kept **verbatim** (a translated command is a broken command).
 3. 🔄 **Self-Update** — a tool checks for and applies its own updates (consent-gated, offline-graceful), and every version transition leaves **no old-version leftover** — stale caches and renamed files are swept, never abandoned.
 4. 🐛 **Problem-Report** — one command offers to file an issue upstream, with any memory content scrubbed first; nothing is ever submitted without your say-so.
