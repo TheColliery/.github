@@ -23,7 +23,7 @@ This document outlines the design standards for Node.js-based terminal hooks, gi
 
 ## 4. Output Formatting & Verbosity
 
-- **No Log Clutter:** Produce NO output during normal operation — the hooks are silent (Phoenix #13). The ONLY sanctioned outputs are the two channels named in commandment #13 (Zero Noise) — the Stop hook's structured JSON block when an action is required, and SessionStart context injection; never emit incidental logs, warnings, or status lines.
+- **No Log Clutter:** Produce NO output during normal operation — the hooks are silent (Phoenix #13). The ONLY sanctioned outputs are the three channels named in commandment #13 (Zero Noise) — the Stop hook's structured JSON block when an action is required, and conductor context injection on SessionStart or UserPromptSubmit; never emit incidental logs, warnings, or status lines.
 - **Clear Indicators:** When a hook DOES emit on one of those sanctioned channels, use a clean, standard prefix (e.g., `[CoalMine]`) so the user knows the source.
 
 ## 5. Localization & Adaptive Language
@@ -49,7 +49,7 @@ All CoalMine hooks and canary skill scripts must conform to the Phoenix Canary p
 | 10 | ไม่ล้ำเส้น | **Sandbox Compliant** | Never read or write outside `os.tmpdir()` (session state) and `os.homedir()/.claude/` (mode config) — EXCEPT reading the project config (`.coalmine.json` / `.coaltipple.json` / `.coalboard.json`) from the project git root. (Writes stay strictly inside the two sandbox roots.) |
 | 11 | ไม่แก่ตัว | **Future-proof** | Use stable Node.js built-ins only. No deprecated APIs. Compatible with Node 18+. |
 | 12 | ไม่ต้องการผู้ดูแล | **Self-healing** | On any unexpected state (corrupt temp file, missing session ID), silently skip and return cleanly. |
-| 13 | ไม่ส่งเสียง | **Zero Noise** | Hooks output NOTHING to stdout/stderr except the two sanctioned channels: the Stop hook's structured JSON block when an action is required, and SessionStart context injection (conductor). Everything else is silent. |
+| 13 | ไม่ส่งเสียง | **Zero Noise** | Hooks output NOTHING to stdout/stderr except the three sanctioned channels: the Stop hook's structured JSON block when an action is required, and conductor context injection on SessionStart or UserPromptSubmit (agent-context stdout — the shipped CB/CT/CW conductors). Everything else is silent. |
 
 ## 7. Hermetic Hook Testing
 
