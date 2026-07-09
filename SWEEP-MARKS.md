@@ -103,7 +103,8 @@ The 8 marks above sweep the enumeration surfaces so a new sibling is *listed* ev
 | Features: Issues · Discussions | ON | `has_issues` · `has_discussions` (bug reports · community Q&A — owner auto-watches → post notifies) |
 | Features: Projects · Wiki | OFF | `has_projects` · `has_wiki` (unused; docs live in README/references) |
 | PR: auto-delete head branch | ON | `delete_branch_on_merge` (tidy after a merged Dependabot PR) |
-| PR: auto-merge | OFF | `allow_auto_merge` (a human merges Dependabot — never gateless) |
+| PR: auto-merge | ON | `allow_auto_merge` — REQUIRED by the Dependabot auto-merge gate below (was OFF/"human merges" until 2026-07-09; the maintainer merged every green bump by hand → days of latency, so it is now automated BEHIND a CI gate, never gateless) |
+| Ruleset `dependabot-auto-merge-gate` | active | branch ruleset on `~DEFAULT_BRANCH`, `required_status_checks` = the stable CI contexts (`all-green` + `analyze (javascript)` for a skill repo; `verify` for `.github`), `strict_required_status_checks_policy: false`, **bypass_actors = RepositoryRole Admin (actor_id 5, `always`)** so the maintainer's direct pushes have ZERO friction. This makes `gh pr merge --auto` WAIT for green instead of merging instantly — it is load-bearing, not optional. `POST /repos/{o}/{r}/rulesets`. |
 | Security & analysis | ALL ON | secret-scanning · push-protection · Dependabot alerts + security-updates · private-vulnerability-reporting |
 | Actions: workflow token | read | `default_workflow_permissions=read` (least-privilege GITHUB_TOKEN) |
 | Actions: can approve PRs | OFF | `can_approve_pull_request_reviews=false` |
@@ -111,7 +112,7 @@ The 8 marks above sweep the enumeration surfaces so a new sibling is *listed* ev
 | FUNDING.yml | `github: HetCreep` | the org-wide default (`.github` repo) reaches ORG repos; a repo OUTSIDE the org (e.g. HetCreep-owned) needs its OWN `.github/FUNDING.yml` |
 | Scorecard posture findings | dismiss-with-reason | BranchProtection / Fuzzing / CIIBestPractices = solo-repo not-fixable, dismissed per repo |
 
-The repo FILES (SHA-pinned CI workflows · gitignore private-governance ignores · markdownlint · LICENSE · SECURITY/CONTRIBUTING/PRIVACY · dependabot.yml · codeql.yml · scorecard.yml) live in [`SKILL-REPO-PATTERN.md`](SKILL-REPO-PATTERN.md) — copy that shape. This table = the API/UI settings that file-shape does not carry. (Scriptable end-to-end: a `repo-setup.mjs` could PATCH all of these in one shot; a checklist is the honest floor for a rare event.)
+The repo FILES (SHA-pinned CI workflows incl. the `all-green` summary job · `dependabot-auto-merge.yml` [top-level `contents: read`, job-level write only — Scorecard Token-Permissions] · gitignore private-governance ignores · markdownlint · LICENSE · SECURITY/CONTRIBUTING/PRIVACY · dependabot.yml · codeql.yml · scorecard.yml) live in [`SKILL-REPO-PATTERN.md`](SKILL-REPO-PATTERN.md) — copy that shape. This table = the API/UI settings that file-shape does not carry. (Scriptable end-to-end: a `repo-setup.mjs` could PATCH all of these in one shot; a checklist is the honest floor for a rare event.)
 
 ---
 
