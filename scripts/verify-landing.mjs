@@ -30,7 +30,11 @@ const ROOT = process.argv[2] ?? join(fileURLToPath(new URL('.', import.meta.url)
 
 const THAI = /[฀-๿]/;
 const DATE = /20\d\d-\d\d-\d\d/;
-const SKIP_DIRS = new Set(['.git', '.claude', '.agents', 'node_modules']);
+// 'fixtures' = benchmark test PAYLOADS (e.g. CoalWash's Thai-mixed memory store,
+// CoalLedger's planted-defect docs) — deliberately messy/multilingual DATA a
+// scorer runs against, not front-door prose a visitor reads. English-only
+// gating applies to what we SAY, never to what we TEST.
+const SKIP_DIRS = new Set(['.git', '.claude', '.agents', 'node_modules', 'fixtures']);
 
 /** Recursively collect *.md paths under `dir`, skipping VCS/dep/private dirs. */
 function mdFiles(dir, acc = []) {
