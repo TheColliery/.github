@@ -69,7 +69,7 @@ node colliery-install.mjs 6 7         # CoalWash + CoalLedger (beta)
 
 Periodic blind output-quality evaluations and regression tests. To keep them honest, this page **links to each tool's `RESULTS.md` (the single source of truth) and never copies the figures** -- so a number here cannot drift from, or be invented apart from, the measured run.
 
-* **CoalMine** -- defect-detection recall/precision on 16 fixtures (12 with planted defects — 13 in total, one fixture plants 2 — plus 4 clean decoys), Claude Code. Results: [benchmarks/CoalMine/RESULTS.md](benchmarks/CoalMine/RESULTS.md).
+* **CoalMine** -- defect-detection recall/precision across the full 7-canary suite, multiple engines (Claude tiers + Antigravity cross-vendor). Results: [benchmarks/CoalMine/RESULTS.md](benchmarks/CoalMine/RESULTS.md).
 * **CoalTipple** -- dynamic model escalation + output correctness across 5 domains (crypto, proof, research, legal, voice), Claude Code. Results: [benchmarks/CoalTipple/RESULTS.md](benchmarks/CoalTipple/RESULTS.md); routing-cost savings: [benchmarks/CoalTipple/ROUTING-SAVINGS.md](benchmarks/CoalTipple/ROUTING-SAVINGS.md).
 * **CoalBoard** -- with-the-board-vs-without on error-not-allowed tasks, two platforms (Claude Code reliability + Antigravity cross-vendor), including the honest correlated-blind-spot ceiling. Results: [benchmarks/CoalBoard/results/](benchmarks/CoalBoard/results/).
 * **CoalHearth** -- interruption damage: cold restart vs warm resume on a 10-file mid-refactor (token delta + the categorical state-fidelity recovery), Claude Code. Results: [benchmarks/CoalHearth/RESULTS.md](benchmarks/CoalHearth/RESULTS.md).

@@ -142,9 +142,11 @@ directional cross-vendor confirmation, on an estimate — not an independent mag
 
 ## Honest scope
 
-- **Benchmark ≠ graduation.** This measures CF's token/$ claims on a **synthetic** worksite. CF
-  stays **beta** — a token measurement is not a real-worksite field proof, and the structural-safety
-  value (single-writer, QC) is *asserted by construction here, not stress-tested*.
+- **Benchmark ≠ graduation.** This measures CF's token/$ claims on a **synthetic** worksite — a
+  token measurement is not a real-worksite field proof, and the structural-safety value
+  (single-writer, QC) is *asserted by construction here, not stress-tested*. **Measured at CF
+  v0.1.0-beta.2; CF graduated v0.2.0 stable on 2026-07-09 via a separate real fan-out worksite
+  (the flock doc-conform sweep) — these figures are unchanged until the next benchmark run.**
 - Workers were Haiku (cheap tier, and the mechanical task fits it) — partly to conserve the
   operator's Fable quota.
 - K=1: defensible only because the per-worker token draw was deterministic-stable (±20 over 6

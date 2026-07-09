@@ -29,7 +29,18 @@ import { fileURLToPath } from 'node:url';
 const ROOT = process.argv[2] ?? join(fileURLToPath(new URL('.', import.meta.url)), '..');
 
 const THAI = /[฀-๿]/;
-const DATE = /20\d\d-\d\d-\d\d/;
+// A YYYY-MM-DD shape, bounds-checked (month 01-12, day 01-31) so a fabricated date
+// like "2026-99-99" can't satisfy "carries a dated record". Plain range check, not
+// a real calendar (no month-length awareness, e.g. Feb 30 passes) — this is a
+// landing gate, not a date parser (CoalBoard nasa audit finding M12).
+function hasValidDate(text) {
+  for (const m of text.matchAll(/20\d\d-(\d\d)-(\d\d)/g)) {
+    const month = Number(m[1]);
+    const day = Number(m[2]);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) return true;
+  }
+  return false;
+}
 // 'fixtures' = benchmark test PAYLOADS (e.g. CoalWash's Thai-mixed memory store,
 // CoalLedger's planted-defect docs) — deliberately messy/multilingual DATA a
 // scorer runs against, not front-door prose a visitor reads. English-only
@@ -113,13 +124,19 @@ export function verifyLanding(root) {
     }
     for (const tool of tools) {
       const files = mdFiles(join(benchDir, tool));
-      const dated = files.some((f) => DATE.test(readFileSync(f, 'utf8')));
+      const dated = files.some((f) => hasValidDate(readFileSync(f, 'utf8')));
       // A benchmark may launch RECORDLESS when its digest SAYS so — an honest,
       // named "first run pending" beats an invented date (CoalWash launched with
       // protocol + fixtures + scorer, run pending). The date rule bites the
       // moment a real record lands.
       const namedPending = files.some((f) => /first run pending/i.test(readFileSync(f, 'utf8')));
-      if (!dated && !namedPending) {
+      // A permanent "pending" is the OTHER half of the fabrication gap: once a real
+      // dated record lands, a digest that still claims "first run pending" is either
+      // stale bookkeeping or a fabricated row hiding behind the honest-placeholder
+      // exemption forever. Pending is only legal while there is truly nothing dated.
+      if (namedPending && dated) {
+        fail(`benchmark '${tool}': digest says "first run pending" but a dated record exists — fill the digest from the record`);
+      } else if (!dated && !namedPending) {
         fail(`benchmark '${tool}' has NO dated record (a benchmark must carry its test date, or its digest must say "first run pending")`);
       }
     }

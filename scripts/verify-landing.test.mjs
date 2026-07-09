@@ -90,3 +90,43 @@ test('lang-exempt marker suppresses the Thai flag (intentional translation data)
     assert.deepEqual(verifyLanding(root), [], 'marked Thai is allowed');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+// --- M12 remainder (CoalBoard nasa audit 2026-07-09): impossible dates + a permanent
+// "pending" bypass — the row->dir bidirectional check shipped earlier that day covered
+// a fabricated ORPHAN row, not a fabricated DATE or a stale pending claim.
+
+test('an impossible date (month/day out of range) does not count as "dated"', () => {
+  const root = fixture((r) => {
+    write(r, 'profile/README.md',
+      '# Org\n\n## 📊 Benchmarks\n\n| Tool | Result |\n|---|---|\n| **BadDate** | 2026-99-99 |\n');
+    write(r, 'benchmarks/BadDate/RESULTS.md', '# BadDate\nMeasured 2026-99-99 (bogus month+day).\n');
+  });
+  try {
+    const f = verifyLanding(root).join('\n');
+    assert.match(f, /'BadDate' has NO dated record/, 'an out-of-range month/day never satisfies the date check');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('a "first run pending" digest alongside a real dated record is a contradiction → fail', () => {
+  const root = fixture((r) => {
+    write(r, 'profile/README.md',
+      '# Org\n\n## 📊 Benchmarks\n\n| Tool | Result |\n|---|---|\n| **StalePending** | — |\n');
+    write(r, 'benchmarks/StalePending/RESULTS.md', '**Measured:** — *(first run pending)*\n');
+    write(r, 'benchmarks/StalePending/results/run-2026-07-09.md', '# Run\nMeasured 2026-07-09. Real numbers here.\n');
+  });
+  try {
+    const f = verifyLanding(root).join('\n');
+    assert.match(f, /'StalePending': digest says "first run pending" but a dated record exists/, 'flags the pending+dated contradiction');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('a "first run pending" digest with NO record anywhere is legal (honest launch state)', () => {
+  const root = fixture((r) => {
+    write(r, 'profile/README.md',
+      '# Org\n\n## 📊 Benchmarks\n\n| Tool | Result |\n|---|---|\n| **FreshLaunch** | — |\n');
+    write(r, 'benchmarks/FreshLaunch/RESULTS.md', '**Measured:** — *(first run pending)*\n');
+  });
+  try {
+    assert.deepEqual(verifyLanding(root), [], 'pending with no backing record anywhere is not flagged');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

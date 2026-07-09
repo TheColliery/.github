@@ -62,12 +62,19 @@ the last ACTUAL scan (Event 3 owns it). Bumping it without a scan fabricates cov
 
 | # | Mark | Where |
 |---|---|---|
-| 1 | SECURITY.md scan pin: scanner version + score + verified finding classes | every scanned repo's `SECURITY.md` (×5) |
+| 1 | SECURITY.md scan pin: scanner version + score + verified finding classes | every scanned repo's `SECURITY.md` (×7 — CoalMine, CoalTipple, CoalBoard, CoalHearth, CoalFace, CoalWash, CoalLedger) |
 | 2 | Scan reports stay local | `skillspector-*.json` gitignored, never committed |
 | 3 | The scan record (dated, per-repo scores, FP verdicts) | machine-local registry/memory |
 
 Rules: scan LAST — on the version a batch declared done, never a mid-batch snapshot.
 Verify every finding before writing a verdict; a sub's clean-scan claim is suspect input.
+
+**Split-baseline hazard (found 2026-07-09):** the root `.skillspector-version` baseline the
+version-watch workflow diffs against is ONE number, but the fleet can straddle two scanner
+versions — CoalWash + CoalLedger launched already scanned at v2.3.11 while the other 5 siblings
+(and the baseline file) still sit at v2.3.9. A single pin can't represent a split fleet; only a
+suite-wide re-scan that brings every repo to the SAME version, then bumps the baseline to match,
+closes it.
 
 ## Event 4 — New skill/tool launch (a new sibling) · 8 marks
 

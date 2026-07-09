@@ -23,7 +23,7 @@ This document outlines the design standards for Node.js-based terminal hooks, gi
 
 ## 4. Output Formatting & Verbosity
 
-- **No Log Clutter:** Produce NO output during normal operation — the hooks are silent (Phoenix #13). The ONLY sanctioned outputs are the two channels named in §13 (the Stop hook's structured JSON block when an action is required, and SessionStart context injection); never emit incidental logs, warnings, or status lines.
+- **No Log Clutter:** Produce NO output during normal operation — the hooks are silent (Phoenix #13). The ONLY sanctioned outputs are the two channels named in commandment #13 (Zero Noise) — the Stop hook's structured JSON block when an action is required, and SessionStart context injection; never emit incidental logs, warnings, or status lines.
 - **Clear Indicators:** When a hook DOES emit on one of those sanctioned channels, use a clean, standard prefix (e.g., `[CoalMine]`) so the user knows the source.
 
 ## 5. Localization & Adaptive Language

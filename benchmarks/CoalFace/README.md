@@ -4,8 +4,8 @@
 > re-reading the full shared context, a scout digests it once and hands workers a compact digest,
 > under a bounded single-writer contract. This benchmark measures the **token and dollar cost** of
 > three ways to do the same 6-spot job — solo, ad-hoc fan-out, and the CF contract — to test CF's
-> **wallet** claim ("the swarm fits inside the solo cost"). It does **NOT** graduate CF (it stays
-> beta) and it does **NOT** stress-test the structural-safety machinery (single-writer, QC) — this
+> **wallet** claim ("the swarm fits inside the solo cost"). It does **NOT** by itself graduate CF
+> and it does **NOT** stress-test the structural-safety machinery (single-writer, QC) — this
 > worksite has no write conflicts by construction.
 
 ## Three arms, one worksite
@@ -40,5 +40,7 @@ is for *large* shared context × *many* right-sized units, routed to *cheap* tie
 
 Synthetic worksite, K=1 (defensible only because the per-worker token draw was deterministic-stable
 ±20). Workers = Haiku (cheap tier + fits the mechanical task, and conserves Fable quota). Benchmark
-≠ graduation — CF stays **beta** until a real fan-out worksite proves the structural-safety machinery
-under actual write contention. Dated 2026-07-03.
+≠ graduation — this synthetic run alone does not prove the structural-safety machinery under real
+write contention. **CF graduated v0.2.0 stable on 2026-07-09 via a separate real fan-out worksite**
+(the flock doc-conform sweep); these token/dollar figures are unchanged and still describe the
+beta.2 run dated below. Dated 2026-07-03.
