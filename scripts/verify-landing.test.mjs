@@ -63,6 +63,21 @@ test('catches a benchmark missing from a SECOND enumerating surface (README.md, 
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+test('catches an ORPHAN benchmark row — a landing row with no backing dir (bidirectional)', () => {
+  const root = fixture((r) => {
+    // the Benchmarks table lists Real AND Orphan, but only Real has a benchmarks/ dir
+    write(r, 'profile/README.md',
+      '# Org\n\n## 📊 Benchmarks\n\n| Tool | Result |\n|---|---|\n| **Real** | 2026-07-03 |\n| **Orphan** | 2026-07-03 |\n');
+    write(r, 'benchmarks/Real/RESULTS.md', '# ok\nmeasured 2026-07-03\n');
+    // no benchmarks/Orphan/ dir on purpose — the reverse of the enumeration miss
+  });
+  try {
+    const f = verifyLanding(root).join('\n');
+    assert.match(f, /lists 'Orphan' but there is NO benchmarks\/Orphan\/ dir/, 'catches the orphan row (reverse direction)');
+    assert.doesNotMatch(f, /lists 'Real' but there is NO/, 'a row with a backing dir is not flagged');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test('lang-exempt marker suppresses the Thai flag (intentional translation data)', () => {
   const thai = 'เว้นแต่ในกรณีที่';
   const root = fixture((r) => {

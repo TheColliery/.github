@@ -95,6 +95,18 @@ export function verifyLanding(root) {
           fail(`benchmark '${tool}' is NOT listed in the Benchmarks section of ${relPath} (SWEEP-MARKS Event-1 enumeration miss — every enumerating surface must list every benchmark)`);
         }
       }
+      // BIDIRECTIONAL (the reverse of the enumeration check): every first-column
+      // **Tool** entry in the Benchmarks section — a table row `| **X** |` or a list
+      // item `- **X**` — must have a backing benchmarks/<X>/ dir. Catches an ORPHAN row
+      // (a benchmark removed but its landing row left behind) or a typo'd tool name that
+      // renders fine but points at no record. record→row alone let those pass.
+      const ROW_TOOL = /^(?:\|\s*|-\s+)\*\*([A-Za-z][\w-]*)\*\*/gm;
+      let rm;
+      while ((rm = ROW_TOOL.exec(sec[0])) !== null) {
+        if (!tools.includes(rm[1])) {
+          fail(`Benchmarks section of ${relPath} lists '${rm[1]}' but there is NO benchmarks/${rm[1]}/ dir (orphan or typo'd row — the reverse enumeration miss)`);
+        }
+      }
     }
     if (!enumerated) {
       fail('no "## … Benchmarks" section in profile/README.md or README.md (the org-landing enumeration is gone)');
