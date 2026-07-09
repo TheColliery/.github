@@ -1,11 +1,18 @@
 version: 2
 updates:
-  # The org landing repo ships GitHub Actions workflows (update-readme, skillspector-version-watch).
-  # Keep their pinned actions fresh — Dependabot opens a PR when a pinned action has a newer release.
-  # (The plugin repos CM/CT/CB each already have this; .github was the gap — R3A-3.)
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
     commit-message:
       prefix: ci
+    # Assign every bump PR to the maintainer -> a notification fires (assignment is
+    # a "participating" event, delivered at any watch level). Human still merges.
+    assignees:
+      - HetCreep
+    # Group all github/codeql-action/* paths (init/analyze/upload-sarif) into ONE PR
+    # so they bump together -> no init/analyze version skew (which reds CodeQL).
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"

@@ -94,6 +94,8 @@ README behind a stale About loses the visitor before the README loads.
 
 ### GitHub repo settings — the creation-time setup (the marks above keep enumeration IN SYNC; this is the one-time repo CONFIG the mark registry did not cover)
 
+> **The settings half is the one that gets SKIPPED** (proven live at the CoalWash + CoalLedger launch, 2026-07-09: the 8 enumeration marks + repo-details were done, but Discussions / delete-branch-on-merge / secret-scanning + push-protection + Dependabot-security-updates were all left at their disabled defaults). Why: the enumeration marks produce a visible FILE DIFF (you see the row you added), the settings produce NONE (an API state change, invisible in git) — so a launch that "looks done" in the diff is not. **On every new-sibling launch, run BOTH halves and VERIFY the settings via the API afterward, comparing against a live sibling** (`GET /repos/{owner}/{repo}` + `.../actions/permissions/workflow`).
+
 The 8 marks above sweep the enumeration surfaces so a new sibling is *listed* everywhere. Separately, a new repo needs its GitHub SETTINGS set once — the mark registry covers up-to-date drift, NOT creation. Apply these (API-scriptable via `PATCH /repos/{owner}/{repo}` + the code-security/actions endpoints):
 
 | Setting | Value | Field / where |
