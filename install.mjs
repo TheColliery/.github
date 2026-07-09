@@ -43,10 +43,22 @@ function installCoalHearth() {
     && run('claude', ['plugin', 'install', 'coalhearth@coalhearth']);
 }
 function installCoalFace() {
-  // CoalFace ships as a Claude Code plugin (beta) — see its README; other agents
+  // CoalFace ships as a Claude Code plugin — see its README; other agents
   // install by copying skills/coalface into the agent's skills root.
   return run('claude', ['plugin', 'marketplace', 'add', 'TheColliery/CoalFace'])
     && run('claude', ['plugin', 'install', 'coalface@coalface']);
+}
+function installCoalWash() {
+  // CoalWash ships as a Claude Code plugin (beta) — see its README; other agents
+  // install by copying skills/coalwash (+ scripts/lib engine) into the agent's skills root.
+  return run('claude', ['plugin', 'marketplace', 'add', 'TheColliery/CoalWash'])
+    && run('claude', ['plugin', 'install', 'coalwash@coalwash']);
+}
+function installCoalLedger() {
+  // CoalLedger ships as a Claude Code plugin (beta) — see its README; other agents
+  // install by copying skills/* (+ scripts/lib engine) into the agent's skills root.
+  return run('claude', ['plugin', 'marketplace', 'add', 'TheColliery/CoalLedger'])
+    && run('claude', ['plugin', 'install', 'coalledger@coalledger']);
 }
 
 const DLC = [
@@ -54,7 +66,9 @@ const DLC = [
   { n: 2, key: 'coaltipple', name: 'CoalTipple', blurb: 'model/effort router (delegate-down to save tokens, escalate-up for quality)',      live: true,  install: installCoalTipple },
   { n: 3, key: 'coalboard',  name: 'CoalBoard',  blurb: 'consensus & debate board (multi-lens review, bounded cost, zero-breakage)',        live: true,  install: installCoalBoard },
   { n: 4, key: 'coalhearth', name: 'CoalHearth', blurb: 'session warm-resume + advisory budget nudge (reduces limit-hit loss)',              live: true,  install: installCoalHearth },
-  { n: 5, key: 'coalface',   name: 'CoalFace',   blurb: 'fan-out discipline (beta; scout -> waves -> QC -> one writer, solo-cost bound)',   live: true,  install: installCoalFace },
+  { n: 5, key: 'coalface',   name: 'CoalFace',   blurb: 'fan-out discipline (scout -> waves -> QC -> one writer, solo-cost bound)',          live: true,  install: installCoalFace },
+  { n: 6, key: 'coalwash',   name: 'CoalWash',   blurb: 'memory washer/defrag (beta; zero-fact-loss gate, human-gated deletes)',             live: true,  install: installCoalWash },
+  { n: 7, key: 'coalledger', name: 'CoalLedger', blurb: 'docs-health canaries (beta; 6+1 over a CommonMark+GFM AST engine)',                 live: true,  install: installCoalLedger },
 ];
 
 function menu() {

@@ -63,6 +63,10 @@ function badgeSpecs(stats) {
     { name: 'CoalHearth_Developers', re: /CoalHearth_Developers-[0-9a-zA-Z.%+]+-brightgreen/g, val: `CoalHearth_Developers-${encodeURIComponent(stats.hearthUniques + ' / 14d')}-brightgreen` },
     { name: 'CoalFace_Downloads', re: /CoalFace_Downloads-[0-9a-zA-Z.%+]+-orange/g, val: `CoalFace_Downloads-${encodeURIComponent(stats.faceClones + ' / 14d')}-orange` },
     { name: 'CoalFace_Developers', re: /CoalFace_Developers-[0-9a-zA-Z.%+]+-brightgreen/g, val: `CoalFace_Developers-${encodeURIComponent(stats.faceUniques + ' / 14d')}-brightgreen` },
+    { name: 'CoalWash_Downloads', re: /CoalWash_Downloads-[0-9a-zA-Z.%+]+-orange/g, val: `CoalWash_Downloads-${encodeURIComponent(stats.washClones + ' / 14d')}-orange` },
+    { name: 'CoalWash_Developers', re: /CoalWash_Developers-[0-9a-zA-Z.%+]+-brightgreen/g, val: `CoalWash_Developers-${encodeURIComponent(stats.washUniques + ' / 14d')}-brightgreen` },
+    { name: 'CoalLedger_Downloads', re: /CoalLedger_Downloads-[0-9a-zA-Z.%+]+-orange/g, val: `CoalLedger_Downloads-${encodeURIComponent(stats.ledgerClones + ' / 14d')}-orange` },
+    { name: 'CoalLedger_Developers', re: /CoalLedger_Developers-[0-9a-zA-Z.%+]+-brightgreen/g, val: `CoalLedger_Developers-${encodeURIComponent(stats.ledgerUniques + ' / 14d')}-brightgreen` },
   ];
 }
 
@@ -102,16 +106,18 @@ function assertEveryBadgeMatched(perFileHits, stats) {
 
 async function main() {
   // Per-repo fetch: failures are non-fatal (logged + exitCode=1) so the other repos still update.
-  const [mineData, tippleData, boardData, hearthData, faceData] = await Promise.all([
+  const [mineData, tippleData, boardData, hearthData, faceData, washData, ledgerData] = await Promise.all([
     fetchRepoClonesSafe('HetCreep/CoalMine'),
     fetchRepoClonesSafe('TheColliery/CoalTipple'),
     fetchRepoClonesSafe('TheColliery/CoalBoard'),
     fetchRepoClonesSafe('TheColliery/CoalHearth'),
     fetchRepoClonesSafe('TheColliery/CoalFace'),
+    fetchRepoClonesSafe('TheColliery/CoalWash'),
+    fetchRepoClonesSafe('TheColliery/CoalLedger'),
   ]);
 
-  const totalClones = (mineData.count || 0) + (tippleData.count || 0) + (boardData.count || 0) + (hearthData.count || 0) + (faceData.count || 0);
-  const totalUniques = (mineData.uniques || 0) + (tippleData.uniques || 0) + (boardData.uniques || 0) + (hearthData.uniques || 0) + (faceData.uniques || 0);
+  const totalClones = (mineData.count || 0) + (tippleData.count || 0) + (boardData.count || 0) + (hearthData.count || 0) + (faceData.count || 0) + (washData.count || 0) + (ledgerData.count || 0);
+  const totalUniques = (mineData.uniques || 0) + (tippleData.uniques || 0) + (boardData.uniques || 0) + (hearthData.uniques || 0) + (faceData.uniques || 0) + (washData.uniques || 0) + (ledgerData.uniques || 0);
 
   const stats = {
     combinedClones: formatStat(totalClones),
@@ -125,7 +131,11 @@ async function main() {
     hearthClones: formatStat(hearthData.count || 0),
     hearthUniques: formatStat(hearthData.uniques || 0),
     faceClones: formatStat(faceData.count || 0),
-    faceUniques: formatStat(faceData.uniques || 0)
+    faceUniques: formatStat(faceData.uniques || 0),
+    washClones: formatStat(washData.count || 0),
+    washUniques: formatStat(washData.uniques || 0),
+    ledgerClones: formatStat(ledgerData.count || 0),
+    ledgerUniques: formatStat(ledgerData.uniques || 0)
   };
 
   console.log(`CoalMine - Clones: ${stats.mineClones}, Uniques: ${stats.mineUniques}`);
@@ -133,6 +143,8 @@ async function main() {
   console.log(`CoalBoard - Clones: ${stats.boardClones}, Uniques: ${stats.boardUniques}`);
   console.log(`CoalHearth - Clones: ${stats.hearthClones}, Uniques: ${stats.hearthUniques}`);
   console.log(`CoalFace - Clones: ${stats.faceClones}, Uniques: ${stats.faceUniques}`);
+  console.log(`CoalWash - Clones: ${stats.washClones}, Uniques: ${stats.washUniques}`);
+  console.log(`CoalLedger - Clones: ${stats.ledgerClones}, Uniques: ${stats.ledgerUniques}`);
   console.log(`Combined - Clones: ${stats.combinedClones}, Uniques: ${stats.combinedUniques}`);
 
   // Update both profile/README.md and root README.md.

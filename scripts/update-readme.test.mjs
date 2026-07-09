@@ -18,6 +18,8 @@ const STATS = {
   boardClones: '286+', boardUniques: '84+',
   hearthClones: '40+', hearthUniques: '12+',
   faceClones: '31+', faceUniques: '9+',
+  washClones: '0+', washUniques: '0+',
+  ledgerClones: '0+', ledgerUniques: '0+',
 };
 
 function withTmp(name, content, fn) {
@@ -31,8 +33,8 @@ function withTmp(name, content, fn) {
   }
 }
 
-test('badgeSpecs covers all 12 badges (2 global + 10 per-tool)', () => {
-  assert.equal(badgeSpecs(STATS).length, 12);
+test('badgeSpecs covers all 16 badges (2 global + 14 per-tool)', () => {
+  assert.equal(badgeSpecs(STATS).length, 16);
 });
 
 test('updateFileStats replaces a present badge and counts the hit', () => {

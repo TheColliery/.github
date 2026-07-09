@@ -30,27 +30,37 @@ This repository houses the global configuration, landing page profile, central i
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalHearth?style=flat-square&logo=github)](https://github.com/TheColliery/CoalHearth/network/members)
   [![Downloads](https://img.shields.io/badge/CoalHearth_Downloads-387%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalHearth)
   [![Developers](https://img.shields.io/badge/CoalHearth_Developers-106%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalHearth)
-* **[CoalFace](https://github.com/TheColliery/CoalFace)** *(beta)*: Fan-out discipline — scout → waves → QC → one writer, the whole swarm bounded by the estimated solo cost.
+* **[CoalFace](https://github.com/TheColliery/CoalFace)**: Fan-out discipline — scout → waves → QC → one writer, the whole swarm bounded by the estimated solo cost.
   <br>
   [![Stars](https://img.shields.io/github/stars/TheColliery/CoalFace?style=flat-square&logo=github)](https://github.com/TheColliery/CoalFace/stargazers)
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalFace?style=flat-square&logo=github)](https://github.com/TheColliery/CoalFace/network/members)
   [![Downloads](https://img.shields.io/badge/CoalFace_Downloads-313%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalFace)
   [![Developers](https://img.shields.io/badge/CoalFace_Developers-90%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalFace)
-* 🔵 **CoalWash** *(in design · blueprint)*: Memory-defragment engine — cleans + compacts an agent's persistent memory (notes + governance) under a hard **zero-fact-loss** guarantee. The 6th sibling; spec in design, build deferred.
-* 🔵 **CoalLedger** *(in design · blueprint)*: Docs-health canary suite — the docs-side mirror of CoalMine (grounding · completeness · rot · consistency · structure · quality · leak), cross-agent + multilingual. The 7th sibling; spec in design, build deferred.
+* **[CoalWash](https://github.com/TheColliery/CoalWash)** *(beta)*: Memory washer/defragmenter — cleans class-B memory FAT (never the MEAT) under a code-enforced **zero-fact-loss** gate, deletes human-gated, apply transactional.
+  <br>
+  [![Stars](https://img.shields.io/github/stars/TheColliery/CoalWash?style=flat-square&logo=github)](https://github.com/TheColliery/CoalWash/stargazers)
+  [![Forks](https://img.shields.io/github/forks/TheColliery/CoalWash?style=flat-square&logo=github)](https://github.com/TheColliery/CoalWash/network/members)
+  [![Downloads](https://img.shields.io/badge/CoalWash_Downloads-0%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalWash)
+  [![Developers](https://img.shields.io/badge/CoalWash_Developers-0%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalWash)
+* **[CoalLedger](https://github.com/TheColliery/CoalLedger)** *(beta)*: Docs-health canary suite — CoalMine for documentation (wrong · incomplete · stale · contradictory · broken · unreadable · leaked) over a CommonMark+GFM AST engine, cross-agent + multilingual.
+  <br>
+  [![Stars](https://img.shields.io/github/stars/TheColliery/CoalLedger?style=flat-square&logo=github)](https://github.com/TheColliery/CoalLedger/stargazers)
+  [![Forks](https://img.shields.io/github/forks/TheColliery/CoalLedger?style=flat-square&logo=github)](https://github.com/TheColliery/CoalLedger/network/members)
+  [![Downloads](https://img.shields.io/badge/CoalLedger_Downloads-0%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalLedger)
+  [![Developers](https://img.shields.io/badge/CoalLedger_Developers-0%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalLedger)
 
 ---
 
 ## 📦 How to Install the Suite
 
-You can install any or all tools in the series (`CoalMine`, `CoalTipple`, `CoalBoard`, `CoalHearth`, `CoalFace` (beta)) using the central installer located in this repository:
+You can install any or all tools in the series (`CoalMine`, `CoalTipple`, `CoalBoard`, `CoalHearth`, `CoalFace`, `CoalWash` (beta), `CoalLedger` (beta)) using the central installer located in this repository:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/TheColliery/.github/main/install.mjs -o colliery-install.mjs
-node colliery-install.mjs all         # the whole suite (all 5)
+node colliery-install.mjs all         # the whole suite (all 7)
 node colliery-install.mjs 3           # just CoalBoard
 node colliery-install.mjs 1 2 3       # CoalMine + CoalTipple + CoalBoard
-node colliery-install.mjs 4 5         # CoalHearth + CoalFace (CoalFace beta)
+node colliery-install.mjs 6 7         # CoalWash + CoalLedger (beta)
 ```
 
 ---
@@ -63,6 +73,8 @@ Periodic blind output-quality evaluations and regression tests. To keep them hon
 * **CoalTipple** -- dynamic model escalation + output correctness across 5 domains (crypto, proof, research, legal, voice), Claude Code. Results: [benchmarks/CoalTipple/RESULTS.md](benchmarks/CoalTipple/RESULTS.md); routing-cost savings: [benchmarks/CoalTipple/ROUTING-SAVINGS.md](benchmarks/CoalTipple/ROUTING-SAVINGS.md).
 * **CoalBoard** -- with-the-board-vs-without on error-not-allowed tasks, two platforms (Claude Code reliability + Antigravity cross-vendor), including the honest correlated-blind-spot ceiling. Results: [benchmarks/CoalBoard/results/](benchmarks/CoalBoard/results/).
 * **CoalHearth** -- interruption damage: cold restart vs warm resume on a 10-file mid-refactor (token delta + the categorical state-fidelity recovery), Claude Code. Results: [benchmarks/CoalHearth/RESULTS.md](benchmarks/CoalHearth/RESULTS.md).
+* **CoalWash** -- first run pending: the protocol, fixtures, and a runnable mechanical scorer are published (sawtooth-vs-bloat saving · infinity-loop fact-loss · consecutive-run ceiling); the digest fills from the first dated record. Protocol: [benchmarks/CoalWash/RESULTS.md](benchmarks/CoalWash/RESULTS.md).
+* **CoalLedger** -- not yet measured (launched unbenchmarked rather than with an invented number); the engine's mechanical layer is fixture-gated in-repo, and the first published benchmark will follow the flock shape here.
 * **CoalFace** -- fan-out cost: solo vs ad-hoc vs scout-digest on a shared-context worksite (tokens + dollars + the coarse-pack lever), Claude Code + Antigravity cross-vendor. Results: [benchmarks/CoalFace/RESULTS.md](benchmarks/CoalFace/RESULTS.md).
 
 ---
