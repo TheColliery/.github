@@ -13,6 +13,14 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # Push with the same user PAT the traffic step already requires: the
+          # dependabot-auto-merge-gate ruleset (required status checks) rejects a
+          # github-actions[bot] direct push (GH013, no Integration bypass possible —
+          # no app installed on the org), while the PAT's owner carries the ruleset's
+          # admin RepositoryRole bypass. checkout persists this credential for the
+          # push step below.
+          token: ${{ secrets.PAT_TOKEN }}
 
       - name: Set up Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
