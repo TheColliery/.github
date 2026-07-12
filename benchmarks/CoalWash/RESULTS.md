@@ -10,6 +10,18 @@
 | A — sawtooth (CoalWash at its band gauge) | — *(measurement pending — protocol ready)* | — |
 | B — bloat (no CoalWash) | — | (baseline) |
 
+### Controlled equal-size fidelity (v1 · 2026-07-12)
+
+A complementary controlled experiment — **hold output SIZE constant, measure what each arm LOST** — on one real dogfood corpus (the pre-re-wash `MEMORY.md`, 150,115 B → ~68,924 B, a ~54% cut of always-loaded bytes). Fidelity is recomputed independently with the shipped inventory engine — the tool's own gate is never cited as its own proof.
+
+| Arm (equal ~54% saving) | token-recall | tokens lost (of 448) | latent-recoverable |
+|---|---|---|---|
+| unchecked (untouched) | 100.00% | 0 | 100% |
+| naive-compress (fair LLM, no gate, no archive; K=4) | 51.2% (49.6–54.5) | 218.8 (204–226) | 0% of removed |
+| **CoalWash** (fidelity-gated + externalize) | **100.00%** | **0** | **100%** (190/190 → archive) |
+
+**At equal saving, opposite fidelity:** CoalWash lost **0 of 448** structured tokens and kept **100%** of what it removed from the live file recoverable in the on-demand archive; the *fair* naive compress lost a mean **218.8** tokens (K=4, range 204–226) at the same size and **0%** of what it removed is recoverable. The differentiator is **SAFE saving, not a smaller file**. Full record + method + limitations: [controlled-fidelity (v1)](results/controlled-fidelity-claude-code-2026-07-12.md). (The time-flip / regret-timeline arm is deferred to v2.)
+
 Detailed dated records — including the consecutive-run ceiling and the per-model infinity-loop fact-loss measurements — live in [`results/`](results/).
 
 **Honest scope:** fixture stores, scripted growth, small N; single model tier measured so far (fable — multi-tier pending); figures are model- and version-bound (each record names both). The saving claim will be the measured Δ% on these fixtures — not a universal promise.
