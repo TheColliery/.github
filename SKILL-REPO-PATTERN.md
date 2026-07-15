@@ -49,7 +49,7 @@
 | Script | Role | Required |
 |---|---|---|
 | `scripts/build-plugin.mjs` | regenerate `plugin/` from source | ALWAYS |
-| `scripts/verify.mjs` | fail-loud gate: files exist · manifest valid (semver **accepting pre-release** — a strict `x.y.z` regex once rejected a beta tag at release time) · marketplace points at `./plugin` · factory config validates against the schema · dist in sync + no orphans · version-pin markers current | ALWAYS |
+| `scripts/verify.mjs` | fail-loud gate: files exist · manifest valid (semver **accepting pre-release** — a strict `x.y.z` regex once rejected a beta tag at release time) · marketplace points at `./plugin` · factory config validates against the schema · dist in sync + no orphans · version-pin markers current · every skill/command frontmatter `description` ≤ **1024 chars** (`DESC_CAP` — the cross-platform-safe cap, agentskills.io; CC's own listing truncation is 1536 combined `description`+`when_to_use`, docs verified 2026-07-16; USER lock 2026-07-16, past/present/future) | ALWAYS |
 | `scripts/test.mjs` | run the zero-dep tests via `node --test` with an **explicit file list** (the directory form is unreliable; a missing listed file fails loud) | ALWAYS |
 | `scripts/lib/*.mjs` + `*.test.mjs` | pure logic + its unit tests; hooks get **hermetic spawn tests** (spawn the real hook file, sandbox TEMP + HOME, assert exit 0 / sanctioned-output-only / state effect) | ALWAYS |
 | `scripts/install.mjs` | cross-agent installer (non-Claude platforms) | cross-agent tools only |
