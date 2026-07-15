@@ -5,3 +5,5 @@ The detailed layer for ALL three measurements (consecutive-run ceiling · infini
 Records: [`ceiling-infinity-loop-claude-code-2026-07-09.md`](ceiling-infinity-loop-claude-code-2026-07-09.md) (Measurements 1 + 2, fable tier). Measurement 3 (sawtooth) has no record yet.
 
 A separate **controlled equal-size fidelity** measurement (v1 — hold output size constant across arms, measure what each LOST) lives in [`controlled-fidelity-claude-code-2026-07-12.md`](controlled-fidelity-claude-code-2026-07-12.md), scored by [`../controlled-fidelity-score.mjs`](../controlled-fidelity-score.mjs).
+
+A **[MINI-LAB] loss-class validation** (targeted one-round detector proof, not a benchmark axis) for loss class #54 (generational-compounding / iterative-compression drift) lives in [`generational-compounding-claude-code-2026-07-15.md`](generational-compounding-claude-code-2026-07-15.md) — scored against the shipped `inventory()` engine and the new detector `computeCandidates()`/`anchorDiff()` (`CoalWash/scripts/lib/anchor-diff.mjs`, a separate repo alongside this one).

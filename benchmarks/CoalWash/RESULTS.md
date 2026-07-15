@@ -22,6 +22,10 @@ A complementary controlled experiment — **hold output SIZE constant, measure w
 
 **At equal saving, opposite fidelity:** CoalWash lost **0 of 448** structured tokens and kept **100%** of what it removed from the live file recoverable in the on-demand archive; the *fair* naive compress lost a mean **218.8** tokens (K=4, range 204–226) at the same size and **0%** of what it removed is recoverable. The differentiator is **SAFE saving, not a smaller file**. Full record + method + limitations: [controlled-fidelity (v1)](results/controlled-fidelity-claude-code-2026-07-12.md). (The time-flip / regret-timeline arm is deferred to v2.)
 
+### Generational-compounding mini-lab (loss class #54 · 2026-07-15)
+
+A targeted, one-round validation (not a full benchmark axis) for a newly-catalogued loss class: repeated lossy consolidation passes diffing against each PRIOR pass's output, never the original, compound losses invisibly to a per-pass-only fidelity check. On one synthetic fixture (K=4 sequential passes, haiku), pairwise (hop-to-hop) recall stayed a reassuring 62–91% at every step while cumulative recall against the true original collapsed to **33.3%** — a same-size-class single-shot compression of the original, working under an easier size target, still out-recalled the 4-pass chain (43.3%). The shipped `anchor-diff` detector (built from CoalWash's existing snapshot + bin artifacts, no new storage) reproduces the exact cumulative-loss candidate set on this fixture. Full method, tables, and limitations: [generational-compounding (2026-07-15)](results/generational-compounding-claude-code-2026-07-15.md).
+
 Detailed dated records — including the consecutive-run ceiling and the per-model infinity-loop fact-loss measurements — live in [`results/`](results/).
 
 **Honest scope:** fixture stores, scripted growth, small N; single model tier measured so far (fable — multi-tier pending); figures are model- and version-bound (each record names both). The saving claim will be the measured Δ% on these fixtures — not a universal promise.
