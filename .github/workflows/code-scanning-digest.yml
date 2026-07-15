@@ -1,0 +1,56 @@
+# Weekly code-scanning digest (USER-chosen 2026-07-16): GitHub ships NO native
+# notification for new default-branch code-scanning alerts (docs-verified) —
+# the one gap that survived the retired alert-on-red experiment. Shape follows
+# skillspector-version-watch: ONE scheduled watcher in THIS repo only; touches
+# no CI/CodeQL workflow anywhere; SILENT when clean (no weekly noise).
+# Needs secret CODESCAN_DIGEST_TOKEN (classic PAT, security_events read scope
+# — the default github.token cannot read sibling repos' alerts). Secret
+# missing => one notice line, exit green, nothing else.
+name: code-scanning-digest
+
+on:
+  schedule:
+    - cron: '0 9 * * 1' # Mondays 09:00 UTC — after the repos' weekly CodeQL crons (06:00)
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: collect open alerts across the suite
+        env:
+          SCAN_TOKEN: ${{ secrets.CODESCAN_DIGEST_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$SCAN_TOKEN" ]; then
+            echo "::notice::CODESCAN_DIGEST_TOKEN secret not set — digest skipped (add a classic PAT with the security_events read scope)"
+            exit 0
+          fi
+          repos="TheColliery/CoalTipple TheColliery/CoalBoard TheColliery/CoalHearth TheColliery/CoalFace TheColliery/CoalWash TheColliery/CoalLedger HetCreep/CoalMine"
+          total=0; body=""
+          for r in $repos; do
+            alerts=$(GH_TOKEN="$SCAN_TOKEN" gh api "repos/$r/code-scanning/alerts?state=open&per_page=100" \
+              --jq '.[] | "- **" + .rule.id + "** [" + (.rule.security_severity_level // .rule.severity // "?") + "] " + .most_recent_instance.location.path + " — " + .html_url' 2>/dev/null) \
+              || { body="$body"$'\n'"- $r: alerts API unreadable (token scope?)"; continue; }
+            n=$(printf '%s' "$alerts" | grep -c . || true)
+            if [ "$n" -gt 0 ]; then
+              total=$((total+n))
+              body="$body"$'\n\n'"### $r ($n)"$'\n'"$alerts"
+            fi
+          done
+          if [ "$total" -eq 0 ]; then echo "clean — no open alerts anywhere"; exit 0; fi
+          gh label create scan-digest --repo "$GITHUB_REPOSITORY" --description "weekly code-scanning digest" --color D93F0B 2>/dev/null || true
+          title="Code scanning digest: $total open alert(s) — $(date -u +%F)"
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --label scan-digest --state open --json number --jq '.[0].number' 2>/dev/null || true)
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$title$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "$title" \
+              --body "GitHub ships no native notification for these — this weekly digest is the net. Dismissed/fixed alerts drop out on the next run.$body" \
+              --label scan-digest --assignee HetCreep
+          fi
