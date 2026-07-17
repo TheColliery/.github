@@ -56,7 +56,7 @@ Title is `# Verifying <Tool>`. Same section order across the family.
 |---|---|---|
 | 1 | Intro (no heading) | One line: what the tool is + "issues, bug reports, and PRs welcome". |
 | 2 | Proposing a Change | Open an issue first (especially for a `SKILL.md` edit) → make the change, keep the gates green → validate behaviour against a real fixture / dogfood it live. |
-| 3 | Developing & Testing | Zero-dependency (Node 18+, no `npm install`). The green-gate commands (`build-plugin` → `verify` → `test`). A **Development Rules** `H3`: the SSoT file, rebuild `plugin/` after a source edit, keep hooks Phoenix-pure + hermetic-tested, add unit tests, code style, English-only source. |
+| 3 | Developing & Testing | Zero-dependency (Node 22+ — the maintained LTS floor the repos' CI tests, 22 · 24; no `npm install`). The green-gate commands (`build-plugin` → `verify` → `test`). A **Development Rules** `H3`: the SSoT file, rebuild `plugin/` after a source edit, keep hooks Phoenix-pure + hermetic-tested, add unit tests, code style, English-only source. |
 | 4 | Supported Platforms | Mirror the README's stance (cross-agent matrix, or the single-platform statement + reason). |
 | 5 | Project Layout | A path → purpose table. |
 | 6 | Releasing (Maintainers) | The bump → CHANGELOG → green gates → signed tag → push → GitHub Release (stable tags only) chain. |

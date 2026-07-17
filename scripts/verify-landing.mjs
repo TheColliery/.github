@@ -108,10 +108,12 @@ export function verifyLanding(root) {
       }
       // BIDIRECTIONAL (the reverse of the enumeration check): every first-column
       // **Tool** entry in the Benchmarks section — a table row `| **X** |` or a list
-      // item `- **X**` — must have a backing benchmarks/<X>/ dir. Catches an ORPHAN row
-      // (a benchmark removed but its landing row left behind) or a typo'd tool name that
-      // renders fine but points at no record. record→row alone let those pass.
-      const ROW_TOOL = /^(?:\|\s*|-\s+)\*\*([A-Za-z][\w-]*)\*\*/gm;
+      // item `- **X**` / `* **X**` — must have a backing benchmarks/<X>/ dir. Catches an ORPHAN
+      // row (a benchmark removed but its landing row left behind) or a typo'd tool name that
+      // renders fine but points at no record. record→row alone let those pass. The `*` bullet
+      // is load-bearing: README.md's "Series Benchmarks" list uses `* **X**`, not `- **X**` —
+      // omitting it left the reverse check blind to an orphan row on the repo README.
+      const ROW_TOOL = /^(?:\|\s*|[-*]\s+)\*\*([A-Za-z][\w-]*)\*\*/gm;
       let rm;
       while ((rm = ROW_TOOL.exec(sec[0])) !== null) {
         if (!tools.includes(rm[1])) {

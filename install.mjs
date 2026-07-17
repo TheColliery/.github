@@ -38,7 +38,7 @@ function installCoalBoard() {
     && run('claude', ['plugin', 'install', 'coalboard@coalboard']);
 }
 function installCoalHearth() {
-  // CoalHearth ships as a Claude Code plugin (hook-only — Claude Code only).
+  // CoalHearth ships as a Claude Code plugin (hook-only; also runs on Antigravity 2.0 via a manual wire — see its README).
   return run('claude', ['plugin', 'marketplace', 'add', 'TheColliery/CoalHearth'])
     && run('claude', ['plugin', 'install', 'coalhearth@coalhearth']);
 }

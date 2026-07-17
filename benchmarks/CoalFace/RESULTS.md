@@ -2,11 +2,13 @@
 
 **Measured:** 2026-07-03 · CoalFace **v0.1.0-beta.2** · workers = Haiku 4.5, scout = Sonnet 5,
 solo = Opus 4.8 · K=1 per spot (token accounting on a deterministic mechanical task; per-worker
-token draw was dead-stable at ±20 across 6 spots, so K=1 is defensible here).
+token draw was dead-stable at ±20 across 6 spots, so K=1 is defensible here; the CF arm ran 3
+workers and its 6-worker total is extrapolated ×2 — disclosed under Tokens).
 
 > **TL;DR (three flips, all honest):** on a 6-spot fan-out (add a JSDoc header to 6 functions
 > from one shared style spec) — **(1)** fanning out costs **MORE raw tokens than solo**, not less:
-> ad-hoc 6-worker = **4.2×** the solo tokens, CF (scout+workers) = **5.3×** — the fixed per-sub
+> ad-hoc 6-worker = **4.2×** the solo tokens, CF (scout+workers) = **5.3×** (the CF total
+> extrapolates 3 measured workers ×2 to 6 — disclosed under Tokens) — the fixed per-sub
 > baseline (~25k) multiplied by N swamps everything. The "the swarm fits inside solo cost" wallet
 > claim is **FALSE in raw tokens.** **(2)** In **dollars** it flips: cheap-tier workers make
 > fan-out **cheaper than solo-on-an-expensive-main** (6 Haiku = $0.75 vs 1 Opus = $0.89, **−15%**),
@@ -42,13 +44,23 @@ Haiku said `Promise<void>`, a wash for the point being measured).
 |---|---|---|---|
 | SOLO (Opus, all 6) | — | **35,538** | 1.0× |
 | AD-HOC (6× Haiku, full spec) | ~25,090 | **150,562** | **4.2×** |
-| CF (scout + 6× Haiku, digest) | ~25,064 | **189,431** | **5.3×** (1.26× ad-hoc) |
+| CF (scout + 6× Haiku†, digest) | ~25,064 | **189,431** | **5.3×** (1.26× ad-hoc) |
 
 - The per-worker draw is **~25k regardless of arm** — the Explore-agent baseline (system prompt +
   governance + tools) dominates; the spec (full ~18 lines) vs the digest (~90 words) differ by only
   **~26 tokens/worker**. At this shared-context size the digest lever is in the noise.
 - **Fan-out multiplies the baseline by N.** 6 workers = 6 baselines ≈ 150k, whether ad-hoc or CF.
   CF adds a 7th sub (the scout, 39k) on top — so CF is the *most* token-expensive arm here.
+
+† **Extrapolation, disclosed.** The CF arm logged **3** worker draws (chargeOrder 25,069 · taxFor
+25,068 · legacyExport 25,056; avg 25,064) plus the scout — see [`results/onoff-raw.tsv`](results/onoff-raw.tsv).
+Its 6-worker total (189,431) **extrapolates those 3 ×2** to the full 6-spot job — justified, not
+independently measured, by the per-worker baseline being dead-stable across all **9** real
+single-spot Haiku workers here (6 ad-hoc + 3 CF, every draw 25,056–25,104, ±0.1%). The **ad-hoc arm
+(4.2×), the coarse arm (−67%), and the −15% dollar headline are fully measured** — no extrapolation.
+The conclusion does not hinge on the ×2: the 3 measured CF workers + scout already = 114,238 =
+**3.2× solo**, so "fan-out costs more raw tokens than solo" is measured-true on its own; the ×2 only
+sharpens 3.2×→5.3× to represent all 6 spots, it does not manufacture the effect.
 
 ## Dollars (relative-cost proxy)
 
@@ -149,8 +161,10 @@ directional cross-vendor confirmation, on an estimate — not an independent mag
   (the flock doc-conform sweep) — these figures are unchanged until the next benchmark run.**
 - Workers were Haiku (cheap tier, and the mechanical task fits it) — partly to conserve the
   operator's Fable quota.
-- K=1: defensible only because the per-worker token draw was deterministic-stable (±20 over 6
-  spots). A quality benchmark would need K≥3 and a harder task.
+- K=1: defensible only because the per-worker token draw was deterministic-stable (25,056–25,104
+  across the 9 measured single-spot workers). The CF arm ran **3** workers; its 6-worker total is
+  **extrapolated ×2** (disclosed under Tokens) — ad-hoc, coarse, and the −15%-$ headline are fully
+  measured. A quality benchmark would need K≥3 and a harder task.
 - The $ figures are a rate-proxy on blended tokens, for *ordering* — not a bill.
 
 Dated 2026-07-03; a single synthetic worksite, not a guarantee.

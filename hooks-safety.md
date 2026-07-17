@@ -47,7 +47,7 @@ All CoalMine hooks and canary skill scripts must conform to the Phoenix Canary p
 | 8 | ไม่กลายพันธุ์ | **Deterministic** | Same input → same output, always. No random IDs, no time-based branching outside timestamp stamps. |
 | 9 | ไม่จำกัดร่าง | **Portable** | Runs on Windows, macOS, Linux without modification. Use `path.join()`, `os.homedir()`, `os.tmpdir()`. |
 | 10 | ไม่ล้ำเส้น | **Sandbox Compliant** | Never read or write outside `os.tmpdir()` (session state) and `os.homedir()/.claude/` (mode config) — EXCEPT reading the project config (`.coalmine.json` / `.coaltipple.json` / `.coalboard.json`) from the project git root. (Writes stay strictly inside the two sandbox roots.) |
-| 11 | ไม่แก่ตัว | **Future-proof** | Use stable Node.js built-ins only. No deprecated APIs. Compatible with Node 18+. |
+| 11 | ไม่แก่ตัว | **Future-proof** | Use stable Node.js built-ins only. No deprecated APIs. Compatible with Node 22+ (the maintained LTS line the repos' CI tests, 22 · 24; 18/20 are EOL). |
 | 12 | ไม่ต้องการผู้ดูแล | **Self-healing** | On any unexpected state (corrupt temp file, missing session ID), silently skip and return cleanly. |
 | 13 | ไม่ส่งเสียง | **Zero Noise** | Hooks output NOTHING to stdout/stderr except the three sanctioned channels: the Stop hook's structured JSON block when an action is required, and conductor context injection on SessionStart or UserPromptSubmit (agent-context stdout — the shipped CB/CT/CW conductors). Everything else is silent. |
 

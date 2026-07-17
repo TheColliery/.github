@@ -25,7 +25,8 @@ totals — a relative-ordering figure, not a bill).
 ## The honest result (three flips)
 
 1. **Fan-out costs MORE raw tokens than solo** — the fixed per-sub baseline (~25k) × N dominates:
-   ad-hoc = 4.2× solo, CF = 5.3×. The wallet claim is **false in tokens**.
+   ad-hoc = 4.2× solo (fully measured), CF = 5.3× (the CF total extrapolates 3 measured workers ×2
+   to 6 — disclosed in [`RESULTS.md`](RESULTS.md)). The wallet claim is **false in tokens**.
 2. **In dollars it flips** — cheap-tier workers make fan-out **−15% vs solo-on-Opus** (Haiku is ~5×
    cheaper/token). CF's wallet is a **$-via-cheap-tier** claim, not a token claim.
 3. **CF's scout is overhead on a small shared context** — the scout (39k) costs far more than the
@@ -39,7 +40,8 @@ is for *large* shared context × *many* right-sized units, routed to *cheap* tie
 ## Honest scope
 
 Synthetic worksite, K=1 (defensible only because the per-worker token draw was deterministic-stable
-±20). Workers = Haiku (cheap tier + fits the mechanical task, and conserves Fable quota). Benchmark
+±20; the CF arm ran 3 workers, extrapolated ×2 to 6 — [`RESULTS.md`](RESULTS.md) discloses it, and
+ad-hoc/coarse/the −15%-$ headline are fully measured). Workers = Haiku (cheap tier + fits the mechanical task, and conserves Fable quota). Benchmark
 ≠ graduation — this synthetic run alone does not prove the structural-safety machinery under real
 write contention. **CF graduated v0.2.0 stable on 2026-07-09 via a separate real fan-out worksite**
 (the flock doc-conform sweep); these token/dollar figures are unchanged and still describe the

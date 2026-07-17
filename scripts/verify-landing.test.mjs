@@ -78,6 +78,23 @@ test('catches an ORPHAN benchmark row — a landing row with no backing dir (bid
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+test('catches an ORPHAN row in a `*`-bullet README list (the reverse check sees `*` bullets, not only `|`/`-`)', () => {
+  const root = fixture((r) => {
+    write(r, 'profile/README.md',
+      '# Org\n\n## 📊 Benchmarks\n\n| Tool | Result |\n|---|---|\n| **Backed** | 2026-07-03 |\n');
+    // repo README "Series Benchmarks" uses `*` bullets (the real shape) and carries an ORPHAN
+    write(r, 'README.md',
+      '# Repo\n\n## 📊 Series Benchmarks\n\n* **Backed** -- ok. Results: [x](x).\n* **GhostBullet** -- no dir backs this. Results: [x](x).\n\n## Next\n');
+    write(r, 'benchmarks/Backed/RESULTS.md', '# ok\nmeasured 2026-07-03\n');
+    // no benchmarks/GhostBullet/ — a `-`/`|`-only regex would miss this orphan on a `*` list
+  });
+  try {
+    const f = verifyLanding(root).join('\n');
+    assert.match(f, /lists 'GhostBullet' but there is NO benchmarks\/GhostBullet\/ dir/, 'catches the orphan in a `*`-bullet list');
+    assert.doesNotMatch(f, /lists 'Backed' but there is NO/, 'a `*`-bullet row with a backing dir is not flagged');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test('lang-exempt marker suppresses the Thai flag (intentional translation data)', () => {
   const thai = 'เว้นแต่ในกรณีที่';
   const root = fixture((r) => {

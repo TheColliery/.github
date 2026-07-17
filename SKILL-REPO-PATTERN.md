@@ -96,14 +96,14 @@ When a skill must govern a substrate's PAST + PRESENT + FUTURE, look for the sub
 
 A dir a tool type doesn't need is ABSENT, not empty — no scaffolding "for later".
 
-## Live divergences (updated 2026-07-02 post-batch — the conform backlog, not part of the pattern)
+## Live divergences (re-verified 2026-07-17 — the conform backlog, not part of the pattern)
 
 | Repo | Missing / off-pattern | Weight |
 |---|---|---|
 | CoalHearth | ~~docs/CI/self-update/package.json~~ **closed at v0.1.0-beta.2** · remaining: `SECURITY.md` uses `# Security Policy`, not the pattern's `# Verifying <Tool>` shape | cosmetic; align on next doc touch |
-| CoalMine | no `scripts/test.mjs` (tests enumerated in git-hook scripts instead — predates the pattern) | cosmetic; consolidate on next touch |
 | CoalBoard | no `scripts/lib/jsonc.mjs` (parse inlined in the conductor) · no `install.mjs`/`configure.mjs` (deferred by decision) · no `platform-report.yml` (cross-agent tool without one) | deliberate/deferred |
-| CoalTipple / CoalFace | none — at the full pattern | — |
+| CoalWash / CoalLedger | no `install.mjs`/`configure.mjs` (cross-agent tools ship a documented file-copy path; config CLI not built) · no `platform-report.yml` (cross-agent field-report funnel not yet added) — but both DO have `scripts/lib/jsonc.mjs` + the `# Verifying <Tool>` SECURITY shape | deferred — conform backlog |
+| CoalMine / CoalTipple / CoalFace | none — at the full pattern (CoalMine's old `no scripts/test.mjs` gap is closed — it now ships one) | — |
 
 ## CI hard-won rules (2026-07-02 — from CoalHearth's first CI run)
 
