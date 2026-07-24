@@ -10,9 +10,9 @@ This repository houses the global configuration, landing page profile, central i
   <br>
   [![Stars](https://img.shields.io/github/stars/HetCreep/CoalMine?style=flat-square&logo=github)](https://github.com/HetCreep/CoalMine/stargazers)
   [![Forks](https://img.shields.io/github/forks/HetCreep/CoalMine?style=flat-square&logo=github)](https://github.com/HetCreep/CoalMine/network/members)
-  [![Downloads](https://img.shields.io/badge/CoalMine_Downloads-357%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/HetCreep/CoalMine)
-  [![Developers](https://img.shields.io/badge/CoalMine_Developers-77%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/HetCreep/CoalMine)
-* **[CoalTipple](https://github.com/TheColliery/CoalTipple)**: Model and effort router with budget protection locks.
+  [![Downloads](https://img.shields.io/badge/CoalMine_Downloads-391%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/HetCreep/CoalMine)
+  [![Developers](https://img.shields.io/badge/CoalMine_Developers-84%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/HetCreep/CoalMine)
+* **[CoalTipple](https://github.com/TheColliery/CoalTipple)**: Model/effort router — delegate-down to save, escalate-up for quality, with a fail-safe model-ranking Lock.
   <br>
   [![Stars](https://img.shields.io/github/stars/TheColliery/CoalTipple?style=flat-square&logo=github)](https://github.com/TheColliery/CoalTipple/stargazers)
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalTipple?style=flat-square&logo=github)](https://github.com/TheColliery/CoalTipple/network/members)
@@ -34,9 +34,9 @@ This repository houses the global configuration, landing page profile, central i
   <br>
   [![Stars](https://img.shields.io/github/stars/TheColliery/CoalFace?style=flat-square&logo=github)](https://github.com/TheColliery/CoalFace/stargazers)
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalFace?style=flat-square&logo=github)](https://github.com/TheColliery/CoalFace/network/members)
-  [![Downloads](https://img.shields.io/badge/CoalFace_Downloads-280%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalFace)
-  [![Developers](https://img.shields.io/badge/CoalFace_Developers-60%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalFace)
-* **[CoalWash](https://github.com/TheColliery/CoalWash)** *(beta)*: Memory washer/defragmenter — cleans class-B memory FAT (never the MEAT) under a code-enforced **zero-fact-loss** gate, deletes human-gated, apply transactional.
+  [![Downloads](https://img.shields.io/badge/CoalFace_Downloads-366%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalFace)
+  [![Developers](https://img.shields.io/badge/CoalFace_Developers-76%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalFace)
+* **[CoalWash](https://github.com/TheColliery/CoalWash)** *(rc)*: Memory washer/defragmenter — cleans class-B memory FAT (never the MEAT) under a code-enforced **zero-fact-loss** gate, deletes human-gated, apply transactional.
   <br>
   [![Stars](https://img.shields.io/github/stars/TheColliery/CoalWash?style=flat-square&logo=github)](https://github.com/TheColliery/CoalWash/stargazers)
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalWash?style=flat-square&logo=github)](https://github.com/TheColliery/CoalWash/network/members)
@@ -71,7 +71,7 @@ Periodic blind output-quality evaluations and regression tests. To keep them hon
 
 * **CoalMine** -- defect-detection recall/precision across the full 7-canary suite, multiple engines (Claude tiers + Antigravity cross-vendor). Results: [benchmarks/CoalMine/RESULTS.md](benchmarks/CoalMine/RESULTS.md).
 * **CoalTipple** -- dynamic model escalation + output correctness across 5 domains (crypto, proof, research, legal, voice), Claude Code. Results: [benchmarks/CoalTipple/RESULTS.md](benchmarks/CoalTipple/RESULTS.md); routing-cost savings: [benchmarks/CoalTipple/ROUTING-SAVINGS.md](benchmarks/CoalTipple/ROUTING-SAVINGS.md).
-* **CoalBoard** -- with-the-board-vs-without on error-not-allowed tasks, two platforms (Claude Code reliability + Antigravity cross-vendor), including the honest correlated-blind-spot ceiling. Results: [benchmarks/CoalBoard/results/](benchmarks/CoalBoard/results/).
+* **CoalBoard** -- with-the-board-vs-without on error-not-allowed tasks, two platforms (Claude Code reliability + Antigravity cross-vendor), including the honest correlated-blind-spot ceiling. Results: [benchmarks/CoalBoard/RESULTS.md](benchmarks/CoalBoard/RESULTS.md).
 * **CoalHearth** -- interruption damage: cold restart vs warm resume on a 10-file mid-refactor (token delta + the categorical state-fidelity recovery), Claude Code. Results: [benchmarks/CoalHearth/RESULTS.md](benchmarks/CoalHearth/RESULTS.md).
 * **CoalWash** -- consecutive-run ceiling + infinity-loop fact-loss, first dated run (fable tier); the headline sawtooth-vs-bloat saving is still unmeasured (protocol, fixtures, and a runnable mechanical scorer are published). Results: [benchmarks/CoalWash/RESULTS.md](benchmarks/CoalWash/RESULTS.md).
 * **CoalLedger** -- not yet measured (launched unbenchmarked rather than with an invented number); the engine's mechanical layer is fixture-gated in-repo, and the first published benchmark will follow the flock shape here.

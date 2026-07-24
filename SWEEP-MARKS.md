@@ -16,7 +16,7 @@ every mark was touched (or explicitly N/A); the main gates the push on mark-comp
 — FAILS the build on the subset a machine can check in THIS repo, so a human never has to catch it:
 
 - **Event 1 mark 3** — every `benchmarks/<Tool>/` has a row in the profile Benchmarks table.
-- **Event 1 mark 4 (date half)** — every benchmark record carries a `YYYY-MM-DD`.
+- **Event 1 mark 4 (date half)** — every `benchmarks/<Tool>/` carries at least one dated (`YYYY-MM-DD`) record (matches what `verify-landing` actually gates; per-file dating stays the manual convention).
 - **Language-universal** — no unmarked Thai in the visitor front doors (`profile/` · `benchmarks/` ·
   root `README.md`); intentional Thai (translation-benchmark DATA, e.g. scored Thai output) declares
   `<!-- lang-exempt: reason -->` (the "name the intentional divergence" rule).

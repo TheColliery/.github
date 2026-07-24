@@ -17,7 +17,7 @@ claude.ai runs a skill's `SKILL.md` in a code-execution sandbox — **no hooks, 
 | **CoalWash** | ⚠️ Partial | The SKILL contract works for judgment; the code-core engine (caliper, fidelity gate) expects a filesystem — usable on uploaded/project files, not a live machine. |
 | **CoalBoard** | ❌ Not ported | The board's value is **blind parallel lenses** (decorrelation). claude.ai has no subagent isolation — sequential "lenses" in one context anchor on each other, which silently destroys the one thing the board sells. An honest no-port beats a fake board. |
 | **CoalTipple** | ❌ Not portable | Routing actuates by picking a spawned worker's model; no spawn tool exists here. |
-| **CoalHearth** | ❌ Not portable | It *is* two Claude Code hooks; no hooks here. |
+| **CoalHearth** | ❌ Not portable | Its engine is lifecycle hooks (Claude Code + Antigravity 2.0); claude.ai has no hook engine. |
 
 ## How to package one (about a minute)
 

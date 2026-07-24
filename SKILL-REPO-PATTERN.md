@@ -84,13 +84,15 @@ When a skill must govern a substrate's PAST + PRESENT + FUTURE, look for the sub
 
 ## Variant matrix — which layers a tool type ships
 
+> 4 exemplar tool types shown (of the 7 siblings — CoalFace/CoalWash/CoalLedger follow the same shapes).
+
 | Layer | CoalMine (skill suite) | CoalTipple (skill + router) | CoalBoard (skill) | CoalHearth (hook-only) |
 |---|---|---|---|---|
 | `skills/` | 9 skills + `_shared/` | 1 skill | 1 skill | — (no skill) |
-| `commands/` | stats · update | memory · off · stats · update | update | — (gap: no update command yet) |
+| `commands/` | stats · update | memory · off · stats · update | stats · update | stats · update |
 | `agents/` | scanner worker | — | — | — |
-| `hooks/` conductor | ✓ | ✓ | ✓ | ✓ (2 hooks: SessionStart + PostToolUse; entries in `bin/`, logic in `lib/`) |
-| `platform-configs/` | ✓ + per-platform templates + alt hooks | ✓ | ✓ | ✓ (factory only — CC-only tool) |
+| `hooks/` conductor | ✓ | ✓ | ✓ | ✓ (2 CC hooks + 2 AG 2.0 hooks; entries in `bin/`, logic in `lib/`) |
+| `platform-configs/` | ✓ + per-platform templates + alt hooks | ✓ | ✓ | ✓ (factory + AG hooks.json — CC + Antigravity 2.0) |
 | `install.mjs` / `configure.mjs` | ✓ / ✓ | ✓ / ✓ | — / — | — / — |
 | `alt/` (PowerShell fallback) | ✓ | — | — | — |
 

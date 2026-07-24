@@ -65,9 +65,9 @@ const DLC = [
   { n: 1, key: 'coalmine',   name: 'CoalMine',   blurb: '9 quality-canary skills (code-health, grounding, supply-chain, resilience, more)', live: true,  install: installCoalMine },
   { n: 2, key: 'coaltipple', name: 'CoalTipple', blurb: 'model/effort router (delegate-down to save tokens, escalate-up for quality)',      live: true,  install: installCoalTipple },
   { n: 3, key: 'coalboard',  name: 'CoalBoard',  blurb: 'consensus & debate board (multi-lens review, bounded cost, zero-breakage)',        live: true,  install: installCoalBoard },
-  { n: 4, key: 'coalhearth', name: 'CoalHearth', blurb: 'session warm-resume + advisory budget nudge (reduces limit-hit loss)',              live: true,  install: installCoalHearth },
+  { n: 4, key: 'coalhearth', name: 'CoalHearth', blurb: 'session warm-resume (journals state; resumes from a recovery block after an interruption)',              live: true,  install: installCoalHearth },
   { n: 5, key: 'coalface',   name: 'CoalFace',   blurb: 'fan-out discipline (scout -> waves -> QC -> one writer, solo-cost bound)',          live: true,  install: installCoalFace },
-  { n: 6, key: 'coalwash',   name: 'CoalWash',   blurb: 'memory washer/defrag (beta; zero-fact-loss gate, human-gated deletes)',             live: true,  install: installCoalWash },
+  { n: 6, key: 'coalwash',   name: 'CoalWash',   blurb: 'memory washer/defrag (rc; zero-fact-loss gate, human-gated deletes)',             live: true,  install: installCoalWash },
   { n: 7, key: 'coalledger', name: 'CoalLedger', blurb: 'docs-health canaries (beta; 6+1 over a CommonMark+GFM AST engine)',                 live: true,  install: installCoalLedger },
 ];
 
