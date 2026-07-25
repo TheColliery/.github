@@ -21,6 +21,14 @@ every mark touched or explicitly N/A, each carrying the evidence its owner produ
 gates/build AS the gate, and commits, tags, pushes, releases. A mark reported as swept WITHOUT
 evidence counts as UNSWEPT: a sub's output is suspect input until source-verified.
 
+**ORG-SYNC RIDES THE PUSH.** Nothing automated keeps the org landing true — the derivable half
+(version · topics · license · counts) is already dynamic, and every drift found in practice has been
+a JUDGMENT claim no machine can own. The chokepoint is the push, so the sync rides it: on a release,
+a capability change, a platform tier moving, a benchmark re-run, or a description/install-path
+change — not every commit — the org docs are re-synced before the push. The ROOM supplies the claim
+text for its own tool; nobody authors a claim about a room they do not own. Main NAMES who synced
+the org docs or marks it N/A — "pushed" is not a report, and silence means the station did not run.
+
 ## Mechanically gated (no longer swept by eye)
 
 `scripts/verify-landing.mjs` — run in CI on every push + PR (`.github/workflows/verify-landing.yml`)
@@ -45,7 +53,7 @@ subset. The rest is still the review lane + the human reading the rendered landi
 |---|---|---|---|
 | 1 | The benchmark record (full tables, method, caveats) | `.github/benchmarks/<Tool>/RESULTS.md` | benchmark deputy |
 | 2 | The tool repo's README benchmark headline (the front door) | `<Tool>/README.md` § Benchmark | that room's doc-writer — PLACES the digest the benchmark deputy hands over |
-| 3 | The org landing Benchmarks table row | `.github/profile/README.md` § Benchmarks | benchmark deputy |
+| 3 | The org landing Benchmarks table row | `.github/profile/README.md` § Benchmarks | benchmark deputy — **report the sync by name, or mark it N/A; silence = the station did not run** |
 | 4 | Provenance on every figure: test DATE + tested tool VERSION + engine labels | inside marks 1-3 | benchmark deputy — one owner for the DATA wherever it appears, so a number is never placed by someone who did not measure it |
 
 Rules: public docs are language-universal (English) — marks 3, 4-date, and the Thai rule are now
@@ -61,7 +69,7 @@ half of provenance are still manual. A figure without date+version is not publis
 | 3 | Annotated tag pushed | `git tag -a vX.Y.Z` + `--follow-tags` | MAIN |
 | 4 | GitHub Release — STABLE tags only (beta = tag-only). The notes carry the CHANGELOG entry's content; a gate receipt (test counts · VERIFY · CI) or a cross-repo pointer may ride along ONLY if verified at press | `gh`/REST release | MAIN presses; reviewer verifies the notes against the CHANGELOG entry FIRST |
 | 5 | **Repo details — the front-MOST door, checked BEFORE the README** (About description incl. counts/status · topics · website link · Releases panel shows the new stable · license auto-detect) | repo settings + the rendered repo page | room reviewer (standing duty) |
-| 6 | Org landing suite table (version/status per tool) | `.github/profile/README.md` | `.github` deputy |
+| 6 | Org landing suite table (version/status per tool) | `.github/profile/README.md` | `.github` deputy — **report the sync by name, or mark it N/A; silence = the station did not run** |
 | 7 | Mirror refresh ("push offline") | `clean-export.ps1` | MAIN |
 | 8 | Installed + cross-agent copies | `update-tools.ps1` | MAIN |
 | 9 | **CI green on the release commit + Code scanning 0 new alerts — checked AFTER the push** (the release is not "done" at the push; a red check sits on the repo front door). The review lane owns this; a local-green/CI-red split usually means the PUSHED content differs from the working tree (e.g. a `git add` pathspec that missed a source dir — hit live at CT v1.2.0). **EXPERIMENT RECORD (2026-07-16, deployed AND retired same day — do not re-propose):** an `alert-on-red.yml` net + a codeql fail-on-open-alerts step replaced this ritual for ~2 hours; its first live fire (CoalHearth) proved the design wrong — it DUPLICATED GitHub's native workflow-failure notification (a double ping), held CodeQL red the whole time a known-FP alert stayed open (re-ping per scheduled run + blocked Dependabot auto-merge), and painted a "code scanning configuration error" banner. USER ruling: what already works, don't touch. The ONE real gap that survives: GitHub has NO documented notification for NEW default-branch code-scanning alerts (verified vs docs 2026-07-16) — this mark's post-push alert check is currently the only coverage. | Actions runs + Security tab, via REST/`gh` | room reviewer |

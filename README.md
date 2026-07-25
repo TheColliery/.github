@@ -18,7 +18,7 @@ This repository houses the global configuration, landing page profile, central i
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalTipple?style=flat-square&logo=github)](https://github.com/TheColliery/CoalTipple/network/members)
   [![Downloads](https://img.shields.io/badge/CoalTipple_Downloads-250%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalTipple)
   [![Developers](https://img.shields.io/badge/CoalTipple_Developers-62%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalTipple)
-* **[CoalBoard](https://github.com/TheColliery/CoalBoard)**: Consensus & debate board — diverse lenses verify error-not-allowed work before it ships.
+* **[CoalBoard](https://github.com/TheColliery/CoalBoard)**: Consensus & debate board — diverse lenses verify error-not-allowed work before it ships, or audit existing work and report findings.
   <br>
   [![Stars](https://img.shields.io/github/stars/TheColliery/CoalBoard?style=flat-square&logo=github)](https://github.com/TheColliery/CoalBoard/stargazers)
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalBoard?style=flat-square&logo=github)](https://github.com/TheColliery/CoalBoard/network/members)
@@ -70,7 +70,7 @@ node colliery-install.mjs 6 7         # CoalWash + CoalLedger (beta)
 Periodic blind output-quality evaluations and regression tests. To keep them honest, this page **links to each tool's `RESULTS.md` (the single source of truth) and never copies the figures** -- so a number here cannot drift from, or be invented apart from, the measured run.
 
 * **CoalMine** -- defect-detection recall/precision across 7 of the 9 canaries, multiple engines (Claude tiers + Antigravity cross-vendor). Results: [benchmarks/CoalMine/RESULTS.md](benchmarks/CoalMine/RESULTS.md).
-* **CoalTipple** -- dynamic model escalation + output correctness across 5 domains (crypto, proof, research, legal, voice), Claude Code. Results: [benchmarks/CoalTipple/RESULTS.md](benchmarks/CoalTipple/RESULTS.md); routing-cost savings: [benchmarks/CoalTipple/ROUTING-SAVINGS.md](benchmarks/CoalTipple/ROUTING-SAVINGS.md).
+* **CoalTipple** -- ON-vs-OFF paired benchmark (4 tasks × 3 tiers): routing ON = 4/4 task quality on both baselines vs OFF = 3/4, ~23% cheaper from an Opus main / cost-neutral from a Sonnet main; plus a 5-domain (crypto, proof, research, legal, voice) output-correctness matrix, Claude Code. Results: [benchmarks/CoalTipple/RESULTS.md](benchmarks/CoalTipple/RESULTS.md); routing-cost savings: [benchmarks/CoalTipple/ROUTING-SAVINGS.md](benchmarks/CoalTipple/ROUTING-SAVINGS.md).
 * **CoalBoard** -- with-the-board-vs-without on error-not-allowed tasks, two platforms (Claude Code reliability + Antigravity cross-vendor), including the honest correlated-blind-spot ceiling. Results: [benchmarks/CoalBoard/RESULTS.md](benchmarks/CoalBoard/RESULTS.md).
 * **CoalHearth** -- interruption damage: cold restart vs warm resume on a 10-file mid-refactor (token delta + the categorical state-fidelity recovery), Claude Code. Results: [benchmarks/CoalHearth/RESULTS.md](benchmarks/CoalHearth/RESULTS.md).
 * **CoalWash** -- consecutive-run ceiling + infinity-loop fact-loss, first dated run (fable tier); the headline sawtooth-vs-bloat saving is still unmeasured (protocol, fixtures, and a runnable mechanical scorer are published). Results: [benchmarks/CoalWash/RESULTS.md](benchmarks/CoalWash/RESULTS.md).
