@@ -100,6 +100,8 @@ Every tool inside **TheColliery** is governed by our core constitution — the *
 4. 🛡️ **Antivirus/ESET Heuristics:** Heuristic detection plus definition-freshness stamps (revalidate dates) and consent-gated updates — never a silent one.
 5. 🔌 **Single Power Button:** Absolute minimal setup — a single command installs and runs the conductor.
 
+> 🔑 **Least-power, in one place:** the **[Permission Matrix](https://github.com/TheColliery/.github/blob/main/PERMISSION-MATRIX.md)** lists the minimum capability each tool requests — and the rights it deliberately never asks for, proven absent rather than merely unused.
+
 ---
 
 ## 🧩 The 5 Standard Systems
