@@ -36,7 +36,7 @@ This repository houses the global configuration, landing page profile, central i
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalFace?style=flat-square&logo=github)](https://github.com/TheColliery/CoalFace/network/members)
   [![Downloads](https://img.shields.io/badge/CoalFace_Downloads-205%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalFace)
   [![Developers](https://img.shields.io/badge/CoalFace_Developers-40%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalFace)
-* **[CoalWash](https://github.com/TheColliery/CoalWash)** *(rc)*: Memory washer/defragmenter — cleans class-B memory FAT (never the MEAT) under a code-enforced **zero-fact-loss** gate, deletes human-gated, apply transactional.
+* **[CoalWash](https://github.com/TheColliery/CoalWash)** *(rc)*: Memory washer/defragmenter, **two lanes**: **class-B** (session-loaded memory + governance) cleans the FAT never the MEAT, under a code-enforced gate proving **zero structured-token loss**, deletes human-gated, apply transactional; **class-A** (the at-rest transcript estate) is **never semantic-edited** — byte-identity only, copy-verify-then-delete with a round-trip restore, and wizard-invoked only.
   <br>
   [![Stars](https://img.shields.io/github/stars/TheColliery/CoalWash?style=flat-square&logo=github)](https://github.com/TheColliery/CoalWash/stargazers)
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalWash?style=flat-square&logo=github)](https://github.com/TheColliery/CoalWash/network/members)
