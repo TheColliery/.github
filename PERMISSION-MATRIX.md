@@ -46,10 +46,10 @@ Both are enforced as **must-fail** checks, not just omissions: a platform that *
 
 ## The baseline and the two spikes
 
-The baseline is deliberately tiny — **scoped read (P1) + scratch-write (P2)**, plus running the repo's *own* local tooling (build, test, lint, the doc engine). Four skills exec locally that way — CoalMine, CoalLedger, CoalBoard, CoalFace — and it never leaves the machine, so it is baseline, not a spike. Two capabilities genuinely rise above the baseline, and each is rare:
+The baseline is deliberately tiny — **scoped read (P1) + scratch-write (P2)**, plus running the repo's *own* local tooling (build, test, lint, the doc engine). Four skills exec locally that way — CoalMine, CoalLedger, CoalBoard, CoalFace — and that execution never leaves the machine, so it is baseline, not a spike. Two capabilities genuinely rise above the baseline, and each is rare:
 
 1. **NETWORK in the code — CoalBoard's empirical lens**, whose identity is live source-grounding. Everywhere else, reaching a live source is an agent-layer, consent-gated action (CoalMine and CoalLedger grounding) governed by ASK — never a code network right (see the two-layers note above).
-2. **HOME-REACH + WRITE-TARGET + DELETE — CoalWash**, the heaviest profile in the series: a cwd-jailed role cannot gauge memory that lives outside the project, and washing *is* mutation. This is why it carries the full safety stack — human-gated deletes, verified snapshot, whole-run rollback. CoalLedger also writes target files, but only as a fix the user picks item by item from a menu, never a bulk mutation; and only CoalWash deletes.
+2. **HOME-REACH + WRITE-TARGET + DELETE — CoalWash**, the heaviest profile in the series: a cwd-jailed role cannot gauge class-B memory that lives outside the project, nor reach the class-A transcript estate spanning every project under `~/.claude/projects/` — and washing *is* mutation. This is why it carries the full safety stack — human-gated deletes, verified snapshot, whole-run rollback. CoalLedger also writes target files, but only as a fix the user picks item by item from a menu, never a bulk mutation; and only CoalWash deletes.
 
 ## Earning a new right
 

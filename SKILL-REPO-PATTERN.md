@@ -112,7 +112,8 @@ A dir a tool type doesn't need is ABSENT, not empty — no scaffolding "for late
 | CoalHearth | ~~docs/CI/self-update/package.json~~ **closed at v0.1.0-beta.2** · remaining: `SECURITY.md` uses `# Security Policy`, not the pattern's `# Verifying <Tool>` shape | cosmetic; align on next doc touch |
 | CoalBoard | no `scripts/lib/jsonc.mjs` (parse inlined in the conductor) · no `install.mjs`/`configure.mjs` (deferred by decision) · no `platform-report.yml` (cross-agent tool without one) | deliberate/deferred |
 | CoalWash / CoalLedger | no `install.mjs`/`configure.mjs` (cross-agent tools ship a documented file-copy path; config CLI not built) · no `platform-report.yml` (cross-agent field-report funnel not yet added) — but both DO have `scripts/lib/jsonc.mjs` + the `# Verifying <Tool>` SECURITY shape | deferred — conform backlog |
-| CoalMine / CoalTipple / CoalFace | **re-verify at L3** — the 2026-07-17 pass was shallower than L3 and its "none — at the full pattern" verdict did NOT hold: a 2026-07-25 L3 audit found real gate/naming gaps in CoalMine + CoalTipple. (CoalMine's old `no scripts/test.mjs` gap IS closed — it ships one.) | unknown until re-verified |
+| CoalTipple | no committed pre-commit/pre-push hooks (no `.husky/`, no `package.json`), so `verify.mjs` + `test.mjs` run on CI only — [scripts-quality.md](./scripts-quality.md) §2 requires them wired locally as well | real, checkable |
+| CoalMine / CoalFace | re-verify at L3 — the 2026-07-17 pass was shallower than L3, so its "none — at the full pattern" verdict is unconfirmed rather than disproven. **No defect is asserted here.** (CoalMine's old `no scripts/test.mjs` gap IS closed — it ships one.) | unknown until re-verified |
 
 ## CI hard-won rules (2026-07-02 — from CoalHearth's first CI run)
 

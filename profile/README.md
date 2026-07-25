@@ -67,7 +67,7 @@ node colliery-install.mjs coalmine  # by name, too
 | 3 | **[CoalBoard](https://github.com/TheColliery/CoalBoard)** | a Claude Code **plugin** — `claude plugin marketplace add TheColliery/CoalBoard` then `claude plugin install coalboard@coalboard`; **Antigravity** (validated) — copy `skills/coalboard` into `~/.gemini/config/skills` (see the [README](https://github.com/TheColliery/CoalBoard#-install)) |
 | 4 | **[CoalHearth](https://github.com/TheColliery/CoalHearth)** | a Claude Code **plugin** — `claude plugin marketplace add TheColliery/CoalHearth` then `claude plugin install coalhearth@coalhearth`; **6 more platforms wired** (Antigravity, Gemini CLI, Copilot CLI, Devin CLI, Kiro, Augment) — copy the plugin dir + wire the matching template in `platform-configs/` (see the [README](https://github.com/TheColliery/CoalHearth#install) for the per-platform file) |
 | 5 | **[CoalFace](https://github.com/TheColliery/CoalFace)** | a Claude Code **plugin** — `claude plugin marketplace add TheColliery/CoalFace` then `claude plugin install coalface@coalface`; **other agents** — copy `skills/coalface` into the agent's skills root (cross-agent contract; the auto-conductor hook is Claude Code + Antigravity 2.0 (wired), commands are Claude-Code-only) |
-| 6 | **[CoalWash](https://github.com/TheColliery/CoalWash)** | a Claude Code **plugin** (rc) — `claude plugin marketplace add TheColliery/CoalWash` then `claude plugin install coalwash@coalwash`; **other agents** — copy `skills/coalwash` + `scripts/lib/` into the agent's skills root (the engine ships beside the skill) |
+| 6 | **[CoalWash](https://github.com/TheColliery/CoalWash)** | a Claude Code **plugin** (rc) — `claude plugin marketplace add TheColliery/CoalWash` then `claude plugin install coalwash@coalwash`; **other agents** — copy `skills/coalwash/` and `scripts/lib/` together, preserving their relative positions (`scripts/lib/` sits two levels above `skills/coalwash/SKILL.md`, as a sibling of `skills/` itself, not inside it) — e.g. `<root>/skills/coalwash/` + `<root>/scripts/lib/` under one shared root |
 | 7 | **[CoalLedger](https://github.com/TheColliery/CoalLedger)** | a Claude Code **plugin** (beta) — `claude plugin marketplace add TheColliery/CoalLedger` then `claude plugin install coalledger@coalledger`; **other agents** — copy the `skills/` canaries + `scripts/lib/` engine into the agent's skills root |
 
 ---
@@ -94,7 +94,19 @@ See **[the benchmark records](https://github.com/TheColliery/.github/tree/main/b
 
 Every tool inside **TheColliery** is governed by our core constitution — the **[full doctrine](https://github.com/TheColliery/.github/blob/main/DESIGN-PRINCIPLES.md)** spells out every Phoenix-13 and Quantum-11 point. The lines below are one-line digests:
 
-1. 🌐 **Works in Every Mine (Cross-Agent):** Vendor-agnostic by design — CoalMine, CoalBoard, CoalFace, CoalWash, and CoalLedger are cross-agent (CoalMine/CoalLedger read + analyze anywhere; CoalBoard/CoalFace need a concurrent-subagent platform — Claude Code, Antigravity, Cursor, Codex, Cline, …). **Validated on Claude Code**; **CoalBoard** is also **validated on Antigravity** (2026-06-22); every other platform is design-supported (re-verify subagent support on yours). (**CoalTipple** is the one **Claude-Code-only** exception — its model/effort routing only actuates where an agent can pick a spawned worker's model + effort. **CoalHearth** is hook-dependent — it runs wherever a lifecycle-hook engine exists: **Claude Code + Antigravity 2.0** (wired).)
+1. 🌐 **Works in Every Mine (Cross-Agent):** Vendor-agnostic by design, and each tool says exactly how far it has been taken — no blanket claim covers them all.
+
+   | Tool | Beyond Claude Code (all are validated on Claude Code) |
+   |---|---|
+   | **CoalMine** | **Validated on Antigravity** — canaries validated, auto-cadence hooks *wired*. Reads + analyzes anywhere. |
+   | **CoalBoard** | **Validated on Antigravity** (2026-06-22). Needs a concurrent-subagent platform. |
+   | **CoalHearth** | **Wired** on Antigravity, Gemini CLI, Copilot CLI, Devin CLI, Kiro and Augment — built + hermetically tested, live-validation pending. Runs wherever a lifecycle-hook engine exists. |
+   | **CoalWash** | **Manual** on every non-Claude-Code platform — the documented file-copy install, designed-degrade-safe, not yet run there. |
+   | **CoalLedger** | **Manual**, same shape. Reads + analyzes anywhere, except `doc-structure`, which runs its bundled zero-dep engine (Node only — no install, no network). |
+   | **CoalFace** | **Design-supported** — needs a concurrent-subagent platform; re-verify subagent support on yours. |
+   | **CoalTipple** | **Claude Code only, by capability** — model/effort routing actuates only where an agent can pick a spawned worker's model + effort, so there is nothing to degrade to elsewhere. |
+
+   *Wired* = built and hermetically tested, not yet run live. *Manual* = a documented install path that works, not merely a design intent. Neither is a validated claim, and neither is a promise.
 2. 🦅 **Phoenix 13 Compliance:** Immortal hooks, all **13** commandments — fail-silent · zero-dependency · zero-latency · zero-garbage · zero-side-effects · stateless · offline · deterministic · portable · sandboxed · future-proof · self-healing · zero-noise.
 3. 🔬 **Quantum 11 Performance:** All **11** principles — maximum output · zero visible errors · single brand · minimum power + consent · essential accessories · error correction · determinism · isolation · measurement · trust · entanglement.
 4. 🛡️ **Antivirus/ESET Heuristics:** Heuristic detection plus definition-freshness stamps (revalidate dates) and consent-gated updates — never a silent one.
