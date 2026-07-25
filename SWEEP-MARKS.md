@@ -66,6 +66,8 @@ half of provenance are still manual. A figure without date+version is not publis
 | 8 | Installed + cross-agent copies | `update-tools.ps1` | MAIN |
 | 9 | **CI green on the release commit + Code scanning 0 new alerts — checked AFTER the push** (the release is not "done" at the push; a red check sits on the repo front door). The review lane owns this; a local-green/CI-red split usually means the PUSHED content differs from the working tree (e.g. a `git add` pathspec that missed a source dir — hit live at CT v1.2.0). **EXPERIMENT RECORD (2026-07-16, deployed AND retired same day — do not re-propose):** an `alert-on-red.yml` net + a codeql fail-on-open-alerts step replaced this ritual for ~2 hours; its first live fire (CoalHearth) proved the design wrong — it DUPLICATED GitHub's native workflow-failure notification (a double ping), held CodeQL red the whole time a known-FP alert stayed open (re-ping per scheduled run + blocked Dependabot auto-merge), and painted a "code scanning configuration error" banner. USER ruling: what already works, don't touch. The ONE real gap that survives: GitHub has NO documented notification for NEW default-branch code-scanning alerts (verified vs docs 2026-07-16) — this mark's post-push alert check is currently the only coverage. | Actions runs + Security tab, via REST/`gh` | room reviewer |
 
+Release title + notes shape → [RELEASE-PATTERN.md](./RELEASE-PATTERN.md).
+
 **Anti-mark:** `SECURITY.md`'s SkillSpector pin is NEVER bumped on a release — it names
 the last ACTUAL scan (Event 3 owns it). Bumping it without a scan fabricates coverage.
 **Owner:** the skillspector deputy owns the pin; the room reviewer's job is to make sure

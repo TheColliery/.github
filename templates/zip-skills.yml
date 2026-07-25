@@ -1,0 +1,66 @@
+# CANONICAL TEMPLATE — copy to <skill-repo>/.github/workflows/zip-skills.yml
+# It lives here (templates/, not .github/workflows/) so it does NOT execute in the org repo.
+# Shape owner: SKILL-REPO-PATTERN.md Layer 5. Do not hand-roll a variant.
+#
+# Publishes the claude.ai skill ZIPs as Release assets. All packaging logic lives in
+# scripts/build-claudeai-zips.mjs (copied from templates/ alongside this file) so every
+# gate can be exercised locally against a fixture — this workflow is only trigger + upload.
+#
+# TWO PATHS, ONE IMPLEMENTATION:
+#   release: published  -> build, self-verify, ATTACH to the Release.
+#   workflow_dispatch   -> build, self-verify, rebuild and byte-diff. Uploads NOTHING, ever.
+# The manual path is the safe rehearsal: same checkout, same runner, same script. There is
+# no dry-run FLAG on purpose — a manual run simply has no upload step that can misfire.
+
+name: claude.ai skill ZIPs
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Tag to package (blank = the default branch)
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  zip:
+    # Releases are stable-only by policy; a prerelease that slips through gets no assets.
+    if: ${{ github.event_name == 'workflow_dispatch' || !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    permissions:
+      # ponytail: granted job-wide because GitHub cannot scope a permission per step; only
+      # the release-gated upload step below uses it. Splitting into a read-only build job
+      # would need an artifact hand-off action for no real gain at this blast radius.
+      contents: write # gh release upload
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.inputs.ref || github.event.release.tag_name }}
+          persist-credentials: false
+
+      - name: Build + self-verify the ZIPs
+        env:
+          REPO: ${{ github.event.repository.name }}
+        run: node scripts/build-claudeai-zips.mjs "$REPO" dist-zips --stamp "$(git log -1 --format=%cI)"
+
+      - name: Determinism — rebuild and diff the bytes
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          REPO: ${{ github.event.repository.name }}
+        run: |
+          set -euo pipefail
+          node scripts/build-claudeai-zips.mjs "$REPO" dist-zips-b --stamp "$(git log -1 --format=%cI)"
+          diff <(cd dist-zips && sha256sum *.zip) <(cd dist-zips-b && sha256sum *.zip)
+          echo "two builds of the same tag are byte-identical"
+          ls -l dist-zips
+
+      - name: Attach to the Release
+        if: ${{ github.event_name == 'release' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" dist-zips/*.zip --clobber

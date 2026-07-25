@@ -56,11 +56,13 @@
 | `scripts/install.mjs` | cross-agent installer (non-Claude platforms) | cross-agent tools only |
 | `scripts/configure.mjs` | config CLI over the schema SSoT | optional (CM/CT have it; CB deferred) |
 
-Green gate = `build-plugin` → `verify` → `test`, wired into pre-commit/pre-push where the repo keeps git hooks. Release chain (bump sizing, CHANGELOG, signed tag, Release-per-stable-tag, propagation) is owned by [scripts-quality.md](./scripts-quality.md) — not restated here.
+Green gate = `build-plugin` → `verify` → `test`, wired into pre-commit/pre-push where the repo keeps git hooks. Release chain (bump sizing, CHANGELOG, signed tag, Release-per-stable-tag, propagation) is owned by [scripts-quality.md](./scripts-quality.md), and the Release notes' own shape by [RELEASE-PATTERN.md](./RELEASE-PATTERN.md) — not restated here.
 
 ## Layer 5 — `.github/` (CI + health)
 
 All workflows **SHA-pinned** (40-char, with a `# vX` comment): `ci.yml` (the green gate on push/PR) · `codeql.yml` · `markdownlint.yml` · `scorecard.yml` · `dependabot-auto-merge.yml` (org-canonical since 2026-07-09 — actor-guarded to `dependabot[bot]` only, patch/minor only, `gh pr merge --auto` behind a required-checks ruleset; a MAJOR bump and any human-opened PR still wait for the human). Plus `dependabot.yml` and `ISSUE_TEMPLATE/` (`bug-report.yml` + `config.yml`; add `platform-report.yml` when the tool is cross-agent). Issue templates that name a version carry a `version-pin:` marker so `verify.mjs` catches a stale pin.
+
+A repo whose skills are published to claude.ai also ships **`zip-skills.yml`** — on a published stable Release it packages each `plugin/skills/<skill>/` folder into `<tool>-<skill>-claudeai.zip` and attaches it as a Release asset. Copy it verbatim from [`templates/zip-skills.yml`](./templates/zip-skills.yml); it performs NO adaptation, so **a skill folder must be self-contained** (a `SKILL.md` pointing outside its own folder fails the build rather than shipping a dangling instruction). Scope + the capability table: [CLAUDE-AI-INSTALL.md](./CLAUDE-AI-INSTALL.md).
 
 `paths-ignore`: the three gated workflows (`ci.yml` · `codeql.yml` · `scorecard.yml`) skip doc-only commits — **`NOTICE` belongs in that list beside `LICENSE`**, else a legal-text-only commit burns a full CI run. `markdownlint.yml` carries none by design (markdown IS its subject).
 
