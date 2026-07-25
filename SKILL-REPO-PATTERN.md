@@ -15,7 +15,8 @@
 ├── platform-configs/          # commented factory .{tool}.json (+ per-platform templates if cross-agent)
 ├── plugin/                    # GENERATED dist — what the marketplace serves; never hand-edit
 ├── scripts/                   # build-plugin.mjs · verify.mjs · test.mjs · lib/ (logic + hermetic tests)
-├── README.md CHANGELOG.md SECURITY.md CONTRIBUTING.md PRIVACY.md LICENSE
+├── README.md CHANGELOG.md SECURITY.md CONTRIBUTING.md PRIVACY.md
+├── LICENSE NOTICE             # Apache-2.0 + the §4(d) attribution file (flock-wide since the 2026-07-04 relicense)
 └── .gitignore .markdownlint.json
 ```
 
@@ -33,7 +34,7 @@
 - **The sync gate**: `scripts/verify.mjs` byte-compares dist against source **both directions** — stale dist fails AND dist-only orphans fail (nothing ships without a source).
 - `hooks/hooks.json` wires entries via `${CLAUDE_PLUGIN_ROOT}/<path>` — verify.mjs asserts the wiring strings.
 
-## Layer 3 — config system (one pattern, four repos)
+## Layer 3 — config system (one pattern, every sibling)
 
 | Piece | Rule |
 |---|---|
@@ -59,7 +60,11 @@ Green gate = `build-plugin` → `verify` → `test`, wired into pre-commit/pre-p
 
 ## Layer 5 — `.github/` (CI + health)
 
-All workflows **SHA-pinned** (40-char, with a `# vX` comment): `ci.yml` (the green gate on push/PR) · `codeql.yml` · `markdownlint.yml` · `scorecard.yml`. Plus `dependabot.yml` and `ISSUE_TEMPLATE/` (`bug-report.yml` + `config.yml`; add `platform-report.yml` when the tool is cross-agent). Issue templates that name a version carry a `version-pin:` marker so `verify.mjs` catches a stale pin.
+All workflows **SHA-pinned** (40-char, with a `# vX` comment): `ci.yml` (the green gate on push/PR) · `codeql.yml` · `markdownlint.yml` · `scorecard.yml` · `dependabot-auto-merge.yml` (org-canonical since 2026-07-09 — actor-guarded to `dependabot[bot]` only, patch/minor only, `gh pr merge --auto` behind a required-checks ruleset; a MAJOR bump and any human-opened PR still wait for the human). Plus `dependabot.yml` and `ISSUE_TEMPLATE/` (`bug-report.yml` + `config.yml`; add `platform-report.yml` when the tool is cross-agent). Issue templates that name a version carry a `version-pin:` marker so `verify.mjs` catches a stale pin.
+
+`paths-ignore`: the three gated workflows (`ci.yml` · `codeql.yml` · `scorecard.yml`) skip doc-only commits — **`NOTICE` belongs in that list beside `LICENSE`**, else a legal-text-only commit burns a full CI run. `markdownlint.yml` carries none by design (markdown IS its subject).
+
+A `.github/codeql/codeql-config.yml` (CodeQL `config-file:` path tuning) is OPTIONAL, not flock-canonical — CoalTipple is the only repo carrying one today; add it only where the tuning is needed, and name the reason there.
 
 ## Layer 6 — hooks (pointer)
 
@@ -105,7 +110,7 @@ A dir a tool type doesn't need is ABSENT, not empty — no scaffolding "for late
 | CoalHearth | ~~docs/CI/self-update/package.json~~ **closed at v0.1.0-beta.2** · remaining: `SECURITY.md` uses `# Security Policy`, not the pattern's `# Verifying <Tool>` shape | cosmetic; align on next doc touch |
 | CoalBoard | no `scripts/lib/jsonc.mjs` (parse inlined in the conductor) · no `install.mjs`/`configure.mjs` (deferred by decision) · no `platform-report.yml` (cross-agent tool without one) | deliberate/deferred |
 | CoalWash / CoalLedger | no `install.mjs`/`configure.mjs` (cross-agent tools ship a documented file-copy path; config CLI not built) · no `platform-report.yml` (cross-agent field-report funnel not yet added) — but both DO have `scripts/lib/jsonc.mjs` + the `# Verifying <Tool>` SECURITY shape | deferred — conform backlog |
-| CoalMine / CoalTipple / CoalFace | none — at the full pattern (CoalMine's old `no scripts/test.mjs` gap is closed — it now ships one) | — |
+| CoalMine / CoalTipple / CoalFace | **re-verify at L3** — the 2026-07-17 pass was shallower than L3 and its "none — at the full pattern" verdict did NOT hold: a 2026-07-25 L3 audit found real gate/naming gaps in CoalMine + CoalTipple. (CoalMine's old `no scripts/test.mjs` gap IS closed — it ships one.) | unknown until re-verified |
 
 ## CI hard-won rules (2026-07-02 — from CoalHearth's first CI run)
 

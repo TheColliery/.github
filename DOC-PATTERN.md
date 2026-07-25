@@ -1,9 +1,9 @@
 # Public-Doc Pattern (TheColliery)
 
-> The shared writing pattern for every series repo's public docs — `README.md`, `SECURITY.md`, `CONTRIBUTING.md`, `PRIVACY.md` — and the org `benchmarks/<Tool>/` dir shape. Extracted from the live CoalMine / CoalTipple / CoalBoard docs so a new repo (and an edit to an old one) ships sibling-consistent.
+> The shared writing pattern for every series repo's public docs — `README.md`, `SECURITY.md`, `CONTRIBUTING.md`, `PRIVACY.md`, `CHANGELOG.md` — and the org `benchmarks/<Tool>/` dir shape. Extracted from the live CoalMine / CoalTipple / CoalBoard docs so a new repo (and an edit to an old one) ships sibling-consistent.
 > Three standing doc rules govern all of them: **trim the fat** (say each thing once, cut filler), **correct heading hierarchy** (clean `H1 → H2 → H3`, no skipped or duplicated levels), and **a README matches the code** (every claim = shipped behaviour, re-verified against the source, never aspirational).
 
-## Cross-cutting rules (all four docs)
+## Cross-cutting rules (all the public docs)
 
 - **One `H1` per file** (the title), then `H2` sections, then `H3` sub-sections. Never skip a level (no `H1 → H3`) and never repeat the `H1`.
 - **Platform-neutral** — these tools are cross-agent. A user-facing instruction is COMPLETE for every platform (Claude Code plugin command AND the other-agent path) or it points to the README's per-platform section. Never a single-vendor-only line. (CoalTipple is the one exception that is *correctly* Claude-Code-only — and it says so explicitly, with the reason.)
@@ -37,6 +37,8 @@ The shop window. Lead with what the tool IS and the one install command; push de
 | 8 | Part of TheColliery | The sibling links + the shared doctrine (Phoenix-13, SSoT config, no-overkill). |
 | 9 | License | `Apache License 2.0. See [LICENSE](LICENSE).` — **the LICENSE file MUST exist in the repo** (a `License: Apache-2.0` badge or claim with no backing file is a false claim). |
 
+These 9 are the REQUIRED spine, in order — but row 3 under-specifies a rich tool, so tool-specific `H2`s ARE allowed: CoalMine carries four (One button · Ultra-Short Summary Format · Escalation Tiers · Design Principles), CoalBoard one ("What it guarantees (and what it doesn't)"). That is a NAMED extension, not drift — an extra slots around row 3 and never displaces, reorders, or absorbs a spine section.
+
 ## SECURITY.md
 
 Title is `# Verifying <Tool>`. Same section order across the family.
@@ -49,6 +51,8 @@ Title is `# Verifying <Tool>`. Same section order across the family.
 | 4 | Dist Integrity | `plugin/` is generated; `verify.mjs` byte-checks dist-sync; `build-plugin.mjs` reproduces it; `test.mjs` runs the zero-dep tests. |
 | 5 | Independent Scanning — NVIDIA SkillSpector | The scan result, behind a `<!-- version-transition: ... -->` marker. **Scanning is event-driven** (a new SkillSpector version or a genuinely new attack surface), NOT per-release — the static rules are stable, so a content bump does not change what they read; a scan-pin lagging the ship version is BY DESIGN. Every finding gets a per-finding false-positive reason. Never bump the scanner version / score / date without a real re-scan. |
 | 6 | Structural Safety (Phoenix-13) | The hook is zero-dep, no-network, no-child-process, fail-silent, advise-only. No data-exfiltration path. |
+
+A tool whose own architecture carries a security story appends ONE tool-specific `H2` **after** row 6 — `Security by Design — the Swarm` (CoalFace) · `Security by Design — the Board` (CoalBoard). Named extension, not drift; the 6-row spine keeps its order above it.
 
 ## CONTRIBUTING.md
 
@@ -70,14 +74,22 @@ Title is `# <Tool> Privacy Policy`, then a bold one-liner, then one bullet list 
 - **The bullets (bold lead-in each):** No telemetry · No network calls from the hook (Phoenix #7) · It runs inside YOUR agent (no servers, your account, your platform's permission gate) · the tool-specific honesty note (a local-estimate stat figure, a best-effort secret-scrub that is NOT a guarantee, propose-never-execute staging) · Error reports are manual (offered, never auto-submitted, you edit first) · Local files only (name the exact files the user can read).
 - **Close:** `Questions: open an issue at <repo-issues-url>.`
 
+## CHANGELOG.md
+
+Keep-a-Changelog format at repo root — the FORMAT is flock-shared, the VOICE is not (each repo's entry style is its own; never conform one sibling's habit onto another). The release chain that fills it (bump sizing, tag, Release) is owned by [scripts-quality.md](./scripts-quality.md) §3 — not restated here. What a DOC pass checks:
+
+- **Every shipped tag has an entry.** An entry-less tag is the recurring miss (caught live twice in one day) — the entry lands *before* the tag, not after.
+- **The section types match the bump size** (the keep-a-changelog ↔ SemVer mapping): an `### Added` entry ⇒ MINOR-minimum · a breaking `### Removed`/`### Changed` ⇒ MAJOR · only `### Fixed` / non-breaking `### Changed` / a `### Security` patch ⇒ PATCH. A feature shipped under a PATCH number is the bug.
+- **Newest version first**, each under `## [X.Y.Z] - YYYY-MM-DD` (a leading `## [Unreleased]` block is fine). A released entry is IMMUTABLE — to correct one, add a forward-pointing note in the NEW entry ("Supersedes [X.Y.Z]'s '…' note — true when written; what changed since"), never edit the old text.
+
 ## Repo details (the front-MOST door — outranks the README)
 
 A visitor decides in seconds from the repo card/About BEFORE the README ever renders: name · description · topics · language · release recency. A stale About loses them before the page loads (the "5 canaries" description once sat 4 versions stale). The review lane verifies this surface FIRST — before the README — on every release and launch (USER rule 2026-07-08).
 
 | Piece | Shape |
 |---|---|
-| About description | ONE sentence, ≤ ~120 chars: what it does + the load-bearing count/status if any ("9 quality canaries…", "…live beta"). Any number in it joins the Event-2 sweep — prefer number-free. |
-| Topics | The flock base set `claude-code` `claude` `ai-agents` `skills` + per-tool specifics (e.g. `code-quality`/`linter` for CM, `model-routing` for CT, `multi-agent`/`consensus` for CB, `memory` for CW). Keep ≈ 6-10; they are search surface. |
+| About description | ONE clear About that is **accurate and non-stale**: what it does + the load-bearing count/status if any ("9 quality canaries…", "…live beta"). **Currency beats brevity** — honest framing (a scope caveat, a platform lock) may run long; a short *stale* About is the failure, a long *accurate* one is not. Any version/count in it joins the Event-2 sweep — prefer number-free. |
+| Topics | The flock base set `claude-code` `claude` `ai-agents` `agent-skills` `ai-coding` `developer-tools` (the floor — present on every sibling) + per-tool specifics (e.g. `code-quality` for CM, `model-routing` for CT, `multi-agent`/`consensus` for CB, `memory-management` for CW, `linter` for CL). The base floor + every specific that a searcher would actually type. GitHub's hard cap is 20 — the real limits are RELEVANCE (an off-target topic dilutes the card) and CURRENCY (a retired capability's topic joins the Event-2 sweep, like CoalHearth's dropped `token-optimization`). |
 | Website field | The org landing (`github.com/TheColliery`) unless the tool has a better front door. |
 | Releases panel | Never empty on a stable tool (= reads abandoned); the latest stable visible. Policy: tags = beta+stable, Releases = stable-only. |
 | License tag | Auto-detected `Apache-2.0` — a missing/odd detect means the LICENSE file drifted (caught live: `.github` showed MIT after the relicense missed its own LICENSE). |
