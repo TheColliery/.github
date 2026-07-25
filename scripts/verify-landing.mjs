@@ -127,6 +127,18 @@ export function verifyLanding(root) {
     for (const tool of tools) {
       const files = mdFiles(join(benchDir, tool));
       const dated = files.some((f) => hasValidDate(readFileSync(f, 'utf8')));
+      // A DIGEST IS NOT A RECORD. `dated` above is deliberately loose — it accepts a date
+      // anywhere, which is what the grandfathered layouts need (CoalHearth is a single-run
+      // bench whose results/ is empty and whose digest carries the run; CoalMine's records
+      // are machine .json; CoalTipple's raw lives outside results/). But "does a RECORD
+      // exist?" is a different question, and answering it with `dated` misread a digest's
+      // own prose as its own evidence: CoalLedger honestly says the org run is pending while
+      // dating a SEPARATE in-repo fixture gate, and the gate failed that correct page.
+      // RESULTS.md's frozen comment already names the authority — fill the digest "from an
+      // actual run record in results/" — so a record is a dated file OUTSIDE the digest.
+      const hasRecord = files.some(
+        (f) => !/[\\/]RESULTS\.md$/.test(f) && hasValidDate(readFileSync(f, 'utf8')),
+      );
       // A benchmark may launch RECORDLESS when its digest SAYS so — an honest,
       // named "first run pending" beats an invented date (CoalWash launched with
       // protocol + fixtures + scorer, run pending). The date rule bites the
@@ -136,7 +148,7 @@ export function verifyLanding(root) {
       // dated record lands, a digest that still claims "first run pending" is either
       // stale bookkeeping or a fabricated row hiding behind the honest-placeholder
       // exemption forever. Pending is only legal while there is truly nothing dated.
-      if (namedPending && dated) {
+      if (namedPending && hasRecord) {
         fail(`benchmark '${tool}': digest says "first run pending" but a dated record exists — fill the digest from the record`);
       } else if (!dated && !namedPending) {
         fail(`benchmark '${tool}' has NO dated record (a benchmark must carry its test date, or its digest must say "first run pending")`);

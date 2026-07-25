@@ -137,6 +137,28 @@ test('a "first run pending" digest alongside a real dated record is a contradict
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+// A DIGEST IS NOT A RECORD (2026-07-25). CoalLedger's digest honestly says the org
+// benchmark is unrun while dating a DIFFERENT, in-repo fixture gate in its own prose.
+// The `dated` scan read any .md under benchmarks/<tool>/ — including the digest — so
+// that date was taken as proof an org record existed, and the gate failed a correct,
+// honest page. RESULTS.md's own frozen comment already names the authority: fill the
+// digest "from an actual run record in results/". A record lives OUTSIDE the digest.
+test('a pending digest whose ONLY date is its own prose is legal (a digest is not a record)', () => {
+  const root = fixture((r) => {
+    write(r, 'profile/README.md',
+      '# Org\n\n## 📊 Benchmarks\n\n| Tool | Result |\n|---|---|\n| **PendingWithProseDate** | — |\n');
+    write(r, 'benchmarks/PendingWithProseDate/RESULTS.md',
+      '**Measured:** — *(first run pending)*\n\n'
+      + 'Current evidence (in-repo, NOT the org benchmark): the fixture gate was re-counted\n'
+      + '2026-07-25 at v0.3.0-beta.1 — 13/13 planted defects, 0 on clean decoys. The org\n'
+      + 'benchmark below will measure recall on an independent corpus.\n');
+    // deliberately NO results/ dir — the org record genuinely does not exist yet
+  });
+  try {
+    assert.deepEqual(verifyLanding(root), [], 'a date in the digest describing other evidence is not an org record');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test('a "first run pending" digest with NO record anywhere is legal (honest launch state)', () => {
   const root = fixture((r) => {
     write(r, 'profile/README.md',
