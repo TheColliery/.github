@@ -87,7 +87,13 @@ This specific repository (`.github`) manages the following internal assets:
 * **[`DESIGN-PRINCIPLES.md`](DESIGN-PRINCIPLES.md)**: The **Quantum 11** performance & design guidelines governing all series projects.
 * **[`hooks-safety.md`](hooks-safety.md)**: The **Phoenix 13** safety hook commandments (sandboxing, fail-silent execution).
 * **[`scripts-quality.md`](scripts-quality.md)**: The CLI and script quality rules for release-gating.
-* **[`DOC-PATTERN.md`](DOC-PATTERN.md)**: The shared public-doc pattern (README / SECURITY / CONTRIBUTING / PRIVACY) that keeps every repo's docs sibling-consistent.
+* **[`DOC-PATTERN.md`](DOC-PATTERN.md)**: The shared public-doc pattern (README / SECURITY / CONTRIBUTING / PRIVACY / CHANGELOG) that keeps every repo's docs sibling-consistent.
+* **[`SKILL-REPO-PATTERN.md`](SKILL-REPO-PATTERN.md)**: The shared repository layout and machinery — manifests, source-vs-dist, config system, gates, workflows.
+* **[`RELEASE-PATTERN.md`](RELEASE-PATTERN.md)**: The shape of a GitHub Release — title, notes body, and which tags get one.
+* **[`PERMISSION-MATRIX.md`](PERMISSION-MATRIX.md)**: The least-power capability each tool requests, and the rights it deliberately never asks for.
+* **[`SWEEP-MARKS.md`](SWEEP-MARKS.md)**: The event → doc-spot registry: which surfaces each recurring event rots, and who owns sweeping each one.
+* **[`CLAUDE-AI-INSTALL.md`](CLAUDE-AI-INSTALL.md)**: Which skills run on claude.ai, and how to package one for it.
+* **[`benchmarks/`](benchmarks)**: The per-tool benchmark records the Series Benchmarks section above links to.
 
 ---
 

@@ -10,34 +10,37 @@ claude.ai can run **custom skills**: a ZIP containing a `SKILL.md` (YAML frontma
 
 ## Install
 
-Every supported skill is published as a ZIP **attached to its tool's GitHub Release**, built by CI from the exact code that shipped in that version.
+You build the ZIP yourself — it takes about a minute, and every skill folder in the repos already IS the package.
 
-1. Open the tool's **Releases** page and pick the latest stable release.
-2. Under **Assets**, download the skill you want — `<tool>-<skill>-claudeai.zip`.
-3. In claude.ai, go to skill settings and create a skill from that ZIP.
-4. Repeat per skill (per-user, remember).
+1. Get the repo (green **Code** button → *Download ZIP*, or `git clone`).
+2. Take one skill folder from `plugin/skills/` — e.g. `plugin/skills/rot-canary/`. Keep its `references/` subfolder inside.
+3. Zip **that folder**, so the archive contains `rot-canary/SKILL.md` and not a bare `SKILL.md`.
+4. In claude.ai, go to skill settings and create a skill from that ZIP. Repeat per skill (per-user, remember).
 
-To update, download the newer release's ZIP and re-upload it — claude.ai has no auto-update and no config file; **re-uploading is how a skill changes on this surface**. The Release notes say what changed.
+Use `plugin/skills/`, not `skills/` — the top-level source tree still holds unexpanded template markers, so a ZIP built from it ships broken text.
 
-There is nothing to build by hand. A ZIP contains one skill folder and extracts to `<skill>/SKILL.md`; its contents are byte-reproducible from the tag it was built at.
+To update, rebuild the folder from a newer version and re-upload — claude.ai has no auto-update and no config file; **re-uploading is how a skill changes on this surface**.
 
-## Which Coal* skills are published here
+> [!NOTE]
+> **Not yet automated.** CI-built ZIPs attached to each Release are designed but **not shipping** — no release carries one today. Until that lands and is verified end-to-end, the manual steps above are the only install path.
+
+## Which Coal* skills work here
 
 claude.ai runs a skill's `SKILL.md` in a code-execution sandbox — **no hooks, no subagents, no worker-model pick**. That gates the series by capability:
 
 | Tool | On claude.ai | Why |
 |---|---|---|
-| **CoalMine** (9 canaries) | Published — manual invocation | The canaries read + analyze; that is exactly what the sandbox does. The Claude-Code hook automation (session-end auto-scan, conductor) does not exist here — you invoke a canary by asking for it. |
-| **CoalLedger** (docs canaries) | Published — manual invocation | Same read+analyze shape as CoalMine. |
-| **CoalFace** | Published — sequential degrade | No subagents, so the contract's built-in degrade path runs: scout → units in order → QC → apply, one lane. You keep the discipline (scout, partition, QC, receipt) and none of the parallel speed. |
-| **CoalWash** | Not published (yet) | Its safety property is code-enforced — the fidelity gate and snapshot/undo that make a memory rewrite reversible. On a surface where that engine cannot be relied on to run, you would get the judgment layer without the enforcement layer. Revisit when the tool reaches stable and the engine is confirmed to run here. |
+| **CoalMine** (9 canaries) | Works — manual invocation | The canaries read + analyze; that is exactly what the sandbox does. The Claude-Code hook automation (session-end auto-scan, conductor) does not exist here — you invoke a canary by asking for it. |
+| **CoalLedger** (docs canaries) | Works — manual invocation | Same read+analyze shape as CoalMine. |
+| **CoalFace** | Works — sequential degrade | No subagents, so the contract's built-in degrade path runs: scout → units in order → QC → apply, one lane. You keep the discipline (scout, partition, QC, receipt) and none of the parallel speed. |
+| **CoalWash** | Held back | Its safety property is code-enforced — the fidelity gate and snapshot/undo that make a memory rewrite reversible. On a surface where that engine cannot be relied on to run, you would get the judgment layer without the enforcement layer. Revisit when the tool reaches stable and the engine is confirmed to run here. |
 | **CoalBoard** | Not ported | The board's value is **blind parallel lenses** (decorrelation). claude.ai has no subagent isolation — sequential "lenses" in one context anchor on each other, which silently destroys the one thing the board sells. An honest no-port beats a fake board, so no CoalBoard ZIP is built, ever. |
 | **CoalTipple** | Not portable | Routing actuates by picking a spawned worker's model; no spawn tool exists here. |
 | **CoalHearth** | Not portable | Its engine is lifecycle hooks (Claude Code + Antigravity 2.0); claude.ai has no hook engine. |
 
 ## Why there is no separate "claude.ai edition"
 
-A published ZIP is the shipped skill folder, unmodified. That is deliberate: **the platform difference belongs in the skill body, not in a second edition of it.** A Coal\* skill states its own capability branch once — "auto-wired where the platform has hooks, manual elsewhere", "no fan-out → degrade to a sequential pipeline" — so the same text is true on every surface and there is no adapted copy to keep in sync.
+A ZIP you build is the shipped skill folder, unmodified. That is deliberate: **the platform difference belongs in the skill body, not in a second edition of it.** A Coal\* skill states its own capability branch once — "auto-wired where the platform has hooks, manual elsewhere", "no fan-out → degrade to a sequential pipeline" — so the same text is true on every surface and there is no adapted copy to keep in sync.
 
 Two rules follow, and they bind the skills, not the packaging:
 
@@ -46,4 +49,4 @@ Two rules follow, and they bind the skills, not the packaging:
 
 ## Honest frame
 
-On claude.ai you get each skill's **manual core** — the contract text driving the model. The automation layer (hooks that trigger scans, conductors that nudge, per-worker routing) is Claude Code's, and no equivalent exists in this sandbox. These packages are **built and published but not yet run end-to-end on claude.ai** — the tier moves to validated on the first real run, not before. If a hookless platform later gains hooks or subagents, the capability ladder moves that platform up: the gate is capability, never a hardcoded platform list.
+On claude.ai you get each skill's **manual core** — the contract text driving the model. The automation layer (hooks that trigger scans, conductors that nudge, per-worker routing) is Claude Code's, and no equivalent exists in this sandbox. These packages are **not yet run end-to-end on claude.ai** — the tier moves to validated on the first real run, not before. If a hookless platform later gains hooks or subagents, the capability ladder moves that platform up: the gate is capability, never a hardcoded platform list.
