@@ -9,6 +9,6 @@
 |---|---|---|
 | doc-structure · grounding · standard · rot · consistency · quality (+ doc-leak) | — | — |
 
-**Current evidence (in-repo, not the org benchmark):** the mechanical AST layer is fixture-gated in the CoalLedger repo — **13/13 planted defects found, 0 findings on clean decoys** (anti-cry-wolf), Thai fixtures included. That gate proves the deterministic detector; the org benchmark below will measure per-canary RECALL on an independent foreign corpus (the canaries whose severity is context-judged, not mechanical, need the corpus, not a fixture).
+**Current evidence (in-repo, not the org benchmark):** the mechanical AST layer is fixture-gated in the CoalLedger repo — **13/13 planted defects found, 0 findings on clean decoys** (anti-cry-wolf), Thai fixtures included — *fixture gate re-counted 2026-07-25 at v0.3.0-beta.1 (11 in `defects-structure.md` + 2 in `defects-thai.md`); re-derive with `node scripts/lib/md-checks.mjs` over `scripts/fixtures/`*. That gate proves the deterministic detector; the org benchmark below will measure per-canary RECALL on an independent foreign corpus (the canaries whose severity is context-judged, not mechanical, need the corpus, not a fixture).
 
 **Honest scope:** a docs-health recall figure is corpus- and version-bound (each future record names both). Detection is deterministic (AST, not regex); severity is context-judged and never benchmarked as a fixed number.

@@ -6,7 +6,7 @@ This repository houses the global configuration, landing page profile, central i
 
 ## ⛏️ Active Repositories
 
-* **[CoalMine](https://github.com/HetCreep/CoalMine)**: Quality-canary skills suite for AI coding agents.
+* **[CoalMine](https://github.com/HetCreep/CoalMine)**: Quality-canary skills suite for AI coding agents — nine canaries plus the auto-cadence hooks that run them unprompted.
   <br>
   [![Stars](https://img.shields.io/github/stars/HetCreep/CoalMine?style=flat-square&logo=github)](https://github.com/HetCreep/CoalMine/stargazers)
   [![Forks](https://img.shields.io/github/forks/HetCreep/CoalMine?style=flat-square&logo=github)](https://github.com/HetCreep/CoalMine/network/members)
@@ -30,7 +30,7 @@ This repository houses the global configuration, landing page profile, central i
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalHearth?style=flat-square&logo=github)](https://github.com/TheColliery/CoalHearth/network/members)
   [![Downloads](https://img.shields.io/badge/CoalHearth_Downloads-246%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalHearth)
   [![Developers](https://img.shields.io/badge/CoalHearth_Developers-59%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalHearth)
-* **[CoalFace](https://github.com/TheColliery/CoalFace)**: Fan-out discipline — scout → waves → QC → one writer, the whole swarm bounded by the estimated solo cost.
+* **[CoalFace](https://github.com/TheColliery/CoalFace)**: Fan-out discipline — scout → waves → QC → one writer, the whole swarm bounded by the estimated solo $-cost, never a token bound.
   <br>
   [![Stars](https://img.shields.io/github/stars/TheColliery/CoalFace?style=flat-square&logo=github)](https://github.com/TheColliery/CoalFace/stargazers)
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalFace?style=flat-square&logo=github)](https://github.com/TheColliery/CoalFace/network/members)
@@ -42,7 +42,7 @@ This repository houses the global configuration, landing page profile, central i
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalWash?style=flat-square&logo=github)](https://github.com/TheColliery/CoalWash/network/members)
   [![Downloads](https://img.shields.io/badge/CoalWash_Downloads-556%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalWash)
   [![Developers](https://img.shields.io/badge/CoalWash_Developers-110%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalWash)
-* **[CoalLedger](https://github.com/TheColliery/CoalLedger)** *(beta)*: Docs-health canary suite — CoalMine for documentation (wrong · incomplete · stale · contradictory · broken · unreadable · leaked) over a CommonMark+GFM AST engine, cross-agent + multilingual.
+* **[CoalLedger](https://github.com/TheColliery/CoalLedger)** *(beta)*: Docs-health canary suite — CoalMine for documentation (wrong · incomplete · stale · contradictory · broken · unreadable · config-gated leaked), `doc-structure` detecting through a CommonMark+GFM AST engine, plus a quiet docs memory-drift reminder; cross-agent + multilingual.
   <br>
   [![Stars](https://img.shields.io/github/stars/TheColliery/CoalLedger?style=flat-square&logo=github)](https://github.com/TheColliery/CoalLedger/stargazers)
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalLedger?style=flat-square&logo=github)](https://github.com/TheColliery/CoalLedger/network/members)
@@ -69,7 +69,7 @@ node colliery-install.mjs 6 7         # CoalWash + CoalLedger (beta)
 
 Periodic blind output-quality evaluations and regression tests. To keep them honest, this page **links to each tool's `RESULTS.md` (the single source of truth) and never copies the figures** -- so a number here cannot drift from, or be invented apart from, the measured run.
 
-* **CoalMine** -- defect-detection recall/precision across the full 7-canary suite, multiple engines (Claude tiers + Antigravity cross-vendor). Results: [benchmarks/CoalMine/RESULTS.md](benchmarks/CoalMine/RESULTS.md).
+* **CoalMine** -- defect-detection recall/precision across 7 of the 9 canaries, multiple engines (Claude tiers + Antigravity cross-vendor). Results: [benchmarks/CoalMine/RESULTS.md](benchmarks/CoalMine/RESULTS.md).
 * **CoalTipple** -- dynamic model escalation + output correctness across 5 domains (crypto, proof, research, legal, voice), Claude Code. Results: [benchmarks/CoalTipple/RESULTS.md](benchmarks/CoalTipple/RESULTS.md); routing-cost savings: [benchmarks/CoalTipple/ROUTING-SAVINGS.md](benchmarks/CoalTipple/ROUTING-SAVINGS.md).
 * **CoalBoard** -- with-the-board-vs-without on error-not-allowed tasks, two platforms (Claude Code reliability + Antigravity cross-vendor), including the honest correlated-blind-spot ceiling. Results: [benchmarks/CoalBoard/RESULTS.md](benchmarks/CoalBoard/RESULTS.md).
 * **CoalHearth** -- interruption damage: cold restart vs warm resume on a 10-file mid-refactor (token delta + the categorical state-fidelity recovery), Claude Code. Results: [benchmarks/CoalHearth/RESULTS.md](benchmarks/CoalHearth/RESULTS.md).

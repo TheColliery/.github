@@ -29,5 +29,6 @@ The token arm is engine- and scale-sensitive: on a small tree the per-agent base
 and a strong model reconstructs state unaided, so the token delta is tiny — CH's token value is
 a **large-session** effect (re-scanning a big repo to reconstruct state is what costs). The
 **fidelity** arm is the categorical one: the in-flight-agent record has **no tree signal**, so a
-cold restart recovers 0% of it at any scale. See [`RESULTS.md`](RESULTS.md). CC-hook-only skill
-(no Antigravity arm — AG doesn't run hooks).
+cold restart recovers 0% of it at any scale. See [`RESULTS.md`](RESULTS.md). **CC-only measurement so far** — CH now also
+ports to Antigravity 2.0 and five other config-only hook platforms, but no cross-platform
+arm has been measured yet.

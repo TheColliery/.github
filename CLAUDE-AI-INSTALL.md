@@ -31,7 +31,7 @@ claude.ai runs a skill's `SKILL.md` in a code-execution sandbox — **no hooks, 
 | Tool | On claude.ai | Why |
 |---|---|---|
 | **CoalMine** (9 canaries) | Works — manual invocation | The canaries read + analyze; that is exactly what the sandbox does. The Claude-Code hook automation (session-end auto-scan, conductor) does not exist here — you invoke a canary by asking for it. |
-| **CoalLedger** (docs canaries) | Works — manual invocation | Same read+analyze shape as CoalMine. |
+| **CoalLedger** (docs canaries) | Works — manual invocation | Read+analyze like CoalMine, with one difference: `doc-structure` RUNS a bundled Node engine, so ZIP the built `plugin/skills/doc-structure/` folder (the engine rides inside it at `lib/`) and keep code execution on. |
 | **CoalFace** | Works — sequential degrade | No subagents, so the contract's built-in degrade path runs: scout → units in order → QC → apply, one lane. You keep the discipline (scout, partition, QC, receipt) and none of the parallel speed. |
 | **CoalWash** | Held back | Its safety property is code-enforced — the fidelity gate and snapshot/undo that make a memory rewrite reversible. On a surface where that engine cannot be relied on to run, you would get the judgment layer without the enforcement layer. Revisit when the tool reaches stable and the engine is confirmed to run here. |
 | **CoalBoard** | Not ported | The board's value is **blind parallel lenses** (decorrelation). claude.ai has no subagent isolation — sequential "lenses" in one context anchor on each other, which silently destroys the one thing the board sells. An honest no-port beats a fake board, so no CoalBoard ZIP is built, ever. |
