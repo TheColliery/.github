@@ -106,6 +106,8 @@ Decided 2026-07-04: **`RESULTS.md` = the OVERVIEW (short digest) · `results/` =
 | `results/` | The detailed dated records — one `.md` per platform/run (`<topic>-<platform>-YYYY-MM-DD.md`) with full per-task tables and analysis, plus raw machine files (`.json` / `.tsv` / logs). Anything a stranger needs to reproduce the digest. |
 | inputs + scorer | `fixtures/` or `tasks.md`; `score.mjs` where scoring is executable (CM/CT). A judgment-scored bench says so in its README (CB does). |
 
+**Field evidence (reported, not measured):** a third-party field report (e.g. a user-run result filed as a public issue) lands as a clearly-labeled `## Field evidence — reported, not measured` section at the END of `RESULTS.md`, plus a verbatim source snapshot under `results/field/` (a subdir, so a scorer globbing `results/*.json` never picks it up as a run). Every entry carries reporter + date + source link + what the report does NOT state (version/engine); it NEVER folds into the measured arms/tables. Shape set by the first entry (CoalMine, 2026-07-25).
+
 Named divergences (grandfathered — conform at each tool's next benchmark re-run, not by churning public links today): **CoalTipple** raw lives in `dogfood/output/` + top-level `ROUTING-SAVINGS.md` (publicly linked 4×) → fold into `results/` at the next re-run · **CoalMine** raw is machine `.json` only (fine — its RESULTS.md carries the narrative) · **CoalHearth** is a single-run bench, RESULTS.md serves both layers until a second run exists.
 
 ## When you touch any of these docs

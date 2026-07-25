@@ -166,3 +166,21 @@ fable's 100%), the same shape as the 2026-06-13 result: detection converges
 across vendors, severity judgment diverges — consistent with the cross-model
 convergence theory. AG protocol note: all 3 reps ran as fresh scanning contexts
 (fresh conversations), matching the CC arms' fresh-sub-per-rep design.
+
+## Field evidence — reported, not measured
+
+Third-party field reports. These figures were NOT measured by us — we hold no
+raw run artifact; the linked public report is the source, snapshotted verbatim
+under `results/field/`. They are never folded into the measured arms above.
+
+| Date | Reporter | Target codebase | Tool + reported result | Source |
+|---|---|---|---|---|
+| 2026-07-25 | `mehvetero` (owner of the scanned repo; ran it themselves) | [move-test-gen](https://github.com/mehvetero/move-test-gen) — JS/Node, ~1,600 lines: 7 scripts + 4 lint rules + an eval runner | rot-canary (DEEP, whole repo): **3 confirmed / 2 suspected / 0 false positives**; non-applicable categories (async, perf) correctly silent | [HetCreep/CoalMine#25](https://github.com/HetCreep/CoalMine/issues/25) · [snapshot](results/field/2026-07-25-mehvetero-move-test-gen-issue25.json) |
+
+First field run on a non-TheColliery codebase. What it shows: precision-style
+evidence on a real repo — all 3 confirmed findings verified real by the code
+owner ("a codebase I know line-by-line"), 0 false positives, and correct
+silence where categories don't apply. What it does NOT show: recall (no
+planted ground truth — the true-defect denominator is unknown), no K-repeat,
+and the report states neither the CoalMine version nor the engine/model that
+ran it — not comparable to the measured arms above.
