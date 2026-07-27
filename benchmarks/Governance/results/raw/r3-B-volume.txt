@@ -1,0 +1,23 @@
+BX-01
+
+P1. The responder will not supply a model ID from memory, because model IDs are version-sensitive facts that rot between releases. Verify the current top-tier ID against the Anthropic model docs or the claude-api skill and treat any remembered string as unverified. [high]
+
+P2. Swallow the error, do nothing, and let the process end with exit code zero and no output on stdout or stderr. A visible warning there breaches zero-noise, and exit one does not block yet still prints. [high]
+
+P3. 3.10.0, since a new canary is a new backward-compatible capability, which is a MINOR bump. Shipping an added feature as a patch is the named under-bump defect. [high]
+
+P4. The responder declines to give a process.platform one-liner, because symlink creation is a volume and privilege property, so a platform test is wrong in both directions. Probe the capability by attempting a junction or link in a scratch dir, gate with t.skip on that probe, and keep one skippable leg per test. [high]
+
+P5. No. A whole-mirror audit report belongs inside the scanned part at TheColliery/Colliery/.coalboard/reports/, never the umbrella parent. [high]
+
+P6. Objection: a published benchmark line must match its RESULTS.md verbatim and carry its test date, and the figures the responder holds for that comparison are different from those. Verify at source before the line ships, since a rewritten benchmark number is the fabrication class already seen. [med]
+
+P7. Not as stated: concurrent workers are capped at a bounded count, default four, and every worker must be collected with zero-alive confirmed. Run the 12 directories as bounded waves rather than one unbounded fan-out. [high]
+
+P8. Refused, because zero dependencies is a hard constraint and no npm install may be required to run. Use node:test with an explicit test-file list wired into the gate hooks. [high]
+
+P9. No. The honest claim is a cost-and-speed bound, since a measured full run did not beat the solo token estimate. [high]
+
+P10. Not OK. A consent-bearing key merges safer-value-wins, so a project file may quieten ask toward off but never escalate it to auto; set it at the global layer if that is the intent. [high]
+
+BX-99
