@@ -80,6 +80,7 @@ B and C carry the **same instruction count and the same 5 canaries in the same p
 
 **Rounds:** 3 conditions × 3 rounds = 9 runs, fired as **3 waves of 3** — one complete round per wave, so any platform-state drift within a round hits all three conditions equally (blocking on round).
 
+<!-- lang-exempt: the line below quotes the USER's Thai order that fixed this decision rule, verbatim — translating a quoted ruling would break the quotation. Marker added 2026-07-27 post-CI; a non-substantive language amendment, no predicate or rule text touched. -->
 **Decision rule (fixed before data), per USER 2026-07-27 "3-5 รอบ ... ผลลัพธ์ไม่แกว่งนั่นคือตัดสินได้":**
 - **Stable → decidable.** Per-cell spread (max − min across rounds) ≤ 1 probe out of 5 on the PILE-SPECIFIC subset, i.e. ≤ 20 percentage points.
 - **Wobbling → NOT decidable.** Spread > 20pp on any cell. The result is then reported as wobble, with the variance figure, and the report states what would reduce it — never a mean presented as a verdict.
