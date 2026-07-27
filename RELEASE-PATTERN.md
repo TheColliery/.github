@@ -13,6 +13,7 @@
 | Separator | **A spaced hyphen `-`** — not an em-dash. Same forward rule as the CHANGELOG version heading, so the title and its entry read alike. |
 | Summary | **Required** — a version alone is not a title. Lower-case sentence style naming WHAT changed ("`- conductor count gate + honest split`"), never marketing ("`- a huge leap for agent quality`"). |
 | Breaking | A MAJOR release names the break in the title ("`v2.0.0 - budget guardrail REMOVED`"). |
+| Subject | **The title's grammatical subject is THIS repo's own change** — a sibling repo's name may appear only after the own-subject, never leading. Caught live 2026-07-27: CoalBoard's `v1.8.1 - SKILL doc-truth: CoalHearth is LIVE` read as an announcement about the sibling (the USER opened the page and asked whose release it was); a title-sweep found the same shape twice more (`- CoalBoard-audit hardening`). The CHANGELOG heading was fine each time — the error enters at the compress-to-a-headline step, so the check belongs HERE, at the title rule, not in the CHANGELOG discipline. |
 
 ## The body
 
