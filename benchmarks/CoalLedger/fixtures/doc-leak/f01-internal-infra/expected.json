@@ -1,0 +1,9 @@
+{ "findings": [
+  { "file": "TROUBLESHOOTING.md", "line": 14, "category": "internal-infrastructure", "note": "private IP 10.0.3.47 in code block", "suspected": true },
+  { "file": "TROUBLESHOOTING.md", "line": 19, "category": "internal-infrastructure", "note": "internal hostname bastion.internal.acmecorp.net", "suspected": true },
+  { "file": "TROUBLESHOOTING.md", "line": 20, "category": "internal-infrastructure", "note": "production namespace in kubectl command", "suspected": true },
+  { "file": "TROUBLESHOOTING.md", "line": 27, "category": "internal-infrastructure", "note": "RDS hostname + username app_admin + production database", "suspected": true },
+  { "file": "TROUBLESHOOTING.md", "line": 30, "category": "internal-infrastructure", "note": "RDS replica hostname exposed", "suspected": true },
+  { "file": "TROUBLESHOOTING.md", "line": 34, "category": "internal-infrastructure", "note": "internal Kibana URL with port", "suspected": true },
+  { "file": "TROUBLESHOOTING.md", "line": 36, "category": "internal-infrastructure", "note": "internal server path and hostname gateway-prod-01", "suspected": true }
+] }

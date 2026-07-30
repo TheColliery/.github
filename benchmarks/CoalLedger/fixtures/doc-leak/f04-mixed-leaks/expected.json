@@ -1,0 +1,12 @@
+{ "findings": [
+  { "file": "RUNBOOK.md", "line": 7, "category": "personal-data", "note": "on-call name + phone + Slack handle", "suspected": true },
+  { "file": "RUNBOOK.md", "line": 8, "category": "personal-data", "note": "on-call name + phone + Slack handle", "suspected": true },
+  { "file": "RUNBOOK.md", "line": 9, "category": "personal-data", "note": "CTO name + phone — high-value target", "suspected": true },
+  { "file": "RUNBOOK.md", "line": 13, "category": "private-figures", "note": "revenue-impact threshold discloses financial sensitivity", "suspected": true },
+  { "file": "RUNBOOK.md", "line": 23, "category": "internal-infrastructure", "note": "internal hostname db-failover.internal.acmecorp.net", "suspected": true },
+  { "file": "RUNBOOK.md", "line": 24, "category": "internal-infrastructure", "note": "internal tool path + cluster name + replica name", "suspected": true },
+  { "file": "RUNBOOK.md", "line": 27, "category": "internal-infrastructure", "note": "private IP 10.0.5.12 + superadmin username + production db", "suspected": true },
+  { "file": "RUNBOOK.md", "line": 34, "category": "internal-infrastructure", "note": "deploy token placeholder with rotation schedule", "suspected": true },
+  { "file": "RUNBOOK.md", "line": 40, "category": "internal-infrastructure", "note": "internal docs URL", "suspected": true },
+  { "file": "RUNBOOK.md", "line": 41, "category": "private-figures", "note": "SLA credit amount ($23,000) disclosed", "suspected": true }
+] }

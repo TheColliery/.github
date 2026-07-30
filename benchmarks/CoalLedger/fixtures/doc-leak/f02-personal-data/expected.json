@@ -1,0 +1,8 @@
+{ "findings": [
+  { "file": "ONBOARDING.md", "line": 7, "category": "personal-data", "note": "full name + email + phone number of employee", "suspected": true },
+  { "file": "ONBOARDING.md", "line": 8, "category": "personal-data", "note": "employee name + email exposed", "suspected": true },
+  { "file": "ONBOARDING.md", "line": 13, "category": "personal-data", "note": "employee name with operational role", "suspected": true },
+  { "file": "ONBOARDING.md", "line": 14, "category": "personal-data", "note": "employee name + internal role disclosed", "suspected": true },
+  { "file": "ONBOARDING.md", "line": 21, "category": "personal-data", "note": "employee email in code example (should use placeholder)", "suspected": true },
+  { "file": "ONBOARDING.md", "line": 28, "category": "personal-data", "note": "CTO name disclosed in internal access context", "suspected": true }
+] }
