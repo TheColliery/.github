@@ -1,9 +1,9 @@
 # CoalLedger Benchmark — Results Digest
 
 <!-- version-frozen: fill the Measured line + headline table from an actual run record in results/; never edit figures without a matching dated record. -->
-**Measured:** — *(first run pending)* · CoalLedger version: — · engines: —
+**Measured:** — *(corpus ready — awaiting first dated run)* · CoalLedger version: — · engines: —
 
-> **TL;DR:** first run pending — CoalLedger launched **unbenchmarked** rather than with an invented number. The org-level benchmark (recall per canary on a foreign docs corpus, dated + versioned, following the flock shape) is not yet run; this digest fills from the first dated record, never before.
+> **TL;DR:** the org-level benchmark is not yet run — CoalLedger launched **unbenchmarked** rather than with an invented number. The corpus and scorer shipped first; this digest fills from the first dated record, never before.
 
 | Suite | Fixtures | Decoys | Recall (mean ± range) | FP (mean) | Runs |
 |-------|----------|--------|----------------------|-----------|------|
