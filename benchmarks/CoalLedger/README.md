@@ -54,14 +54,19 @@ table. They may not match the actual agent output taxonomy — adjust to fit:
 
 ## Running an eval
 
+Both suites test agent judgment, so a single pass per model is not a
+measurement — the house standard is **3–5 repeated runs per suite × model**
+(a single-run recall on a stochastic judge is noise).
+
 1. Have the agent run the corresponding CoalLedger canary over each fixture
    directory, recording findings as `{ fixture, file, line, category, note }`.
-2. Save as `results/<YYYY-MM-DD>-<suite>-<model>.json`:
+2. Save each run as `results/<YYYY-MM-DD>-<suite>-<model>-r<N>.json`:
    ```json
    {
      "suite": "doc-rot",
      "model": "Claude Opus 4.8",
      "date": "2026-07-30",
+     "run": 1,
      "skillVersion": "0.3.0-beta.2",
      "findings": [
        { "fixture": "f01-stale-versions", "file": "README.md",
@@ -70,8 +75,11 @@ table. They may not match the actual agent output taxonomy — adjust to fit:
      ]
    }
    ```
-3. Score: `node score.mjs results/<file>.json`.
-   Add `--write` to regenerate `RESULTS.md`.
+3. Score a single run: `node score.mjs results/<file>.json`.
+4. Score all runs for a suite × model:
+   `node score.mjs --suite doc-rot --model "Claude Opus 4.8"` — reports
+   per-run recall/FP plus mean and min–max across runs.
+5. Add `--write` to regenerate `RESULTS.md` with the aggregate.
 
 A match = same fixture + file + category, line within ±3. Findings on decoys
 are false positives.
