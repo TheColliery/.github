@@ -1,0 +1,6 @@
+{ "findings": [
+  { "file": "SECURITY.md", "line": 9, "category": "stale-date", "note": "2.x EOL June 2024 has passed — version table outdated" },
+  { "file": "SECURITY.md", "line": 10, "category": "stale-date", "note": "1.x EOL January 2023 — still listed, remove or archive" },
+  { "file": "SECURITY.md", "line": 12, "category": "stale-date", "note": "last audit October 2023 — over two years ago" },
+  { "file": "SECURITY.md", "line": 14, "category": "stale-date", "note": "next audit Q1 2025 — that date has passed, no update" }
+] }

@@ -1,0 +1,12 @@
+{ "findings": [
+  { "file": "ROADMAP.md", "line": 5, "category": "private-figures", "note": "enterprise pricing disclosed ($2,499/mo)", "suspected": true },
+  { "file": "ROADMAP.md", "line": 6, "category": "unpublished-intent", "note": "unannounced partnership under NDA (Datadog)", "suspected": true },
+  { "file": "ROADMAP.md", "line": 7, "category": "private-figures", "note": "internal MAU metrics disclosed", "suspected": true },
+  { "file": "ROADMAP.md", "line": 11, "category": "unpublished-intent", "note": "auditor name + engagement date (SOC 2 prep)", "suspected": true },
+  { "file": "ROADMAP.md", "line": 12, "category": "private-figures", "note": "Series B terms disclosed ($25M at $150M pre)", "suspected": true },
+  { "file": "ROADMAP.md", "line": 13, "category": "private-figures", "note": "salary ranges disclosed ($180k-$220k)", "suspected": true },
+  { "file": "ROADMAP.md", "line": 17, "category": "private-figures", "note": "MRR figure disclosed ($47,200)", "suspected": true },
+  { "file": "ROADMAP.md", "line": 19, "category": "private-figures", "note": "burn rate and runway disclosed", "suspected": true },
+  { "file": "ROADMAP.md", "line": 25, "category": "private-figures", "note": "customer names + ARR per customer disclosed", "suspected": true },
+  { "file": "ROADMAP.md", "line": 32, "category": "unpublished-intent", "note": "competitor fundraise intel + internal analysis reference", "suspected": true }
+] }

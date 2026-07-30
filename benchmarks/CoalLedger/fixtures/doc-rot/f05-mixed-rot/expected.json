@@ -1,0 +1,8 @@
+{ "findings": [
+  { "file": "DEPLOY.md", "line": 3, "category": "stale-date", "note": "last-updated 2023-11-20 — over two years ago" },
+  { "file": "DEPLOY.md", "line": 8, "category": "stale-version", "note": "Terraform 1.3.0 is outdated" },
+  { "file": "DEPLOY.md", "line": 9, "category": "stale-version", "note": "kubectl 1.25 is EOL" },
+  { "file": "DEPLOY.md", "line": 24, "category": "dead-marker", "note": "TODO — deploy script automation never completed" },
+  { "file": "DEPLOY.md", "line": 34, "category": "dead-marker", "note": "FIXME — EKS rewrite never done" },
+  { "file": "DEPLOY.md", "line": 44, "category": "stale-date", "note": "PagerDuty config last verified August 2023" }
+] }

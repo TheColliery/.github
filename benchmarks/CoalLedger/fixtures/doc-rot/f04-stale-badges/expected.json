@@ -1,0 +1,5 @@
+{ "findings": [
+  { "file": "README.md", "line": 3, "category": "stale-badge", "note": "Travis CI badge — project migrated to GitHub Actions" },
+  { "file": "README.md", "line": 4, "category": "stale-badge", "note": "Coveralls badge may be stale if coverage moved to Codecov" },
+  { "file": "README.md", "line": 18, "category": "stale-version", "note": "Node.js 16 is EOL" }
+] }
