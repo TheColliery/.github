@@ -45,6 +45,27 @@ Five parts, in this order. **1-3 are REQUIRED; 4-5 are conditional.**
 
 **Tags = beta + stable · Releases = STABLE only.** Every stable tag gets one, no gaps. A beta/rc/pre-release tag is history: it gets the tag and no Release. An all-beta or all-rc repo therefore shows an **EMPTY Releases panel — and that is correct**, not a gap to fill.
 
+<!-- coalmine: verified 2026-08-01 · exemplar ECC-MIGRATION-1X-TO-2.0 · revalidate 90d -->
+## A MAJOR release ships a migration note
+
+The body's part 3 ("what you need to do") is one short block. A MAJOR that renames the plugin id, moves the install path, or removes a capability needs more room than that — so it ships a `MIGRATION.md` at the repo root, and part 3 becomes one line pointing at it.
+
+**Source of this shape: UPSTREAM, adopted whole.** ECC's [`docs/MIGRATION-1X-TO-2.0.md`](https://github.com/affaan-m/ECC/blob/HEAD/docs/MIGRATION-1X-TO-2.0.md) is the only migration artifact in either house; we had none. Its three load-bearing parts, in its own words:
+
+| Part | Upstream's wording | Why it earns a slot |
+|---|---|---|
+| The duplicate symptom, named as expected | *"I now see two ECC plugins" … "Expected. … Running both duplicates skills, commands, and hook executions."* | A rename leaves the old plugin installed. A user who is not told this reads it as a broken upgrade. |
+| The leftover list **with an explicit do-NOT-delete list** | *"Safe to delete after the old plugin no longer appears in `/plugin` list"* … followed by *"Do NOT delete `~/.claude/rules/` content you copied intentionally, or personal memory/state files."* | This is the half that makes the section safe to follow. A cleanup list without its exclusions turns a migration doc into a data-loss instruction. |
+| One install path only | *"Do not stack the plugin install with the manual installer … Pick one path; stacking creates duplicate skills and duplicate hook runs."* | Every cross-agent sibling ships both a plugin path and a file-copy path, so this hazard is already live here. |
+
+Rules for ours:
+- **A MAJOR ships it; a MINOR/PATCH never does.** If the "what you need to do" block fits in three lines, it is not a migration.
+- **It answers "does this touch my projects?" explicitly.** Upstream does: *"No. ECC is a harness layer … It does not alter your project code or git history."* A migration doc that leaves that unanswered gets asked it anyway.
+- **Every path in the delete list is verified on a real install before the doc ships** — a wrong path in a delete instruction is the worst defect this file can carry.
+- The Release body links it; the CHANGELOG entry's breaking `### Removed`/`### Changed` line links it too. It is not a version-pinned file — one `MIGRATION.md` per breaking transition, named for the transition it covers if a repo ever needs two.
+
+**Not adopted from the same source, named so nobody re-derives it:** upstream's release notes lead with a `## Positioning` section and carry repo star/fork counts ([`docs/releases/1.10.0/release-notes.md`](https://github.com/affaan-m/ECC/blob/HEAD/docs/releases/1.10.0/release-notes.md)). Our body rule bans marketing language and requires every line to trace to the CHANGELOG entry; a positioning section traces to nothing. **Ours stands.**
+
 ## Back-filling a missed Release
 
 A missed stable Release is back-filled from its CHANGELOG entry, never skipped.
@@ -60,6 +81,7 @@ A missed stable Release is back-filled from its CHANGELOG entry, never skipped.
 | 2 | SemVer sized by that entry's own sections (`### Added` ⇒ MINOR-minimum · a breaking `### Removed`/`### Changed` ⇒ MAJOR) |
 | 3 | Version pins bumped with the release — but the SkillSpector scan pin is the ANTI-mark: it names the last real scan and never bumps on a release |
 | 4 | Gates green · signed tag pushed |
+| 4b | A MAJOR only: `MIGRATION.md` written and its every path verified on a real install |
 | 5 | Release published per this file |
 | 6 | Repo details (About · topics · Releases panel) checked BEFORE the README |
 | 7 | Where the repo ships `zip-skills.yml`: publishing the Release fires it — confirm the claude.ai skill ZIPs actually attached, since a failed build leaves the Release assetless ([CLAUDE-AI-INSTALL.md](./CLAUDE-AI-INSTALL.md)) |

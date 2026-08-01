@@ -90,10 +90,14 @@ This specific repository (`.github`) manages the following internal assets:
 * **[`scripts-quality.md`](scripts-quality.md)**: The CLI and script quality rules for release-gating.
 * **[`DOC-PATTERN.md`](DOC-PATTERN.md)**: The shared public-doc pattern (README / SECURITY / CONTRIBUTING / PRIVACY / CHANGELOG) that keeps every repo's docs sibling-consistent.
 * **[`SKILL-REPO-PATTERN.md`](SKILL-REPO-PATTERN.md)**: The shared repository layout and machinery — manifests, source-vs-dist, config system, gates, workflows.
-* **[`RELEASE-PATTERN.md`](RELEASE-PATTERN.md)**: The shape of a GitHub Release — title, notes body, and which tags get one.
+* **[`RELEASE-PATTERN.md`](RELEASE-PATTERN.md)**: The shape of a GitHub Release — title, notes body, which tags get one, and the migration note a MAJOR ships.
+* **[`RELEASE-NOTES-TEMPLATE.md`](RELEASE-NOTES-TEMPLATE.md)**: The fill-in skeleton that implements `RELEASE-PATTERN.md` — the CHANGELOG entry, the Release title and body, and the `MIGRATION.md` shape, with a worked example.
+* **[`ADOPTION-PATTERN.md`](ADOPTION-PATTERN.md)**: What to do when a rule, doc shape, or skill comes from outside the series — adopt the idea not the identity, pick the narrowest surface, carry the source, and rule a conflict in the open.
 * **[`PERMISSION-MATRIX.md`](PERMISSION-MATRIX.md)**: The least-power capability each tool requests, and the rights it deliberately never asks for.
 * **[`SWEEP-MARKS.md`](SWEEP-MARKS.md)**: The event → doc-spot registry: which surfaces each recurring event rots, and who owns sweeping each one.
 * **[`CLAUDE-AI-INSTALL.md`](CLAUDE-AI-INSTALL.md)**: Which skills run on claude.ai, and how to package one for it.
+* **[`templates/`](templates)**: The copy-verbatim artifacts a sibling repo installs rather than hand-rolls — `zip-skills.yml` (the claude.ai skill-ZIP release workflow, cited by `SKILL-REPO-PATTERN.md` Layer 5) and its packaging script.
+* **[`scripts/`](scripts)**: This repo's own gate — `verify-landing.mjs` (no-Thai front doors · benchmark row enumeration both directions · dated record) and `update-readme.mjs` (the traffic badges), each with its unit tests. Run by `.github/workflows/` and by `.githooks/` after `git config core.hooksPath .githooks`.
 * **[`benchmarks/`](benchmarks)**: The per-tool benchmark records the Series Benchmarks section above links to.
 
 ---

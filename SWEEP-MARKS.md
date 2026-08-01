@@ -74,7 +74,20 @@ half of provenance are still manual. A figure without date+version is not publis
 | 8 | Installed + cross-agent copies | `update-tools.ps1` | MAIN |
 | 9 | **CI green on the release commit + Code scanning 0 new alerts — checked AFTER the push** (the release is not "done" at the push; a red check sits on the repo front door). The review lane owns this; a local-green/CI-red split usually means the PUSHED content differs from the working tree (e.g. a `git add` pathspec that missed a source dir — hit live at CT v1.2.0). **EXPERIMENT RECORD (2026-07-16, deployed AND retired same day — do not re-propose):** an `alert-on-red.yml` net + a codeql fail-on-open-alerts step replaced this ritual for ~2 hours; its first live fire (CoalHearth) proved the design wrong — it DUPLICATED GitHub's native workflow-failure notification (a double ping), held CodeQL red the whole time a known-FP alert stayed open (re-ping per scheduled run + blocked Dependabot auto-merge), and painted a "code scanning configuration error" banner. USER ruling: what already works, don't touch. The ONE real gap that survives: GitHub has NO documented notification for NEW default-branch code-scanning alerts (verified vs docs 2026-07-16) — this mark's post-push alert check is currently the only coverage. | Actions runs + Security tab, via REST/`gh` | room reviewer |
 
-Release title + notes shape → [RELEASE-PATTERN.md](./RELEASE-PATTERN.md).
+Release title + notes shape → [RELEASE-PATTERN.md](./RELEASE-PATTERN.md); the fill-in skeleton for
+marks 2 and 4 → [RELEASE-NOTES-TEMPLATE.md](./RELEASE-NOTES-TEMPLATE.md).
+
+**Prose mark — the template's own drift, not the release's.** Marks 2 and 4 are filled FROM
+`RELEASE-NOTES-TEMPLATE.md`, so the template itself rots the moment `RELEASE-PATTERN.md` or
+`scripts-quality.md` §3 is amended and nobody re-reads it — a skeleton that has drifted from the
+rules it implements teaches the drift to every room that fills it. **On any amendment to either of
+those two files, re-check the template against it in the SAME change** — the §3 "rules already
+binding" list and the §1 skeleton are the two spots that go stale. Its worked example is REAL and
+therefore also perishable: re-verify the cited tag still renders as quoted, or replace the example.
+**Owner:** the `.github` deputy (the template is a pattern-doc surface, not a per-release artifact)
+— report it by name or mark it N/A; silence = the station did not run. Deliberately NOT a numbered
+mark: it fires on a pattern-doc amendment, not on a release, and adding a row would desync the
+`· 9 marks` header and the umbrella `AGENTS.md` bullet that repeats all four counts.
 
 **Anti-mark:** `SECURITY.md`'s SkillSpector pin is NEVER bumped on a release — it names
 the last ACTUAL scan (Event 3 owns it). Bumping it without a scan fabricates coverage.

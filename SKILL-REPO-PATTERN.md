@@ -34,6 +34,16 @@
 - **The sync gate**: `scripts/verify.mjs` byte-compares dist against source **both directions** — stale dist fails AND dist-only orphans fail (nothing ships without a source).
 - `hooks/hooks.json` wires entries via `${CLAUDE_PLUGIN_ROOT}/<path>` — verify.mjs asserts the wiring strings.
 
+<!-- coalmine: verified 2026-08-01 · exemplar ECC-CONTRIBUTING · revalidate 30d -->
+### The skill frontmatter contract
+
+Two rules on `skills/<name>/SKILL.md` frontmatter beyond the `DESC_CAP` length gate. **Source of both: UPSTREAM, adopted whole** — we had a length rule and nothing about SHAPE or SOURCE.
+
+- **`description` is an inline or FOLDED scalar, never a literal block.** ECC's [`CONTRIBUTING.md`](https://github.com/affaan-m/ECC/blob/HEAD/CONTRIBUTING.md) states it exactly: *"Frontmatter `description:` is an inline string or folded (`>`) scalar — not a literal block (`|`, `|-`, or `|+`), which preserves internal newlines and breaks flat-table renderers"*. Live here, not theoretical: our own claude.ai packaging step rewrites `description` with a regex that must already cope with folded `>-`, and a literal block would carry its newlines straight into the packaged frontmatter. Gate it beside `DESC_CAP` (Layer 4) — it is a one-character check on the token after the colon, so there is no reason to leave it to a reader.
+- **A skill states where it came from.** ECC's [`RULES.md`](https://github.com/affaan-m/ECC/blob/HEAD/RULES.md) requires an `origin` key: *"Use `origin: ECC` for first-party skills and `origin: community` for imported/community skills."* Ours: **`origin: <Tool>` for a skill this repo authored, `origin: <source>` naming the upstream where the surface was ported** — the flock has been an importer since 2026-08-01 ([ADOPTION-PATTERN.md](./ADOPTION-PATTERN.md)) and shipped no way to tell the two apart. Absent = treat as unstated, not as first-party; the gate warns rather than fails until every shipped skill carries one.
+
+Rejected from the same two files, named so nobody re-derives it: their `200-500 lines typical, 800 lines maximum` skill-body sizing. Our `skill-authoring.md` §3b measured that a line count reads green while a body sits ~1.5× over its real token budget, and gates on the platform's own `claude plugin details` projection instead. **Ours stands.**
+
 ## Layer 3 — config system (one pattern, every sibling)
 
 | Piece | Rule |
@@ -50,7 +60,7 @@
 | Script | Role | Required |
 |---|---|---|
 | `scripts/build-plugin.mjs` | regenerate `plugin/` from source | ALWAYS |
-| `scripts/verify.mjs` | fail-loud gate: files exist · manifest valid (semver **accepting pre-release** — a strict `x.y.z` regex once rejected a beta tag at release time) · marketplace points at `./plugin` · factory config validates against the schema · dist in sync + no orphans · version-pin markers current · every skill/command frontmatter `description` ≤ **1024 chars** (`DESC_CAP` — the cross-platform-safe cap, agentskills.io; CC's own listing truncation is 1536 combined `description`+`when_to_use`, docs verified 2026-07-16; USER lock 2026-07-16, past/present/future) | ALWAYS |
+| `scripts/verify.mjs` | fail-loud gate: files exist · manifest valid (semver **accepting pre-release** — a strict `x.y.z` regex once rejected a beta tag at release time) · marketplace points at `./plugin` · factory config validates against the schema · dist in sync + no orphans · version-pin markers current · every skill/command frontmatter `description` ≤ **1024 chars** (`DESC_CAP` — the cross-platform-safe cap, agentskills.io; CC's own listing truncation is 1536 combined `description`+`when_to_use`, docs verified 2026-07-16; USER lock 2026-07-16, past/present/future) · that same `description` is an inline or folded (`>`) scalar, never a YAML literal block (the pipe form and its chomping variants — spelled out in Layer 2, not here, because a literal pipe inside a table cell splits the row) · every `skills/<name>/SKILL.md` carries an `origin:` (warn, not fail, until the flock is fully stamped) — both per Layer 2's frontmatter contract | ALWAYS |
 | `scripts/test.mjs` | run the zero-dep tests via `node --test` with an **explicit file list** (the directory form is unreliable; a missing listed file fails loud) | ALWAYS |
 | `scripts/lib/*.mjs` + `*.test.mjs` | pure logic + its unit tests; hooks get **hermetic spawn tests** (spawn the real hook file, sandbox TEMP + HOME, assert exit 0 / sanctioned-output-only / state effect) | ALWAYS |
 | `scripts/install.mjs` | cross-agent installer (non-Claude platforms) | cross-agent tools only |
@@ -80,7 +90,11 @@ Every skill's automation ships as a THREE-TIER ladder, resolved per platform by 
 2. **best-effort agent-driven** — no hooks → an ALWAYS-LOADED instruction (the platform's AGENTS.md-equivalent, NOT the SKILL.md — it must act before invocation) tells the agent to detect the trigger condition itself and offer the ask-box. Honest label: probabilistic, never claimed as hook parity. Convert only the classes whose job is already "offer" (conductor nudges, canary offers); NEVER per-tool-call bookkeeping (a journal via instructions = token-huge + unreliable — CoalHearth stays hook-only by design).
 3. **manual** — the user invokes the skill themselves.
 
-Ship-text states the CONDITION ("has hooks → wire hooks; no hooks → agent-driven"), and the moment a platform ADDS a hook layer it moves UP (wire the snippet, retire the emulation — no-leftover). The monthly what's-new sweep is the catch. Compat matrices name the tier per platform with the honest label.
+Ship-text states the CONDITION ("has hooks → wire hooks; no hooks → agent-driven"), and the moment a platform ADDS a hook layer it moves UP (wire the snippet, retire the emulation — no-leftover). The monthly what's-new sweep is the catch.
+
+**These three are the MECHANISM, not the headline.** A compat matrix's headline tier per platform is one of exactly two words — **`validated`** (Claude Code) or **`works with`** (everywhere else) — the words already shipped, re-affirmed by USER ruling 2026-08-01 and owned by [DOC-PATTERN.md](./DOC-PATTERN.md) §"Platform tiers (row 4)". The ladder rung (`auto` · `agent-driven` · `manual`) is the DETAIL sentence beside the row; it never replaces the headline word, and `wired` / `design-supported` are no longer headline words at all.
+
+**What FLIPS a platform from `works with` to `validated` was set long before this wording pass — USER 2026-07-02, the PLATFORM-SUPPORT × INSTALL MATRIX:** **one real end-to-end contract run on that platform.** Not a doc claim, not a capability probe, not a search result — a run. That rule already carries the per-tool calibration and it still governs: CM is cross-agent FULL with no per-platform verify needed (read/analyze degrades safe) · CH is hook-engine-keyed · CF and CB are sub-capable, verify not-strict · **CT is CC-only and verify-STRICT — the spawn-tool schema is checked before ANY adapter, because the product actuates through the model-pick API.** The 2026-08-01 ruling settled the WORDS; this one settles the EVIDENCE, and it is the older and stricter of the two.
 
 ## Layer 8 — the chokepoint lesson (temporal coverage design)
 
