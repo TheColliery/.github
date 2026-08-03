@@ -84,3 +84,11 @@ rails.** The index and the enumerability finding compose; neither alone explains
 - **Novelty is a separate, weaker claim.** A market survey (2026-08-01) found no existing tool
   variance-tests a shipped instruction file for repeated-read determinism across model tiers as a
   shipping gate. Stated as "not found in a real search of ~18 candidates", never as "nobody does this".
+- **Sequential carves on one clause are not independent trials.** The CT↔CB hook-cue corpus (Runs
+  13/14/17/18) is one author's guided walk down one clause's defect tree, each carve targeted at the
+  specific undefined term the prior wave's readers named, tested against the same reused 5-scenario
+  set every time. This bounds what the resulting trend (55.6 → 0 → 33.3 → 44.4, never converging) can
+  claim: it is evidence that a falling divergence number is not by itself proof a text has improved,
+  not evidence about how targeted prose editing performs in general. See `RESULTS.md` §Publishability
+  verdict for the full reasoning and what a second, independent corpus would need to look like before
+  the general claim is written.

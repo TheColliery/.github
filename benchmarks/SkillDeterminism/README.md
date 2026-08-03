@@ -30,9 +30,10 @@ reach zero variance while every reader agrees on the wrong answer. Report both, 
   platform injects the umbrella governance stack at spawn regardless (measured 2026-07-26). Between-
   walker spread is real data; agreement across walkers is never cited as independent confirmation.
 - **Four instrument shapes exist and are NEVER pooled into one cross-run number:** lane EXECUTION
-  (Runs 11-a-kind), lane SELECTION (Run 12-a-kind), a hook-injected coordination cue (Run 13/14-a-
-  kind), and this benchmark's own prose-index hypothesis test (Run 15). Each is tabled on its own
-  terms; a rail from one is never averaged against a rail from another.
+  (Runs 11-a-kind), lane SELECTION (Run 12-a-kind), a hook-injected coordination cue (Runs 13/14/17/18
+  — four sequential carves of the same clause), and this benchmark's own prose-index hypothesis test
+  (Run 15). Each is tabled on its own terms; a rail from one is never averaged against a rail from
+  another.
 - **A prediction is written down before the walkers fire, every time.** A hypothesis confirmed after
   the fact is not evidence; the value of this method is that it can be wrong in public.
 - **Novelty is a separate, weaker claim than the measurement itself.** A market survey (2026-08-01,
