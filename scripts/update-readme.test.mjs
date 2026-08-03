@@ -78,7 +78,19 @@ test('assertEveryBadgeMatched: a badge matched NOWHERE (drift) → fail loud (ex
   profileHits['CoalBoard_Downloads'] = 0; // matched nowhere = drifted markup
   const prev = process.exitCode;
   process.exitCode = 0;
-  assertEveryBadgeMatched([profileHits, rootHits], STATS);
+  // This path's console.error is real production behavior (the live drift alarm) —
+  // but printing it here, from a SYNTHETIC negative case, makes every green CI run
+  // carry a "FAIL: badge regex matched nothing" line indistinguishable from a real
+  // one (verify-landing.yml runs this file on every push). Capture instead of leak.
+  const realError = console.error;
+  const errors = [];
+  console.error = (...args) => errors.push(args.join(' '));
+  try {
+    assertEveryBadgeMatched([profileHits, rootHits], STATS);
+  } finally {
+    console.error = realError;
+  }
   assert.equal(process.exitCode, 1, 'an unmatched badge must set exitCode 1');
+  assert.match(errors.join('\n'), /CoalBoard_Downloads/, 'must name the drifted badge');
   process.exitCode = prev;
 });
