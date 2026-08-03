@@ -23,10 +23,14 @@ reader agreed on the wrong answer.**
 | **15** | CoalMine `rot-canary` (index 12.0) | prose-index test | **0%** on all 4 predicted rails · **33.3%** on 1 emergent rail | **YES**, on every scored rail |
 | 17 | CT↔CB hook cue, after carve 2 | coordination cue | **33.3%**, tier-stratified (weak+mid wrong, strong correct) | **NO** — 6 of 9 readers still wrong |
 | 18 | CT↔CB hook cue, after carve 3 | coordination cue | **44.4%**, tier boundary dissolved | **NO** — 5 of 9 readers still wrong |
+| 19 | CT↔CB hook cue, after carve 4 | coordination cue | **44.4%** on S1-lead, unchanged | **YES** — first correct modal in 5 waves; still fails §3b (weak tier 0/3) |
+| 20 | CT↔CB hook cue, after carve 5 — **REVERTED same day** | coordination cue | 2 target rails 44.4%→33.3%, 5 clean rails 0%→11.1% | YES, but 5 of 9 lead rails newly wrong |
 
-**The CT↔CB corpus across four sequential carves: 55.6% → 0% → 33.3% → 44.4%, never converging and
-never landing on a correct modal answer.** See §Publishability verdict below for what this sequence
-does and does not support.
+**The CT↔CB corpus across six sequential carves: 55.6% → 0% → 33.3% → 44.4% → 44.4% → (regressed,
+reverted).** Wave 4 (Run 19) is the best-measured state in the series — first correct modal, 4 of 5
+lead rails at 0.0% — and is what ships today. Wave 5 (Run 20) traded a length increase for two
+targeted rails while breaking five clean ones and was reverted the same day in both rooms. See
+§Publishability verdict below for what this sequence does and does not support.
 
 ## The prose-index, independently re-derived (2026-08-03, script over the live tree)
 
@@ -66,7 +70,46 @@ one un-enumerated seam.
 - **Four instrument shapes, never pooled** — a 55.6% on the hook-cue instrument and a 33.3% on a
   SKILL.md instrument share a formula, never a combined score.
 
-## Publishability verdict — the CT↔CB corpus (Runs 13/14/17/18), written 2026-08-03
+## Publishability verdict — the CT↔CB corpus (Runs 13/14/17/18/19/20), updated 2026-08-03 by the third benchmark deputy
+
+**Runs 19 and 20 closed the loop this corpus's own §Publishability verdict opened.** Both were
+pre-registered before firing (condition 3 of the four below, now satisfied for the first time on
+this corpus), and Run 19 supplied the corpus's first correct modal answer in five waves. That does
+**not** upgrade Claim 2 below — conditions 1, 2 and 4 (a different clause/author, fresh scenarios, a
+different room) are still unmet, and Runs 19/20 are the fifth and sixth point in the SAME case
+study, not a second corpus. Three narrower items from this pair of runs stand on their own,
+independent of Claim 2's cross-corpus bar, for the same reason Claim 1 does — each is a single
+measured instance with a scored ground truth, not a claim about prose-editing in general:
+
+- **A targeted carve can improve its two target rails while regressing five previously-clean
+  ones, in the same run.** Run 20 vs Run 19: S2/S5-tell fell 44.4%→33.3% (the carve's own targets)
+  while S2/S3/S4/S5-lead and S1-tell rose 0.0%→11.1% (untouched rails). The mechanism is visible and
+  measured, not inferred: the clause grew 685→854 ch (+25%), and `BOTH` — chosen by no walker in Run
+  19 — appears five times in Run 20, all at the weak tier, the can't-decide signature of a longer,
+  more-qualified instruction. **Publishable as an existence proof** (a targeted fix traded breadth
+  for depth, at a measured length cost) — not as a general rate at which this happens.
+- **Bundling two independent prose fixes into one carve destroys attribution, and this is a
+  methodology finding, not a data finding — it needs no second corpus to be true.** Wave 5 changed
+  two things (name the tier; scope the silence) in one clause; waves 1-4 each changed one. Five
+  rails regressed and the run structurally cannot say which fix caused it — defect-1's own target
+  rail (S1-lead) did not move at all, which is *weak* evidence the length cost is the other fix's,
+  but that is inference, not measurement, precisely because the design confounded the two. This is
+  main's process error to own (main authorized the bundled carve), not the builder's.
+- **The instrument itself produced a fifth defect, and this one manufactures improvement rather
+  than noise — the strongest and most transferable of the three.** The line-anchored scorer
+  returned two weak-tier walkers as empty (both ran clean: `is_error:false`, `end_turn`,
+  7,958/8,081 output tokens, a third answer format the series had not seen) and reported aggregates
+  over the remaining 7. Read that way, S1 came back **28.6% instead of 44.4%** — arithmetically
+  confirmed as an artifact, not a rounding quirk: both dropped walkers were in the wrong-answer
+  camp, so (4 correct + 2 wrong)/7 = 28.6% versus the true (5 correct + 4 wrong)/9 = 44.4%. **A
+  scorer that silently shrinks its denominator when it cannot parse an answer moves the number in
+  the direction that looks like success, and it does so precisely on the rail measuring whether the
+  weak tier can follow the text at all** — the population most likely to fail is the population
+  most likely to be dropped. This is not bound to this clause, this corpus, or even this benchmark:
+  any scorer assuming a fixed answer shape carries the same risk. Fixed the same day (`tasks.md`
+  §Scorer note): the replacement scorer is format-agnostic and refuses to aggregate unless all N
+  walkers parse. **Publishable now, independent of any second corpus — it is an infrastructure
+  finding, verified by re-reading raw output, not an empirical claim requiring replication.**
 
 **Two claims live in this corpus. They carry different strength and must not be quoted with the same
 confidence.**
@@ -79,52 +122,66 @@ independently reproducible against the pinned blobs in `tasks.md`. This is the s
 result in the whole benchmark and the one worth leading with.
 
 **Claim 2 — sequential, targeted revision of a single clause does not reliably converge either
-number.** Four waves, one clause, same 5 scenarios: 55.6 → 0 → 33.3 → 44.4, and the modal answer was
-wrong in all four. This is real and it is honestly measured — but it is **NOT the same strength of
+number.** Six waves, one clause, same 5 scenarios: 55.6 → 0 → 33.3 → 44.4 → 44.4 → (regressed,
+reverted). The modal answer was wrong in the first four and correct in the fifth (Run 19) — the
+loop's first correct modal — but the sixth wave (Run 20) traded that gain for five newly-broken
+clean rails and was reverted the same day, so the corpus's SHIPPED state is Run 19's, still failing
+§3b on the weak tier. This is real and it is honestly measured — but it is **NOT the same strength of
 claim as Claim 1**, for reasons specific to how the corpus was built, not to the number itself:
 
 - **The waves are not independent trials.** Each carve was a targeted patch for the specific
-  undefined term the PRIOR wave's readers named (`stakes signal` → `a real routing need` → `needs a
-  different tier`), written by the same author who read those results. That is good iterative
-  practice — each fix demonstrably closed the defect it targeted — but it means "four waves" is not
-  four draws from "how does prose editing generally affect determinism." It is one author's guided
+  undefined term (or, from Run 19 on, the specific named mechanism) the PRIOR wave's readers
+  surfaced, written by the same author who read those results. That is good iterative practice —
+  each fix demonstrably closed or narrowed the defect it targeted — but it means "six waves" is not
+  six draws from "how does prose editing generally affect determinism." It is one author's guided
   walk down one clause's defect tree, and the tree turned out deeper than the walk's own §3b method
   anticipated when it wrote the pass rule.
-- **The scenario set was reused, not resampled, across all four waves.** By Run 18 the clause has
-  been iterated against the same fixed 5 situations three times. A rail that now reads cleanly on
+- **The scenario set was reused, not resampled, across all six waves.** By Run 20 the clause has
+  been iterated against the same fixed 5 situations five times. A rail that now reads cleanly on
   those five scenarios has not been shown to read cleanly on a fresh set — this is the same
   overfitting risk as tuning against a fixed validation set, and it has not been controlled for here.
-- **The predicted trajectory was wrong twice, which is good science but bounds the claim.** The
+- **The predicted trajectory has now been wrong on every wave since Run 17 — four in a row.** The
   wave-2 carve predicted the correct answer would stabilize at the weak tier; it landed at strong
   instead (Run 17). The wave-3 carve predicted variance would fall and the modal would flip to
-  correct; neither happened (Run 18). Two falsified predictions in a row is honest evidence that the
-  authors do not yet have a working model of *why* this specific clause resists convergence — which
-  means the "targeted carve" method itself is unproven here, not just the clause.
+  correct; neither happened (Run 18). The wave-4 carve predicted divergence would fall below 44.4%;
+  the modal flipped correct but divergence held exactly at 44.4% (Run 19). The wave-5 carve
+  predicted both residual rails would reach 0.0%; instead five other rails broke (Run 20). Four
+  falsified predictions in a row is honest evidence the authors do not have a working model of *why*
+  this specific clause resists convergence — which means the "targeted carve" method itself remains
+  unproven here, not just the clause. **Runs 19/20 additionally identified WHY, mechanistically, for
+  the first time:** the two residual rails are not wording defects at all but two unmade product
+  decisions (does a read-only measurement fan-out count as a model-tier delegation; may the agent
+  state why it is asking) — no wave of re-wording can close a boundary the product itself has not
+  drawn, which is a candidate explanation for why five wording-only waves never converged.
 
-**So: Claim 2 is reported, not asserted as a general law.** The honest sentence is *"across four
+**So: Claim 2 is reported, not asserted as a general law.** The honest sentence is *"across six
 sequential, non-independent waves on one hook-injected clause, in one corpus, variance did not
-converge toward zero and the modal answer did not converge toward correct — this is evidence that
+converge toward zero and the modal answer did not converge to a passing state (one wave reached a
+correct-but-still-failing modal, the next regressed and was reverted) — this is evidence that
 `divergence -> 0` is an unreliable stopping criterion on its own, not evidence about prose-editing
 generally."* That sentence is true, cites its own bound, and does not overreach.
 
-**What a second corpus needs, to promote Claim 2 past a case study:**
+**What a second corpus needs, to promote Claim 2 past a case study — three of four conditions still
+open:**
 1. **A different clause or `SKILL.md`, ideally not iterated by the same author reading the same walk
-   output between rounds** — or, if the same author, a pre-registered fix BEFORE seeing which
-   scenario it will be scored against, to break the target-the-last-defect loop.
-2. **Fresh scenarios per wave**, or at minimum a held-out scenario set scored only at the end, so a
-   later wave's apparent improvement (or lack of one) is not measured against the same fixture its
-   carve was implicitly tuned to.
-3. **A pre-registered prediction for every wave, not only the first** — Run 15 did this and it is
-   this benchmark's cleanest result; Runs 17/18 stated a prediction in the lab record but it was not
-   filed in `PREREGISTRATION.md` before firing, so it carries less evidentiary weight than Run 15's.
-4. Ideally a clause from a **different room or different author's skill**, to separate "this specific
-   clause has a deep defect tree" from "targeted prose carves generally underperform their own
-   predictions."
+   output between rounds** — still open. Runs 19/20 are the fifth and sixth wave on the SAME clause
+   by the SAME author.
+2. **Fresh scenarios per wave**, or at minimum a held-out scenario set scored only at the end — still
+   open. The same 5 situations have now been reused six times.
+3. **A pre-registered prediction for every wave, not only the first** — **CLOSED by Runs 19 and 20.**
+   Both predictions were written into the lab record and committed before their walkers fired, and
+   both were reported as falsified rather than quietly revised after the fact.
+4. Ideally a clause from a **different room or different author's skill** — still open.
 
-**Disposition:** ship Claim 1 as-is (already at the right strength). Ship Claim 2 as a bounded case
-study with the four numbers and the non-convergence stated plainly — do not round it up to "prose
-carving doesn't work" or "the walk method needs a redesign." Docket a second corpus per the four
-conditions above before either of those stronger claims is written anywhere.
+**Disposition (reaffirmed 2026-08-03 by the third benchmark deputy):** ship Claim 1 as-is (already
+at the right strength). Ship Claim 2 as a bounded case study with the six numbers and the
+non-convergence stated plainly, including the wave-4 partial success and the wave-5 revert — do not
+round it up to "prose carving doesn't work," "the walk method needs a redesign," or "the corpus
+converged." One condition of the second-corpus bar (pre-registration on every wave) is now met by
+this same corpus; that strengthens the METHOD's discipline, not Claim 2's generality — the other
+three conditions require a genuinely different clause and scenario set. Docket a second corpus per
+the (now three, not four) open conditions above before either of those stronger claims is written
+anywhere.
 
 ## Novelty — a separate, weaker claim
 
@@ -144,8 +201,12 @@ into the same enumerated list as the other two) and re-walk fresh across all thr
 whether a full §3b pass (zero variance, every rail, every tier) is reachable at this index — that
 result, either way, is the sharper test of the enumerability refinement than another index point.
 
-A wave-4 clause for the CT↔CB corpus (Run 19) is pending separately, owned by the room doing the
-carve. Per the verdict above, the priority ahead of a Run 19 is a **second, independent corpus** —
-a different clause walked with fresh, unreused scenarios — since a fifth wave on the same clause and
-scenario set adds another point to a case study that already has four, not evidence toward the
-general claim.
+**The CT↔CB corpus is CLOSED — no wave 6 is authorized on the current text.** Runs 19 and 20 ran,
+and Run 20 was reverted the same day back to Run 19's clause (685 ch, sha `4a18bb6f8f03`), which is
+what ships. The two residual rails (S1-lead 44.4%, S2/S5-tell 44.4%) are named as unmade product
+decisions, not wording defects — a cue cannot specify a boundary its own product has not drawn.
+Both return to the room's owner as a design question, not to a seventh wave of prose. The priority
+ahead of any further work on this corpus is a **second, independent corpus** — a different clause
+(or a different room's skill) walked with fresh, unreused scenarios — since a further wave on the
+same clause and scenario set adds another point to a case study that already has six, not evidence
+toward the general claim.

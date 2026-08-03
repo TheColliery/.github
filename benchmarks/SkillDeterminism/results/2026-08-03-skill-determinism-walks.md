@@ -251,6 +251,105 @@ has relocated the same undefined-boundary shape rather than removed it. See `RES
 
 ---
 
+## Run 19 — the wave-4 clause (2026-08-03)
+
+Pre-registered in the internal lab record before any walker spawned. Clause 685 ch, sha
+`4a18bb6f8f03`, verified identical across CoalBoard + CoalTipple source and dist on EMITTED text
+(a raw-byte compare of the single-quoted JS source reports a divergence that does not exist at the
+surface a walker reads). Prompt `run19-prompt-v1.txt`, blob `93e42c03d5b2d60e2390c78a1411350d9aad6472`,
+4,504 B. Same 5 scenarios and answer format as Runs 13/14/17/18. Weak/mid/strong × 3,
+`--safe-mode --effort medium`. GT for S1 = NEITHER, unchanged.
+
+**Prediction:** S1's modal flips to NEITHER (correct, first time in five waves) and divergence falls
+below Run 18's 44.4%.
+
+| tier | r1 | r2 | r3 |
+|---|---|---|---|
+| weak | COALTIPPLE | COALTIPPLE | COALTIPPLE |
+| medium | NEITHER | COALTIPPLE | NEITHER |
+| strong | NEITHER | NEITHER | NEITHER |
+
+`NEITHER ×5 · COALTIPPLE ×4` — **S1-lead divergence 44.4%.** "Modal flips to NEITHER" — CONFIRMED,
+first correct modal in five waves. "Divergence falls below 44.4%" — FALSIFIED, unchanged. **The
+split is now perfectly tier-stratified** (weak 0/3, medium 2/3, strong 3/3) — by the pass rule
+("a file stable only on the strong tier has FAILED") this is still a fail, and the residual is not
+noise: it is the weak tier uniformly wrong, the exact case §1 exists to catch.
+
+**All five situations scored positionally for the first time** (Runs 13-18 only ever tallied S1):
+every modal on every rail is CORRECT. S2-S5 lead sit at 0.0%; a second rail never scored before —
+C) *"tell the user two hooks fired?"* on S2/S5, where the clause says arbitrate silently — also
+sits at 44.4%, same stratification, modal correct (NO is right; 4/9 weak/mid walkers said YES).
+
+**Two specific, mechanistic defects, not diffuse ambiguity:**
+1. **`delegate-down`/`escalate-up` is never said to be a MODEL-TIER move**, and S1's work ("run a
+   set of read-only measurement agents") is a delegation by the plain meaning of the word — three
+   independent witnesses at three tiers name exactly this. Fix: name the tier explicitly.
+2. **`arbitrate silently` and `HALT and ask the user` collide** on S2/S5, the two scenarios where
+   both are live — a reader inside the ask-the-user branch reasonably explains why it is asking.
+   Fix: scope the silence to the arbitration act itself, not the whole turn.
+
+**Ruling:** wave 5 authorized, narrowly — an additive one-phrase fix per defect, one-flock (lands
+in CoalBoard and CoalTipple in the same batch or not at all). Pre-registered prediction for Run 20:
+S1 lead and S2/S5 tell both fall to 0.0%; if either survives, the "not specifiable in cue-length
+prose" reading takes over.
+
+**Instrument:** one walker again omitted `S1..S5` labels — same shape that produced Run 18's false
+55.6% — scored positionally from raw output this time; zero scorer defects this run.
+
+---
+
+## Run 20 — the wave-5 clause (2026-08-03) — reverted the same day
+
+Clause 854 ch, sha1 `e72fec15dffe` (854 ch, verified identical bytes across source+dist in both
+rooms). Prompt `run20-prompt-v1.txt`, blob `4da42a7f2275337b3b3db8ca993ac8e4373328d5`, 4,842 B. Run
+19 was **re-scored under the same fixed instrument** so the two runs are like-for-like.
+
+| rail | Run 19 | Run 20 | |
+|---|---|---|---|
+| **S1 lead** (defect 1's target) | 44.4% | **44.4%** | unchanged — the fix achieved nothing |
+| S2 lead | 0.0% | 11.1% | regressed |
+| S3 lead | 0.0% | 11.1% | regressed |
+| S4 lead | 0.0% | 11.1% | regressed |
+| S5 lead | 0.0% | 11.1% | regressed |
+| S1 tell | 0.0% | 11.1% | regressed |
+| **S2 tell** (defect 2's target) | 44.4% | **33.3%** | improved |
+| **S5 tell** (defect 2's target) | 44.4% | **33.3%** | improved |
+
+**Both pre-registered predictions FALSIFIED — the fifth consecutive falsification of a prediction
+on this corpus.** The two targeted rails improved by 11.1 points each; five previously-clean rails
+broke by 11.1 points each. Every modal stayed correct, which is why this benchmark scores spread
+AND correctness rather than either alone — a correctness-only read would have called this a clean
+win.
+
+**Mechanism: length.** `BOTH` was chosen by nobody in Run 19; in Run 20 it appears five times, all
+at the weak tier (weak-r2 on S1/S2/S5, weak-r3 on S1) — the can't-decide signature of a longer,
+more-qualified instruction. The clause grew 685 → 854 ch (+25%).
+
+**Process error — the transferable half: wave 5 changed two things in one clause; waves 1-4 each
+changed one.** Five rails regressed and the run cannot attribute the regression to defect-1's fix
+or defect-2's fix. Defect 1's own target rail did not move at all — weak evidence that fix is
+inert and the length cost belongs to the defect-2 fix, but that is inference, not measurement.
+**This is the transferable lesson: bundling two prose changes into one carve destroys the
+attribution the walk exists to provide, independent of which clause or corpus is under test.**
+
+**A fifth scorer defect, the most dangerous shape yet:** the line-anchored scorer returned two
+weak-tier walkers as empty (both ran clean — `is_error:false`, `end_turn`, 7,958/8,081 output
+tokens — and answered in a third format the series had not seen) and reported aggregates over the
+remaining 7. Read that way, S1 came back 28.6% instead of 44.4% — **an apparent improvement
+manufactured entirely by deleting the population that could not follow the text**, arithmetically
+confirmed (2 of the 2 dropped walkers were in the wrong-answer camp: (4 correct + 2 wrong)/7 =
+28.6%, versus (5 correct + 4 wrong)/9 = 44.4%). Caught by noticing two blank rows and checking the
+raw JSON before writing a number down. Fixed: see `tasks.md` §Scorer note.
+
+**Ruling: REVERT wave 5 entirely**, not "revert the bad half" — the run cannot identify one. Landed
+same day: CoalBoard `2b99b46`, CoalTipple `85f1312`; all four files (source + dist, both rooms)
+verified back to 685 ch / sha `4a18bb6f8f03`. Gates green both rooms. **No wave 6 authorized on the
+current text** — the two residuals (S1 lead 44.4%, S2/S5 tell 44.4%) are unmade DESIGN decisions
+(does a read-only measurement fan-out count as a tier delegation; may the agent say why it is
+asking), not wording defects, and re-wording them has now been tried and cost more than it bought.
+
+---
+
 ## What this does NOT show
 
 - **N is small.** 3-9 walkers per run. A 1-in-3 split is real signal at this scale; it is not a
@@ -266,7 +365,7 @@ has relocated the same undefined-boundary shape rather than removed it. See `RES
   points confirming it at the high end (CB ~83, the hook cue) and one confirming it at the low end.
   A single low point is a start, not a curve — CoalLedger (9.6) and CoalTipple (23.8) are the natural
   next points, and neither has run under this instrument shape yet.
-- **Runs 13/14/17/18 are four SEQUENTIAL, non-independent waves on ONE clause**, each carve targeted
-  at the specific defect the prior wave's readers named, by the same author who read those results.
-  This is a case study of one clause's iterative-refinement dynamics, not four independent samples of
-  "editing prose" — see `RESULTS.md` §Publishability verdict.
+- **Runs 13/14/17/18/19/20 are SIX SEQUENTIAL, non-independent waves on ONE clause**, each carve
+  targeted at the specific defect the prior wave's readers named, by the same author who read those
+  results. This is a case study of one clause's iterative-refinement dynamics, not six independent
+  samples of "editing prose" — see `RESULTS.md` §Publishability verdict.
