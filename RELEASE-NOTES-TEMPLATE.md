@@ -166,7 +166,8 @@ the same release.
 ### Security
 - The journal no longer plants `.claude/coalhearth/` in whatever directory a hook's cwd
   happens to be — it now anchors to the resolved project root (the nearest ancestor with a
-  `.git` or a `.coalhearth.json`, never past `$HOME`).
+  `.git`, a legacy `.coalhearth.json`, or a `.<agent-dir>/coal/coalhearth.json`
+  (`.claude`/`.agents`/`.gemini`), never past `$HOME`).
 - The self-clean step that mops up a legacy phantom directory could delete the journal
   directory it had just created, on any filesystem where a directory has more than one
   valid spelling; fixed by resolving `process.cwd()` once and reusing that value on both
