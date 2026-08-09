@@ -32,11 +32,14 @@ than its own section headings to orient a reader. Many entries skip this line en
 ### Changed
 - <a behavior change that is not a capability add or a break>
 
-### Fixed
-- <a bug fix>
+### Deprecated
+- <a feature marked for future removal — not yet gone>
 
 ### Removed
 - <a removed capability — MAJOR unless it was already dead/unreachable, see §3 below>
+
+### Fixed
+- <a bug fix>
 
 ### Security
 - <a security-relevant fix>
@@ -59,7 +62,9 @@ release names the break here, first, before anything else.>
 - <condensed version of each CHANGELOG bullet — trim, never invent>
 
 **What you need to do:** <a required action (update command, new/changed config key,
-migration step), or literally "Nothing — update at your convenience.">
+migration step) — REQUIRED on a MAJOR/breaking release, conditional otherwise. Where
+nothing is needed, OMIT this whole line entirely — do not write "Nothing to do" as a
+placeholder (RELEASE-PATTERN.md's Part 3, ratified 2026-08-09).>
 
 Gate: <test count / VERIFY / CI status — ONLY if re-run at press; omit the line entirely
 if nobody re-ran it for this release>
@@ -73,7 +78,11 @@ Fill-in notes:
 - Title separator is a **spaced hyphen `-`**, never an em-dash — matches the CHANGELOG
   version heading's own separator so the two read as one family.
 - The summary after the version is **required**. `vX.Y.Z` alone is not a title.
-- No emoji anywhere in the body — not in a heading, not as a headline bullet.
+- No emoji in the title or a body heading — the ban is headline-shaped, not whole-body
+  (body PROSE that quotes an emoji as data is not itself a violation). A MAJOR/breaking
+  section needing skim-visibility uses a GFM alert (`> [!WARNING]` / `> [!CAUTION]`)
+  instead of an emoji heading — never an emoji, whatever the section's severity
+  (RELEASE-PATTERN.md "Never in a body", ratified 2026-08-09; no exception was carved).
 - Technical terms, commands, paths, config keys, identifiers: verbatim, never translated or
   prettified, regardless of what language the surrounding prose is in.
 
@@ -186,22 +195,25 @@ the same release.
 - 6 remaining realpath containment/prune calls upgraded to `.realpathSync.native`.
 - Stale doc comments from the root-anchor change corrected.
 - The legacy-phantom mop-up now also removes its own leftover `.gitignore`.
-
-**What you need to do:** Nothing — update at your convenience. No config key changed
-shape; the two QUIETEN-only keys behave the same unless your project config was actively
-using them to re-enable something your global config had turned off.
 ```
 
 Why it fits the skeleton: the lead names PATCH + the security theme in one sentence · the
 `### Security` / `### Changed` / `### Fixed` headings are the CHANGELOG entry's own, same
-order, condensed — no heading invented, none dropped · "What you need to do" answers the
-action question explicitly instead of leaving it implicit. The Gate line is **deliberately
-absent** here, not an oversight: the room's own record ties a `159/159` figure to a doc pass
-two days after this tag actually pressed, not to the v2.1.1 press moment itself — I could
-not verify a re-run number AT press, so per RELEASE-PATTERN.md's own rule ("only if verified
-at press — never a number nobody re-ran") the honest fill is no Gate line at all, exactly
-what the real release did. Provenance is absent because nothing applies — this was not a
-back-fill and cites no sibling repo.
+order, condensed — no heading invented, none dropped. **Both "What you need to do" and the
+Gate line are deliberately absent**, matching what the real Release actually shipped —
+neither is an oversight. "What you need to do" is absent because this is a PATCH with no
+required action (no config key changed shape; the two QUIETEN-only keys behave the same
+unless a project config was actively using them to re-enable something the global config
+had turned off) — per RELEASE-PATTERN.md's current Part 3 rule (conditional, required only
+on MAJOR/breaking), the honest fill omits the block rather than writing a null placeholder
+like "Nothing — update at your convenience." (an earlier draft of this template did exactly
+that, which conflict-note #3 in §5 below used to flag as unresolved against real practice —
+resolved 2026-08-09). The Gate line is absent because the room's own record ties a
+`159/159` figure to a doc pass two days after this tag actually pressed, not to the v2.1.1
+press moment itself — I could not verify a re-run number AT press, so per RELEASE-PATTERN.md's
+own rule ("only if verified at press — never a number nobody re-ran") the honest fill is no
+Gate line at all, exactly what the real release did. Provenance is absent because nothing
+applies — this was not a back-fill and cites no sibling repo.
 
 ## 3. Rules already binding — do not re-litigate per room
 
@@ -217,9 +229,10 @@ main, not a local variance in the release notes.
   CONTRIBUTING, etc.) is recorded in the commit and the room's `MEMORY.md`, never in the
   CHANGELOG. (scripts-quality.md §3.)
 - **SemVer is sized by the CHANGELOG entry's own sections, decided BEFORE picking the
-  number.** `### Added` ⇒ MINOR minimum · a breaking `### Removed`/`### Changed` ⇒ MAJOR ·
-  only `### Fixed` / a non-breaking `### Changed` / a `### Security` patch ⇒ PATCH. Shipping
-  a feature as a PATCH is the bug, not a style choice. (scripts-quality.md §3.)
+  number.** Shipping a feature as a PATCH is the bug, not a style choice. The exact
+  section→bump mapping is scripts-quality.md §3's own — read it there rather than a copy
+  here, so this template can't drift from it a second time (it already had: this bullet
+  was missing `### Deprecated` from the mapping until this reconciliation).
 - **Every claim in a Release matches shipped behaviour; every figure is verbatim from its
   source.** A version comes from `plugin.json`, a test count from an actually-re-run gate at
   press, a behaviour claim from the code — never invented, never carried forward from an
@@ -252,45 +265,54 @@ Naming these so nobody reads the skeleton as covering more ground than it does:
   checks a Release title or body against this shape today — this is a fourth-tense gap
   (named, not covered): a Release that violates §1's shape currently ships without any
   script noticing. §5 below is live evidence of exactly that.
-- **It does not resolve the conflicts found while drafting it** (§5). Those are reported to
-  main, not silently absorbed into "the correct shape" here — a skeleton that quietly picks
-  a side in an unresolved disagreement would misrepresent it as already settled.
+- **It did not resolve the conflicts found while drafting it, on its own** (§5). They were
+  reported to main rather than silently absorbed — a skeleton that quietly picks a side in
+  an unresolved disagreement would misrepresent it as already settled. As of 2026-08-09,
+  three of the four (#2/#3/#4) have since been ruled by main and folded into
+  RELEASE-PATTERN.md itself (and into this skeleton, above); the fourth (#1) is still open.
 
 ## 5. Conflicts found — reported, not resolved here
 
 Found while reading the pattern docs against what CoalHearth's own GitHub Releases actually
-shipped (`api.github.com/repos/TheColliery/CoalHearth/releases`, fetched live). Each is a
-pattern-vs-artifact mismatch, not a one-off typo — every one recurs across multiple real
-releases. Main rules; this section states the evidence, not a fix.
+shipped (`api.github.com/repos/TheColliery/CoalHearth/releases`, fetched live). Each was a
+pattern-vs-artifact mismatch, not a one-off typo — every one recurred across multiple real
+releases. Main ruled; this section now states the evidence AND the disposition for each —
+**three of the four are resolved (2026-08-09); #1 is still open.** Line numbers below are
+as they stood when each conflict was found — RELEASE-PATTERN.md has grown since (R3's Part-3
+demotion, R6's `### Deprecated`, R2/R4's own stamps), so a citation here may no longer land
+on the quoted number; the quoted TEXT is what was verified, not the line.
 
-1. **Title summary is stated as required (RELEASE-PATTERN.md line 14: "Required — a version
-   alone is not a title"), but the most recent real release violates it outright.**
-   `v2.1.2` (published 2026-07-31, the release this exact drafting session's own fix shipped
-   as) has no summary at all — the GitHub Release title is the bare string `v2.1.2`. Every
-   earlier CoalHearth release does carry a summary; this is the first to drop it.
+1. **STILL OPEN — unrelated to the R2/R3/R4 rulings below, no owner decision yet.** Title
+   summary is stated as required ("Required — a version alone is not a title"), but the most
+   recent real release at the time this was found violated it outright: `v2.1.2` (published
+   2026-07-31) has no summary at all — the GitHub Release title is the bare string `v2.1.2`.
+   Every earlier CoalHearth release carries a summary; this was the first to drop one. The
+   fix could be "conform the Release" (a live-surface edit) or "the rule needs a documented
+   escape hatch" — main's call, not made here.
 
-2. **Title separator is specified as a spaced hyphen only ("not an em-dash",
-   RELEASE-PATTERN.md line 13), but `v2.1.1`'s real title uses an em-dash:**
-   `v2.1.1 — phantom-slug root anchor + junction-proof self-ignore`. Twelve of the other
-   thirteen released titles use the hyphen correctly (the thirteenth, `v2.1.2`, has no
-   separator to check at all — it is finding 1, above), so this is not a repo-wide style
-   choice — it is inconsistent within one repo's own release history.
+2. **RESOLVED 2026-08-09 — RATIFIED HYPHEN.** Title separator was specified as a spaced
+   hyphen only, but `v2.1.1`'s real title used an em-dash: `v2.1.1 — phantom-slug root
+   anchor + junction-proof self-ignore`. Re-scoped to the post-manual population
+   (`published_at >= 2026-07-25`) across all 8 repos: 12 hyphen vs 13 em-dash, a near-tie —
+   but every CHANGELOG version heading in the flock is 100% hyphen with zero exceptions
+   (also keepachangelog.com's own spec format), which is the thing the title separator is
+   meant to stay consistent with. Ratifying em-dash would have broken that alignment
+   instead of resolving a real disagreement, so: hyphen stands. `v2.1.1` is pre-ratification
+   history and is not retroactively fixed. Full evidence:
+   `scratchpad/dispatch/r2r4-return.md`.
 
-3. **"What you need to do" is listed as REQUIRED (RELEASE-PATTERN.md line 20's table: parts
-   1-3 required, 4-5 conditional), but zero of the fourteen real CoalHearth Releases contain
-   an explicit "What you need to do" line or block** — not v1.0.0, not the security-led
-   v2.1.1, not the BREAKING v2.0.0/v2.0.2, not v2.1.2. Either every past release is
-   non-compliant with a rule nobody has ever applied, or the rule was aspirational from the
-   start and the pattern should say "conditional" like parts 4-5. Worth main's ruling before
-   the next room adopts this template and starts applying part 3 where the exemplar repo
-   itself never has.
+3. **RESOLVED 2026-08-09 — DEMOTED TO CONDITIONAL.** "What you need to do" was listed as
+   REQUIRED, but zero of the fourteen real CoalHearth Releases at the time contained an
+   explicit "What you need to do" line — not v1.0.0, not the security-led v2.1.1, not the
+   BREAKING v2.0.0/v2.0.2, not v2.1.2. RELEASE-PATTERN.md's Part 3 is now conditional
+   (required only on MAJOR/breaking; where nothing is needed, OMIT the block rather than
+   write "nothing to do here") — matching what every real release had already been doing.
+   §1b and §2's worked example above are updated to the current shape.
 
-4. **"Never in a body: ... An emoji headline" (RELEASE-PATTERN.md line 42), but v2.0.2's
-   real, currently-published body contains `## ⚠️ BREAKING (v2.0.0)`** as an `H2` with a
-   leading emoji.
-
-I did not attempt to guess which side is right in any of these four — the fix could be
-"conform the Release" (edit already-published GitHub Releases, a live-surface edit outside
-this task's scope) or "amend RELEASE-PATTERN.md" (the pattern was aspirational and the real
-practice is the de facto standard) and the two are very different weights of decision for
-main to make, not me.
+4. **RESOLVED 2026-08-09 — BAN KEPT, NO EXCEPTION CARVED.** "Never in a body: ... An emoji
+   headline", but v2.0.2's real, currently-published body contains `## ⚠️ BREAKING
+   (v2.0.0)` as an `H2` with a leading emoji. Ruled: the ban stays absolute, including for a
+   BREAKING section — a MAJOR/breaking section needing skim-visibility uses a GFM alert
+   (`> [!WARNING]` / `> [!CAUTION]`) instead, which gets the same visual weight without an
+   emoji or a new carve-out in the ban. `v2.0.2` predates the ruling and stays as history,
+   unfixed — it is the case that prompted the ruling.
