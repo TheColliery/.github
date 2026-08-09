@@ -17,13 +17,15 @@
 
 ## The body
 
-Five parts, in this order. **1-3 are REQUIRED; 4-5 are conditional.**
+Five parts, in this order. **1-2 are REQUIRED; 3-5 are conditional — except 3 is REQUIRED on a MAJOR/breaking release**, where an action is near-certain anyway.
+
+<!-- coalmine: verified 2026-08-09 · task-37 audit R3 (flock 3/148 = 2%, 0/9 since the manual shipped; 0/7 exemplar projects carry a standing action block) · demoted 1-3-REQUIRED to conditional -->
 
 | # | Part | Rule |
 |---|---|---|
 | 1 | **Lead** — one sentence, no heading | What changed and why it matters to a reader. A plain statement: no marketing adjective, no "we are excited". A MAJOR/breaking release names the break **here, first**, before anything else. |
-| 2 | **What changed** | The CHANGELOG entry's own content, kept under the SAME keep-a-changelog headings that entry uses (`### Added` · `### Changed` · `### Fixed` · `### Removed` · `### Security`) so the mapping is 1:1 and any line traces back. Condensing is allowed; **re-ordering the headings, merging them, or inventing a line is not**. A long entry gets condensed — never summarized into a claim the entry does not make. |
-| 3 | **What you need to do** — one short block | Does this need an action from the reader (update command · a new or changed config key · a migration step · a breaking follow-up), or nothing? **"Nothing — update at your convenience" is a valid and common answer, and saying it explicitly is the point.** |
+| 2 | **What changed** | The CHANGELOG entry's own content, kept under the SAME keep-a-changelog headings that entry uses (`### Added` · `### Changed` · `### Deprecated` · `### Removed` · `### Fixed` · `### Security` — the spec's full six, [keepachangelog.com/en/1.1.0](https://keepachangelog.com/en/1.1.0/)) so the mapping is 1:1 and any line traces back. Condensing is allowed; **re-ordering the headings, merging them, or inventing a line is not**. A long entry gets condensed — never summarized into a claim the entry does not make. |
+| 3 | **What you need to do** — one short block, conditional (required on MAJOR/breaking) | Where the release needs an action from the reader — an update command, a new or changed config key, a migration step — say so plainly. **Where it does not, say nothing** — omit the block rather than write "nothing to do here". |
 | 4 | **Gate** — one line, conditional | Test counts · VERIFY · CI. Only if **verified at press** — never a number nobody re-ran. |
 | 5 | **Provenance** — one line, conditional | A back-dated Release says it is back-dated for an already-published tag and names the CHANGELOG entry it was written from. Notes citing a sibling repo name it and state it was verified at press. |
 
@@ -78,7 +80,7 @@ A missed stable Release is back-filled from its CHANGELOG entry, never skipped.
 | Order | Step |
 |---|---|
 | 1 | CHANGELOG entry written **BEFORE** the tag |
-| 2 | SemVer sized by that entry's own sections (`### Added` ⇒ MINOR-minimum · a breaking `### Removed`/`### Changed` ⇒ MAJOR) |
+| 2 | SemVer sized by that entry's own sections (`### Added` or `### Deprecated` ⇒ MINOR-minimum · a breaking `### Removed`/`### Changed` ⇒ MAJOR) |
 | 3 | Version pins bumped with the release — but the SkillSpector scan pin is the ANTI-mark: it names the last real scan and never bumps on a release |
 | 4 | Gates green · signed tag pushed |
 | 4b | A MAJOR only: `MIGRATION.md` written and its every path verified on a real install |

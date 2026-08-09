@@ -129,7 +129,7 @@ Title is `# <Tool> Privacy Policy`, then a bold one-liner, then one bullet list 
 Keep-a-Changelog format at repo root — the FORMAT is flock-shared, the VOICE is not (each repo's entry style is its own; never conform one sibling's habit onto another). The release chain that fills it (bump sizing, tag, Release) is owned by [scripts-quality.md](./scripts-quality.md) §3, and the Release's own title + notes shape by [RELEASE-PATTERN.md](./RELEASE-PATTERN.md) — not restated here. What a DOC pass checks:
 
 - **Every shipped tag has an entry.** An entry-less tag is the recurring miss (caught live twice in one day) — the entry lands *before* the tag, not after.
-- **The section types match the bump size** (the keep-a-changelog ↔ SemVer mapping): an `### Added` entry ⇒ MINOR-minimum · a breaking `### Removed`/`### Changed` ⇒ MAJOR · only `### Fixed` / non-breaking `### Changed` / a `### Security` patch ⇒ PATCH. A feature shipped under a PATCH number is the bug.
+- **The section types match the bump size** (the keep-a-changelog ↔ SemVer mapping, all six spec types — [keepachangelog.com/en/1.1.0](https://keepachangelog.com/en/1.1.0/)): an `### Added` or `### Deprecated` entry ⇒ MINOR-minimum · a breaking `### Removed`/`### Changed` ⇒ MAJOR · only `### Fixed` / non-breaking `### Changed` / a `### Security` patch ⇒ PATCH. A feature (or a deprecation notice) shipped under a PATCH number is the bug.
 - **Newest version first**, each under `## [X.Y.Z] - YYYY-MM-DD` (a leading `## [Unreleased]` block is fine). A released entry is IMMUTABLE — to correct one, add a forward-pointing note in the NEW entry ("Supersedes [X.Y.Z]'s '…' note — true when written; what changed since"), never edit the old text.
 
 ## Repo details (the front-MOST door — outranks the README)

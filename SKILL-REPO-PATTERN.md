@@ -148,5 +148,5 @@ Siblings share ONE canonical shape on EVERY shared surface (workflows · paths-i
 4. `scripts/{build-plugin,verify,test}.mjs` + hermetic hook tests; gate green before the first commit.
 5. `.github/` — 4 SHA-pinned workflows + dependabot + issue templates.
 6. Public docs per [DOC-PATTERN.md](./DOC-PATTERN.md); machine-local files (`CLAUDE.md` `AGENTS.md` `MEMORY.md` `.claude/` `.agents/` design docs) gitignored — clean-clone.
-7. Release + propagation per [scripts-quality.md](./scripts-quality.md); tags = beta + stable, GitHub Releases = stable-only (a beta launch still gets its prerelease Release).
+7. Release + propagation per [scripts-quality.md](./scripts-quality.md); tags = beta + stable, GitHub Releases = stable-only — a beta/rc tag gets no Release; [RELEASE-PATTERN.md](./RELEASE-PATTERN.md) governs, not restated here.
 8. **Live-test the advertised install command against the pushed repo** (`claude plugin marketplace add <owner>/<repo>`) — local validation does not catch a wrong manifest path; only the real loader does.
