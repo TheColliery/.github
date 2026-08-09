@@ -15,6 +15,8 @@
 | Breaking | A MAJOR release names the break in the title ("`v2.0.0 - budget guardrail REMOVED`"). |
 | Subject | **The title's grammatical subject is THIS repo's own change** — a sibling repo's name may appear only after the own-subject, never leading. Caught live 2026-07-27: CoalBoard's `v1.8.1 - SKILL doc-truth: CoalHearth is LIVE` read as an announcement about the sibling (the USER opened the page and asked whose release it was); a title-sweep found the same shape twice more (`- CoalBoard-audit hardening`). The CHANGELOG heading was fine each time — the error enters at the compress-to-a-headline step, so the check belongs HERE, at the title rule, not in the CHANGELOG discipline. |
 
+<!-- coalmine: verified 2026-08-09 · task-37 audit R2 — RATIFIED HYPHEN, decided on real data, not left as prose. Post-manual population (published_at >= 2026-07-25, the manual's own git-add date): 28 releases, of which 25 carry a well-formed leading-version title — 12 hyphen vs 13 em-dash, a near-tie in raw practice. The tiebreaker: the CHANGELOG version heading this rule keeps forward-consistent with is 100% hyphen, zero exceptions, across every repo in the flock (`## [X.Y.Z] - YYYY-MM-DD` — also keepachangelog.com's own spec format) — ratifying em-dash would break the one alignment this rule exists to keep. scripts/release-conform.mjs already gates em-dash as a finding; no script change needed, manual and machine agree. Full evidence: scratchpad/dispatch/r2r4-return.md. -->
+
 ## The body
 
 Five parts, in this order. **1-2 are REQUIRED; 3-5 are conditional — except 3 is REQUIRED on a MAJOR/breaking release**, where an action is near-certain anyway.
@@ -41,7 +43,7 @@ Five parts, in this order. **1-2 are REQUIRED; 3-5 are conditional — except 3 
 - A claim absent from the CHANGELOG and unverified at press.
 - An internal path, a rule identifier, or a reference to machine-local agent or memory notes.
 - Marketing language.
-- An emoji headline.
+- **An emoji headline — including inside a body heading, however severe the section.** WHY this differs from a README's `H2` icons (DOC-PATTERN.md's "Emoji section icons are optional but consistent within a file" — that rule governs README navigation, not a Release body, and does not carry over here): a Release surfaces compressed into a single-line card (the `/releases` panel, the Atom feed, a notification email), where an emoji reads as decoration nobody can act on; a README `H2` is a persistent, browsed page where the same emoji reads as a landmark. **Ruled 2026-08-09 (task-37 audit R4), decided explicitly rather than left for the next writer to guess: a MAJOR/breaking section that needs skim-visibility uses the flock's own GFM alert (`> [!WARNING]` / `> [!CAUTION]`, DOC-PATTERN.md's callout table) — never an emoji heading.** GitHub renders the alert natively with the same visual weight, without touching the ban — it is a strictly better fit than an exception would have been, since Part 1's Lead already requires naming a break "here, first" and the alert doesn't need a new carve-out in this rule or in the emoji detector. (CoalHearth `v2.0.2`'s `## ⚠️ BREAKING (v2.0.0)` predates this ruling and is history, not retroactively fixed — it is the one case that prompted it.)
 
 ## Which tags get a Release
 
