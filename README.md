@@ -10,8 +10,8 @@ This repository houses the global configuration, landing page profile, central i
   <br>
   [![Stars](https://img.shields.io/github/stars/HetCreep/CoalMine?style=flat-square&logo=github)](https://github.com/HetCreep/CoalMine/stargazers)
   [![Forks](https://img.shields.io/github/forks/HetCreep/CoalMine?style=flat-square&logo=github)](https://github.com/HetCreep/CoalMine/network/members)
-  [![Downloads](https://img.shields.io/badge/CoalMine_Downloads-370%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/HetCreep/CoalMine)
-  [![Developers](https://img.shields.io/badge/CoalMine_Developers-82%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/HetCreep/CoalMine)
+  [![Downloads](https://img.shields.io/badge/CoalMine_Downloads-366%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/HetCreep/CoalMine)
+  [![Developers](https://img.shields.io/badge/CoalMine_Developers-83%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/HetCreep/CoalMine)
 * **[CoalTipple](https://github.com/TheColliery/CoalTipple)**: Model/effort router — delegate-down to save, escalate-up for quality, with a fail-safe model-ranking Lock.
   <br>
   [![Stars](https://img.shields.io/github/stars/TheColliery/CoalTipple?style=flat-square&logo=github)](https://github.com/TheColliery/CoalTipple/stargazers)
@@ -22,14 +22,14 @@ This repository houses the global configuration, landing page profile, central i
   <br>
   [![Stars](https://img.shields.io/github/stars/TheColliery/CoalBoard?style=flat-square&logo=github)](https://github.com/TheColliery/CoalBoard/stargazers)
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalBoard?style=flat-square&logo=github)](https://github.com/TheColliery/CoalBoard/network/members)
-  [![Downloads](https://img.shields.io/badge/CoalBoard_Downloads-203%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalBoard)
-  [![Developers](https://img.shields.io/badge/CoalBoard_Developers-47%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalBoard)
+  [![Downloads](https://img.shields.io/badge/CoalBoard_Downloads-238%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalBoard)
+  [![Developers](https://img.shields.io/badge/CoalBoard_Developers-56%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalBoard)
 * **[CoalHearth](https://github.com/TheColliery/CoalHearth)**: Session warm-resume — journals state so an interrupted session resumes from a recovery block instead of a manual rebuild.
   <br>
   [![Stars](https://img.shields.io/github/stars/TheColliery/CoalHearth?style=flat-square&logo=github)](https://github.com/TheColliery/CoalHearth/stargazers)
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalHearth?style=flat-square&logo=github)](https://github.com/TheColliery/CoalHearth/network/members)
-  [![Downloads](https://img.shields.io/badge/CoalHearth_Downloads-194%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalHearth)
-  [![Developers](https://img.shields.io/badge/CoalHearth_Developers-50%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalHearth)
+  [![Downloads](https://img.shields.io/badge/CoalHearth_Downloads-181%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalHearth)
+  [![Developers](https://img.shields.io/badge/CoalHearth_Developers-49%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalHearth)
 * **[CoalFace](https://github.com/TheColliery/CoalFace)**: Fan-out discipline — scout → waves → QC → one writer, the whole swarm bounded by the estimated solo $-cost, never a token bound.
   <br>
   [![Stars](https://img.shields.io/github/stars/TheColliery/CoalFace?style=flat-square&logo=github)](https://github.com/TheColliery/CoalFace/stargazers)
@@ -41,13 +41,13 @@ This repository houses the global configuration, landing page profile, central i
   [![Stars](https://img.shields.io/github/stars/TheColliery/CoalWash?style=flat-square&logo=github)](https://github.com/TheColliery/CoalWash/stargazers)
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalWash?style=flat-square&logo=github)](https://github.com/TheColliery/CoalWash/network/members)
   [![Downloads](https://img.shields.io/badge/CoalWash_Downloads-1.1k%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalWash)
-  [![Developers](https://img.shields.io/badge/CoalWash_Developers-117%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalWash)
+  [![Developers](https://img.shields.io/badge/CoalWash_Developers-118%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalWash)
 * **[CoalLedger](https://github.com/TheColliery/CoalLedger)** *(beta)*: Docs-health canary suite — CoalMine for documentation (wrong · incomplete · stale · contradictory · broken · unreadable · config-gated leaked), `doc-structure` detecting through a CommonMark+GFM AST engine, plus a quiet docs memory-drift reminder; cross-agent + multilingual.
   <br>
   [![Stars](https://img.shields.io/github/stars/TheColliery/CoalLedger?style=flat-square&logo=github)](https://github.com/TheColliery/CoalLedger/stargazers)
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalLedger?style=flat-square&logo=github)](https://github.com/TheColliery/CoalLedger/network/members)
-  [![Downloads](https://img.shields.io/badge/CoalLedger_Downloads-204%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalLedger)
-  [![Developers](https://img.shields.io/badge/CoalLedger_Developers-61%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalLedger)
+  [![Downloads](https://img.shields.io/badge/CoalLedger_Downloads-205%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalLedger)
+  [![Developers](https://img.shields.io/badge/CoalLedger_Developers-62%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalLedger)
 
 ---
 
