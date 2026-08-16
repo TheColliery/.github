@@ -6,11 +6,15 @@ claude.ai can run **custom skills**: a ZIP containing a `SKILL.md` (YAML frontma
 - **No sync** — claude.ai skills are separate from Claude Code and the API. The same skill = separate installs per surface.
 
 > [!IMPORTANT]
-> **The install mechanics below are pending re-verification.** The plan requirements, the exact settings path, and the upload flow were last checked 2026-07-16 and are version-sensitive — claude.ai moves. A verification pass is in flight; until it lands, treat the *menu path* and the *plan list* as unconfirmed and follow whatever the app currently shows. The capability table and the packaging rules below do not depend on it.
+> **The install mechanics below are pending re-verification.** The plan requirements, the exact settings path, and the upload flow were last checked 2026-07-16 (31 days ago as of this note) and are version-sensitive — claude.ai moves. A pass was said to be in flight as of 2026-07-25; no evidence since then shows it landed, so that claim is retracted rather than carried forward unconfirmed. Treat the *menu path* and the *plan list* as unconfirmed and follow whatever the app currently shows. The capability table and the packaging rules below do not depend on it.
 
 ## Install
 
-You build the ZIP yourself — it takes about a minute, and every skill folder in the repos already IS the package.
+Two ways to get the ZIP — which one applies depends on the tool.
+
+**Fastest, where a Release ships one:** CoalMine and CoalFace attach pre-built ZIPs to every Release (one per CoalMine canary, one for CoalFace) plus a `SHA256SUMS.txt`. Open the Release's Assets, download the skill's `.zip`, verify it against `SHA256SUMS.txt` (`sha256sum -c SHA256SUMS.txt` or your OS's equivalent — the checksum file exists so you can check the ZIP wasn't corrupted or tampered with in transit, not as decoration), then upload it. No build step. CoalLedger's version of this is in progress and has not shipped on a stable Release yet; every other tool in the table below is either excluded from claude.ai entirely or has no ZIP workflow.
+
+**Always works, any tool:** build it yourself — every skill folder in the repos already IS the package.
 
 1. Get the repo (green **Code** button → *Download ZIP*, or `git clone`).
 2. Take one skill folder from `plugin/skills/` — e.g. `plugin/skills/rot-canary/`. Keep its `references/` subfolder inside.
@@ -19,10 +23,7 @@ You build the ZIP yourself — it takes about a minute, and every skill folder i
 
 Use `plugin/skills/`, not `skills/` — the top-level source tree still holds unexpanded template markers, so a ZIP built from it ships broken text.
 
-To update, rebuild the folder from a newer version and re-upload — claude.ai has no auto-update and no config file; **re-uploading is how a skill changes on this surface**.
-
-> [!NOTE]
-> **Not yet automated.** CI-built ZIPs attached to each Release are designed but **not shipping** — no release carries one today. Until that lands and is verified end-to-end, the manual steps above are the only install path.
+To update, rebuild the folder (or download the newer Release ZIP) and re-upload — claude.ai has no auto-update and no config file; **re-uploading is how a skill changes on this surface**.
 
 ## Which Coal* skills work here
 
