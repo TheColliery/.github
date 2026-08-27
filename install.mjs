@@ -9,8 +9,8 @@
 //   node install.mjs coaltipple   by name
 //
 // The authoritative, always-current install steps for each tool live in that
-// tool's own README; this runs the same commands. Needs node + git on PATH, and
-// (for the CoalMine and CoalTipple plugins) the `claude` CLI.
+// tool's own README; this runs the same commands. Needs node + git on PATH,
+// and the `claude` CLI (every tool here ships as a Claude Code plugin).
 import { spawnSync } from 'node:child_process';
 
 const sh = process.platform === 'win32';
