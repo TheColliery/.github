@@ -135,3 +135,7 @@ Beyond the doctrine, each tool is built like a proper program — it ships the s
 <p align="center">
   <em>More tools and skills are still deep underground. 🔦</em>
 </p>
+
+<p align="center">
+  📮 Contact: <a href="mailto:contact@kolwen.com">contact@kolwen.com</a>
+</p>
