@@ -6,8 +6,13 @@
 // on a published Release, body non-empty, emoji-in-heading. Lead quality, CHANGELOG 1:1
 // fidelity, and honest framing stay a human call — never scored here.
 //
-// Zero-dep (Phoenix #2): fetch is a Node builtin global, no import needed. Unauthenticated
-// reads only — no token is read, needed, or ever embedded (public repos, GET /releases).
+// Zero-dep (Phoenix #2): fetch is a Node builtin global, no import needed. AUTH IS OPTIONAL
+// (amended 2026-08-31, CWK-036 blocker): a GITHUB_TOKEN in the environment is USED when
+// present (Bearer header) and the script degrades to unauthenticated reads when absent —
+// never required, never embedded, never written anywhere (no-external-assumption). Why the
+// amendment: the anonymous cap is 60 req/hr per IP, and a whole-flock release-body sweep
+// (~192 releases + per-head re-runs) is precisely the workload that exhausts it — every
+// belt head hit 403 and the gate became unrunnable for the one job it exists to gate.
 //
 // Fail-loud CLI discipline (scripts-quality.md §1): non-zero exit on any finding, one repo's
 // failure never kills the run, enumerated FAIL lines, never a raw stack trace.
@@ -34,13 +39,17 @@ const REPOS = [
 ];
 
 async function fetchReleases(owner, repo) {
+  const headers = {
+    'User-Agent': 'TheColliery-release-conform',
+    Accept: 'application/vnd.github+json',
+  };
+  // Optional auth (2026-08-31): lifts the 60/hr anonymous cap to the authenticated one.
+  // Env-only, never logged, never persisted; absent = the original unauthenticated read.
+  if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
   const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases?per_page=100`, {
-    headers: {
-      'User-Agent': 'TheColliery-release-conform',
-      Accept: 'application/vnd.github+json',
-    },
+    headers,
   });
-  if (!res.ok) throw new Error(`GET /releases → HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`GET /releases → HTTP ${res.status}${res.status === 403 && !process.env.GITHUB_TOKEN ? ' (anonymous rate cap? set GITHUB_TOKEN — optional, lifts it)' : ''}`);
   return res.json();
 }
 
