@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Downloads-871%2B%20%2F%2014d-orange?style=for-the-badge" alt="Downloads">
   <img src="https://img.shields.io/badge/Developers-262%2B%20%2F%2014d-brightgreen?style=for-the-badge" alt="Developers">
   <img src="https://img.shields.io/badge/Works_With-Mostly_Cross--Agent-cyan?style=for-the-badge" alt="Mostly Cross-Agent">
-  <img src="https://img.shields.io/badge/License-Apache_2.0-green?style=for-the-badge" alt="License">
+  <img src="https://img.shields.io/badge/License-Per_Zone-lightgrey?style=for-the-badge" alt="Licence: per zone, see below">
 </p>
 
 ---
@@ -129,6 +129,12 @@ Beyond the doctrine, each tool is built like a proper program — it ships the s
 3. 🔄 **Self-Update** — a tool checks for and applies its own updates (consent-gated, offline-graceful), and every version transition leaves **no old-version leftover** — stale caches and renamed files are swept, never abandoned.
 4. 🐛 **Problem-Report** — one command offers to file an issue upstream, with any memory content scrubbed first; nothing is ever submitted without your say-so.
 5. 📊 **Measurement** — a `/stats` command shows what the tool actually did and what it was worth — tokens saved, issues caught, or fidelity preserved; a quality tool should prove its own impact.
+
+---
+
+## 📜 License — per zone, not one blanket
+
+TheColliery is a portfolio, not one licence. The Coal\* skill suite above ships **Apache-2.0** — see each repo's own `LICENSE`. Other zones of the series (a code product, a spec, an article, a model's weights) ship whatever licence fits what THAT artifact protects, stated in that artifact's own `LICENSE`/`README`. Never assume Apache-2.0 outside the Coal\* suite; check the repo you're looking at.
 
 ---
 

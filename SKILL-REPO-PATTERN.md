@@ -34,7 +34,7 @@
 - **The sync gate**: `scripts/verify.mjs` byte-compares dist against source **both directions** — stale dist fails AND dist-only orphans fail (nothing ships without a source).
 - `hooks/hooks.json` wires entries via `${CLAUDE_PLUGIN_ROOT}/<path>` — verify.mjs asserts the wiring strings.
 
-<!-- coalmine: verified 2026-08-01 · exemplar ECC-CONTRIBUTING · revalidate 30d -->
+<!-- coalmine: verified 2026-09-02 · exemplar ECC-CONTRIBUTING · revalidate 30d (re-verified UMB-021: content re-checked against source, unchanged — the exemplar covers only the SKILL.md frontmatter shape, never the doc-spine/CODE_OF_CONDUCT/inbound-licence questions DOC-PATTERN.md and NEW-REPO-WIZARD.md now own) -->
 ### The skill frontmatter contract
 
 Two rules on `skills/<name>/SKILL.md` frontmatter beyond the `DESC_CAP` length gate. **Source of both: UPSTREAM, adopted whole** — we had a length rule and nothing about SHAPE or SOURCE.
@@ -64,19 +64,30 @@ Rejected from the same two files, named so nobody re-derives it: their `200-500 
 | `scripts/test.mjs` | run the zero-dep tests via `node --test` with an **explicit file list** (the directory form is unreliable; a missing listed file fails loud) | ALWAYS |
 | `scripts/lib/*.mjs` + `*.test.mjs` | pure logic + its unit tests; hooks get **hermetic spawn tests** (spawn the real hook file, sandbox TEMP + HOME, assert exit 0 / sanctioned-output-only / state effect) | ALWAYS |
 | `scripts/install.mjs` | cross-agent installer (non-Claude platforms) | cross-agent tools only |
-| `scripts/configure.mjs` | config CLI over the schema SSoT | optional (CM/CT have it; CB deferred) |
+| `scripts/configure.mjs` | config CLI over the schema SSoT | ALWAYS (owner-signed ใบ D 2026-08-30 — a FLOCK STANDARD, not optional: the 5 standard systems require config to be CLI-settable, not merely documented. CM · CT · CL ship one; CB · CH · CF · CW owe one) |
 
 Green gate = `build-plugin` → `verify` → `test`, wired into pre-commit/pre-push where the repo keeps git hooks. Release chain (bump sizing, CHANGELOG, signed tag, Release-per-stable-tag, propagation) is owned by [scripts-quality.md](./scripts-quality.md), and the Release notes' own shape by [RELEASE-PATTERN.md](./RELEASE-PATTERN.md) — not restated here.
 
 ## Layer 5 — `.github/` (CI + health)
 
-All workflows **SHA-pinned** (40-char, with a `# vX` comment): `ci.yml` (the green gate on push/PR) · `codeql.yml` · `markdownlint.yml` · `scorecard.yml` · `dependabot-auto-merge.yml` (org-canonical since 2026-07-09 — actor-guarded to `dependabot[bot]` only, patch/minor only, `gh pr merge --auto` behind a required-checks ruleset; a MAJOR bump and any human-opened PR still wait for the human). Plus `dependabot.yml` and `ISSUE_TEMPLATE/` (`bug-report.yml` + `config.yml`; add `platform-report.yml` when the tool is cross-agent). Issue templates that name a version carry a `version-pin:` marker so `verify.mjs` catches a stale pin.
+All workflows **SHA-pinned** (40-char, with a `# vX` comment): `ci.yml` (the green gate on push/PR) · `codeql.yml` · `markdownlint.yml` · `scorecard.yml` · `link-check.yml` (below) · `dependabot-auto-merge.yml` (org-canonical since 2026-07-09 — actor-guarded to `dependabot[bot]` only, patch/minor only, `gh pr merge --auto` behind a required-checks ruleset; a MAJOR bump and any human-opened PR still wait for the human). Plus `dependabot.yml` and `ISSUE_TEMPLATE/` (`bug-report.yml` + `config.yml`; add `platform-report.yml` when the tool is cross-agent). Issue templates that name a version carry a `version-pin:` marker so `verify.mjs` catches a stale pin.
+
+<!-- coalmine: verified 2026-09-02 · exemplar OpenSSF Scorecard Token-Permissions + Dangerous-Workflow checks (github.com/ossf/scorecard/blob/main/docs/checks.md) + GitHub Actions security hardening guide · revalidate 90d -->
+### Workflow permissions, dangerous patterns, and branch protection — MUST
+
+- **Least-privilege `permissions:` on every workflow, MUST.** Top-level `permissions: contents: read`; a job that needs to write (release-please, the `dependabot-auto-merge` merge itself, a badge commit) declares that write AT THE JOB LEVEL, never `write-all` and never a repo-wide write inherited by every job. The repo SETTING (workflow default token permissions) is not a substitute — Scorecard's Token-Permissions check exists because one workflow declaring its own broader block defeats the setting, and a token that can write is a token that can be abused by anything the workflow runs.
+- **The dangerous-workflow ban, MUST.** No `pull_request_target` or `workflow_run` trigger that checks out the PR head (Scorecard's Dangerous-Workflow check: this pattern runs with the base repo's secrets against attacker-controlled code) and no untrusted context (a PR title, an issue body, a commit message) interpolated directly into a `run:` shell string (GitHub's own hardening guide names this "script injection" — pass untrusted values through an `env:` variable instead, never string-substitute them into the script).
+- **Branch protection is a STANDING row, MUST — not only the Dependabot precondition.** The default branch and any release branch require the green required-status-checks and forbid force-push, full stop. [SWEEP-MARKS.md](./SWEEP-MARKS.md)'s `dependabot-auto-merge-gate` ruleset is the MECHANISM already live org-wide (`required_status_checks` + no-force-push, admin bypass for the maintainer's own direct pushes) — this row promotes what it already enforces from "the thing that makes auto-merge wait" to a standing repo-hygiene requirement independent of whether Dependabot is even the actor.
+- **Marketplace pin discipline, MUST — the channel's own contract.** An `archive`-sourced skill on the Claude Code plugin marketplace pins `ref`+`sha` (the vendor's own docs: *"the `sha` is the effective pin"*) and **bumps the plugin version whenever the archive zip or its digest changes** — a version left unbumped after the artifact moved is a stale pin wearing a fresh-looking manifest.
 
 A repo whose skills are published to claude.ai also ships **`zip-skills.yml`** — on a published stable Release it packages each `plugin/skills/<skill>/` folder into `<tool>-<skill>-claudeai.zip` and attaches it as a Release asset. Copy it verbatim from [`templates/zip-skills.yml`](./templates/zip-skills.yml); it performs NO adaptation, so **a skill folder must be self-contained** (a `SKILL.md` pointing outside its own folder fails the build rather than shipping a dangling instruction). Scope + the capability table: [CLAUDE-AI-INSTALL.md](./CLAUDE-AI-INSTALL.md).
 
 `paths-ignore`: the three gated workflows (`ci.yml` · `codeql.yml` · `scorecard.yml`) skip doc-only commits — **`NOTICE` belongs in that list beside `LICENSE`**, else a legal-text-only commit burns a full CI run. `markdownlint.yml` carries none by design (markdown IS its subject).
 
 A `.github/codeql/codeql-config.yml` (CodeQL `config-file:` path tuning) is OPTIONAL, not flock-canonical — CoalTipple is the only repo carrying one today; add it only where the tuning is needed, and name the reason there.
+
+<!-- coalmine: verified 2026-09-02 · exemplar Standard Readme spec ("Must not contain broken links", github.com/RichardLitt/standard-readme/blob/main/spec.md) · revalidate 90d -->
+**`link-check.yml`, MUST, beside `markdownlint.yml`.** `markdownlint` checks markdown FORMAT; nothing checks that a link in it actually resolves. Zero-dep per Phoenix #2: a small `scripts/lib/link-check.mjs` walking the repo's own `.md` files (internal relative links + anchors) is the default; an external SHA-pinned action (`gaurav-nelson/github-action-markdown-link-check` or equivalent) is acceptable ONLY where it is pinned by 40-char SHA like every other workflow action here — never a bare `@vN` tag. Doc-only paths-ignore applies the same as the other three gated workflows.
 
 ## Layer 6 — hooks (pointer)
 
@@ -117,6 +128,8 @@ When a skill must govern a substrate's PAST + PRESENT + FUTURE, look for the sub
 | `install.mjs` / `configure.mjs` | ✓ / ✓ | ✓ / ✓ | — / — | — / — |
 | `alt/` (PowerShell fallback) | ✓ | — | — | — |
 
+**This matrix predates CoalFace, CoalWash and CoalLedger and covers 4 of the 7 live rooms — a real gap, wider than any single fix in this file, and named here rather than silently carried.** Extending it to 7 columns is its own unit, each room supplying its own column (never authored from here — ORG-SYNC RIDES THE PUSH).
+
 A dir a tool type doesn't need is ABSENT, not empty — no scaffolding "for later".
 
 ## Live divergences (re-verified 2026-07-17 — the conform backlog, not part of the pattern)
@@ -125,7 +138,8 @@ A dir a tool type doesn't need is ABSENT, not empty — no scaffolding "for late
 |---|---|---|
 | CoalHearth | ~~docs/CI/self-update/package.json~~ **closed at v0.1.0-beta.2** · remaining: `SECURITY.md` uses `# Security Policy`, not the pattern's `# Verifying <Tool>` shape | cosmetic; align on next doc touch |
 | CoalBoard | no `scripts/lib/jsonc.mjs` (parse inlined in the conductor) · no `install.mjs`/`configure.mjs` (deferred by decision) · no `platform-report.yml` (cross-agent tool without one) | deliberate/deferred |
-| CoalWash / CoalLedger | no `install.mjs`/`configure.mjs` (cross-agent tools ship a documented file-copy path; config CLI not built) · no `platform-report.yml` (cross-agent field-report funnel not yet added) — but both DO have `scripts/lib/jsonc.mjs` + the `# Verifying <Tool>` SECURITY shape | deferred — conform backlog |
+| CoalWash | no `install.mjs`/`configure.mjs` (cross-agent tools ship a documented file-copy path; config CLI not built) · no `platform-report.yml` (cross-agent field-report funnel not yet added) — but DOES have `scripts/lib/jsonc.mjs` + the `# Verifying <Tool>` SECURITY shape | deferred — conform backlog · a `configure.mjs` is now owed per ใบ D (this room's own line to re-verify) |
+| CoalLedger | ~~no `configure.mjs`~~ **closed at `v0.6.0-beta.1`** (`fb349dd`, CWK-023) — ships `scripts/configure.mjs`, CoalMine's shape, schema-table-driven with `--global` · remaining: no `install.mjs` (cross-agent tools ship a documented file-copy path, README `## Install`) · no `platform-report.yml` (cross-agent field-report funnel not yet added) — DOES have `scripts/lib/jsonc.mjs` + the `# Verifying <Tool>` SECURITY shape | partially closed — same strikethrough-plus-**closed at** format this table already uses for CoalHearth and CoalTipple |
 | CoalTipple | ~~no committed pre-commit/pre-push hooks, so `verify.mjs` + `test.mjs` ran on CI only~~ **closed 2026-07-27** (`6253f06`) — `.githooks/pre-commit` + `.githooks/pre-push` now ship, both running `verify.mjs` then `test.mjs`, `.gitattributes` pins `.githooks/** text eol=lf`; matches [scripts-quality.md](./scripts-quality.md) §2's shape exactly. Re-verified at source 2026-08-09 (task-37 audit S2): both files present, identical content, correct wiring; `core.hooksPath` enablement is documented inline in the hook's own header comment, same as every other repo | closed |
 | CoalMine / CoalFace | re-verify at L3 — the 2026-07-17 pass was shallower than L3, so its "none — at the full pattern" verdict is unconfirmed rather than disproven. **No defect is asserted here.** (CoalMine's old `no scripts/test.mjs` gap IS closed — it ships one.) | unknown until re-verified |
 
@@ -146,7 +160,7 @@ Siblings share ONE canonical shape on EVERY shared surface (workflows · paths-i
 2. Source dirs per the variant matrix — only what the tool type needs.
 3. `platform-configs/.{tool}.json` factory + `scripts/lib/config-schema.mjs`; config load = global→project, stop-at-home, proto-guarded JSONC, clamped reads.
 4. `scripts/{build-plugin,verify,test}.mjs` + hermetic hook tests; gate green before the first commit.
-5. `.github/` — 4 SHA-pinned workflows + dependabot + issue templates.
+5. `.github/` — the SHA-pinned workflow set (Layer 5) + dependabot + issue templates.
 6. Public docs per [DOC-PATTERN.md](./DOC-PATTERN.md); machine-local files (`CLAUDE.md` `AGENTS.md` `MEMORY.md` `.claude/` `.agents/` design docs) gitignored — clean-clone.
 7. Release + propagation per [scripts-quality.md](./scripts-quality.md); tags = beta + stable, GitHub Releases = stable-only — a beta/rc tag gets no Release; [RELEASE-PATTERN.md](./RELEASE-PATTERN.md) governs, not restated here.
 8. **Live-test the advertised install command against the pushed repo** (`claude plugin marketplace add <owner>/<repo>`) — local validation does not catch a wrong manifest path; only the real loader does.
