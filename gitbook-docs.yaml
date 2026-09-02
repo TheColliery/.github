@@ -1,0 +1,65 @@
+$schema: https://api.gitbook.com/gitbook-docs.yaml
+site:
+  title: TheColliery
+  structure:
+    - type: section
+      key: section-home
+      title: Home
+      path: home
+      default: true
+      children:
+        - type: space
+          key: space-org-profile
+          title: TheColliery
+          path: overview
+          default: true
+          content:
+            directory: ./profile
+    - type: section
+      key: section-benchmarks
+      title: Benchmarks
+      path: benchmarks
+      children:
+        - type: space
+          key: space-benchmarks-coalboard
+          title: CoalBoard
+          path: coalboard
+          default: true
+          content:
+            directory: ./benchmarks/CoalBoard
+        - type: space
+          key: space-benchmarks-coalface
+          title: CoalFace
+          path: coalface
+          content:
+            directory: ./benchmarks/CoalFace
+        - type: space
+          key: space-benchmarks-coalhearth
+          title: CoalHearth
+          path: coalhearth
+          content:
+            directory: ./benchmarks/CoalHearth
+        - type: space
+          key: space-benchmarks-coalmine
+          title: CoalMine
+          path: coalmine
+          content:
+            directory: ./benchmarks/CoalMine
+        - type: space
+          key: space-benchmarks-coaltipple
+          title: CoalTipple
+          path: coaltipple
+          content:
+            directory: ./benchmarks/CoalTipple
+        - type: space
+          key: space-benchmarks-governance
+          title: Governance
+          path: governance
+          content:
+            directory: ./benchmarks/Governance
+        - type: space
+          key: space-benchmarks-skilldeterminism
+          title: SkillDeterminism
+          path: skill-determinism
+          content:
+            directory: ./benchmarks/SkillDeterminism
