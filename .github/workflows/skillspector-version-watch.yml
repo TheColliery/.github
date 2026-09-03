@@ -46,5 +46,31 @@ jobs:
           if [ "${open:-0}" -gt 0 ]; then
             echo "issue already open for $upstream"; exit 0
           fi
-          gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body \
-          "NVIDIA/skillspector is now at \`$upstream\` (its pyproject.toml); CoalMine, CoalTipple, CoalBoard, CoalHearth, CoalFace, CoalWash, and CoalLedger \`SECURITY.md\` cite \`$pinned\`. Action: re-run the SkillSpector static scan with $upstream, update the score + findings in each SECURITY.md (the consent-gated version-transition marker flags this), and bump \`.skillspector-version\` to $upstream. SkillSpector ships versions via 'Sync OSS release snapshot' commits, not Releases/tags -- this workflow watches its pyproject.toml."
+          new_url=$(gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body \
+          "NVIDIA/skillspector is now at \`$upstream\` (its pyproject.toml); CoalMine, CoalTipple, CoalBoard, CoalHearth, CoalFace, CoalWash, and CoalLedger \`SECURITY.md\` cite \`$pinned\`. Action: re-run the SkillSpector static scan with $upstream, update the score + findings in each SECURITY.md (the consent-gated version-transition marker flags this), and bump \`.skillspector-version\` to $upstream. SkillSpector ships versions via 'Sync OSS release snapshot' commits, not Releases/tags -- this workflow watches its pyproject.toml.")
+          echo "created: $new_url"
+
+          # ONE open issue at a time (owner 2026-09-04): the create above is the load-bearing
+          # step -- everything below is best-effort hygiene and must never fail the run.
+          # A fixed literal search term only ($GITHUB_REPOSITORY and the hardcoded title
+          # substring) -- $upstream/$new_url are used in the CLOSE COMMENT text only, never
+          # concatenated into a --search/--jq expression, so a hostile upstream version string
+          # (already format-checked above, belt-and-suspenders here too) cannot inject a search
+          # or jq operator.
+          new_number=$(echo "$new_url" | grep -oE '[0-9]+$' || true)
+          if [ -z "$new_number" ]; then
+            echo "could not parse the new issue number from '$new_url' -- skipping the close loop (non-fatal, the create already succeeded)"
+            exit 0
+          fi
+          # Title shape alone is the reliable filter here: only this workflow ever opens an
+          # issue matching it, so "same creator" is structural, not a separate field check
+          # whose exact JSON shape (bot login vs app slug) would need its own verification.
+          stale=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "in:title SkillSpector" --json number,title \
+            --jq '[.[] | select((.title | startswith("SkillSpector ")) and (.title | contains("is out (we scanned with")))] | .[].number' 2>/dev/null || true)
+          for n in $stale; do
+            if [ "$n" = "$new_number" ]; then continue; fi
+            gh issue comment "$n" --repo "$GITHUB_REPOSITORY" \
+              --body "Superseded by #$new_number -- upstream is now $upstream; the re-scan remains owner-switched (see #$new_number)." \
+              || echo "comment failed on #$n (non-fatal)"
+            gh issue close "$n" --repo "$GITHUB_REPOSITORY" || echo "close failed on #$n (non-fatal)"
+          done
