@@ -1,0 +1,44 @@
+name: deploy-check
+
+# Watches a Workers Builds deploy from OUTSIDE Actions — Workers Builds deploys on push to
+# main outside the Actions pipeline, and can silently produce no build at all (a live
+# Kolwen incident: a stale page served until a human curled it — LLMWorks/Kolwen's own
+# LWK-077 O1-O3). Nothing in CI could see what was actually served; this job watches the
+# live page after a deploy.
+#
+# Sourced verbatim (shape) from Kolwen's live deploy-check.yml (LLMWorks/Kolwen/.github/
+# workflows/deploy-check.yml, read 2026-09-03, UMB-045 letter (D)) — the paths below are
+# {{PLACEHOLDER}}s, fill with this tool's own assets dir and script location.
+#
+# PUSH ONLY, and a separate workflow on purpose: no deploy happens for a pull_request, so
+# this must never appear as a PR context. It is deliberately NOT in the required set — it
+# reports on the deploy, it does not gate the merge that caused it.
+on:
+  # Manual trigger: the gate must be runnable on demand, both to read its verdict after a
+  # change to the checker and because the head runs it by hand when CI cannot see the origin.
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      # Only a change to what is served can make the live page wrong.
+      - '{{ASSETS_DIR}}/**'
+      - 'wrangler.jsonc'
+      # A change to the checker itself must re-verify: otherwise the commit that fixes the
+      # gate is the one commit the gate never runs on.
+      - 'scripts/post-deploy-check.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    name: live page matches main
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      # Zero-dependency. Waits for Workers Builds to publish, then compares the served body to
+      # the committed page. A red here means the deploy did not run or did not publish.
+      - run: node scripts/post-deploy-check.mjs --wait 300

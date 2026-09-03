@@ -1,0 +1,13 @@
+{
+	// {{TOOL}} landing — Cloudflare Worker (static assets)
+	// Deployed automatically by Workers Builds on push to main.
+	//
+	// Shape sourced verbatim from Kolwen's live wrangler.jsonc
+	// (LLMWorks/Kolwen/wrangler.jsonc, read 2026-09-03, UMB-045 letter (D)).
+	"name": "{{WORKER_NAME}}",
+	"compatibility_date": "{{COMPAT_DATE}}",
+	"assets": {
+		"directory": "./{{ASSETS_DIR}}",
+		"not_found_handling": "single-page-application"
+	}
+}
