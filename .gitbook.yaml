@@ -1,0 +1,8 @@
+# GitBook space configuration for the TheColliery showcase site (space-level Git Sync, Basic plan).
+# The site publishes ONLY the pages listed in SUMMARY.md — benchmark fixtures, templates and
+# workflow files never enter the navigation. gitbook-docs.yaml (site-level, sections) stays in the
+# repo for the day the site moves to a plan that supports sections; it is not read by space-level sync.
+root: ./
+structure:
+  readme: profile/README.md
+  summary: SUMMARY.md
