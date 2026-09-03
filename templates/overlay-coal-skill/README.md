@@ -24,18 +24,36 @@ Coal* skill repo — the 5 Standard Systems' shipping mechanics.
   scaffolding a new repo, or build them fresh per the same contract: `desc-cap.mjs`
   exports `frontmatterField(text, key)`; `claude-ai-trim.mjs` exports
   `trimDescription(str, cap)` + `CLAUDE_AI_DESC_CAP` (200).
+- **The `config` mechanism (5 Standard Systems #1), UMB-045 letter (C), 2026-09-03 —
+  sourced from CoalMine's live exemplar, genericized:**
+  - `scripts/lib/config-schema.mjs` — the single source-of-truth key table
+    (`CONFIG_SCHEMA` + `validateValue`), shape copied verbatim from
+    `CoalMine/scripts/lib/config-schema.mjs`. **The key list itself is a
+    `{{PLACEHOLDER}}` — every real room's keys are genuinely bespoke; fill it in,
+    never ship the empty array.**
+  - `scripts/configure.mjs` — the `.{{TOOL}}.json` CLI configurator, simplified from
+    `CoalMine/scripts/configure.mjs`. Keeps the two-tier cascade (global
+    `~/.claude/.{{TOOL}}.json`, project `<gitroot>/.{{TOOL}}.json`, project wins per
+    key) — CoalMine's own three-agent-dir walk (`.claude`/`.agents`/`.gemini` +
+    legacy root dotfile) is that room's own namespace-campaign migration history
+    (`TheColliery/MEMORY.md`'s 2026-08-08 entry), not a day-one requirement; port
+    `CoalMine/scripts/lib/config-paths.mjs` later if a room needs multi-agent-dir
+    discovery.
+  - `scripts/lib/config-keys.mjs` — the documentation-vs-schema drift gate
+    (`checkConfigKeys` + `checkConfigReadPath`), wired into `verify.mjs`. Mechanism
+    copied verbatim from `CoalMine/scripts/lib/config-keys.mjs` (CWK-059/CWK-061);
+    CoalMine's own measured false-positive counts and its own `PENDING_KEYS`/
+    `NOT_CONFIG`/`BLIND_KEYS` entries are **not** ported — those are that room's own
+    measurements against its own surfaces. Re-measure this tool's own false-positive
+    rate before trusting the KEY_SHAPE regex as-is; fill the three declaration
+    objects with this tool's own keys (every room hits `BLIND_KEYS` at least once,
+    since the umbrella's 5 Standard Systems #2 mandates a `language` key that fails
+    the camelCase shape rule by construction).
+  - `commands/stats.md` — the `/stats` measurement command (5 Standard Systems #5),
+    genericized from `CoalMine/commands/stats.md`. `{{unit}}`/`{{PLACEHOLDER}}` mark
+    the per-tool natural metric (savings/findings/fidelity per the umbrella's own
+    metric taxonomy) — fill in before shipping.
 
-## NOT included this pass (deferred, named not silently dropped)
-
-- A config-cascade template (`.<tool>.json` global+project) and `configure.mjs` — the
-  5 Standard Systems' `config` mechanism. Every live room's copy is genuinely bespoke
-  per tool's own key set; a template here would be a skeleton with no keys, which is
-  close to no template at all. Worth building from the SHAPE (global/project cascade,
-  safer-value-wins clamp on consent-bearing keys per `hooks-safety.md` §9) rather than
-  one room's literal file.
-- `verify.mjs`'s config-key gate (the schema-vs-help-text drift check, CWK-059 in
-  CoalMine) — same reasoning, genuinely per-tool.
-- A `/stats` command reference/template.
-
-These four are the real remaining overlay-coal-skill content; flagged in the deputy's
-return as pending, not fabricated here from memory.
+These four pieces are real, working code (not prose stubs) — but every one carries a
+`{{PLACEHOLDER}}`/`{{TOOL}}` that must be filled with the new room's own real keys
+before it ships. Do not ship any of them with the placeholder still in.
