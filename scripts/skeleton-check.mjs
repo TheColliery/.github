@@ -5,9 +5,15 @@
 // absent. A DERIVING instrument only — it reports drift, it never fixes it (a DIFFERS row
 // is a finding for that room's own belt, not this script's to resolve).
 //
-// Usage: node scripts/skeleton-check.mjs [--settings]
+// Usage: node scripts/skeleton-check.mjs [--settings] [--clone <kind>=<path> ...]
 //   --settings: also diff each live repo's GitHub settings against templates/repo-settings.*.json
-//               (not yet implemented this pass — reports N/A per repo, named not silently skipped).
+//               via REST GET calls (needs GITHUB_TOKEN in the environment; SKIPs, does not
+//               fail, when it is absent — an unset token is an expected local condition).
+//   --clone <kind>=<path>: an explicit local clone path for one of the three GitHub template
+//               repos (published-code/private-working/article), diffed against templates/<kind>/
+//               the same way a live room is. Repeatable, one per kind. Replaces the old
+//               hardcoded "<umbrellaRoot>/template-<kind>" guess (UMB-045's own named gap,
+//               closed here per UMB-048 item 3) — omit a kind to skip its template-repo section.
 //
 // Zero-dependency (Phoenix #2); fail-loud CLI (scripts-quality.md §1).
 
@@ -78,6 +84,112 @@ function compareFile(templatePath, livePath) {
   return `DIFFERS (template ${tLines}L vs live ${lLines}L)`;
 }
 
+// --settings support ------------------------------------------------------------------
+
+const GITHUB_API = 'https://api.github.com';
+
+// Reads .git/config directly (no shell-out to git, no npm dep) and pulls owner/repo out
+// of origin's URL in either https or ssh form. Returns null if origin is missing/unparseable
+// — a settings check has nothing to GET without it, reported as SKIP, never guessed.
+function getOwnerRepo(repoDir) {
+  const cfgPath = path.join(repoDir, '.git', 'config');
+  if (!fs.existsSync(cfgPath)) return null;
+  const cfg = fs.readFileSync(cfgPath, 'utf8');
+  const originBlock = cfg.match(/\[remote "origin"\][^[]*/);
+  if (!originBlock) return null;
+  const urlMatch = originBlock[0].match(/url\s*=\s*(\S+)/);
+  if (!urlMatch) return null;
+  const url = urlMatch[1];
+  // https://github.com/OWNER/REPO(.git) or git@github.com:OWNER/REPO(.git)
+  const m = url.match(/github\.com[:/]([^/]+)\/([^/.]+?)(?:\.git)?$/);
+  return m ? { owner: m[1], repo: m[2] } : null;
+}
+
+async function ghGet(token, urlPath) {
+  const res = await fetch(GITHUB_API + urlPath, {
+    headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' },
+  });
+  let json = null;
+  try { json = await res.json(); } catch {}
+  return { status: res.status, ok: res.ok, json };
+}
+
+// Compares one non-N/A settings entry's fields against the live GET response and prints
+// identical/DIFFERS lines. `expected` is a plain object of key->value to check against
+// `actual` (also a plain object) — used for repoPatch and actionsWorkflowToken, whose
+// shape is "several keys on one response object."
+function diffFields(label, expected, actual) {
+  for (const [key, want] of Object.entries(expected)) {
+    const got = actual ? actual[key] : undefined;
+    const verdict = got === want ? 'identical' : `DIFFERS (want ${JSON.stringify(want)}, live ${JSON.stringify(got)})`;
+    console.log(`    ${label}.${key}: ${verdict}`);
+  }
+}
+
+async function diffSettings(kind, ownerRepo, settingsPath) {
+  const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) {
+    console.log('  [settings]: SKIP (GITHUB_TOKEN not set in the environment)');
+    return;
+  }
+  const { owner, repo } = ownerRepo;
+  const base = `/repos/${owner}/${repo}`;
+  console.log(`  [settings] vs templates/repo-settings.${kind}.json:`);
+
+  const repoRes = await ghGet(token, base);
+  if (settings.repoPatch) diffFields('repoPatch', settings.repoPatch, repoRes.json);
+
+  if (settings.secretScanning?.status === 'n/a') {
+    console.log(`    secretScanning: N/A (${settings.secretScanning.reason})`);
+  } else if (settings.secretScanning) {
+    const live = repoRes.json?.security_and_analysis?.secret_scanning?.status;
+    console.log(`    secretScanning: ${live === settings.secretScanning.status ? 'identical' : `DIFFERS (want ${settings.secretScanning.status}, live ${live})`}`);
+  }
+
+  if (settings.vulnerabilityAlerts?.enable) {
+    const r = await ghGet(token, `${base}/vulnerability-alerts`);
+    console.log(`    vulnerabilityAlerts: ${r.status === 204 ? 'identical (enabled)' : `DIFFERS (HTTP ${r.status}, expected 204 enabled)`}`);
+  }
+
+  if (settings.privateVulnerabilityReporting?.status === 'n/a') {
+    console.log(`    privateVulnerabilityReporting: N/A (${settings.privateVulnerabilityReporting.reason})`);
+  } else if (settings.privateVulnerabilityReporting?.enable) {
+    // Unlike vulnerability-alerts (204/404), this endpoint returns 200 with a JSON body
+    // {"enabled": bool} — confirmed live 2026-09-03 (a 200/enabled:false reply on a repo
+    // where the feature was never turned on, not a 404).
+    const r = await ghGet(token, `${base}/private-vulnerability-reporting`);
+    const enabled = r.json?.enabled === true;
+    console.log(`    privateVulnerabilityReporting: ${enabled ? 'identical (enabled)' : `DIFFERS (HTTP ${r.status}, body ${JSON.stringify(r.json)})`}`);
+  }
+
+  if (settings.actionsWorkflowToken) {
+    const r = await ghGet(token, `${base}/actions/permissions/workflow`);
+    diffFields('actionsWorkflowToken', settings.actionsWorkflowToken, r.json);
+  }
+
+  if (settings.ruleset?.status === 'n/a') {
+    console.log(`    ruleset: N/A (${settings.ruleset.reason})`);
+  } else if (settings.ruleset?.name) {
+    const r = await ghGet(token, `${base}/rulesets`);
+    const found = Array.isArray(r.json) && r.json.some((rs) => rs.name === settings.ruleset.name && rs.enforcement === 'active');
+    console.log(`    ruleset "${settings.ruleset.name}": ${found ? 'identical (present, active)' : 'DIFFERS (not found active)'}`);
+  }
+}
+
+// Parses repeated "--clone kind=path" pairs into a Map<kind, path>.
+function parseCloneArgs(argv) {
+  const clones = new Map();
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] !== '--clone') continue;
+    const pair = argv[i + 1] || '';
+    const eq = pair.indexOf('=');
+    if (eq === -1) continue;
+    clones.set(pair.slice(0, eq), pair.slice(eq + 1));
+  }
+  return clones;
+}
+
 function findRepos() {
   const repos = [];
   for (const zone of ZONES) {
@@ -93,9 +205,10 @@ function findRepos() {
   return repos;
 }
 
-function main() {
+async function main() {
   const args = process.argv.slice(2);
   const withSettings = args.includes('--settings');
+  const clones = parseCloneArgs(args);
 
   const repos = findRepos();
   console.log(`Found ${repos.length} repo(s) under ${ZONES.join(', ')}.\n`);
@@ -125,17 +238,37 @@ function main() {
       }
     }
     if (withSettings) {
-      console.log('  [settings]: N/A — --settings mode not yet implemented this pass');
+      const settingsPath = path.join(templatesRoot, `repo-settings.${kind}.json`);
+      if (!fs.existsSync(settingsPath)) {
+        console.log(`  [settings]: N/A — no repo-settings.${kind}.json in templates/`);
+      } else {
+        const ownerRepo = getOwnerRepo(repo.dir);
+        if (!ownerRepo) {
+          console.log('  [settings]: SKIP (no parseable "origin" remote in .git/config)');
+        } else {
+          try {
+            await diffSettings(kind, ownerRepo, settingsPath);
+          } catch (e) {
+            console.log(`  [settings]: FAIL (${e.message})`);
+            failed++;
+          }
+        }
+      }
     }
     console.log('');
   }
 
-  // Also diff the three GitHub template repos (fresh clone) against their source dirs,
-  // per UMB-045 step 6 — only if they exist as local clones alongside this repo.
+  // Also diff the three GitHub template repos against their source dirs, per UMB-045 step 6
+  // — only for a kind an explicit `--clone kind=path` named (UMB-048 item 3: no more guessing
+  // "<umbrellaRoot>/template-<kind>" — the caller states where each template repo is cloned).
   for (const kind of Object.keys(SKELETON_FILES)) {
-    const templateRepoDir = path.join(umbrellaRoot, `template-${kind}`);
-    if (!fs.existsSync(path.join(templateRepoDir, '.git'))) continue;
-    console.log(`## template-${kind} (GitHub template repo, local clone) vs templates/${kind}/`);
+    const templateRepoDir = clones.get(kind);
+    if (!templateRepoDir) continue;
+    if (!fs.existsSync(path.join(templateRepoDir, '.git'))) {
+      console.log(`## template-${kind}: --clone path ${templateRepoDir} has no .git — skipped\n`);
+      continue;
+    }
+    console.log(`## template-${kind} (GitHub template repo, local clone at ${templateRepoDir}) vs templates/${kind}/`);
     for (const rel of SKELETON_FILES[kind]) {
       const templatePath = path.join(templatesRoot, kind, rel);
       const clonePath = path.join(templateRepoDir, rel);
@@ -156,4 +289,7 @@ function main() {
   }
 }
 
-main();
+main().catch((e) => {
+  console.error(`FAIL: ${e.message}`);
+  process.exitCode = 1;
+});

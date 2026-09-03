@@ -1,0 +1,26 @@
+{
+  "$comment": "UMB-048. private-working repos live on the org's free plan, PRIVATE — several GitHub security features are N/A there (paid-plan-only), not skipped by oversight. Encoded from the same source, main's 2026-09-03 REST apply against template-private-working (which hit exactly these N/A cases live: a 403 on the ruleset endpoint).",
+  "kind": "private-working",
+  "repoPatch": {
+    "is_template": false,
+    "has_issues": true, "has_wiki": false, "has_projects": false, "has_discussions": false,
+    "allow_merge_commit": false, "allow_squash_merge": true, "allow_rebase_merge": false,
+    "delete_branch_on_merge": true, "allow_update_branch": true, "allow_auto_merge": true
+  },
+  "vulnerabilityAlerts": { "endpoint": "PUT /repos/{owner}/{repo}/vulnerability-alerts", "enable": true },
+  "automatedSecurityFixes": { "endpoint": "PUT /repos/{owner}/{repo}/automated-security-fixes", "enable": true },
+  "secretScanning": {
+    "status": "n/a",
+    "reason": "GitHub Advanced Security's secret scanning on a PRIVATE repo requires GHAS, which this org's free plan does not carry. Measured live on template-private-working, 2026-09-03 — do not retry the enable call; it will 403/422 every time on this plan tier."
+  },
+  "privateVulnerabilityReporting": {
+    "status": "n/a",
+    "reason": "GitHub restricts private vulnerability reporting to PUBLIC repos only. A private-working repo cannot enable this regardless of plan."
+  },
+  "actionsWorkflowToken": { "default_workflow_permissions": "read", "can_approve_pull_request_reviews": false },
+  "ruleset": {
+    "status": "n/a",
+    "reason": "Repository rulesets / branch protection on a PRIVATE repo need a paid org plan. Measured live on template-private-working, 2026-09-03: POST /repos/{owner}/{repo}/rulesets returned 403 Forbidden. Not applied; do not retry until the org's plan changes.",
+    "$ifItEverBecomesAvailableNote": "the caveat from repo-settings.published-code.json's ruleset.$noRequiredStatusChecksNote applies identically the day this becomes applicable — gate.yml's own steps are hashFiles-gated the same way ci.yml's are (the .github commit da15148 red-fix covers all three kinds), so a future required-status-check here should name the 'gate' job, never a step inside it."
+  }
+}
