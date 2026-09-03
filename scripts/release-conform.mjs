@@ -3,8 +3,13 @@
 // zero enforcement anywhere in the tree until this file. Reads every repo's PUBLISHED
 // GitHub Releases (unauthenticated, public, GET only) and checks the MECHANICAL half of
 // the pattern only: title shape (bare-version, repo-prefix, separator), prerelease===false
-// on a published Release, body non-empty, emoji-in-heading. Lead quality, CHANGELOG 1:1
-// fidelity, and honest framing stay a human call — never scored here.
+// on a published Release, body non-empty, emoji-in-heading, and (UMB-050/053) whether the
+// body carries the PS-5.1 ETS-object-leak signature — this audit CANNOT byte-compare a
+// published body against "the intended text" (it never saw the intent, only the published
+// result), so it detects the known defect's structural shape instead; the byte/length
+// compare against intent is the PUBLISHER's own MUST (RELEASE-PATTERN.md "A Release body
+// is re-read after every write"), run at publish time, not here. Lead quality, CHANGELOG
+// 1:1 fidelity, and honest framing stay a human call — never scored here.
 //
 // Zero-dep (Phoenix #2): fetch is a Node builtin global, no import needed. AUTH IS OPTIONAL
 // (amended 2026-08-31, CWK-036 blocker): a GITHUB_TOKEN in the environment is USED when

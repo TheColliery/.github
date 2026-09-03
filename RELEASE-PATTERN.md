@@ -82,6 +82,38 @@ A missed stable Release is back-filled from its CHANGELOG entry, never skipped.
 > [!IMPORTANT]
 > **Re-pin `Latest` after any back-fill, then re-read it.** Back-filling sets `published_at` to NOW, so the back-filled Release silently steals the `Latest` badge from the newest stable—the panel then advertises an old version as current. Set `make_latest` on the newest stable and CONFIRM it moved by reading the panel back; the badge is the one thing a visitor sees without scrolling. (Caught live on a back-fill, 2026-07-25.)
 
+## A Release body is re-read after every write
+
+**MUST — every Release create/patch (`POST`/`PATCH .../releases/{id}`) is followed by a
+GET on that same release and a length/byte compare of the returned `body` against the
+intended text, before the return says "published."** (`AGENTS.md`'s "A RELEASE BODY IS
+RE-READ AFTER EVERY WRITE" bullet, UMB-050/CoalFace r18b, cited not restated — a 200
+status on the create/patch call is evidence the request was well-formed, never evidence
+the body it carried was the intended text.)
+
+**The mechanism** (`AGENTS.md` Hard-won lessons "PS 5.1," cited not restated): PowerShell
+5.1's `Get-Content -Raw` attaches ETS NoteProperties (`PSPath`/`PSParentPath`/
+`PSChildName`/`PSDrive`/`PSProvider`/`ReadCount`) to the string it returns. Passing that
+decorated string into `ConvertTo-Json`—piped directly, OR wrapped first in a hashtable
+(`@{ body = $raw }`)—serializes the *whole decorated object*, publishing PowerShell
+provider internals in place of the file's own text. The incident this rule closes:
+26,668 characters of provider metadata replaced a two-line intended body, and the GitHub
+API returned 200 the entire time—a well-formed request carrying the wrong content is not
+a request failure, and nothing short of reading the artefact back catches it.
+
+**The safe shape: strip the ETS wrapper with an explicit `[string]` cast BEFORE the value
+reaches `ConvertTo-Json`—`[string]$raw` (or `$raw.ToString()`) first, THEN into the
+hashtable:**
+
+```powershell
+$body = [string](Get-Content -Raw ./release-body.md)
+$json = @{ body = $body } | ConvertTo-Json -Compress
+```
+
+Measured clean (round-trips exactly, no provider metadata). **Never pipe or pass a raw
+`Get-Content -Raw` result into `ConvertTo-Json` without that cast first**—not even
+through an intermediate hashtable, which does not strip the decoration on its own.
+
 ## The chain around the press
 
 | Order | Step |
@@ -91,7 +123,7 @@ A missed stable Release is back-filled from its CHANGELOG entry, never skipped.
 | 3 | Version pins bumped with the release—but the SkillSpector scan pin is the ANTI-mark: it names the last real scan and never bumps on a release |
 | 4 | **`git status` clean on the tagged commit—MUST, no exceptions.** A tag cut over a dirty tree ships bytes nobody reviewed alongside the commit history that claims to describe it (Cargo's own dirty-tree publish block is already the flock's cited exemplar for this class—[scripts-quality.md](./scripts-quality.md) §2). Gates green · signed tag pushed |
 | 4b | A MAJOR only: `MIGRATION.md` written and its every path verified on a real install |
-| 5 | Release published per this file |
+| 5 | Release published per this file—**and re-read** ([A Release body is re-read after every write](#a-release-body-is-re-read-after-every-write), above) before the step counts as done |
 | 6 | Repo details (About · topics · Releases panel) checked BEFORE the README |
 | 7 | Where the repo ships `zip-skills.yml`: publishing the Release fires it—confirm the claude.ai skill ZIPs actually attached, since a failed build leaves the Release assetless ([CLAUDE-AI-INSTALL.md](./CLAUDE-AI-INSTALL.md)). **A digest is REQUIRED for every downloadable archive artifact—the MECHANISM already ships (`SHA256SUMS.txt` alongside CoalMine's and CoalFace's ZIPs, [CLAUDE-AI-INSTALL.md:15](./CLAUDE-AI-INSTALL.md)), this is the missing RULE that makes it mandatory rather than incidental** (OpenSSF Best Practices Badge `delivery_unsigned`—a downloadable artifact with no integrity check has no path for a downloader to know it wasn't corrupted or tampered with in transit). A repo shipping a downloadable archive with no `SHA256SUMS.txt` (or equivalent) is a gap to close before its next Release, not a style choice. |
 

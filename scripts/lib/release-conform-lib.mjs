@@ -1,8 +1,9 @@
 // release-conform-lib.mjs — pure predicates over a GitHub Release object.
 // No I/O, no fetch, no node builtins beyond what the caller already has in scope.
-// Scope is deliberately mechanical only (RELEASE-PATTERN.md task-37 R8): title shape,
-// prerelease flag, body presence, emoji-in-heading. Lead quality, CHANGELOG 1:1 fidelity
-// and honest framing are judgment calls for the human reviewer — never scored here.
+// Scope is deliberately mechanical only (RELEASE-PATTERN.md task-37 R8 + UMB-050/053):
+// title shape, prerelease flag, body presence, emoji-in-heading, and the PS-5.1
+// ETS-object-leak signature. Lead quality, CHANGELOG 1:1 fidelity and honest framing are
+// judgment calls for the human reviewer — never scored here.
 
 const EM_DASH = '—';
 // Common emoji ranges (pictographs, symbols, dingbats, arrows-as-emoji, variation selector).
@@ -39,6 +40,19 @@ export function hasEmoji(text) {
   return !!text && EMOJI.test(text);
 }
 
+// PowerShell 5.1's Get-Content -Raw attaches ETS NoteProperties to the string it returns;
+// passing that decorated string into ConvertTo-Json (piped, or via a hashtable that does
+// not first cast it with [string]) serializes the WHOLE object -- these keys are the
+// leaked object's own property names and do not appear in ordinary release prose
+// (RELEASE-PATTERN.md "A Release body is re-read after every write", UMB-050/UMB-053).
+const PS_LEAK_MARKERS = ['"PSPath"', '"PSParentPath"', '"PSChildName"', '"PSDrive"', '"PSProvider"'];
+
+/** True when `body` carries the structural signature of a leaked PS ETS-decorated object. */
+export function hasPsObjectLeak(body) {
+  if (!body) return false;
+  return PS_LEAK_MARKERS.some((marker) => body.includes(marker));
+}
+
 /**
  * Run every mechanical check against one GitHub Release object (the REST API shape:
  * name, tag_name, body, prerelease, draft). Returns an array of finding strings —
@@ -73,6 +87,8 @@ export function checkRelease(release, repoName) {
   const body = release.body ?? '';
   if (!body.trim()) {
     findings.push('body is empty');
+  } else if (hasPsObjectLeak(body)) {
+    findings.push('body looks like a serialized PowerShell object (ETS NoteProperties leaked) -- not release text; see RELEASE-PATTERN.md "A Release body is re-read after every write"');
   } else {
     for (const line of body.split(/\r?\n/)) {
       if (/^#{1,6}\s/.test(line) && hasEmoji(line)) {

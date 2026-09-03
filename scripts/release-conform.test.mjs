@@ -5,6 +5,7 @@ import {
   isBareVersionTitle,
   separatorClass,
   hasEmoji,
+  hasPsObjectLeak,
   checkRelease,
 } from './lib/release-conform-lib.mjs';
 
@@ -76,6 +77,49 @@ test('hasEmoji: plain text has none', () => {
 test('hasEmoji: empty/missing text has none', () => {
   assert.equal(hasEmoji(''), false);
   assert.equal(hasEmoji(undefined), false);
+});
+
+// --- hasPsObjectLeak (UMB-053/UMB-050: the PS 5.1 ETS NoteProperties defect signature) ---
+
+test('hasPsObjectLeak: flags a body carrying serialized PowerShell provider metadata', () => {
+  // The real 2026-09-03 incident shape (`AGENTS.md` "PS 5.1"): Get-Content -Raw's
+  // decorated string, passed through ConvertTo-Json, publishes the whole ETS object --
+  // this is a trimmed stand-in for the 26,668-char real one, same telltale keys.
+  const leaked = '{"value":"Real intended body text.","PSPath":"Microsoft.PowerShell.Core\\\\FileSystem::C:\\\\repo\\\\body.md","PSParentPath":"Microsoft.PowerShell.Core\\\\FileSystem::C:\\\\repo","PSChildName":"body.md","PSDrive":"C","PSProvider":"Microsoft.PowerShell.Core\\\\FileSystem","ReadCount":1}';
+  assert.equal(hasPsObjectLeak(leaked), true);
+});
+
+test('hasPsObjectLeak: a real release body (even one mentioning PowerShell in prose) is clean', () => {
+  assert.equal(hasPsObjectLeak('Lead sentence.\n\n### Fixed\n- a PowerShell quoting bug\n'), false);
+});
+
+test('hasPsObjectLeak: empty/missing body has no leak', () => {
+  assert.equal(hasPsObjectLeak(''), false);
+  assert.equal(hasPsObjectLeak(undefined), false);
+});
+
+test('checkRelease: a leaked PS object body is flagged (RED before hasPsObjectLeak existed)', () => {
+  const release = {
+    tag_name: 'v1.1.0',
+    name: 'v1.1.0 - fidelity gate',
+    body: '{"value":"real text","PSPath":"Microsoft.PowerShell.Core\\\\FileSystem::C:\\\\x","PSProvider":"Microsoft.PowerShell.Core\\\\FileSystem"}',
+    prerelease: false,
+    draft: false,
+  };
+  const findings = checkRelease(release, 'CoalWash').join('\n');
+  assert.match(findings, /serialized PowerShell object/);
+});
+
+test('checkRelease: a real release body with no leak markers stays clean on this check', () => {
+  const release = {
+    tag_name: 'v1.1.0',
+    name: 'v1.1.0 - fidelity gate',
+    body: 'Lead sentence.\n\n### Fixed\n- a real fix\n',
+    prerelease: false,
+    draft: false,
+  };
+  const findings = checkRelease(release, 'CoalWash');
+  assert.equal(findings.some((f) => /serialized PowerShell object/.test(f)), false);
 });
 
 // --- checkRelease (composed, fixture GitHub Release objects) ---
