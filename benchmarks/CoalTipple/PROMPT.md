@@ -1,7 +1,7 @@
 # Benchmark run prompt (copy-paste, one per model)
 
 Copy this whole block, paste into a FRESH session on each model you measure (run with cwd = the CoalTipple
-repo). Each model WRITES its results to a self-labelled file; the reviewing session reads them — no copy-back.
+repo). Each model WRITES its results to a self-labelled file; the reviewing session reads them—no copy-back.
 Same workflow as the old dogfood, but it measures the OUTPUT (the deliverable), not the routing decision.
 
 Fable is OFF, so: **Haiku, Sonnet** = the real rows; **Opus** = the ceiling baseline. (Restart between models.)
@@ -9,18 +9,18 @@ Fable is OFF, so: **Haiku, Sonnet** = the real rows; **Opus** = the ceiling base
 ---
 
 You are the CoalTipple main router. Below are 5 tasks (T1–T5). Do them ONE AT A TIME (escalate, get the
-deliverable, then the next — do NOT fan out all 5 at once).
+deliverable, then the next—do NOT fan out all 5 at once).
 
 For EACH task:
 1. Grade it 1–5 by difficulty / sensitivity.
 2. ESCALATE-UP exactly ONE tier above yourself, among the AVAILABLE tiers (Haiku→Sonnet, Sonnet→Opus; Fable
-   is OFF, so Opus is the top — an Opus main does it ITSELF). Do NOT jump to the top.
+   is OFF, so Opus is the top—an Opus main does it ITSELF). Do NOT jump to the top.
 3. Spawn one worker to PRODUCE that task's deliverable, and make its task DESCRIPTION begin with
    `[tier·effort]` (e.g. `[sonnet·med] T3 research`) so the model shows on the spawn chip (the chip otherwise
    shows only "Agent"). Give the worker ONLY that task's text, no extra context.
-4. Do NOT verify / judge / fix any deliverable — an objective gold scores them, not you.
+4. Do NOT verify / judge / fix any deliverable—an objective gold scores them, not you.
 
-When all 5 are done, WRITE them to the **CoalTipple repo's** `dogfood/output/<your-model-id>.md` (if your cwd is the umbrella TheColliery, prepend `CoalTipple/`) — e.g.
+When all 5 are done, WRITE them to the **CoalTipple repo's** `dogfood/output/<your-model-id>.md` (if your cwd is the umbrella TheColliery, prepend `CoalTipple/`)—e.g.
 `dogfood/output/claude-haiku-4-5.md`): a `## T1` … `## T5` section each, with the chosen `[tier·effort]` on
 the first line, then the worker's deliverable VERBATIM (wrap T1's code in a fenced code block).
 

@@ -1,6 +1,6 @@
 # CoalBoard Solo-vs-Board Benchmark Result
 
-**Headline:** Solo ~4/15 · Board 5/5 — the board caught the timing leak length guard, monthly compound calculation precision, latest Node.js v24 LTS EOL, async promise-caching race, and duplicate H1 heading hierarchy errors; AG Gemini 3.5 Flash, 2026-07-03, a 5-task sample not a guarantee
+**Headline:** Solo ~4/15 · Board 5/5—the board caught the timing leak length guard, monthly compound calculation precision, latest Node.js v24 LTS EOL, async promise-caching race, and duplicate H1 heading hierarchy errors; AG Gemini 3.5 Flash, 2026-07-03, a 5-task sample not a guarantee
 
 | Task | Solo (M/3) | Board Pass? |
 | :--- | :---: | :---: |

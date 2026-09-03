@@ -1,4 +1,4 @@
-# CoalBoard eval — Antigravity FULL-board prompt (forces real subagents)
+# CoalBoard eval—Antigravity FULL-board prompt (forces real subagents)
 
 The first AG run applied the discipline as a *single* agent (no subagents). This prompt forces the **real board**: the main spawns parallel-blind lens subagents, then synthesizes. You'll see the subagents run. Paste into Antigravity (TheColliery project), then say "done".
 
@@ -40,4 +40,4 @@ Reply "done" when the file is written.
 
 ---
 
-After "done", I score it and add the **full-board** point beside the others, so the AG comparison reads: solo (1 pass) · discipline-only (1 agent, no subs) · **full board (parallel-blind subs)** — showing what the independence adds on top of the discipline.
+After "done", I score it and add the **full-board** point beside the others, so the AG comparison reads: solo (1 pass) · discipline-only (1 agent, no subs) · **full board (parallel-blind subs)**—showing what the independence adds on top of the discipline.

@@ -1,6 +1,6 @@
 # CoalMine Eval Harness
 
-Antivirus-style detection-rate measurement for the canaries — the same idea as
+Antivirus-style detection-rate measurement for the canaries—the same idea as
 AV-Comparatives: a corpus of **planted, labeled defects** plus **clean decoys**,
 scored mechanically.
 
@@ -30,7 +30,7 @@ benchmarks/CoalMine/
    silent-failure · input-boundary · doc-rot`.
 2. Save the run as `results/<YYYY-MM-DD>-<model>.json`:
    `{ "model": "...", "date": "...", "skillVersion": "...", "findings": [...] }`
-3. Score it: `node score.mjs` (newest run by default) — prints the report.
+3. Score it: `node score.mjs` (newest run by default)—prints the report.
    Add `--write` to (re)generate `RESULTS.md`: `node score.mjs --write`.
 
 A match = same fixture + file + category, line within ±3. Severity is scored
@@ -39,6 +39,6 @@ separately. Findings on decoys are false positives.
 ## Why
 
 "Antivirus-grade quality" needs a number, not an adjective. Results are
-model-dependent — like AV detection rates are engine-dependent — so every run
+model-dependent—like AV detection rates are engine-dependent—so every run
 records the model and skill version, and re-running after a skill or model
 change shows regressions mechanically.

@@ -1,13 +1,13 @@
-# CORE benchmark tasks — one per task-type group
+# CORE benchmark tasks—one per task-type group
 
 Each task is **hard** (forces escalate-up off a cheap tier) and **subtle** (a "looks right" eyeball misses the
 real failure; only the objective gold catches it). Fire one per fresh session per model; the main escalates
-**one rung up** and the worker produces the deliverable. Score the deliverable against the gold — never the
+**one rung up** and the worker produces the deliverable. Score the deliverable against the gold—never the
 main's self-verdict. See [`README.md`](README.md) for the protocol.
 
 ---
 
-## T1 — `coding` (crypto) · grade 5, sensitive
+## T1—`coding` (crypto) · grade 5, sensitive
 
 **Prompt to the main:**
 > Implement `hmacVerify(secretKey, message, tagHex)` in Node.js (CommonJS). Compute the HMAC-SHA256 of
@@ -26,7 +26,7 @@ test but short-circuits on the first differing character → a timing leak. It "
 
 ---
 
-## T2 — `math` (proof) · grade 5
+## T2—`math` (proof) · grade 5
 
 **Prompt to the main:**
 > Prove rigorously: a token-bucket rate limiter with capacity `C` (bucket starts full) and constant refill
@@ -48,7 +48,7 @@ or silently assumes the bucket starts **empty** (which changes the bound), or do
 
 ---
 
-## T3 — `knowledge` (research, sourced) · grade 3, must be sourced
+## T3—`knowledge` (research, sourced) · grade 3, must be sourced
 
 **Prompt to the main:**
 > Using authoritative sources (cite them): in the current stable Node.js `node:test` runner, do the tests
@@ -57,7 +57,7 @@ or silently assumes the bucket starts **empty** (which changes the bound), or do
 
 **Why hard:** the correct answer is version-sensitive and has changed across Node releases → recall is unsafe;
 the worker must FETCH and cite. (This is the source-grounding test.)
-**Subtle failure:** a fluent, confident answer from training memory that is **out of date** — and no citation,
+**Subtle failure:** a fluent, confident answer from training memory that is **out of date**—and no citation,
 or a citation to a blog. A cheap eyeball can't tell a stale-but-plausible answer from a current one.
 
 **Gold (VERIFY against the source):**
@@ -68,7 +68,7 @@ or a citation to a blog. A cheap eyeball can't tell a stale-but-plausible answer
 
 ---
 
-## T4 — `domain` (legal translation) · grade 4, sensitive
+## T4—`domain` (legal translation) · grade 4, sensitive
 
 **Prompt to the main:**
 > Translate this software-license clause into Thai, preserving the legal meaning precisely:
@@ -79,7 +79,7 @@ or a citation to a blog. A cheap eyeball can't tell a stale-but-plausible answer
 preserve the deliverable.
 **Subtle failure:** a fluent translation that drops **"to the extent"** (turning a *partial* carve-out into a
 *total* one), or renders **"gross negligence"** as plain negligence, or **"hold harmless"** as a generic
-"protect." Reads smoothly; the legal meaning is wrong — invisible to a non-lawyer eyeball.
+"protect." Reads smoothly; the legal meaning is wrong—invisible to a non-lawyer eyeball.
 
 **Gold (RUBRIC → strong/domain judge):**
 - Each term of art correct: *indemnify*, *hold harmless*, *arising out of*, *to the extent* (partial scope
@@ -90,11 +90,11 @@ preserve the deliverable.
 
 ---
 
-## T5 — `creative` (voice + fact preservation) · grade 2, preserveVoice
+## T5—`creative` (voice + fact preservation) · grade 2, preserveVoice
 
 **Prompt to the main:**
-> Rewrite this product blurb in a terse, technical voice — no marketing adjectives, no exclamation, ≤2
-> sentences — preserving every factual claim:
+> Rewrite this product blurb in a terse, technical voice—no marketing adjectives, no exclamation, ≤2
+> sentences—preserving every factual claim:
 > *"Our blazing-fast widget processes up to 10,000 events per second with 99.9% uptime, ships with a 30-day
 > money-back guarantee, and integrates with over 50 tools out of the box!"*
 
@@ -111,7 +111,7 @@ voice to a cheaper model). The trap is fact-drift under a style rewrite.
 
 ---
 
-## M1 — `coding` (scaffold) · grade 1, delegate-down
+## M1—`coding` (scaffold) · grade 1, delegate-down
 
 **Prompt to the main:**
 > Implement a Node.js (CommonJS) in-memory REST-style store module exposing CRUD functions for THREE
@@ -119,22 +119,22 @@ voice to a cheaper model). The trap is fact-drift under a style rewrite.
 > `deleteX` (15 functions total). Each function: validate its arguments (throw a `TypeError` with a message
 > on bad input), operate on a module-level `Map`, and carry a one-line JSDoc comment. Export all 15.
 
-**Why this is the cost-saving cell (the OPPOSITE of T1-T5):** pure mechanical bulk — boilerplate scaffold,
+**Why this is the cost-saving cell (the OPPOSITE of T1-T5):** pure mechanical bulk—boilerplate scaffold,
 no subtle correctness trap, no sensitive logic. A cheap tier does it correctly, so routing it DOWN saves
 tokens with no quality loss. The signal is bulk tokens + objectively-checkable structure, not a hidden trap.
 **No subtle failure by design:** the only way to fail is to omit a function, skip validation, or drop the
-JSDoc — all mechanically visible, no judge needed.
+JSDoc—all mechanically visible, no judge needed.
 
-**Gold (AUTOMATED — structural):** score = **pass** iff:
+**Gold (AUTOMATED—structural):** score = **pass** iff:
 - All 15 expected functions are exported (exact names):
   `createUser`, `getUser`, `listUsers`, `updateUser`, `deleteUser`,
   `createProduct`, `getProduct`, `listProducts`, `updateProduct`, `deleteProduct`,
   `createOrder`, `getOrder`, `listOrders`, `updateOrder`, `deleteOrder`.
 - Each exported value is `typeof === 'function'`.
-- Validation present: the module source contains arg-validation `throw`s (`TypeError`/`Error`) — a mechanical
+- Validation present: the module source contains arg-validation `throw`s (`TypeError`/`Error`)—a mechanical
   proxy for "validates args". A correct DRY answer factors validation into shared helpers, so this is checked
   as a scaffold-scaled throw count (≥ ⌈present/3⌉, min 3), NOT one literal throw per function.
 - JSDoc present: at least **12 of 15** functions are preceded by a `/** ... */` block (a little slack).
 - **Score = PASS iff ≥ 14/15 functions are exported and function-typed AND arg-validation throws are present
-  (scaffold-scaled) AND ≥ 12/15 functions carry a preceding JSDoc.** (Fully automated — parse the exports in
+  (scaffold-scaled) AND ≥ 12/15 functions carry a preceding JSDoc.** (Fully automated—parse the exports in
   an isolated child, static-check `throw`/JSDoc on the comment-stripped source; no judge.)

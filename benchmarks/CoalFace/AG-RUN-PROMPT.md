@@ -1,4 +1,4 @@
-# CoalFace fan-out token — Antigravity run prompt (2026-07-03)
+# CoalFace fan-out token—Antigravity run prompt (2026-07-03)
 
 Copy-paste protocol for the AG (cross-vendor) arm of the CoalFace fan-out token benchmark.
 Same worksite as the CC arm; the question is the same: **how does total token cost move across
@@ -6,12 +6,12 @@ solo vs naive ad-hoc fan-out vs a coarse-packed fan-out**, on Antigravity with G
 
 ## What the AG arm can and cannot show (honest, read first)
 
-- **The worker-count lever is model-agnostic** — the per-sub baseline × N effect (and the coarse-pack
+- **The worker-count lever is model-agnostic**—the per-sub baseline × N effect (and the coarse-pack
   hack that collapses it) should reproduce on AG. That is the main thing this arm confirms.
 - **The dollar FLIP does NOT happen on AG.** CF's `−15% in dollars` came from routing workers to a
   **cheaper tier** (Haiku) than the main. **Antigravity has no per-worker model-pick** (all subs run
   the same model; effort is a variant, not a cheaper tier), so on AG fan-out is **raw token overhead
-  with no dollar recovery** — the wallet's `$-via-cheap-tier` half is a Claude-Code privilege. If the
+  with no dollar recovery**—the wallet's `$-via-cheap-tier` half is a Claude-Code privilege. If the
   AG numbers show fan-out simply costing more with no offset, that is the expected, honest result.
 - **Token self-report:** AG must report its own token usage per sub (or a total per arm). If AG does
   not expose per-sub tokens, record its best available total-token estimate per arm and say so.

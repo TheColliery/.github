@@ -1,14 +1,14 @@
-# CoalMine Eval Results — rot-canary
+# CoalMine Eval Results—rot-canary
 
 **Benchmark loop: K=3 repeated runs per arm, extended to K=5 on any flip** (per the
-locked methodology — paired design + stochastic repeat, arXiv 2411.00640).
+locked methodology—paired design + stochastic repeat, arXiv 2411.00640).
 **Date: 2026-07-03 · Skill version: 3.8.4 · Corpus: 16 fixtures (13 planted defects + 4 clean decoys), scored mechanically by `score.mjs`.**
 
 > **TL;DR (plain language):** rot-canary re-tested on the current model line-up, 3-5 repeated
-> runs per model — Fable 5 catches 13/13 every run with zero variance · Sonnet 5 ~97% ·
+> runs per model—Fable 5 catches 13/13 every run with zero variance · Sonnet 5 ~97% ·
 > Opus 4.8 ~95% · Haiku 4.5 ~89% · no model raised a single false alarm on the clean decoy
 > files · on a corpus this unambiguous, plain Sonnet detects almost as well as skill-on
-> Sonnet — but **the skill improves severity judgment by ~10 points** (95% vs 85%) · the one
+> Sonnet—but **the skill improves severity judgment by ~10 points** (95% vs 85%) · the one
 > item that truly separates models is the dead function that requires whole-file
 > reachability reasoning.
 
@@ -21,21 +21,21 @@ locked methodology — paired design + stochastic repeat, arXiv 2411.00640).
 | **claude-sonnet-5** (skill ON) | 5 | 100·92·100·100·92 | **100%** | 96.9% | 100% ×5 | 0/4 ×5 | 95% |
 | **claude-sonnet-5** (vanilla, skill OFF) | 5 | 92·100·100·100·100 | **100%** | 98.5% | 100% ×5 | 0/4 ×5 | 84.6% |
 | **claude-haiku-4.5** (skill ON) | 5 | 85·92·92·85·92 | **92%** | 89.2% | 2 FPs (r1,r2) | 0/4 ×5 | 79.4% |
-| **Antigravity — Gemini 3.5 Flash Medium** (skill ON) | 3 | 92·100·92 | **92%** | 94.7% | 100% ×3 | 0/4 ×3 | 86.3% |
+| **Antigravity—Gemini 3.5 Flash Medium** (skill ON) | 3 | 92·100·92 | **92%** | 94.7% | 100% ×3 | 0/4 ×3 | 86.3% |
 
 ## Key findings
 
 1. **Skill ON vs OFF (sonnet-5, K=5 paired): detection saturates, severity judgment separates.**
-   Recall ON 96.9% vs OFF 98.5% — no measurable detection gain on this corpus (discordant
+   Recall ON 96.9% vs OFF 98.5%—no measurable detection gain on this corpus (discordant
    reps: 3; McNemar n/s). The corpus is unambiguous-by-design → ceiling effect at the
-   sonnet+ tier. BUT severity accuracy: **ON 95% vs OFF 84.6%** — the vanilla arm
+   sonnet+ tier. BUT severity accuracy: **ON 95% vs OFF 84.6%**—the vanilla arm
    systematically over-rates severity (f06/f07 → CRITICAL where ground truth is HIGH,
    stable across 4/5 reps = systematic, not noise). The skill's severity rubric
    (CRITICAL = crash/security on the normal path · HIGH = real bug on a reachable path)
    calibrates the judgment even where raw detection is saturated.
 2. **Tier ladder confirmed (skill ON): fable 100% (zero variance) > sonnet 96.9% > haiku 89.2%.**
    Detection is engine-dependent, AV-style. Fable-5 is the only arm with ZERO flips
-   across all reps — 13/13, severity 13/13, every run.
+   across all reps—13/13, severity 13/13, every run.
 3. **The discriminating item: `f01` line 5 (zero-ref dead function).** Needs whole-file
    reachability reasoning, not line-local pattern-match. Found: fable 3/3 · sonnet-ON 3/5 ·
    sonnet-OFF 4/5 · haiku 0/5 (stable miss = tier ceiling, not variance) · AG-r1 miss.
@@ -48,20 +48,20 @@ locked methodology — paired design + stochastic repeat, arXiv 2411.00640).
    fable-5 @ v3.8.4 (K=3) = 13/13 stable. Skill evolution 3.4.0 → 3.8.4 did not move
    detection.
 
-## Per category (union across Claude skill-ON arms — all 100% except)
+## Per category (union across Claude skill-ON arms—all 100% except)
 
 | Category | fable | sonnet-ON | haiku |
 |---|---|---|---|
 | dead-code (3 planted) | 3/3 ×3 | 2.6/3 mean (f01:5 flips) | 1.8/3 mean (f01:5 never, f02 flips) |
 | all other 6 categories (10 planted) | 10/10 every rep | 10/10 every rep | 10/10 every rep* |
 
-\* haiku r4 dropped f02 entirely (hedged out of the JSON) — its only non-dead-code miss.
+\* haiku r4 dropped f02 entirely (hedged out of the JSON)—its only non-dead-code miss.
 
 ## Methodology
 
 K=3 stochastic repeats per arm, same prompt verbatim per arm, each rep a FRESH
 agent (no shared context); any item flipping within K=3 extends that arm to K=5
-(fired for both sonnet arms — f01:5 — and haiku — f02). Blind protocol: workers
+(fired for both sonnet arms—f01:5—and haiku—f02). Blind protocol: workers
 read ONLY `fixtures/*/src/*`; `expected.json`/results/scorer off-limits. One run
 was invalidated live (a cross-tree grep leaked expected.json into a sonnet
 worker's context) and re-run clean with an added no-cross-tree-grep clause —
@@ -70,20 +70,20 @@ category, line ±3; severity scored separately). Vanilla arm gets the same outpu
 contract and 7-slug category vocabulary but no skill contract (its ~15-line scan
 discipline, category definitions, severity rubric, and "confirmed-only" rules are
 the treatment). Statistic frame: paired per-fixture comparison, majority (≥3/5)
-verdict per item, per Miller 2024 (arXiv 2411.00640) — a 13-defect corpus can
+verdict per item, per Miller 2024 (arXiv 2411.00640)—a 13-defect corpus can
 credibly show only LARGE differences; small edges need hundreds of items.
 Caveats: fixtures authored in this project (regression floor, not independent);
 corpus unambiguous-by-design → ceiling effect at sonnet+ tier; engine-dependent
-like AV detection rates. This file is the hand-authored K-rep aggregate — do NOT
+like AV detection rates. This file is the hand-authored K-rep aggregate—do NOT
 regenerate with `score.mjs --write` (that emits a single-run block).
 
-## Multi-canary matrix (2026-07-03 — 6 new fixture suites, 4 engines)
+## Multi-canary matrix (2026-07-03—6 new fixture suites, 4 engines)
 
 > **TL;DR:** the benchmark now covers 7 canaries instead of rot-canary alone (66 new
 > fixtures, built + adversarially reviewed via the org 3-sub flow). Result: on 5 of the 6
 > new suites every engine catches 100% on every rep (unambiguous-by-design corpus =
 > regression floor) · **drift-canary is the only suite that truly separates engines**
-> (fable 93 > AG 84 ≈ sonnet 80 mean) — every engine SEES each disagreement but they split
+> (fable 93 > AG 84 ≈ sonnet 80 mean)—every engine SEES each disagreement but they split
 > on which side is authoritative, or hedge the finding away · false alarms on clean decoy
 > files: **0 across every opportunity for every engine** in the whole batch.
 
@@ -98,43 +98,43 @@ Recall per suite (median over K reps; K=3 extended to 5 on any flip):
 | **drift-canary** | **88** med (92.8 mean, K=5) | **88** med (92.8 mean, K=5) | **88** med (80.4 mean, K=5) | **88** med (83.7 mean) |
 | supply-chain-audit | **100** ×3 | **100** ×3 (precision 73–100, see below) | **100** ×3 | **100** ×3 |
 
-Severity accuracy (mean): fable 89% · opus 84% · sonnet 84% · AG 79% — the judgment ladder
+Severity accuracy (mean): fable 89% · opus 84% · sonnet 84% · AG 79%—the judgment ladder
 from the rot-canary run holds across all suites (fable ≥ opus ≈ sonnet ≈ AG).
 
-### What separates engines — the discriminating items
+### What separates engines—the discriminating items
 
 Detection saturates; **judgment items** discriminate:
 
 - **drift f08** (a library whose JSDoc contradicts its own code): every engine flips on WHICH
-  side is authoritative — fable 2/5 · sonnet 1/5 · AG ~1/3 pick the planted side. Genuinely
+  side is authoritative—fable 2/5 · sonnet 1/5 · AG ~1/3 pick the planted side. Genuinely
   ambiguous-authority; kept as a known-ambiguous item, not a defect of any engine.
 - **drift f04** (required config key missing from the defaults catalog): sonnet reads the
   CATALOG as the wrong side 4/5 reps (systematic alternative reading, not noise); fable and
   AG read the planted side.
 - **drift f07** (duplicated constant, values still equal): sonnet drops it as "no behavioral
-  break yet" 3/5 reps — the FN-trap the corpus review predicted verbatim.
+  break yet" 3/5 reps—the FN-trap the corpus review predicted verbatim.
 - **scale f03** (unbounded cache): sonnet anchors the finding at the DECLARATION line 2/5
-  reps, fable at the mutation line every time — an anchor-convention split, not a detection
+  reps, fable at the mutation line every time—an anchor-convention split, not a detection
   gap (both describe the same defect).
-- **rot f01:5** (zero-ref dead function): the original discriminator — fable 3/3 · sonnet 3/5 ·
+- **rot f01:5** (zero-ref dead function): the original discriminator—fable 3/3 · sonnet 3/5 ·
   opus 2/5 · haiku 0/5 · AG 1/3. Opus adds a THIRD failure mode: it SEES the defect every rep
   (its reasoning names it) but strategically WITHHOLDS it 3/5 ("the fixture is named for one
-  defect; false positives are penalized") — distinct from sonnet's occasional misread and
+  defect; false positives are penalized")—distinct from sonnet's occasional misread and
   haiku's stable blindness. Detection ≠ reporting.
 - **supply f08 phantom findings (opus only)**: in 2/3 reps opus reported the caret dependencies
-  of decoy d02 under fault fixture f08's name — the file itself has no carets (verified). A
+  of decoy d02 under fault fixture f08's name—the file itself has no carets (verified). A
   working-memory aliasing error across many small, similar manifests: the only precision break
   in the entire batch (73–80% on those reps). The decoys themselves still scored zero false
-  positives for every engine — decoy discipline held batch-wide; the phantoms landed on a
+  positives for every engine—decoy discipline held batch-wide; the phantoms landed on a
   fault fixture.
 
 ### Corpus lessons (for the next fixture rev)
 
 1. Defects with two legitimate anchor lines (declaration vs occurrence) need either a
    single-anchor plant or scorer alternate-line support.
-2. Two-sided drift pairs must state the authoritative side IN-FILE beyond doubt — f04/f08
+2. Two-sided drift pairs must state the authoritative side IN-FILE beyond doubt—f04/f08
    show that "objectively decidable" to a reviewer is not always unambiguous to a scanner.
-3. Not-yet-diverged duplication is a legitimate FN-trap — keep, but expect engine-dependent
+3. Not-yet-diverged duplication is a legitimate FN-trap—keep, but expect engine-dependent
    recall on it.
 4. All corpora were built by 6 builder subs and adversarially verified by 2 review subs
    (severity reconciled to each skill's OWN rubric; 1 accidental second defect removed;
@@ -142,7 +142,7 @@ Detection saturates; **judgment items** discriminate:
 
 Provenance: 42 CC runs (this section) + 18 AG runs, every run blind + fresh-context, scored
 mechanically by the suite-aware `score.mjs`. AG drift flipped 75↔88 at K=3; the extension to
-K=5 is optional — its two misses are the same systematic classes (wrong-side f04-shape +
+K=5 is optional—its two misses are the same systematic classes (wrong-side f04-shape +
 f07 drop), not sampling noise.
 
 ## Cross-engine comparison (2026-07-03, K=3 both vendors)
@@ -157,30 +157,30 @@ this K=3 protocol.
 | claude-fable-5 (K=3) | 100·100·100 | **100%** | 100% | 0/4 ×3 | 100% |
 | Antigravity Gemini 3.5 Flash Medium (K=3) | 92·100·92 | **92%** | 100% | 0/4 ×3 | 86.3% |
 
-AG's only recall misses: f01:5 (1/3 found — the zero-ref dead function, the same
+AG's only recall misses: f01:5 (1/3 found—the zero-ref dead function, the same
 item that separates the Claude tiers: fable 3/3 · sonnet 3/5 · haiku 0/5). AG
-flips on it exactly like sonnet does — per the flip rule this arm would extend
+flips on it exactly like sonnet does—per the flip rule this arm would extend
 to K=5 (2 more user-run rounds) to settle the item; K=3 medians stand either
 way. Severity divergence again concentrates in the judgment band (86% vs
 fable's 100%), the same shape as the 2026-06-13 result: detection converges
-across vendors, severity judgment diverges — consistent with the cross-model
+across vendors, severity judgment diverges—consistent with the cross-model
 convergence theory. AG protocol note: all 3 reps ran as fresh scanning contexts
 (fresh conversations), matching the CC arms' fresh-sub-per-rep design.
 
-## Field evidence — reported, not measured
+## Field evidence—reported, not measured
 
-Third-party field reports. These figures were NOT measured by us — we hold no
+Third-party field reports. These figures were NOT measured by us—we hold no
 raw run artifact; the linked public report is the source, snapshotted verbatim
 under `results/field/`. They are never folded into the measured arms above.
 
 | Date | Reporter | Target codebase | Tool + reported result | Source |
 |---|---|---|---|---|
-| 2026-07-25 | `mehvetero` (owner of the scanned repo; ran it themselves) | [move-test-gen](https://github.com/mehvetero/move-test-gen) — JS/Node, ~1,600 lines: 7 scripts + 4 lint rules + an eval runner | rot-canary (DEEP, whole repo): **3 confirmed / 2 suspected / 0 false positives**; non-applicable categories (async, perf) correctly silent | [HetCreep/CoalMine#25](https://github.com/HetCreep/CoalMine/issues/25) · [snapshot](results/field/2026-07-25-mehvetero-move-test-gen-issue25.json) |
+| 2026-07-25 | `mehvetero` (owner of the scanned repo; ran it themselves) | [move-test-gen](https://github.com/mehvetero/move-test-gen)—JS/Node, ~1,600 lines: 7 scripts + 4 lint rules + an eval runner | rot-canary (DEEP, whole repo): **3 confirmed / 2 suspected / 0 false positives**; non-applicable categories (async, perf) correctly silent | [HetCreep/CoalMine#25](https://github.com/HetCreep/CoalMine/issues/25) · [snapshot](results/field/2026-07-25-mehvetero-move-test-gen-issue25.json) |
 
 First field run on a non-TheColliery codebase. What it shows: precision-style
-evidence on a real repo — all 3 confirmed findings verified real by the code
+evidence on a real repo—all 3 confirmed findings verified real by the code
 owner ("a codebase I know line-by-line"), 0 false positives, and correct
 silence where categories don't apply. What it does NOT show: recall (no
-planted ground truth — the true-defect denominator is unknown), no K-repeat,
+planted ground truth—the true-defect denominator is unknown), no K-repeat,
 and the report states neither the CoalMine version nor the engine/model that
-ran it — not comparable to the measured arms above.
+ran it—not comparable to the measured arms above.

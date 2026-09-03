@@ -1,6 +1,6 @@
-# CoalFace Fan-Out Token Benchmark — Antigravity (2026-07-03)
+# CoalFace Fan-Out Token Benchmark—Antigravity (2026-07-03)
 
-Solo 26,311 · ad-hoc 155,018 (5.9x) · coarse 52,718 (−66% vs ad-hoc) — AG Gemini 3.5 Flash, 2026-07-03; fan-out cost is worker-count × baseline, no cheap-tier dollar offset on AG
+Solo 26,311 · ad-hoc 155,018 (5.9x) · coarse 52,718 (−66% vs ad-hoc)—AG Gemini 3.5 Flash, 2026-07-03; fan-out cost is worker-count × baseline, no cheap-tier dollar offset on AG
 
 | arm | subs | total tokens | vs ad-hoc |
 | :--- | :---: | :---: | :---: |

@@ -1,11 +1,11 @@
 # CoalTipple output-quality benchmark
 
-This harness measures the **final output correctness** of CoalTipple routing — *what actually reaches the
-user after the model routes a task* — not just whether the routing decision was correct.
+This harness measures the **final output correctness** of CoalTipple routing—*what actually reaches the
+user after the model routes a task*—not just whether the routing decision was correct.
 
 > Two complementary benchmarks. The internal routing dogfood (`dogfood/results/`, `dogfood/results2/`) scores
 > the **decision** ("did the main escalate / delegate / self correctly?"). This one scores the **delivery**
-> ("after it routed, is the answer right?"). Decision-correct does not guarantee output-correct — this closes
+> ("after it routed, is the answer right?"). Decision-correct does not guarantee output-correct—this closes
 > that gap.
 
 ## What it tests (the design)
@@ -17,27 +17,27 @@ conditions:
 1. **Escalate-up ONE RUNG at a time (the staircase), never jump to the top model.** If every main just called
    the strongest model, the output would be trivially good and we'd be measuring the top model, not CoalTipple.
    One rung (cheap→mid, mid→heavy, …) measures the real question: **does +1 rung deliver, or must it climb
-   further?** — per (task difficulty × main tier). The top available tier has no rung above → it does the task
+   further?**—per (task difficulty × main tier). The top available tier has no rung above → it does the task
    itself (the ceiling baseline). *(With Fable disabled, Opus is the top.)*
 2. **The little sibling cannot do the work, and cannot verify it either.** Because the cheap main cannot
    self-verify a subtle failure, verification is the **objective gold** (tests / answer key / rubric judged by
-   a strong model) — *never* the main's eyeball. This reveals whether the escalated output reaches the user
+   a strong model)—*never* the main's eyeball. This reveals whether the escalated output reaches the user
    correct **without leaning on a verify the cheap main can't perform.**
 
 ## How to run
 
 - **Division of labour:** *you* copy [`PROMPT.md`](PROMPT.md) and fire it at each model; *each model writes* its
   deliverables to `dogfood/output/<model-id>.md` (local, self-labelled); *the reviewing session reads + scores
-  them* — no copy-back. Same workflow as the decision dogfood, scoring the OUTPUT instead.
-- `PROMPT.md` bundles all 5 CORE tasks (one per group — `coding`, `math`, `knowledge`, `domain`, `creative`)
+  them*—no copy-back. Same workflow as the decision dogfood, scoring the OUTPUT instead.
+- `PROMPT.md` bundles all 5 CORE tasks (one per group—`coding`, `math`, `knowledge`, `domain`, `creative`)
   and has the main do them one at a time within the session. All-5-in-one-session is convenient but carries a
   context-bleed + limit-risk tradeoff; for the cleanest per-task numbers, split into one task per session.
 - Fire **Haiku + Sonnet** (the real +1-rung rows) and **Opus** (the ceiling, since Fable is off). Restart
   between models. Log anything you cap.
 
-## Scoring (objective gold — not the main's verdict)
+## Scoring (objective gold—not the main's verdict)
 
-`node score.mjs <Tn> [file]` — see [`TASKS.md`](TASKS.md) for each task's gold:
+`node score.mjs <Tn> [file]`—see [`TASKS.md`](TASKS.md) for each task's gold:
 
 | Method | Tasks | How |
 |---|---|---|
@@ -46,7 +46,7 @@ conditions:
 
 - **Output correctness %** = correct deliverables / total, per model tier.
 - **Climb second pass:** when the +1-rung output FAILS the gold, re-run escalating one *more* rung and record
-  whether that clears it — the staircase economics (is one rung enough, or how far must it climb?).
+  whether that clears it—the staircase economics (is one rung enough, or how far must it climb?).
 
 ## Output
 

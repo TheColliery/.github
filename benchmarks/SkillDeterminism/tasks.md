@@ -2,7 +2,7 @@
 
 Four instrument shapes. Each is reproducible against the named blob; none is pooled with another.
 
-## Shape 1 — lane EXECUTION (Run 11's EN frame)
+## Shape 1—lane EXECUTION (Run 11's EN frame)
 
 Walks how a lane's rails execute (gates, prohibitions, fail-routes, writes) from a frozen contract
 prompt. Common wrapper, byte-identical across every dispatch; only `[SCENARIO BLOCK]` differs.
@@ -36,23 +36,23 @@ If it points at another file and you judge that file necessary to decide the sit
 
 Full scenario blocks (4 lanes: routing-OFF, sensitive/never-down, escalate-up, route-to-self) and the
 per-run results live in `results/2026-08-03-skill-determinism-walks.md` §Run 11 (this benchmark's
-detail file consolidates the prior lab record — the canonical working copy is
+detail file consolidates the prior lab record—the canonical working copy is
 `TheColliery/scratchpad/longrun/SKILL-VARIANCE-WALK.md`, machine-local and not part of this public repo).
 
-## Shape 2 — lane SELECTION (Run 12's shape)
+## Shape 2—lane SELECTION (Run 12's shape)
 
-Walks the decision UPSTREAM of execution — given a situation, which entry does the reader pick at
+Walks the decision UPSTREAM of execution—given a situation, which entry does the reader pick at
 all. 4 scenarios (one real, three controls), EN, ~1.1k chars, questions A (routing pick) / B
 (enumerate the trigger list) / C (free-text criticism). **Not pinned at fire time** (declared gap in
-the original record) — reconstructable from the scenario summaries in the detail file, not
+the original record)—reconstructable from the scenario summaries in the detail file, not
 byte-reproducible the way Runs 13-15 are.
 
-## Shape 3 — hook-injected coordination cue (Runs 13, 14, 17, 18)
+## Shape 3—hook-injected coordination cue (Runs 13, 14, 17, 18)
 
-Walks a `UserPromptSubmit`-injected cue, not a SKILL.md body — the load layer is two hook-emitted
+Walks a `UserPromptSubmit`-injected cue, not a SKILL.md body—the load layer is two hook-emitted
 lines. 5 scenarios, EN, answer format A (which leads) / B (next action) / C (surface to user Y/N) /
 D (enumerate the stakes set) / E (self-reported uncertainty). Same 5 situations and answer format
-reused across all four waves — the clause text is the only thing edited between runs, which is what
+reused across all four waves—the clause text is the only thing edited between runs, which is what
 makes the runs like-for-like; it also means the situation set has now been iterated against three
 times by the same author (see `RESULTS.md` §Publishability verdict for what that bounds).
 
@@ -61,7 +61,7 @@ times by the same author (see `RESULTS.md` §Publishability verdict for what tha
 - Run 14 (after wave-1 carve, hook line A substituted, scenarios untouched):
   [`results/raw/run14-prompt-v1.txt`](results/raw/run14-prompt-v1.txt), blob
   `cd7c82405ffa9ad4c40ac9ade85ad471ce904d52`, 3,999 B.
-- Run 17 (after wave-2 carve, both hook lines substituted — one-flock means CoalTipple's copy now
+- Run 17 (after wave-2 carve, both hook lines substituted—one-flock means CoalTipple's copy now
   carries the same clause too, so this is NOT like-for-like with Run 14 on that one axis):
   [`results/raw/run17-prompt-v1.txt`](results/raw/run17-prompt-v1.txt), blob
   `e82b0693ec2ea28998ecd8b93da6522474ee8cc4`, 4,322 B. Clause walked: 594 ch, sha `23fed45403bb`,
@@ -80,13 +80,13 @@ times by the same author (see `RESULTS.md` §Publishability verdict for what tha
   [`results/raw/run20-prompt-v1.txt`](results/raw/run20-prompt-v1.txt), blob
   `4da42a7f2275337b3b3db8ca993ac8e4373328d5`, 4,842 B. Clause walked: 854 ch, sha1 `e72fec15dffe`,
   byte-identical across both conductors and both `plugin/` dists at fire time. **Reverted the same
-  day** (CoalBoard `2b99b46`, CoalTipple `85f1312`) back to the wave-4 clause — this prompt is
+  day** (CoalBoard `2b99b46`, CoalTipple `85f1312`) back to the wave-4 clause—this prompt is
   retained as the frozen record of what was walked, not of what ships.
 
-## Shape 4 — this benchmark's prose-index hypothesis test (Run 15)
+## Shape 4—this benchmark's prose-index hypothesis test (Run 15)
 
 Same shell as Shape 1 (8 numbered questions, read-only rails), scenario constructed so every branch
-of the target skill's own deterministic tier rubric is satisfied by the prompt's own wording — a
+of the target skill's own deterministic tier rubric is satisfied by the prompt's own wording—a
 clean test of whether the walker COMPUTES the branch rather than guessing it.
 
 - Run 15 (CoalMine `rot-canary`, prediction locked before firing):
@@ -103,17 +103,17 @@ clean test of whether the walker COMPUTES the branch rather than guessing it.
    `blind-ic` under Claude Code; any zero-context, zero-tool-beyond-read leaf qualifies).
 3. Score each rail's modal answer and membership per the formula in `PREREGISTRATION.md`.
 4. Walker transcripts are collected into the detail record, then destroyed (standing lab-hygiene
-   rule) — only the frozen PROMPT and the scored TABLE persist; a stranger re-running this gets a
+   rule)—only the frozen PROMPT and the scored TABLE persist; a stranger re-running this gets a
    fresh, independent reading rather than an answer key.
 
 ## Scorer note (fifth instrument defect, Run 20, fixed)
 
 A **line-anchored** scorer (matching on an `S<n>` label) silently drops any walker whose answer
-uses a different shape and reports the aggregate over the survivors — this happened five times
+uses a different shape and reports the aggregate over the survivors—this happened five times
 across the series (Runs 17, 18, 20 caught; two more shapes seen in raw output but not mis-scored).
 Run 20's instance was the most dangerous: it dropped exactly the two weak-tier walkers who could
 not follow the text, which **manufactures an apparent improvement** on the rail that measures
-whether the weak tier follows the text at all — the direction opposite of a random drop. The
+whether the weak tier follows the text at all—the direction opposite of a random drop. The
 replacement scorer is **format-agnostic** (order-of-appearance, not line anchors) and **refuses to
 print an aggregate unless all N walkers yield exactly the expected number of answers per rail** —
 a parse failure fails loud instead of silently shrinking the denominator. Use the replacement for

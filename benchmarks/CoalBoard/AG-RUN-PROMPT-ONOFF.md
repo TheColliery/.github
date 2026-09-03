@@ -1,9 +1,9 @@
-# CoalBoard solo-vs-board — Antigravity run prompt (2026-07-03 redo)
+# CoalBoard solo-vs-board—Antigravity run prompt (2026-07-03 redo)
 
 Copy-paste protocol for the AG arm. Same 5 tasks as the CC arm; scored the same
 way (the rubric in `tasks.md`). Two arms:
-- **WITHOUT** — one agent, one pass, the bare task (no board).
-- **WITH** — convene the CoalBoard board (`/coalboard` at rigor: high, or the
+- **WITHOUT**—one agent, one pass, the bare task (no board).
+- **WITH**—convene the CoalBoard board (`/coalboard` at rigor: high, or the
   manual multi-lens+judge flow), scored on the verified answer.
 
 Reliability variant: run WITHOUT **3 times per task** (pass-rate M/3), WITH once
@@ -13,7 +13,7 @@ per task at high rigor (the board's edge is applying rigor every time).
 
 1. Open a **FRESH Antigravity conversation** at `<repo-root>`,
    model = **Gemini 3.5 Flash (Medium)** (AG's current default; same engine as the
-   CoalMine AG arm — do NOT pick the Claude models in AG's picker).
+   CoalMine AG arm—do NOT pick the Claude models in AG's picker).
 2. Paste the block below.
 3. Let AG write the result file itself; hand back to CC for the merged headline.
 

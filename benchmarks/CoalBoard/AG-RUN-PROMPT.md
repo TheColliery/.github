@@ -1,6 +1,6 @@
-# CoalBoard eval — Antigravity run prompt
+# CoalBoard eval—Antigravity run prompt
 
-Paste the block below into Antigravity (in the TheColliery project, so it can write the result file). It runs **both arms** on the 5 tasks and writes the answers to a file. Then tell me "done" and I read + score it (I score against the golds — Antigravity just produces the answers, so it can't teach-to-the-gold).
+Paste the block below into Antigravity (in the TheColliery project, so it can write the result file). It runs **both arms** on the 5 tasks and writes the answers to a file. Then tell me "done" and I read + score it (I score against the golds—Antigravity just produces the answers, so it can't teach-to-the-gold).
 
 ---
 
@@ -48,4 +48,4 @@ When the file is written, reply "done".
 
 ---
 
-After you say "done", I read `results/antigravity-raw.md`, score both arms against the golds (RUN-verifying T2's number and re-fetching T3's current Node LTS), and write the scored `results/antigravity.md` beside the Claude Code result — your data, unedited. Then we push all 4 repos.
+After you say "done", I read `results/antigravity-raw.md`, score both arms against the golds (RUN-verifying T2's number and re-fetching T3's current Node LTS), and write the scored `results/antigravity.md` beside the Claude Code result—your data, unedited. Then we push all 4 repos.
