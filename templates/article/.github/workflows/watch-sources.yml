@@ -37,10 +37,19 @@ jobs:
       # Findings never fail this job. It reports; it does not judge. Being UNABLE TO LOOK
       # does fail it, with exit 2: a missing or unreadable SOURCES.md would otherwise
       # produce a green tick every month while nothing was watched at all.
+      #
+      # GATED ON tools/watch-sources.mjs EXISTING — this skeleton ships the workflow,
+      # never the sweeper itself (genuinely bespoke per article repo). Both steps below
+      # would otherwise fail permanently on a bare "Use this template" repo: the sweep
+      # has nothing to run, and the artifact upload has no REVALIDATION.md to find.
+      # hashFiles() returns '' when nothing matches, so both are cleanly SKIPPED (not
+      # silently passed) until the room's own sweeper lands.
       - name: Sweep the external sources
+        if: hashFiles('tools/watch-sources.mjs') != ''
         run: node tools/watch-sources.mjs >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: hashFiles('tools/watch-sources.mjs') != ''
         with:
           name: revalidation-${{ github.run_id }}
           path: REVALIDATION.md

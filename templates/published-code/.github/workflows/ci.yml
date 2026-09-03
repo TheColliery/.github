@@ -51,14 +51,27 @@ jobs:
       # cross-platform — verify (dist-sync + repo consistency checks) then the test suite.
       # No build step here: rebuilding the dist in CI would mask a stale COMMITTED
       # plugin/ — the exact drift verify exists to catch.
-      - run: node scripts/verify.mjs
-      - run: node scripts/test.mjs
+      #
+      # GATED ON scripts/verify.mjs EXISTING — a bare "Use this template" click produces
+      # a repo with no scripts/ yet (this skeleton ships docs + CI only; the room's own
+      # scripts are built after scaffolding), and a hard `node scripts/verify.mjs` on that
+      # bare repo is a permanent, self-inflicted red CI run with no fix available to the
+      # user who clicked the button. hashFiles() returns '' when the path matches nothing,
+      # so the step is cleanly SKIPPED (not silently passed) until the real script lands.
+      - name: Verify (skips cleanly until scripts/verify.mjs exists)
+        if: hashFiles('scripts/verify.mjs') != ''
+        run: node scripts/verify.mjs
+      - name: Test (skips cleanly until scripts/test.mjs exists)
+        if: hashFiles('scripts/test.mjs') != ''
+        run: node scripts/test.mjs
       # PowerShell parity tests (the PS twins of the Node hooks) — pwsh ships on the GitHub
       # runners; skip gracefully if it is ever absent so the node gate above still gates.
       - name: PowerShell parity tests
         shell: bash
         run: |
-          if command -v pwsh >/dev/null 2>&1; then
+          if [ ! -f scripts/lib/ps-config.test.ps1 ]; then
+            echo "scripts/lib/ps-config.test.ps1 not present yet — skipping PS parity tests"
+          elif command -v pwsh >/dev/null 2>&1; then
             pwsh -NoProfile -File scripts/lib/ps-config.test.ps1
             pwsh -NoProfile -File scripts/lib/ps-hooks.test.ps1
           else

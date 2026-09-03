@@ -23,6 +23,12 @@ jobs:
   analyze:
     name: analyze (javascript)
     runs-on: ubuntu-latest
+    # GATED ON AT LEAST ONE JS/TS SOURCE FILE EXISTING — CodeQL's javascript-typescript
+    # analyzer fails outright ("no source code was seen during the build") against a bare
+    # "Use this template" repo, which ships docs + CI only and has zero .js/.mjs/.cjs/.ts
+    # files until the room's own scripts land. hashFiles() returns '' when nothing
+    # matches, so the whole job is cleanly SKIPPED (not silently passed) until then.
+    if: hashFiles('**/*.js', '**/*.mjs', '**/*.cjs', '**/*.ts', '**/*.tsx') != ''
     permissions:
       security-events: write
     steps:

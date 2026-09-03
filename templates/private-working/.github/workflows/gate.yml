@@ -28,10 +28,18 @@ jobs:
 
       # The SAME script the pre-push hook runs. Never re-implement a check in this YAML —
       # a check that lives in only one caller is a check that silently stops running.
+      #
+      # GATED ON scripts/gate.mjs EXISTING — this skeleton ships the workflow, never the
+      # gate script itself (genuinely bespoke per repo, per this template's own README).
+      # A bare "Use this template" click must not leave a permanently red Actions tab with
+      # no fix available; hashFiles() returns '' when nothing matches, so both steps are
+      # cleanly SKIPPED (not silently passed) until the room's own gate script lands.
       - name: gate tests
+        if: hashFiles('scripts/gate.test.mjs') != ''
         run: node --test scripts/gate.test.mjs
 
       - name: "{{REPO_NAME}} gate"
+        if: hashFiles('scripts/gate.mjs') != ''
         run: node scripts/gate.mjs --verbose
 
       - name: markdownlint

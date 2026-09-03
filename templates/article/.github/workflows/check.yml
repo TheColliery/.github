@@ -22,4 +22,12 @@ jobs:
       # out to `npx prettier@3`, which pulls prettier from the npm registry on first use,
       # so this job needs network. If prettier cannot run, the checker reports that as a
       # failure rather than as a pass.
-      - run: node tools/check.mjs
+      #
+      # GATED ON tools/check.mjs EXISTING — this skeleton ships the workflow, never the
+      # checker itself (genuinely bespoke per article repo, per this template's own
+      # README). A bare "Use this template" click must not leave a permanently red
+      # Actions tab with no fix available; hashFiles() returns '' when nothing matches,
+      # so the step is cleanly SKIPPED (not silently passed) until the real script lands.
+      - name: Run the corpus checker
+        if: hashFiles('tools/check.mjs') != ''
+        run: node tools/check.mjs
