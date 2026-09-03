@@ -1,0 +1,47 @@
+name: watch-sources
+
+# CADENCE: monthly, not daily. The sources an article cites are specifications, vendor
+# documentation, and tool defaults — things that move on a scale of years. A daily job
+# over the same sources would produce ~365 identical green reports a year and teach
+# everyone to close the tab, which is worse than no watch at all.
+#
+# TWO THINGS THAT CAN SILENTLY KILL THIS, once it is live:
+#   * GitHub disables scheduled workflows in a repository with no activity for 60 days.
+#     A quiet documentation repository hits that easily. Nothing announces it.
+#   * A scheduled run is best-effort and can be dropped entirely under load.
+# Neither shows up as a red run. If the sweeps in REVALIDATION.md stop appearing, that
+# is the failure, and only a reader noticing the gap will catch it.
+#
+# THIS JOB DOES NOT COMMIT. It uploads the updated register as an artifact and prints
+# the sweep into the job summary. A bot writing into an append-only human register would
+# make the register look maintained while nobody read a word of it. A person lands the sweep.
+
+on:
+  schedule:
+    - cron: '0 6 1 * *' # 06:00 UTC on the 1st of each month
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      # Findings never fail this job. It reports; it does not judge. Being UNABLE TO LOOK
+      # does fail it, with exit 2: a missing or unreadable SOURCES.md would otherwise
+      # produce a green tick every month while nothing was watched at all.
+      - name: Sweep the external sources
+        run: node tools/watch-sources.mjs >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: revalidation-${{ github.run_id }}
+          path: REVALIDATION.md
+          if-no-files-found: error

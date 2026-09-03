@@ -1,5 +1,25 @@
 # New-Repo Wizard (TheColliery)
 
+> **THE 3-KIND SKELETON (UMB-045, 2026-09-03) supersedes phases A–C below for a repo of a
+> known KIND—published-code (a Coal* skill or Kolwen-shaped repo) · private-working (a
+> Free-plan private repo, Bankfire-shaped) · article (a GitBook-published standard,
+> SpriteDesignDatum-shaped).** One command replaces the manual walk for everything a
+> skeleton owns: `node .github/scripts/new-repo.mjs <kind> [--overlay coal-skill|llm-deploy]
+> --name <repo> --license <spdx> <target-dir>`. It copies `templates/<kind>/` (+ the named
+> overlay), fills `{{PLACEHOLDER}}` tokens it can from flags, and refuses a non-empty
+> target—content-only placeholders (a README's "what it is" prose, a SECURITY.md's threat
+> model) are left for a human, named in the script's own output. `node
+> .github/scripts/skeleton-check.mjs` is the companion DERIVING instrument—it walks every
+> live repo, classifies it by kind, and reports each skeleton-owned file identical /
+> DIFFERS / absent; it never fixes drift, only names it. **Phases A–C below still apply
+> to anything the skeleton does not own**—the repo's own README prose, its `SKILL.md`
+> contract, local governance files, and any org-mechanics step (Phase D onward) untouched
+> by a skeleton copy. `overlay-coal-skill/` carries the 5-Standard-Systems shipping
+> mechanics for a Coal*-shaped repo (today: the claude.ai ZIP-packaging pair only—the
+> config/`configure.mjs`/`verify.mjs`-gate/`/stats` pieces are named pending in that
+> overlay's own README, not fabricated). `overlay-llm-deploy/` is a placeholder directory,
+> not yet populated.
+>
 > **This is an ENUMERATION, not a design.** Every pattern named below already exists somewhere in the org; this document is the ORDERED LIST a human or a room head walks through when a new repo is born, with each step pointing at the file that governs it. Where a step has no pattern, that is said plainly rather than invented here. Duplicating a governing file's content here would create a second source of truth that rots—so this file is one line plus a pointer, per step.
 >
 > **First customer: CoalGob**, founded 2026-08-04 as org repo #8, **LOCAL ONLY—no remote yet** (main's ruling). This wizard is what CoalGob runs before that changes.

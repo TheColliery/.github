@@ -1,0 +1,24 @@
+#!/bin/sh
+# {{REPO_NAME}} pre-push fence.
+#
+# THIS IS THE REAL FENCE, not CI. A private repo on a Free plan has no branch protection
+# and no required status checks — a red CI run cannot block anything, it can only report
+# after the fact. This hook runs BEFORE the push, on the one machine that exists, at zero
+# Actions minutes. CI is the second opinion.
+#
+# ENABLE (once per clone):  git config core.hooksPath .githooks
+# BYPASS (and it is a real hole, named rather than hidden): git push --no-verify
+#   Nothing available on a Free private repo can close that. The fence is a discipline
+#   with a machine behind it, not a wall.
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "pre-push: node not found — gate SKIPPED (visible skip, never a silent pass)" >&2
+  exit 0
+fi
+
+echo "pre-push: running scripts/gate.mjs"
+node "$(git rev-parse --show-toplevel)/scripts/gate.mjs" || {
+  echo "" >&2
+  echo "pre-push: gate FAILED — push refused. Fix, or --no-verify if you mean it." >&2
+  exit 1
+}

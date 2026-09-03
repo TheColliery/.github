@@ -1,0 +1,38 @@
+name: "Bug report"
+description: "{{REPO_NAME}} misbehaves"
+title: "[bug] <component>: <one-line summary>"
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - "{{COMPONENT_1}}"
+        - "{{COMPONENT_2}}"
+        - conductor hook
+        - installer
+        - configurator
+        - verify gate
+        - plugin / packaging
+        - docs
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: "{{REPO_NAME}} version + platform"
+      placeholder: "vX.Y.Z · Claude Code on Windows 11"
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce + what happened
+      description: "Exact commands/inputs and exact output."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior

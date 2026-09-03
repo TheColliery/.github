@@ -1,0 +1,15 @@
+# What the documentation site is allowed to publish.
+#
+# Without this, GitBook publishes every tracked file, including internal working files
+# nobody meant to write for readers. The site is a reading copy of the article and the
+# few documents around it, and nothing else.
+#
+# Note the limit honestly: this is a publication filter, not a privacy control. If the
+# repository is public, everything here is readable on GitHub either way. What this stops
+# is the site presenting internal working files as though they were part of the article.
+
+root: ./
+
+structure:
+  readme: README.md
+  summary: SUMMARY.md

@@ -1,0 +1,41 @@
+name: gate
+
+# ONE workflow, ONE Linux job — sized to a PRIVATE repo, not to the published-code shape.
+# Reason: minutes come from the org's shared 2,000/month Free pool. A 3-OS x 2-node matrix
+# would exhaust the whole org quota in a small number of pushes and take every other
+# private repo down with it. Every published-code repo is PUBLIC, where that matrix is free.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**/*.png', 'LICENSE', 'NOTICE']
+  pull_request:
+    branches: [main]
+    paths-ignore: ['**/*.png', 'LICENSE', 'NOTICE']
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        # Shallow by design: no tags, no history-dependent check here.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      # The SAME script the pre-push hook runs. Never re-implement a check in this YAML —
+      # a check that lives in only one caller is a check that silently stops running.
+      - name: gate tests
+        run: node --test scripts/gate.test.mjs
+
+      - name: "{{REPO_NAME}} gate"
+        run: node scripts/gate.mjs --verbose
+
+      - name: markdownlint
+        uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff # v24.2.0
+        continue-on-error: true # report-only
+        with:
+          globs: '**/*.md'
