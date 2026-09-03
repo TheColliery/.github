@@ -24,6 +24,14 @@ on:
 permissions:
   contents: read
 
+# cancel-in-progress: TRUE -- the sweep uploads a per-run ARTIFACT, not a shared Release/tag
+# asset; a cancelled run simply never uploads it, with no partial or corrupted shared state
+# left behind (unlike claude-ai-zips.yml's per-tag Release asset). Monthly-cron besides, so
+# overlap is vanishingly rare (SKILL-REPO-PATTERN.md's concurrency MUST, cited not restated).
+concurrency:
+  group: watch-sources-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   watch:
     runs-on: ubuntu-latest

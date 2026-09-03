@@ -28,6 +28,17 @@ on:
 permissions:
   contents: read
 
+# cancel-in-progress: FALSE, deliberately (AGENTS.md's UMB-052 CANON CORRECTIONS exhibit is
+# THIS workflow's own class, cited not restated: CoalMine's prior v3.17.1 asset race, two
+# overlapping claude-ai-zips runs uploading to the same tag). Serialising is the fix;
+# CANCELLING is not, because a run killed mid-upload can leave the Release carrying a
+# partial or missing ZIP with nothing to signal it -- a broken install path for a user,
+# which is strictly worse than a slow one. The group is keyed on the TAG (ref_name),
+# not the branch, because the asset collision is per-Release.
+concurrency:
+  group: claude-ai-zips-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   build-zips:
     runs-on: ubuntu-latest

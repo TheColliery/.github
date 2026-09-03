@@ -19,6 +19,13 @@ on:
 permissions:
   contents: read
 
+# cancel-in-progress: TRUE -- a superseded CodeQL run simply never uploads its SARIF, and the
+# previous analysis stands; nothing is left half-written. The newer push analyzes the newer tree,
+# which is the state anyone cares about.
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   analyze:
     name: analyze (javascript)

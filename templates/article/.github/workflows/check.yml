@@ -8,6 +8,13 @@ on:
 permissions:
   contents: read
 
+# cancel-in-progress: TRUE -- the corpus checker reads and reports; it publishes nothing
+# and touches no external state, so a superseded run has nothing to leave half-done
+# (SKILL-REPO-PATTERN.md's concurrency MUST, cited not restated).
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest

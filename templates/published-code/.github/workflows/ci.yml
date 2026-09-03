@@ -25,6 +25,12 @@ on:
 permissions:
   contents: read
 
+# cancel-in-progress: TRUE -- ci.yml only reads, tests and compares; it publishes nothing and
+# touches no external state, so a superseded run has nothing to leave half-done.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   gate:
     name: gate (${{ matrix.os }} · node ${{ matrix.node }})
