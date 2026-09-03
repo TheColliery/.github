@@ -10,9 +10,13 @@ Coal* skill repo — the 5 Standard Systems' shipping mechanics.
   CoalFace · CoalLedger) per UMB-045 step 2. **CoalMine is the canonical source**
   (`board #40`, explicitly the flock exemplar in its own `MEMORY.md`; its own
   `claude-ai-zips.yml` was the most recently touched of the three, `2026-08-22`).
-  CoalFace's fork carries two real improvements (a combined ref-type+stability check,
-  a fuller step-name provenance comment) not folded in here — worth a follow-up
-  reconciliation, not done this pass.
+  CoalFace's fork's two real improvements are now **merged in** (UMB-045 letter (B),
+  2026-09-03, citing CoalFace commit `6f1f3458009c039de44fa2c3fcd548222b0ebc2b`): the
+  ref-type + stability check is one env-driven step instead of a job-level `if:` plus a
+  separate step, and the step's own `name:` carries the full provenance rationale
+  inline (double-quoted, so GitHub's YAML parser does not truncate it at the first
+  unescaped `#` — the exact defect CoalFace's own board #119 found and fixed in this
+  same file).
 - `build-claude-ai-zips.mjs` imports `./lib/desc-cap.mjs` and `./lib/claude-ai-trim.mjs`
   at run time — **those two library files are NOT copied here.** They are general
   cross-platform description-capping utilities (part of the config-schema tooling,

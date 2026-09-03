@@ -7,6 +7,15 @@ name: claude-ai-zips
 # never edited), zip each staged directory, and attach the ZIPs to the GitHub Release
 # as assets. The user downloads a ZIP from the Release and uploads it to claude.ai
 # directly. Canonical exemplar: CoalMine (board #40 / C2-v2 design).
+#
+# The combined ref-type+stability gate step below is ported from CoalFace's own fork
+# (commit 6f1f3458009c039de44fa2c3fcd548222b0ebc2b, 2026-08-22) — UMB-045 letter (B),
+# 2026-09-03. CoalFace merged two checks CoalMine ran as a job-level `if:` plus a
+# separate step into one step with an env-driven if/elif chain, closing a real gap: a
+# `workflow_dispatch` run against the default branch has GITHUB_REF_NAME == the branch
+# name (e.g. "main") — no hyphen — so a shape-only pre-release check alone would read
+# "stable" and attempt a Release literally named after the branch. Both conditions must
+# hold for is_stable=true.
 on:
   push:
     tags:
@@ -22,10 +31,6 @@ permissions:
 jobs:
   build-zips:
     runs-on: ubuntu-latest
-    # A workflow_dispatch against the default branch has GITHUB_REF_NAME == the branch
-    # name (e.g. "main") -- no hyphen -- so a shape-only pre-release check would read
-    # "stable" and attempt a Release tagged with the branch name. Gate on ref_type first.
-    if: github.ref_type == 'tag'
     permissions:
       contents: write # only this job creates the Release and uploads assets
     steps:
@@ -35,12 +40,15 @@ jobs:
         with:
           node-version: 24
 
-      # Tags = beta + stable (all); Releases = stable-only. This job creates a Release,
-      # implicitly "Latest", for any tag push -- gate it so a pre-release tag never does.
-      - name: Check the tag is STABLE, not a pre-release
+      - name: "Check the ref is a STABLE tag, not a branch or a pre-release tag (tags = beta + stable, Releases = stable-only; this job creates a Release, implicitly \"Latest\", for any ref this workflow runs against. A hyphen check alone answers \"is this tag stable\" but never \"is this even a tag\" — workflow_dispatch is enabled and its UI defaults the ref picker to the default branch, so a manual re-run against a branch (GITHUB_REF_NAME=\"main\", no hyphen) would pass a shape-only check and create a Release literally named \"main\". Both conditions must hold for is_stable=true; the hyphen check alone is still correct for its own question.)"
         id: gate
+        env:
+          REF_TYPE: ${{ github.ref_type }}
         run: |
-          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+          if [[ "${REF_TYPE}" != "tag" ]]; then
+            echo "is_stable=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::ref_type is '${REF_TYPE}', not a tag -- skipping claude.ai ZIP packaging (a workflow_dispatch run against a branch has no tag to package)"
+          elif [[ "${GITHUB_REF_NAME}" == *-* ]]; then
             echo "is_stable=false" >> "$GITHUB_OUTPUT"
             echo "::notice::${GITHUB_REF_NAME} is a pre-release tag -- Releases are stable-only here, skipping claude.ai ZIP packaging"
           else
