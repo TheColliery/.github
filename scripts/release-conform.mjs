@@ -72,7 +72,8 @@ async function main() {
     return;
   }
 
-  console.log(`[release-conform] checking ${REPOS.length} repos (unauthenticated, public reads only)...\n`);
+  const authMode = process.env.GITHUB_TOKEN ? 'authenticated' : 'unauthenticated, public reads only';
+  console.log(`[release-conform] checking ${REPOS.length} repos (${authMode})...\n`);
 
   let totalFindings = 0;
   let publishedCount = 0;
@@ -112,4 +113,7 @@ async function main() {
   if (totalFindings > 0 || failedRepos > 0) process.exitCode = 1;
 }
 
-main();
+main().catch((e) => {
+  console.error(`FAIL: ${e.message}`);
+  process.exitCode = 1;
+});
