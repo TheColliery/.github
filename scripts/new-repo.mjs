@@ -206,8 +206,6 @@ async function applySettings(kind, ownerRepo) {
   }
 }
 
-// --settings-check-check-check helper for --apply-settings entry point ---------------
-
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
