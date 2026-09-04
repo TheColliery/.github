@@ -18,10 +18,13 @@
 > to anything the skeleton does not own**—the repo's own README prose, its `SKILL.md`
 > contract, local governance files, and any org-mechanics step (Phase D onward) untouched
 > by a skeleton copy. `overlay-coal-skill/` carries the 5-Standard-Systems shipping
-> mechanics for a Coal*-shaped repo (today: the claude.ai ZIP-packaging pair only—the
-> config/`configure.mjs`/`verify.mjs`-gate/`/stats` pieces are named pending in that
-> overlay's own README, not fabricated). `overlay-llm-deploy/` is a placeholder directory,
-> not yet populated.
+> mechanics for a Coal*-shaped repo—the claude.ai ZIP-packaging pair plus the `config`
+> mechanism (`config-schema.mjs`/`configure.mjs`/`config-keys.mjs`) and a `/stats`
+> command stub, every piece named in its own `OVERLAY-README.md` (renamed from `README.md`
+> UMB-056/4, so applying the overlay never overwrites the scaffolded repo's real product
+> README). `overlay-llm-deploy/` carries a Cloudflare Workers post-deploy check
+> (`post-deploy-check.mjs` + its shipped test) and a `wrangler.jsonc` stub, per its own
+> `OVERLAY-README.md`.
 >
 > **This is an ENUMERATION, not a design.** Every pattern named below already exists somewhere in the org; this document is the ORDERED LIST a human or a room head walks through when a new repo is born, with each step pointing at the file that governs it. Where a step has no pattern, that is said plainly rather than invented here. Duplicating a governing file's content here would create a second source of truth that rots—so this file is one line plus a pointer, per step.
 >

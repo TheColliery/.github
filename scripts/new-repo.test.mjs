@@ -70,6 +70,32 @@ test('new-repo.mjs published-code, bare --license (no value, parses to boolean t
   fs.rmSync(path.dirname(target), { recursive: true, force: true });
 });
 
+test('new-repo.mjs published-code --overlay coal-skill: the overlay does not clobber the product README.md (UMB-056/4)', () => {
+  // copyDirRecursive applies the overlay AFTER the base skeleton with no collision
+  // awareness -- an overlay shipping its own README.md at its own root silently
+  // overwrote the scaffolded repo's real product README with the overlay's own
+  // meta-documentation. Fixed by renaming the overlay meta-docs to OVERLAY-README.md
+  // (a name nothing in the base skeleton ships), never by teaching copyDirRecursive
+  // to skip a path -- the skeleton's own README.md must still be free to exist.
+  const target = path.join(scratchDir(), 'r');
+  const res = run(['published-code', '--overlay', 'coal-skill', '--name', 'x', '--license', 'Apache-2.0', target]);
+  assert.equal(res.status, 0, res.stderr);
+  const readme = fs.readFileSync(path.join(target, 'README.md'), 'utf8');
+  assert.doesNotMatch(readme, /^# overlay-coal-skill/m, 'the product README must not be the overlay meta-doc');
+  assert.ok(fs.existsSync(path.join(target, 'OVERLAY-README.md')), 'the overlay meta-doc still ships, under its own non-colliding name');
+  fs.rmSync(path.dirname(target), { recursive: true, force: true });
+});
+
+test('new-repo.mjs published-code --overlay llm-deploy: the overlay does not clobber the product README.md (UMB-056/4)', () => {
+  const target = path.join(scratchDir(), 'r');
+  const res = run(['published-code', '--overlay', 'llm-deploy', '--name', 'x', '--license', 'Apache-2.0', target]);
+  assert.equal(res.status, 0, res.stderr);
+  const readme = fs.readFileSync(path.join(target, 'README.md'), 'utf8');
+  assert.doesNotMatch(readme, /^# overlay-llm-deploy/m, 'the product README must not be the overlay meta-doc');
+  assert.ok(fs.existsSync(path.join(target, 'OVERLAY-README.md')), 'the overlay meta-doc still ships, under its own non-colliding name');
+  fs.rmSync(path.dirname(target), { recursive: true, force: true });
+});
+
 test('new-repo.mjs article, --license as a bare SPDX string (not a file): still refuses, badge falls back cleanly', () => {
   // A bare "MIT" string is not an existing file path, so it is read as the OLD
   // LICENSE_BADGE-only meaning -- the LICENSE body is never touched and stays the stub.
