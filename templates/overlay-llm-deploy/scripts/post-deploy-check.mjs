@@ -5,8 +5,11 @@
 // a stale page served until a human curled it).
 //
 // Sourced verbatim (mechanism) from Kolwen's live scripts/post-deploy-check.mjs
-// (LLMWorks/Kolwen, read 2026-09-03, UMB-045 letter (D)). The ORIGINS list and the
-// assets directory are {{PLACEHOLDER}}s — fill with this tool's own domain(s) and dir.
+// (LLMWorks/Kolwen, read 2026-09-03, UMB-045 letter (D); re-synced against Kolwen
+// commit 9c834a1, a CodeQL js/trivial-conditional fix — the while-loop's own internal
+// `if (matched) break;` already made the removed `!matched` clause dead code). The
+// ORIGINS list and the assets directory are {{PLACEHOLDER}}s — fill with this tool's
+// own domain(s) and dir.
 //
 // Usage: node scripts/post-deploy-check.mjs [--wait <seconds>]
 // Exit 0 = every deployed file matches. Exit 1 = a mismatch, or nothing could be observed.
@@ -79,7 +82,7 @@ async function probe(origin) {
 // budget runs out; only the final state is reported.
 const started = Date.now();
 let matched = false, lastMisses = null, lastErr = {};
-while (!matched && (Date.now() - started) / 1000 < budget) {
+while ((Date.now() - started) / 1000 < budget) {
   for (const origin of ORIGINS) {
     try {
       const misses = await probe(origin);
