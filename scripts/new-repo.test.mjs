@@ -96,6 +96,22 @@ test('new-repo.mjs published-code --overlay llm-deploy: the overlay does not clo
   fs.rmSync(path.dirname(target), { recursive: true, force: true });
 });
 
+test('new-repo.mjs published-code, --license MIT: NOTICE derives its licence line from the same value as the README badge (UMB-056/5)', () => {
+  // NOTICE used to hard-code "the Apache License, Version 2.0" regardless of --license
+  // -- wrong for every non-Apache zone in the licence PORTFOLIO (AGENTS.md's
+  // "LICENSE = A PORTFOLIO" ruling). Fixed by having NOTICE's own {{LICENSE_BADGE}}
+  // token read from the SAME values object the README badge already fills from.
+  const target = path.join(scratchDir(), 'r');
+  const res = run(['published-code', '--name', 'x', '--license', 'MIT', target]);
+  assert.equal(res.status, 0, res.stderr);
+  const notice = fs.readFileSync(path.join(target, 'NOTICE'), 'utf8');
+  const readme = fs.readFileSync(path.join(target, 'README.md'), 'utf8');
+  assert.match(notice, /licensed under MIT/);
+  assert.doesNotMatch(notice, /Apache License/);
+  assert.match(readme, /badge\/license-MIT-blue/);
+  fs.rmSync(path.dirname(target), { recursive: true, force: true });
+});
+
 test('new-repo.mjs article, --license as a bare SPDX string (not a file): still refuses, badge falls back cleanly', () => {
   // A bare "MIT" string is not an existing file path, so it is read as the OLD
   // LICENSE_BADGE-only meaning -- the LICENSE body is never touched and stays the stub.
