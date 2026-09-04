@@ -80,6 +80,27 @@ export const ARTICLE_PRIVATE_MARKER = '.article-private';
 // this room IS published, just not through git-sync.
 export const ARTICLE_CHANGEREQUEST_MARKER = '.article-changerequest';
 
+// UMB-062 (LLM chief r19 finding, Chotmeter): a private-working repo has no
+// classify()-visible signature until it actually adopts `gate.yml` -- Chotmeter
+// (real, private, has `.git`, zero `.github/workflows/`) read UNCLASSIFIED, so
+// `--settings` never printed a block for it and a live drift (`allow_auto_merge`)
+// was invisible until a raw REST read caught it. Decision: a repo-root marker,
+// same mechanism as the two article markers above, not visibility-based
+// auto-classification. Verified against the code and the live org before
+// choosing, not merely trusted from the hypothesis handed down: (a) `classify()`
+// is a pure, offline, filesystem-only function today (zero network, Phoenix #2) --
+// basing it on GitHub's `private` field would need a REST call inside what is
+// currently a synchronous local walk, or a local hint that does not exist (GitHub
+// visibility is not filesystem-observable without one); (b) visibility and KIND
+// are genuinely orthogonal -- CoalGob (`CoalWorks/CoalGob/`, LOCAL ONLY, no remote
+// yet) is a real, present-tense counter-example: it is published-code-shaped by
+// intent and will very plausibly be pushed PRIVATE at first, the way any repo
+// commonly starts before going public. A visibility-based rule would misclassify
+// it as private-working the moment it gains a remote, before its own `ci.yml`/
+// `codeql.yml` even land. The marker never has this failure mode -- it names
+// intent directly instead of inferring it from an orthogonal access-control flag.
+export const PRIVATE_WORKING_MARKER = '.private-working';
+
 // Both article variants share the PUBLIC article's own template directory -- the
 // files are identical in shape; only which ones are REQUIRED differs, per the
 // declared variant. There is no separate `templates/article (private)/` or
@@ -108,6 +129,11 @@ export function classify(repoDir) {
   // definition, same reasoning as the private case) -- checked next, still more
   // specific than the bare .gitbook.yaml signature below.
   if (has(ARTICLE_CHANGEREQUEST_MARKER)) return 'article (change-request)';
+  // UMB-062: checked before the structural gate.yml signature below -- the marker is
+  // the declared signal and wins if a repo somehow carries both; a repo that has
+  // ALREADY adopted gate.yml does not need the marker at all (the structural check
+  // still classifies it correctly on its own, unchanged).
+  if (has(PRIVATE_WORKING_MARKER)) return 'private-working';
   if (has('.gitbook.yaml')) return 'article';
   if (has('.github/workflows/gate.yml') && !has('.github/workflows/ci.yml')) return 'private-working';
   if (has('.github/workflows/ci.yml') && has('.github/workflows/codeql.yml')) return 'published-code';
@@ -131,6 +157,7 @@ export function classify(repoDir) {
 export function hasAnyKindMarker(repoDir) {
   if (fs.existsSync(path.join(repoDir, ARTICLE_PRIVATE_MARKER))) return true;
   if (fs.existsSync(path.join(repoDir, ARTICLE_CHANGEREQUEST_MARKER))) return true;
+  if (fs.existsSync(path.join(repoDir, PRIVATE_WORKING_MARKER))) return true;
   return ALL_SKELETON_FILE_NAMES.some((rel) => fs.existsSync(path.join(repoDir, rel)));
 }
 

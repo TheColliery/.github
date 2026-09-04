@@ -116,6 +116,33 @@ The docs spine in the table above is a floor, not a mandate frozen at day one �
 
 The `private-working` row above states a floor, not a ceiling. A private-working repo may carry additional surfaces this canon does not name — a bespoke evidence tier, a project-specific queue file, a custom verification gate, design artefacts — and those are that room's own choice. Absence from this table is not drift; this canon names only what every `private-working` repo shares, never everything a given one may add on top.
 
+## A kind signal for `private-working`, the same marker discipline as the article variants
+
+`private-working`'s own classification signature is the workflow file its floor already
+requires (`.github/workflows/gate.yml`, present without a `ci.yml`) — but that signature
+is only visible once a repo has actually adopted the workflow. A repo that is genuinely
+private-working in every other respect, but has not yet wired `gate.yml`, reads
+UNCLASSIFIED with no way to say which kind it is — the same shape the two article
+variants above already closed, applied here to the third kind.
+
+This declares with a repo-root marker, `.private-working` — an empty sentinel,
+checked before the structural `gate.yml` signature since it is the more specific,
+deliberate claim. A repo that has already adopted `gate.yml` needs no marker at all;
+the structural signature keeps working unchanged.
+
+**Why a marker, not a rule inferred from the repo being private:** visibility (a
+GitHub access-control setting) and KIND (a structural shape this canon defines) are
+genuinely orthogonal properties. A private repo is not intrinsically `private-working`
+— it may be a `published-code` room still in its private, pre-launch phase, the way
+many repositories start private and go public later. A rule that classified by
+visibility alone would misclassify that repo the moment it gained a GitHub remote,
+before its own CI workflows ever landed. The marker never has this failure mode: it
+states intent directly, the same reasoning the two article-variant markers above
+already use. A visibility-based rule would also need a live REST read (or a local
+hint that does not exist) to know a repo's visibility at all — a marker keeps
+classification a pure, offline, filesystem-only operation, exactly as it is for
+every other kind.
+
 ## What this file does not cover
 
 - The 5 Standard Systems and every skill-repo-specific mechanism — [SKILL-REPO-PATTERN.md](./SKILL-REPO-PATTERN.md) (L2).

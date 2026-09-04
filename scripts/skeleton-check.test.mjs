@@ -5,7 +5,8 @@ import os from 'os';
 import path from 'path';
 import {
   classify, hasAnyKindMarker, findRepos, SKELETON_FILES,
-  ARTICLE_PRIVATE_MARKER, ARTICLE_CHANGEREQUEST_MARKER, TEMPLATE_DIR_FOR_KIND,
+  ARTICLE_PRIVATE_MARKER, ARTICLE_CHANGEREQUEST_MARKER, PRIVATE_WORKING_MARKER,
+  TEMPLATE_DIR_FOR_KIND,
 } from './lib/skeleton-check-lib.mjs';
 
 // A scratch zones-root, one fixture per test to keep each hermetic. Every fixture is
@@ -35,6 +36,54 @@ test('classify: gate.yml without ci.yml means private-working', () => {
   const dir = path.join(root, 'r');
   write(path.join(dir, '.github/workflows/gate.yml'), 'x');
   assert.equal(classify(dir), 'private-working');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('classify: the .private-working marker alone (no .github/workflows at all) classifies "private-working" -- the real Chotmeter shape, RED against the pre-fix classify() (UMB-062)', () => {
+  const root = makeScratch();
+  const dir = path.join(root, 'r');
+  write(path.join(dir, PRIVATE_WORKING_MARKER), '');
+  write(path.join(dir, 'LICENSE'), 'x');
+  assert.equal(classify(dir), 'private-working');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('classify: the private-working marker takes precedence even if gate.yml is also present', () => {
+  const root = makeScratch();
+  const dir = path.join(root, 'r');
+  write(path.join(dir, PRIVATE_WORKING_MARKER), '');
+  write(path.join(dir, '.github/workflows/gate.yml'), 'x');
+  assert.equal(classify(dir), 'private-working');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('classify: a repo WITHOUT the marker classifies exactly as before -- gate.yml alone is still enough, the marker is additive not a replacement', () => {
+  const root = makeScratch();
+  const dir = path.join(root, 'r');
+  write(path.join(dir, '.github/workflows/gate.yml'), 'x');
+  assert.equal(classify(dir), 'private-working');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('hasAnyKindMarker: the private-working marker alone (no skeleton file) is a marker', () => {
+  const root = makeScratch();
+  const dir = path.join(root, 'r');
+  write(path.join(dir, PRIVATE_WORKING_MARKER), '');
+  assert.equal(hasAnyKindMarker(dir), true);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('findRepos: the real Chotmeter shape (marker + .git + LICENSE, no .github/workflows) is enumerated and classified "private-working" (UMB-062)', () => {
+  const root = makeScratch();
+  const zone = 'LLMWorks';
+  const dir = path.join(root, zone, 'ChotmeterLike');
+  write(path.join(dir, '.git', 'config'), '');
+  write(path.join(dir, PRIVATE_WORKING_MARKER), '');
+  write(path.join(dir, 'LICENSE'), 'x');
+  const repos = findRepos(root, [zone]);
+  assert.equal(repos.length, 1);
+  assert.equal(repos[0].kind, 'private-working');
+  assert.equal(repos[0].hasSignal, true);
   fs.rmSync(root, { recursive: true, force: true });
 });
 

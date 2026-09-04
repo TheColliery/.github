@@ -124,6 +124,15 @@ async function diffSettings(kind, ownerRepo, settingsPath) {
   const repoRes = await ghGet(token, base);
   if (settings.repoPatch) diffFields('repoPatch', settings.repoPatch, repoRes.json);
 
+  // UMB-062: allow_auto_merge lived inside repoPatch until this unit -- a free-org
+  // PRIVATE repo silently ignores the field (PATCH returns 200, GET reads back
+  // false), so comparing it there reported a permanent, unclosable DIFFERS. Printed
+  // as its own explicit N/A line, the same shape as secretScanning/
+  // privateVulnerabilityReporting below -- never silently dropped from the report.
+  if (settings.allowAutoMerge?.status === 'n/a') {
+    console.log(`    allowAutoMerge: N/A (${settings.allowAutoMerge.reason})`);
+  }
+
   if (settings.secretScanning?.status === 'n/a') {
     console.log(`    secretScanning: N/A (${settings.secretScanning.reason})`);
   } else if (settings.secretScanning) {

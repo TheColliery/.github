@@ -5,7 +5,11 @@
     "is_template": false,
     "has_issues": true, "has_wiki": false, "has_projects": false, "has_discussions": false,
     "allow_merge_commit": false, "allow_squash_merge": true, "allow_rebase_merge": false,
-    "delete_branch_on_merge": true, "allow_update_branch": true, "allow_auto_merge": true
+    "delete_branch_on_merge": true, "allow_update_branch": true
+  },
+  "allowAutoMerge": {
+    "status": "n/a",
+    "reason": "UMB-062: PATCH {\"allow_auto_merge\":true} on a free-org PRIVATE repo returns HTTP 200 but the field reads back false on a subsequent GET — measured live on Chotmeter and Bankfire, 2026-09-04 18:55, and re-confirmed by a read-only GET the same day (both still show allow_auto_merge:false). GitHub's own REST reference and product docs do not document a plan- or visibility-tier restriction for this field (checked, not found) — encoded as MEASURED, not as an explained mechanism. Do not retry the PATCH expecting a different result on this org's current plan; if the org's plan or this repo's visibility ever changes, re-measure before trusting either this N/A or a restored true."
   },
   "vulnerabilityAlerts": { "endpoint": "PUT /repos/{owner}/{repo}/vulnerability-alerts", "enable": true },
   "automatedSecurityFixes": { "endpoint": "PUT /repos/{owner}/{repo}/automated-security-fixes", "enable": true },

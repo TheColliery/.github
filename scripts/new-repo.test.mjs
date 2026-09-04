@@ -322,3 +322,24 @@ test('new-repo.mjs published-code, --license-id given but --license is a bare SP
   assert.match(res.stderr, /contradicts .*LICENSE's own body, identified as Apache-2\.0/);
   fs.rmSync(path.dirname(target), { recursive: true, force: true });
 });
+
+// ---------------------------------------------------------------------------------
+// UMB-062 item 2: templates/repo-settings.private-working.json no longer claims
+// allow_auto_merge is settable on this org's plan. A pure data-shape test -- no
+// network, no mock -- proving the JSON itself, not the REST call, since applySettings/
+// diffSettings have no existing test infrastructure to mock a GitHub API response
+// against (pre-existing gap, not one this item introduces) and this item's own
+// change is a two-line print branch reading straight off this JSON's own shape.
+
+const SETTINGS_PATH = path.join(path.dirname(SCRIPT), '..', 'templates', 'repo-settings.private-working.json');
+
+test('repo-settings.private-working.json: allow_auto_merge is NOT inside repoPatch -- a regression guard against silently re-adding the field GitHub ignores on this plan (UMB-062)', () => {
+  const settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
+  assert.ok(!('allow_auto_merge' in settings.repoPatch), 'allow_auto_merge must not live inside repoPatch -- a free-org PRIVATE repo silently ignores it there (measured on Chotmeter and Bankfire, 2026-09-04)');
+});
+
+test('repo-settings.private-working.json: allowAutoMerge is encoded as an N/A-with-reason cell, the same shape as the ruleset row (UMB-062)', () => {
+  const settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
+  assert.equal(settings.allowAutoMerge?.status, 'n/a');
+  assert.ok(typeof settings.allowAutoMerge.reason === 'string' && settings.allowAutoMerge.reason.length > 20, 'the N/A cell must carry a real reason, not a placeholder');
+});

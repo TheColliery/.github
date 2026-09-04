@@ -179,6 +179,15 @@ async function applySettings(kind, ownerRepo) {
     results.push({ surface: 'repoPatch', ok: r.ok, status: r.status });
   }
 
+  // UMB-062: allow_auto_merge used to ride inside repoPatch above, reporting `ok(200)`
+  // on a free-org PRIVATE repo where the PATCH silently did nothing (the field reads
+  // back false regardless) -- an apply that looked successful and changed nothing.
+  // Printed as its own N/A line instead, matching secretScanning/
+  // privateVulnerabilityReporting below; never attempted as a live call.
+  if (settings.allowAutoMerge?.status === 'n/a') {
+    results.push({ surface: 'allowAutoMerge', ok: true, status: 'N/A', reason: settings.allowAutoMerge.reason });
+  }
+
   if (settings.vulnerabilityAlerts?.enable) {
     const r = await ghRequest(token, 'PUT', `${base}/vulnerability-alerts`);
     results.push({ surface: 'vulnerabilityAlerts', ok: r.ok, status: r.status });
