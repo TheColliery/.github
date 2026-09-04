@@ -98,7 +98,7 @@ This specific repository (`.github`) manages the following internal assets:
 * **[`SWEEP-MARKS.md`](SWEEP-MARKS.md)**: The event → doc-spot registry: which surfaces each recurring event rots, and who owns sweeping each one.
 * **[`CLAUDE-AI-INSTALL.md`](CLAUDE-AI-INSTALL.md)**: Which skills run on claude.ai, and how to package one for it.
 * **[`templates/`](templates)**: The copy-verbatim artifacts a sibling repo installs rather than hand-rolls—`zip-skills.yml` (the claude.ai skill-ZIP release workflow, cited by `SKILL-REPO-PATTERN.md` Layer 5) and its packaging script.
-* **[`scripts/`](scripts)**: This repo's own gate—`verify-landing.mjs` (no-Thai front doors · benchmark row enumeration both directions · dated record) and `update-readme.mjs` (the traffic badges), each with its unit tests. Run by `.github/workflows/` and by `.githooks/` after `git config core.hooksPath .githooks`.
+* **[`scripts/`](scripts)**: This repo's own gate (`verify-landing.mjs`—no-Thai front doors · benchmark row enumeration both directions · dated record—and `update-readme.mjs`—the traffic badges) plus the skeleton/template tooling (`skeleton-check.mjs`, `new-repo.mjs`, `release-conform.mjs`, and their shared `lib/`). Every `scripts/*.test.mjs` file runs in CI from one enumerated, fail-loud-on-a-missing-file list (`.github/workflows/verify-landing.yml`—never the directory form, which silently skips a listed file that vanished); the same list also runs locally via `.githooks/` after `git config core.hooksPath .githooks`.
 * **[`benchmarks/`](benchmarks)**: The per-tool benchmark records the Series Benchmarks section above links to.
 
 ---

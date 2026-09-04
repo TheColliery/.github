@@ -13,8 +13,16 @@
 # `node --test` silently ignores a missing path arg (on Node 24 it is reinterpreted
 # as a zero-match name filter), so a renamed test would drop out of the gate with a
 # green exit. This repo has no scripts/test.mjs runner to own the list — check first.
-for t in scripts/verify-landing.test.mjs scripts/update-readme.test.mjs; do
+#
+# UMB-055 item 2: widened to EVERY scripts/*.test.mjs (not just the landing pair) —
+# the same enumerated list .github/workflows/verify-landing.yml now runs, so this
+# hook's own header comment ("runs the same fail-loud pair CI runs") stays true.
+for t in scripts/verify-landing.test.mjs scripts/update-readme.test.mjs \
+         scripts/release-conform.test.mjs scripts/skeleton-check.test.mjs \
+         scripts/license-check.test.mjs scripts/new-repo.test.mjs; do
   [ -f "$t" ] || { echo "gate: missing $t" >&2; exit 1; }
 done
-node --test scripts/verify-landing.test.mjs scripts/update-readme.test.mjs || exit 1
+node --test scripts/verify-landing.test.mjs scripts/update-readme.test.mjs \
+            scripts/release-conform.test.mjs scripts/skeleton-check.test.mjs \
+            scripts/license-check.test.mjs scripts/new-repo.test.mjs || exit 1
 node scripts/verify-landing.mjs

@@ -28,8 +28,25 @@ jobs:
         with:
           node-version: 22
 
-      - name: Unit-test the landing scripts
-        run: node --test scripts/verify-landing.test.mjs scripts/update-readme.test.mjs
+      - name: Unit-test every scripts/*.test.mjs (enumerated, fails loud on a missing file)
+        # UMB-055 item 2: this repo's other four test files (release-conform,
+        # skeleton-check, license-check, new-repo -- the template/skeleton tooling)
+        # never ran in CI before this step; only the landing pair did. `node --test`
+        # SILENTLY ignores a missing path argument (node/runtime.md §2) -- never the
+        # directory form either, which throws MODULE_NOT_FOUND on Node 24 -- so every
+        # listed file's existence is checked FIRST, failing loud, before node --test
+        # ever runs. This is the SAME enumerated list `.githooks/pre-commit`/
+        # `pre-push` run locally -- widen both together, never one without the other.
+        run: |
+          set -euo pipefail
+          for t in scripts/verify-landing.test.mjs scripts/update-readme.test.mjs \
+                   scripts/release-conform.test.mjs scripts/skeleton-check.test.mjs \
+                   scripts/license-check.test.mjs scripts/new-repo.test.mjs; do
+            [ -f "$t" ] || { echo "::error::listed test file missing: $t"; exit 1; }
+          done
+          node --test scripts/verify-landing.test.mjs scripts/update-readme.test.mjs \
+                      scripts/release-conform.test.mjs scripts/skeleton-check.test.mjs \
+                      scripts/license-check.test.mjs scripts/new-repo.test.mjs
 
       - name: Verify the landing (no-Thai · org-row · dated)
         run: node scripts/verify-landing.mjs
