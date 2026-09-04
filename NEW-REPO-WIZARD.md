@@ -10,8 +10,11 @@
 > target—content-only placeholders (a README's "what it is" prose, a SECURITY.md's threat
 > model) are left for a human, named in the script's own output. `node
 > .github/scripts/skeleton-check.mjs` is the companion DERIVING instrument—it walks every
-> live repo, classifies it by kind, and reports each skeleton-owned file identical /
-> DIFFERS / absent; it never fixes drift, only names it. **Phases A–C below still apply
+> zone directory carrying either a `.git` of its own OR at least one file from any kind's
+> own skeleton (`.git` is one enumeration signal, never the sole gate—a folder published
+> by a non-git mechanism, e.g. a GitBook change request, still belongs in the report),
+> classifies it by kind, and reports each skeleton-owned file identical / DIFFERS /
+> absent; it never fixes drift, only names it. **Phases A–C below still apply
 > to anything the skeleton does not own**—the repo's own README prose, its `SKILL.md`
 > contract, local governance files, and any org-mechanics step (Phase D onward) untouched
 > by a skeleton copy. `overlay-coal-skill/` carries the 5-Standard-Systems shipping

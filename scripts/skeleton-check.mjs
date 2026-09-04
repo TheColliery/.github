@@ -5,6 +5,12 @@
 // absent. A DERIVING instrument only — it reports drift, it never fixes it (a DIFFERS row
 // is a finding for that room's own belt, not this script's to resolve).
 //
+// ENUMERATION (UMB-054 item 1): a directory is walked when it carries a real `.git` OR at
+// least one file from any kind's own skeleton (SKELETON_FILES, lib/skeleton-check-lib.mjs)
+// — `.git` is one signal among these, never the sole gate. A folder published by a
+// non-git mechanism (a GitBook change request, e.g.) still belongs in the report; see
+// lib/skeleton-check-lib.mjs's own `hasAnyKindMarker` for the mechanism + exhibit.
+//
 // Usage: node scripts/skeleton-check.mjs [--settings] [--clone <kind>=<path> ...]
 //   --settings: also diff each live repo's GitHub settings against templates/repo-settings.*.json
 //               via REST GET calls (needs GITHUB_TOKEN in the environment; SKIPs, does not
@@ -20,6 +26,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
+import { findRepos as findReposLib, SKELETON_FILES } from './lib/skeleton-check-lib.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const githubRepo = path.resolve(scriptDir, '..');
@@ -27,42 +34,6 @@ const umbrellaRoot = path.resolve(githubRepo, '..');
 const templatesRoot = path.join(githubRepo, 'templates');
 
 const ZONES = ['CoalWorks', 'LLMWorks', 'Articles']; // talongate deliberately excluded — not in the series
-
-// Skeleton-owned files per kind, relative to templates/<kind>/. A room may carry more
-// files than this (its own README body, its own SOURCES.md, ...) — those are not
-// skeleton-owned and are out of this instrument's scope by design.
-const SKELETON_FILES = {
-  'published-code': [
-    'LICENSE', 'NOTICE', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'PRIVACY.md',
-    '.gitattributes', '.gitignore', '.markdownlint.json',
-    '.githooks/pre-commit', '.githooks/pre-push',
-    '.github/dependabot.yml',
-    '.github/workflows/ci.yml', '.github/workflows/codeql.yml',
-    '.github/workflows/dependabot-auto-merge.yml', '.github/workflows/markdownlint.yml',
-    '.github/workflows/scorecard.yml',
-    '.github/ISSUE_TEMPLATE/bug-report.yml', '.github/ISSUE_TEMPLATE/config.yml',
-  ],
-  'private-working': [
-    'LICENSE', '.gitignore',
-    '.githooks/pre-push',
-    '.github/workflows/gate.yml',
-  ],
-  article: [
-    'LICENSE', 'CONTRIBUTING.md', 'CHANGELOG.md', '.gitbook.yaml',
-    '.github/workflows/check.yml', '.github/workflows/watch-sources.yml',
-  ],
-};
-
-// Classification signature per kind — the file whose presence is decisive. Checked in
-// this order because article/private-working signatures are more specific than the
-// published-code 5-workflow set.
-function classify(repoDir) {
-  const has = (rel) => fs.existsSync(path.join(repoDir, rel));
-  if (has('.gitbook.yaml')) return 'article';
-  if (has('.github/workflows/gate.yml') && !has('.github/workflows/ci.yml')) return 'private-working';
-  if (has('.github/workflows/ci.yml') && has('.github/workflows/codeql.yml')) return 'published-code';
-  return null; // unclassified — reported as such, never guessed
-}
 
 function normalizeLineEndings(buf) {
   // latin1, not utf8: a lossless byte<->char mapping, so a genuinely different byte
@@ -190,32 +161,17 @@ function parseCloneArgs(argv) {
   return clones;
 }
 
-function findRepos() {
-  const repos = [];
-  for (const zone of ZONES) {
-    const zoneDir = path.join(umbrellaRoot, zone);
-    if (!fs.existsSync(zoneDir)) continue;
-    for (const entry of fs.readdirSync(zoneDir, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const repoDir = path.join(zoneDir, entry.name);
-      if (!fs.existsSync(path.join(repoDir, '.git'))) continue; // a real repo only
-      repos.push({ zone, name: entry.name, dir: repoDir });
-    }
-  }
-  return repos;
-}
-
 async function main() {
   const args = process.argv.slice(2);
   const withSettings = args.includes('--settings');
   const clones = parseCloneArgs(args);
 
-  const repos = findRepos();
+  const repos = findReposLib(umbrellaRoot, ZONES);
   console.log(`Found ${repos.length} repo(s) under ${ZONES.join(', ')}.\n`);
 
   let failed = 0;
   for (const repo of repos) {
-    const kind = classify(repo.dir);
+    const kind = repo.kind;
     console.log(`## ${repo.zone}/${repo.name} — kind: ${kind ?? 'UNCLASSIFIED'}`);
     if (!kind) {
       console.log('  (no skeleton-file table to compare — unclassified)\n');
