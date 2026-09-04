@@ -39,7 +39,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
-import { isLicenseStub } from './lib/license-check-lib.mjs';
+import { isLicenseStub, identifyLicense, normalizeLicenseId } from './lib/license-check-lib.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const templatesRoot = path.join(scriptDir, '..', 'templates');
@@ -307,11 +307,34 @@ async function main() {
   // a stub (the owner's standing law: full text per part, never SPDX-only, never a
   // stub). The partial copy stays on disk — never overwritten (isEmptyDir above), so a
   // re-run needs a fresh target-dir or a hand-fixed LICENSE in this one.
+  let licenseContent = '';
   if (fs.existsSync(licensePath)) {
-    const licenseContent = fs.readFileSync(licensePath, 'utf8');
+    licenseContent = fs.readFileSync(licensePath, 'utf8');
     if (isLicenseStub(licenseContent)) {
       console.error(`FAIL: ${licensePath} is still a licence STUB (a name/URL pointer, not the licence's own text).`);
       console.error('Supply a real body with --license <path-to-a-file-with-the-full-licence-text>, or edit LICENSE by hand before shipping.');
+      process.exitCode = 1;
+      return;
+    }
+  }
+
+  // UMB-058: the licence-identity triangle. A --license SPDX STRING only fills the
+  // README badge/NOTICE text (LICENSE_BADGE below) -- it never touches the LICENSE
+  // BODY (a FILE path does that, handled separately above). So a bare `--license MIT`
+  // against a kind whose skeleton ships a full Apache-2.0 body would otherwise ship a
+  // repo where the badge says MIT, NOTICE says MIT, and the actual legalcode is
+  // Apache-2.0 -- three surfaces, silently disagreeing. Scoped to the SPDX-string case
+  // only (`!licenseIsFile`), matching exactly what a bare string can and cannot touch;
+  // a --license FILE already replaces the body itself, so there is no badge-vs-body
+  // triangle to check there (the body IS whatever was supplied). Identified from the
+  // BODY, never guessed: an unrecognized body (a bespoke proprietary notice) is not a
+  // contradiction, since there is nothing to compare the claim against.
+  const licenseBadge = (!licenseIsFile && asString(args.license)) || 'Apache-2.0';
+  if (!licenseIsFile) {
+    const identifiedFromBody = identifyLicense(licenseContent);
+    if (identifiedFromBody && normalizeLicenseId(identifiedFromBody) !== normalizeLicenseId(licenseBadge)) {
+      console.error(`FAIL: --license ${JSON.stringify(licenseBadge)} contradicts ${licensePath}'s own body, identified as ${identifiedFromBody}.`);
+      console.error('The README badge and NOTICE would claim one licence while the legalcode says another. Pass --license matching the body, or supply the body as a FILE (--license <path>) so all three agree.');
       process.exitCode = 1;
       return;
     }
@@ -323,7 +346,7 @@ async function main() {
     ORG: asString(args.org) || 'TheColliery',
     YEAR: asString(args.year) || String(now.getFullYear()),
     COPYRIGHT_HOLDER: asString(args.holder) || 'HetCreep',
-    LICENSE_BADGE: (!licenseIsFile && asString(args.license)) || 'Apache-2.0',
+    LICENSE_BADGE: licenseBadge,
   };
   fillPlaceholders(absTarget, values);
   console.log(`filled placeholders: ${Object.keys(values).join(', ')}`);

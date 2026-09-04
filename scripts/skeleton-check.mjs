@@ -27,7 +27,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
 import { findRepos as findReposLib, SKELETON_FILES, TEMPLATE_DIR_FOR_KIND } from './lib/skeleton-check-lib.mjs';
-import { isLicenseStub } from './lib/license-check-lib.mjs';
+import { isLicenseStub, licenseIdentityMismatches } from './lib/license-check-lib.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const githubRepo = path.resolve(scriptDir, '..');
@@ -41,6 +41,18 @@ function normalizeLineEndings(buf) {
   // sequence never false-matches after CRLF normalization (node/runtime.md's own
   // build-dist.mjs precedent — never utf8, which maps invalid bytes to U+FFFD).
   return buf.toString('latin1').replace(/\r\n/g, '\n');
+}
+
+// Reads a repo's README.md/NOTICE (either may be absent) and delegates the actual
+// comparison to license-check-lib.mjs's pure licenseIdentityMismatches (UMB-058) --
+// the fs access lives here, at the gate; the comparison logic lives in the lib,
+// where it is directly unit-testable with inline fixtures.
+function checkLicenseIdentity(repoDir, licenseContent) {
+  const readmePath = path.join(repoDir, 'README.md');
+  const readme = fs.existsSync(readmePath) ? fs.readFileSync(readmePath, 'utf8') : '';
+  const noticePath = path.join(repoDir, 'NOTICE');
+  const notice = fs.existsSync(noticePath) ? fs.readFileSync(noticePath, 'utf8') : '';
+  return licenseIdentityMismatches(licenseContent, readme, notice);
 }
 
 function compareFile(templatePath, livePath) {
@@ -200,6 +212,14 @@ async function main() {
           if (isLicenseStub(liveContent)) {
             console.log('  LICENSE: STUB (a name/URL pointer, not the licence\'s own text -- replace with a full licence body)');
             failed++;
+          } else {
+            // UMB-058: a real, identifiable body -- check it against the surfaces
+            // that CLAIM a licence (the README badge, NOTICE) rather than reproduce it.
+            const mismatches = checkLicenseIdentity(repo.dir, liveContent);
+            for (const m of mismatches) {
+              console.log(`  LICENSE: badge/notice mismatch (${m})`);
+              failed++;
+            }
           }
         }
       } catch (e) {
@@ -253,6 +273,12 @@ async function main() {
           if (isLicenseStub(cloneContent)) {
             console.log('  LICENSE: STUB (a name/URL pointer, not the licence\'s own text -- replace with a full licence body)');
             failed++;
+          } else {
+            const mismatches = checkLicenseIdentity(templateRepoDir, cloneContent);
+            for (const m of mismatches) {
+              console.log(`  LICENSE: badge/notice mismatch (${m})`);
+              failed++;
+            }
           }
         }
       } catch (e) {
