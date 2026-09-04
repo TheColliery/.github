@@ -31,6 +31,37 @@ export const SKELETON_FILES = {
     'LICENSE', 'CONTRIBUTING.md', 'CHANGELOG.md', '.gitbook.yaml',
     '.github/workflows/check.yml', '.github/workflows/watch-sources.yml',
   ],
+  // UMB-055 item 1 (main's Option-A-amended ruling): a private, unpublished article --
+  // never GitBook-synced, cuts no public Release -- declares this with a repo-root
+  // marker (ARTICLE_PRIVATE_MARKER below). CONTRIBUTING is dropped (a single-maintainer
+  // private spec invites no contribution) and .gitbook.yaml is dropped (a private
+  // article never carries GitBook sync files by definition, so listing it would report
+  // a permanent, meaningless ABSENT). Workflows + LICENSE are UNCHANGED from the public
+  // `article` row on purpose: a private spec with external references still needs
+  // watch-sources.yml-shaped staleness checking (SERIES-CANON.md states why), and the
+  // LICENSE law binds regardless of visibility.
+  'article (private)': [
+    'LICENSE', 'CHANGELOG.md',
+    '.github/workflows/check.yml', '.github/workflows/watch-sources.yml',
+  ],
+};
+
+// The repo-root marker declaring a private, unpublished `article` (UMB-055 item 1).
+// An empty sentinel file -- presence is the whole signal, since classify() reads only
+// the filesystem, never external metadata. Named for the ONE kind it currently applies
+// to (never a generic ".private" -- private-working is already private BY KIND and has
+// no use for this marker, so a kind-scoped name avoids a reader wondering if it reaches
+// further than it does).
+export const ARTICLE_PRIVATE_MARKER = '.article-private';
+
+// `article (private)` shares the PUBLIC article's own template directory -- the files
+// are identical in shape; only which ones are REQUIRED differs, per the visibility
+// declaration. There is no separate `templates/article (private)/` directory.
+export const TEMPLATE_DIR_FOR_KIND = {
+  'published-code': 'published-code',
+  'private-working': 'private-working',
+  article: 'article',
+  'article (private)': 'article',
 };
 
 const ALL_SKELETON_FILE_NAMES = [...new Set(Object.values(SKELETON_FILES).flat())];
@@ -41,6 +72,10 @@ const ALL_SKELETON_FILE_NAMES = [...new Set(Object.values(SKELETON_FILES).flat()
 // (UNCLASSIFIED) — never a guess.
 export function classify(repoDir) {
   const has = (rel) => fs.existsSync(path.join(repoDir, rel));
+  // Checked FIRST and unconditionally: a private, unpublished article never carries
+  // GitBook sync files (no .gitbook.yaml, no SUMMARY.md) -- its own marker is the sole
+  // signal, and it is the more specific claim.
+  if (has(ARTICLE_PRIVATE_MARKER)) return 'article (private)';
   if (has('.gitbook.yaml')) return 'article';
   if (has('.github/workflows/gate.yml') && !has('.github/workflows/ci.yml')) return 'private-working';
   if (has('.github/workflows/ci.yml') && has('.github/workflows/codeql.yml')) return 'published-code';
@@ -60,6 +95,7 @@ export function classify(repoDir) {
 // to say "this folder is a kind-object the instrument should look at," even though
 // classify() honestly cannot yet say which kind.
 export function hasAnyKindMarker(repoDir) {
+  if (fs.existsSync(path.join(repoDir, ARTICLE_PRIVATE_MARKER))) return true;
   return ALL_SKELETON_FILE_NAMES.some((rel) => fs.existsSync(path.join(repoDir, rel)));
 }
 

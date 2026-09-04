@@ -26,7 +26,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
-import { findRepos as findReposLib, SKELETON_FILES } from './lib/skeleton-check-lib.mjs';
+import { findRepos as findReposLib, SKELETON_FILES, TEMPLATE_DIR_FOR_KIND } from './lib/skeleton-check-lib.mjs';
 import { isLicenseStub } from './lib/license-check-lib.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -179,8 +179,9 @@ async function main() {
       continue;
     }
     const files = SKELETON_FILES[kind];
+    const templateDir = TEMPLATE_DIR_FOR_KIND[kind];
     for (const rel of files) {
-      const templatePath = path.join(templatesRoot, kind, rel);
+      const templatePath = path.join(templatesRoot, templateDir, rel);
       const livePath = path.join(repo.dir, rel);
       if (!fs.existsSync(templatePath)) {
         console.log(`  ${rel}: (not in this pass's skeleton — skip)`);
@@ -230,7 +231,10 @@ async function main() {
   // Also diff the three GitHub template repos against their source dirs, per UMB-045 step 6
   // — only for a kind an explicit `--clone kind=path` named (UMB-048 item 3: no more guessing
   // "<umbrellaRoot>/template-<kind>" — the caller states where each template repo is cloned).
-  for (const kind of Object.keys(SKELETON_FILES)) {
+  // Iterates the three REAL template directories only (never `article (private)` -- there
+  // is no separate GitHub template repo for it; TEMPLATE_DIR_FOR_KIND's own values are
+  // exactly the three real dirs, deduped).
+  for (const kind of new Set(Object.values(TEMPLATE_DIR_FOR_KIND))) {
     const templateRepoDir = clones.get(kind);
     if (!templateRepoDir) continue;
     if (!fs.existsSync(path.join(templateRepoDir, '.git'))) {

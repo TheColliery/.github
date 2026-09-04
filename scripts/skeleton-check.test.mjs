@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { classify, hasAnyKindMarker, findRepos, SKELETON_FILES } from './lib/skeleton-check-lib.mjs';
+import {
+  classify, hasAnyKindMarker, findRepos, SKELETON_FILES,
+  ARTICLE_PRIVATE_MARKER, TEMPLATE_DIR_FOR_KIND,
+} from './lib/skeleton-check-lib.mjs';
 
 // A scratch zones-root, one fixture per test to keep each hermetic. Every fixture is
 // removed after its own test — nothing here touches the real umbrella tree.
@@ -49,6 +52,70 @@ test('classify: a folder with none of the three signatures is UNCLASSIFIED (null
   const dir = path.join(root, 'r');
   write(path.join(dir, 'CHANGELOG.md'), 'x');
   assert.equal(classify(dir), null);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+// --- classify: article (private) (UMB-055 item 1, main's Option-A-amended ruling) ---
+
+test('classify: the .article-private marker alone (no .gitbook.yaml) classifies "article (private)" -- the Chot-shaped fixture, RED against the pre-fix classify()', () => {
+  const root = makeScratch();
+  const dir = path.join(root, 'r');
+  write(path.join(dir, ARTICLE_PRIVATE_MARKER), '');
+  write(path.join(dir, 'LICENSE'), 'x');
+  assert.equal(classify(dir), 'article (private)');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('classify: the marker takes precedence even if .gitbook.yaml is also present', () => {
+  const root = makeScratch();
+  const dir = path.join(root, 'r');
+  write(path.join(dir, ARTICLE_PRIVATE_MARKER), '');
+  write(path.join(dir, '.gitbook.yaml'), 'x');
+  assert.equal(classify(dir), 'article (private)');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('classify: a folder WITHOUT the marker classifies exactly as before -- .gitbook.yaml alone is still plain "article"', () => {
+  const root = makeScratch();
+  const dir = path.join(root, 'r');
+  write(path.join(dir, '.gitbook.yaml'), 'x');
+  assert.equal(classify(dir), 'article');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('classify: a folder without the marker and without any signature stays UNCLASSIFIED (null), exactly as before', () => {
+  const root = makeScratch();
+  const dir = path.join(root, 'r');
+  write(path.join(dir, 'CHANGELOG.md'), 'x');
+  assert.equal(classify(dir), null);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('SKELETON_FILES["article (private)"] drops CONTRIBUTING.md and .gitbook.yaml, keeps LICENSE/CHANGELOG/workflows', () => {
+  const files = SKELETON_FILES['article (private)'];
+  assert.equal(files.includes('CONTRIBUTING.md'), false);
+  assert.equal(files.includes('.gitbook.yaml'), false);
+  assert.equal(files.includes('LICENSE'), true);
+  assert.equal(files.includes('CHANGELOG.md'), true);
+  assert.equal(files.includes('.github/workflows/check.yml'), true);
+  assert.equal(files.includes('.github/workflows/watch-sources.yml'), true);
+});
+
+test('TEMPLATE_DIR_FOR_KIND: "article (private)" reads the same template directory as public "article"', () => {
+  assert.equal(TEMPLATE_DIR_FOR_KIND['article (private)'], 'article');
+  assert.equal(TEMPLATE_DIR_FOR_KIND.article, 'article');
+});
+
+test('findRepos: a private-article-shaped repo (marker + .git) is enumerated and classified "article (private)"', () => {
+  const root = makeScratch();
+  const zone = 'Articles';
+  const dir = path.join(root, zone, 'ChotLike');
+  write(path.join(dir, '.git', 'config'), '');
+  write(path.join(dir, ARTICLE_PRIVATE_MARKER), '');
+  write(path.join(dir, 'LICENSE'), 'x');
+  const repos = findRepos(root, [zone]);
+  assert.equal(repos.length, 1);
+  assert.equal(repos[0].kind, 'article (private)');
   fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -129,7 +196,11 @@ test('findRepos: a missing zone directory is skipped without error', () => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('SKELETON_FILES: CHANGELOG.md is article-only among the three kinds (the property the Gacha fixture relies on)', () => {
-  const withChangelog = Object.entries(SKELETON_FILES).filter(([, files]) => files.includes('CHANGELOG.md'));
-  assert.deepEqual(withChangelog.map(([k]) => k), ['article']);
+test('SKELETON_FILES: CHANGELOG.md is absent from published-code/private-working (the property the Gacha fixture relies on -- a .git-less folder with only a CHANGELOG.md must not be confusable with either of those two kinds)', () => {
+  assert.equal(SKELETON_FILES['published-code'].includes('CHANGELOG.md'), false);
+  assert.equal(SKELETON_FILES['private-working'].includes('CHANGELOG.md'), false);
+  // Both article variants legitimately carry it -- that is fine and expected; the
+  // Gacha exhibit only needs CHANGELOG.md to be OUTSIDE the two non-article kinds.
+  assert.equal(SKELETON_FILES.article.includes('CHANGELOG.md'), true);
+  assert.equal(SKELETON_FILES['article (private)'].includes('CHANGELOG.md'), true);
 });

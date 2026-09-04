@@ -27,6 +27,31 @@ A Coal* room is a `published-code` repo (L1) carrying the 5 Standard Systems (L2
 
 **Source of truth**: [`templates/published-code/`](./templates/published-code/), [`templates/private-working/`](./templates/private-working/), [`templates/article/`](./templates/article/) in this repo — versioned beside this doc and diffable against any live clone with [`scripts/skeleton-check.mjs`](./scripts/skeleton-check.mjs) (`node scripts/skeleton-check.mjs`). A table cell above that disagrees with the directory is this FILE's bug, never the directory's — re-derive before trusting either.
 
+## A private, unpublished instance of `article`
+
+An `article` repo that is never published (no GitBook sync, no public Release) declares
+this with a repo-root marker file, `.article-private` — an empty sentinel; its presence
+is the whole signal, since classification here reads only the filesystem, never external
+metadata. [`scripts/skeleton-check.mjs`](./scripts/skeleton-check.mjs) reports this
+variant as `article (private)`.
+
+The declaration changes three cells from the table above, by design — a stated property
+of the variant, never an unfilled gap:
+
+| L1 cell | `article` | `article (private)` |
+|---|---|---|
+| Docs spine | LICENSE + CONTRIBUTING + CHANGELOG | LICENSE + CHANGELOG — **CONTRIBUTING not required** (a single-maintainer private spec invites no contribution) |
+| Release mechanics | Full chain where the repo tags versions | **N/A by declaration** — a private, unpublished repo cuts no public Releases |
+| Publishing dialect | GitBook shared dialect where GitBook-synced | **N/A by declaration** — never published, not merely unmeasured |
+
+Workflows and LICENSE are unchanged from the public `article` row: a private spec with
+external references still needs the same staleness-watching shape, and the LICENSE
+row's own law (full text, never a stub) binds regardless of visibility.
+
+**No fourth kind exists for this.** One known instance does not justify a new template
+directory, a new classification signature, and a new table column — the marker declares
+a variant of the existing `article` kind, not a species of its own.
+
 ## Three universal facts, ruled 2026-09-04
 
 Measuring the seven Coal* repos against each other (internal record) found three facts true of **all seven** at once — a canon-level question, not seven separate per-repo fixes.
