@@ -18,16 +18,28 @@
 //
 // Usage:
 //   node scripts/new-repo.mjs <kind> [--overlay coal-skill|llm-deploy] \
-//     --name <repo> --license <spdx> [--org TheColliery] [--holder "Name"] [--year 2026] \
-//     <target-dir>
+//     --name <repo> --license <spdx-or-a-file-path> [--org TheColliery] [--holder "Name"] \
+//     [--year 2026] <target-dir>
 //
 //   node scripts/new-repo.mjs --apply-settings <kind> --repo <owner>/<name>
 //
 // <kind> is one of: published-code | private-working | article
+//
+// --license does DOUBLE DUTY (UMB-054 item 3): a bare SPDX-shaped string (e.g.
+// "Apache-2.0") fills the README's {{LICENSE_BADGE}} token only, same as before. A path
+// to an EXISTING FILE instead REPLACES the copied LICENSE with that file's content
+// before the placeholder fill runs (so a supplied body's own {{YEAR}}/
+// {{COPYRIGHT_HOLDER}} tokens still get filled). Refusal: the owner's standing law is
+// LICENSE = full text per part, never SPDX-only, never a stub — after copying (and any
+// --license file substitution), this refuses to finish scaffolding (fail loud, non-zero
+// exit) if the target's own LICENSE is still stub-shaped (lib/license-check-lib.mjs's
+// isLicenseStub), leaving the partial copy on disk for the human to fix by hand or
+// re-run with a real --license file into a fresh target.
 
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
+import { isLicenseStub } from './lib/license-check-lib.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const templatesRoot = path.join(scriptDir, '..', 'templates');
@@ -276,13 +288,35 @@ async function main() {
     console.log(`applied overlay: ${args.overlay}`);
   }
 
+  // UMB-054 item 3, part 1: --license as a FILE PATH replaces the copied LICENSE body.
+  const licensePath = path.join(absTarget, 'LICENSE');
+  const licenseIsFile = typeof args.license === 'string' && fs.existsSync(args.license) && fs.statSync(args.license).isFile();
+  if (licenseIsFile) {
+    fs.copyFileSync(args.license, licensePath);
+    console.log(`LICENSE body supplied from ${args.license}`);
+  }
+
+  // UMB-054 item 3, part 2: REFUSE to finish scaffolding a repo whose LICENSE is still
+  // a stub (the owner's standing law: full text per part, never SPDX-only, never a
+  // stub). The partial copy stays on disk — never overwritten (isEmptyDir above), so a
+  // re-run needs a fresh target-dir or a hand-fixed LICENSE in this one.
+  if (fs.existsSync(licensePath)) {
+    const licenseContent = fs.readFileSync(licensePath, 'utf8');
+    if (isLicenseStub(licenseContent)) {
+      console.error(`FAIL: ${licensePath} is still a licence STUB (a name/URL pointer, not the licence's own text).`);
+      console.error('Supply a real body with --license <path-to-a-file-with-the-full-licence-text>, or edit LICENSE by hand before shipping.');
+      process.exitCode = 1;
+      return;
+    }
+  }
+
   const now = new Date();
   const values = {
     REPO_NAME: args.name || path.basename(absTarget),
     ORG: args.org || 'TheColliery',
     YEAR: args.year || String(now.getFullYear()),
     COPYRIGHT_HOLDER: args.holder || 'HetCreep',
-    LICENSE_BADGE: args.license || 'Apache-2.0',
+    LICENSE_BADGE: (!licenseIsFile && args.license) || 'Apache-2.0',
   };
   fillPlaceholders(absTarget, values);
   console.log(`filled placeholders: ${Object.keys(values).join(', ')}`);

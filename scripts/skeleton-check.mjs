@@ -27,6 +27,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
 import { findRepos as findReposLib, SKELETON_FILES } from './lib/skeleton-check-lib.mjs';
+import { isLicenseStub } from './lib/license-check-lib.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const githubRepo = path.resolve(scriptDir, '..');
@@ -188,6 +189,18 @@ async function main() {
       try {
         const verdict = compareFile(templatePath, livePath);
         console.log(`  ${rel}: ${verdict}`);
+        // UMB-054 item 3: the owner's standing law is LICENSE = full text per part,
+        // never SPDX-only, never a stub -- checked independently of the template diff
+        // above (a live LICENSE identical to a STUB template is exactly the failure
+        // this refuses, which `compareFile`'s identical/DIFFERS verdict alone cannot
+        // say). REFUSES: counted into `failed` so the run exits non-zero.
+        if (rel === 'LICENSE' && fs.existsSync(livePath)) {
+          const liveContent = fs.readFileSync(livePath, 'utf8');
+          if (isLicenseStub(liveContent)) {
+            console.log('  LICENSE: STUB (a name/URL pointer, not the licence\'s own text -- replace with a full licence body)');
+            failed++;
+          }
+        }
       } catch (e) {
         console.log(`  ${rel}: FAIL comparing (${e.message})`);
         failed++;
@@ -231,6 +244,13 @@ async function main() {
       if (!fs.existsSync(templatePath)) continue;
       try {
         console.log(`  ${rel}: ${compareFile(templatePath, clonePath)}`);
+        if (rel === 'LICENSE' && fs.existsSync(clonePath)) {
+          const cloneContent = fs.readFileSync(clonePath, 'utf8');
+          if (isLicenseStub(cloneContent)) {
+            console.log('  LICENSE: STUB (a name/URL pointer, not the licence\'s own text -- replace with a full licence body)');
+            failed++;
+          }
+        }
       } catch (e) {
         console.log(`  ${rel}: FAIL comparing (${e.message})`);
         failed++;
