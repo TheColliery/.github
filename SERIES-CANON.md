@@ -28,7 +28,22 @@ A Coal* room is a `published-code` repo (L1) carrying the 5 Standard Systems (L2
 
 **Source of truth**: [`templates/published-code/`](./templates/published-code/), [`templates/private-working/`](./templates/private-working/), [`templates/article/`](./templates/article/) in this repo — versioned beside this doc and diffable against any live clone with [`scripts/skeleton-check.mjs`](./scripts/skeleton-check.mjs) (`node scripts/skeleton-check.mjs`). A table cell above that disagrees with the directory is this FILE's bug, never the directory's — re-derive before trusting either.
 
-## A private, unpublished instance of `article`
+## Article variants — the marker discipline
+
+An `article` repo can depart from the plain public row above in more than one way — not
+published at all, or published by a mechanism that never produces the file the plain
+row's signature checks for. **The declared discipline for every such departure: a
+repo-root MARKER FILE, never a rule inferred from folder location or from what a repo
+happens to lack.** A folder sitting directly under a zone with no `.git` cannot, on its
+own, say WHY it has none — a scaffolding-in-progress room, a scratch directory, and a
+genuinely finished repo published by an unusual mechanism all look identical from
+outside. A marker is a maintainer's own deliberate statement, checked first and
+unconditionally by [`classify()`](./scripts/lib/skeleton-check-lib.mjs), and it costs
+one exported constant plus one `classify()` branch per variant — cheaper than defining
+what a "member" is well enough for a location-based rule to tell those cases apart, and
+it never guesses.
+
+### A private, unpublished instance of `article`
 
 An `article` repo that is never published (no GitBook sync, no public Release) declares
 this with a repo-root marker file, `.article-private` — an empty sentinel; its presence
@@ -49,9 +64,37 @@ Workflows and LICENSE are unchanged from the public `article` row: a private spe
 external references still needs the same staleness-watching shape, and the LICENSE
 row's own law (full text, never a stub) binds regardless of visibility.
 
-**No fourth kind exists for this.** One known instance does not justify a new template
-directory, a new classification signature, and a new table column — the marker declares
-a variant of the existing `article` kind, not a species of its own.
+### A publicly-published instance of `article` via GitBook change request
+
+An `article` repo can also be genuinely public and fully published, yet never carry
+`.gitbook.yaml` — that file is git-sync configuration, and a room that publishes by
+submitting a one-off GitBook *change request* instead of continuous git-sync has nothing
+to configure it with. It has no `.git` of its own either. Without a signal, this reads
+as UNCLASSIFIED even though it is a complete, working `article`. This declares with its
+own repo-root marker, `.article-changerequest` — an empty sentinel, checked before the
+plain `.gitbook.yaml` signature since it is the more specific claim.
+[`scripts/skeleton-check.mjs`](./scripts/skeleton-check.mjs) reports this variant as
+`article (change-request)`.
+
+The declaration changes one cell, and only one — this variant is public and fully
+published, so nothing about visibility or release mechanics differs from the plain row:
+
+| L1 cell | `article` | `article (change-request)` |
+|---|---|---|
+| Docs spine | LICENSE + CONTRIBUTING + CHANGELOG | Unchanged — CONTRIBUTING stays required (this room is public and does want contributors) |
+| Publishing dialect | GitBook shared dialect, git-synced | **GitBook change-request dialect — `.gitbook.yaml` is never expected and is not a finding when absent** |
+
+Workflows, LICENSE, and Release mechanics are unchanged from the public `article` row:
+a change-request room still needs the same staleness-watching shape, still owes the full
+LICENSE text, and still cuts Releases the same way a git-synced article does.
+
+### No fourth or sixth kind exists for either of these
+
+One known instance of a departure does not justify a new template directory, a new
+column in the L1 table above, or a location-based rule — a marker declares a VARIANT of
+the existing `article` kind, not a species of its own. Both variants above share
+`article`'s own template directory; `templates/article (private)/` and
+`templates/article (change-request)/` do not exist and are not planned.
 
 ## Three universal facts, ruled 2026-09-04
 

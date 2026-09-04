@@ -5,7 +5,7 @@ import os from 'os';
 import path from 'path';
 import {
   classify, hasAnyKindMarker, findRepos, SKELETON_FILES,
-  ARTICLE_PRIVATE_MARKER, TEMPLATE_DIR_FOR_KIND,
+  ARTICLE_PRIVATE_MARKER, ARTICLE_CHANGEREQUEST_MARKER, TEMPLATE_DIR_FOR_KIND,
 } from './lib/skeleton-check-lib.mjs';
 
 // A scratch zones-root, one fixture per test to keep each hermetic. Every fixture is
@@ -91,6 +91,72 @@ test('classify: a folder without the marker and without any signature stays UNCL
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+// --- UMB-060 item 1: article (change-request) ---
+
+test('classify: the .article-changerequest marker alone (no .git, no .gitbook.yaml) classifies "article (change-request)" -- the real GachaRateDesignDatum shape, RED against the pre-fix classify()', () => {
+  const root = makeScratch();
+  const dir = path.join(root, 'r');
+  write(path.join(dir, ARTICLE_CHANGEREQUEST_MARKER), '');
+  write(path.join(dir, 'LICENSE'), 'x');
+  write(path.join(dir, 'CHANGELOG.md'), 'x');
+  assert.equal(classify(dir), 'article (change-request)');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('classify: the change-request marker takes precedence even if .gitbook.yaml is also present', () => {
+  const root = makeScratch();
+  const dir = path.join(root, 'r');
+  write(path.join(dir, ARTICLE_CHANGEREQUEST_MARKER), '');
+  write(path.join(dir, '.gitbook.yaml'), 'x');
+  assert.equal(classify(dir), 'article (change-request)');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('classify: the private marker and the change-request marker are checked independently -- private wins if (implausibly) both are present, since it is checked first', () => {
+  const root = makeScratch();
+  const dir = path.join(root, 'r');
+  write(path.join(dir, ARTICLE_PRIVATE_MARKER), '');
+  write(path.join(dir, ARTICLE_CHANGEREQUEST_MARKER), '');
+  assert.equal(classify(dir), 'article (private)');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('SKELETON_FILES["article (change-request)"] keeps CONTRIBUTING.md + workflows (unlike article (private), which drops CONTRIBUTING) -- only .gitbook.yaml is dropped', () => {
+  const files = SKELETON_FILES['article (change-request)'];
+  assert.ok(files.includes('LICENSE'));
+  assert.ok(files.includes('CONTRIBUTING.md'));
+  assert.ok(files.includes('CHANGELOG.md'));
+  assert.ok(files.includes('.github/workflows/check.yml'));
+  assert.ok(files.includes('.github/workflows/watch-sources.yml'));
+  assert.ok(!files.includes('.gitbook.yaml'));
+});
+
+test('TEMPLATE_DIR_FOR_KIND: "article (change-request)" reads the same template directory as public "article"', () => {
+  assert.equal(TEMPLATE_DIR_FOR_KIND['article (change-request)'], 'article');
+});
+
+test('findRepos: the real GachaRateDesignDatum shape (marker + LICENSE + CHANGELOG.md, no .git) is enumerated and classified "article (change-request)"', () => {
+  const root = makeScratch();
+  const zone = 'Articles';
+  const dir = path.join(root, zone, 'GachaLike');
+  write(path.join(dir, ARTICLE_CHANGEREQUEST_MARKER), '');
+  write(path.join(dir, 'LICENSE'), 'x');
+  write(path.join(dir, 'CHANGELOG.md'), 'x');
+  const repos = findRepos(root, [zone]);
+  assert.equal(repos.length, 1);
+  assert.equal(repos[0].kind, 'article (change-request)');
+  assert.equal(repos[0].hasSignal, true);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('hasAnyKindMarker: the change-request marker alone (no skeleton file) is a marker', () => {
+  const root = makeScratch();
+  const dir = path.join(root, 'r');
+  write(path.join(dir, ARTICLE_CHANGEREQUEST_MARKER), '');
+  assert.equal(hasAnyKindMarker(dir), true);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
 test('SKELETON_FILES["article (private)"] drops CONTRIBUTING.md and .gitbook.yaml, keeps LICENSE/CHANGELOG/workflows', () => {
   const files = SKELETON_FILES['article (private)'];
   assert.equal(files.includes('CONTRIBUTING.md'), false);
@@ -168,12 +234,15 @@ test('findRepos: a .git-less folder carrying a kind marker file IS enumerated --
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('findRepos: a folder with neither .git nor any kind marker is correctly excluded', () => {
+test('findRepos: a folder with neither .git nor any kind marker is STILL RETURNED, with hasSignal=false -- UMB-060 item 2, the silent-skip fix (RED against the pre-fix findRepos, which dropped it entirely)', () => {
   const root = makeScratch();
   const zone = 'Zone';
   write(path.join(root, zone, 'NotARepo', 'README.md'), 'x');
   const repos = findRepos(root, [zone]);
-  assert.equal(repos.length, 0);
+  assert.equal(repos.length, 1);
+  assert.equal(repos[0].name, 'NotARepo');
+  assert.equal(repos[0].hasSignal, false);
+  assert.equal(repos[0].kind, null);
   fs.rmSync(root, { recursive: true, force: true });
 });
 

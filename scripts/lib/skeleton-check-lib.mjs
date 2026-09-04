@@ -44,6 +44,25 @@ export const SKELETON_FILES = {
     'LICENSE', 'CHANGELOG.md',
     '.github/workflows/check.yml', '.github/workflows/watch-sources.yml',
   ],
+  // UMB-060 (Articles head's ARK-042 D-6 residue, main's ruling): a PUBLIC article that
+  // publishes to GitBook via a one-off CHANGE REQUEST rather than continuous git-sync --
+  // it has no `.git` of its own and, BY DEFINITION, never gains `.gitbook.yaml` (that
+  // file is git-sync configuration; a change-request-published room has nothing to
+  // configure it with). Exhibit: Articles/GachaRateDesignDatum, which carries a real
+  // LICENSE + CHANGELOG.md and its own PUBLISHING.md describing the change-request
+  // flow, but neither `.git` nor `.gitbook.yaml` -- classify() returned null for it
+  // (UNCLASSIFIED) with no way to say WHICH kind, exactly the gap article (private)
+  // closed for the private case. `.gitbook.yaml` is dropped here for the SAME reason
+  // as article (private) drops it (structurally impossible, not merely absent) --
+  // but CONTRIBUTING.md and the two workflows are KEPT (unlike article (private),
+  // which drops CONTRIBUTING for a different reason -- no contributors to invite): a
+  // change-request room IS publicly published and DOES want contributors and
+  // staleness-watching, so their absence is a real, actionable gap for that room to
+  // close, never an instrument artifact to silence.
+  'article (change-request)': [
+    'LICENSE', 'CONTRIBUTING.md', 'CHANGELOG.md',
+    '.github/workflows/check.yml', '.github/workflows/watch-sources.yml',
+  ],
 };
 
 // The repo-root marker declaring a private, unpublished `article` (UMB-055 item 1).
@@ -54,14 +73,23 @@ export const SKELETON_FILES = {
 // further than it does).
 export const ARTICLE_PRIVATE_MARKER = '.article-private';
 
-// `article (private)` shares the PUBLIC article's own template directory -- the files
-// are identical in shape; only which ones are REQUIRED differs, per the visibility
-// declaration. There is no separate `templates/article (private)/` directory.
+// UMB-060: the repo-root marker declaring a PUBLIC article that publishes via a
+// GitBook change request rather than git-sync. Same shape as ARTICLE_PRIVATE_MARKER
+// above (an empty sentinel; presence is the whole signal) -- deliberately a SEPARATE
+// marker, not a reuse of the private one, because the two properties are orthogonal:
+// this room IS published, just not through git-sync.
+export const ARTICLE_CHANGEREQUEST_MARKER = '.article-changerequest';
+
+// Both article variants share the PUBLIC article's own template directory -- the
+// files are identical in shape; only which ones are REQUIRED differs, per the
+// declared variant. There is no separate `templates/article (private)/` or
+// `templates/article (change-request)/` directory.
 export const TEMPLATE_DIR_FOR_KIND = {
   'published-code': 'published-code',
   'private-working': 'private-working',
   article: 'article',
   'article (private)': 'article',
+  'article (change-request)': 'article',
 };
 
 const ALL_SKELETON_FILE_NAMES = [...new Set(Object.values(SKELETON_FILES).flat())];
@@ -76,6 +104,10 @@ export function classify(repoDir) {
   // GitBook sync files (no .gitbook.yaml, no SUMMARY.md) -- its own marker is the sole
   // signal, and it is the more specific claim.
   if (has(ARTICLE_PRIVATE_MARKER)) return 'article (private)';
+  // UMB-060: a change-request-published article ALSO never carries .gitbook.yaml (by
+  // definition, same reasoning as the private case) -- checked next, still more
+  // specific than the bare .gitbook.yaml signature below.
+  if (has(ARTICLE_CHANGEREQUEST_MARKER)) return 'article (change-request)';
   if (has('.gitbook.yaml')) return 'article';
   if (has('.github/workflows/gate.yml') && !has('.github/workflows/ci.yml')) return 'private-working';
   if (has('.github/workflows/ci.yml') && has('.github/workflows/codeql.yml')) return 'published-code';
@@ -96,12 +128,23 @@ export function classify(repoDir) {
 // classify() honestly cannot yet say which kind.
 export function hasAnyKindMarker(repoDir) {
   if (fs.existsSync(path.join(repoDir, ARTICLE_PRIVATE_MARKER))) return true;
+  if (fs.existsSync(path.join(repoDir, ARTICLE_CHANGEREQUEST_MARKER))) return true;
   return ALL_SKELETON_FILE_NAMES.some((rel) => fs.existsSync(path.join(repoDir, rel)));
 }
 
-// Enumerates every directory under `zonesRoot/<zone>/` (for each zone in `zones`) that
-// passes the enumeration test above. Returns { zone, name, dir, kind } rows — `kind` may
-// be null (UNCLASSIFIED), which is a legitimate, reported state, never a silent drop.
+// Enumerates every DIRECTORY under `zonesRoot/<zone>/` (for each zone in `zones`) --
+// UMB-060: every one, not only those carrying a signal. Returns { zone, name, dir,
+// kind, hasSignal } rows. `hasSignal` distinguishes the two UNCLASSIFIED shapes,
+// both `kind: null`, that were previously conflated:
+//   - hasSignal=true, kind=null  -- a real project member (`.git` or a skeleton-file
+//     marker present) that classify() honestly cannot yet name a KIND for.
+//   - hasSignal=false, kind=null -- neither `.git` nor any marker at all. Formerly
+//     `continue`d past in total silence (skeleton-check-lib.mjs:113-114 at the time
+//     this was reported, ARK-042 D-6) -- a folder the instrument never mentioned
+//     could not be distinguished from one it had correctly ruled out, from the
+//     report alone. Still reported, per "silence is not none": the walk is bounded
+//     to one level per zone, so this never floods the report the way a recursive
+//     walk would.
 export function findRepos(zonesRoot, zones) {
   const repos = [];
   for (const zone of zones) {
@@ -111,8 +154,11 @@ export function findRepos(zonesRoot, zones) {
       if (!entry.isDirectory()) continue;
       const repoDir = path.join(zoneDir, entry.name);
       const hasGit = fs.existsSync(path.join(repoDir, '.git'));
-      if (!hasGit && !hasAnyKindMarker(repoDir)) continue; // neither signal fired
-      repos.push({ zone, name: entry.name, dir: repoDir, kind: classify(repoDir) });
+      const hasSignal = hasGit || hasAnyKindMarker(repoDir);
+      repos.push({
+        zone, name: entry.name, dir: repoDir, hasSignal,
+        kind: hasSignal ? classify(repoDir) : null,
+      });
     }
   }
   return repos;

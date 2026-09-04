@@ -179,12 +179,24 @@ async function main() {
   const withSettings = args.includes('--settings');
   const clones = parseCloneArgs(args);
 
+  // UMB-060: findReposLib now enumerates every directory per zone, signal or not
+  // (the silent-skip fix) -- "repo(s)" in the summary line keeps meaning what it
+  // always meant (a signal-bearing member), stated beside the true total scanned.
   const repos = findReposLib(umbrellaRoot, ZONES);
-  console.log(`Found ${repos.length} repo(s) under ${ZONES.join(', ')}.\n`);
+  const signalCount = repos.filter((r) => r.hasSignal).length;
+  console.log(`Found ${signalCount} repo(s) under ${ZONES.join(', ')} (${repos.length} director${repos.length === 1 ? 'y' : 'ies'} scanned).\n`);
 
   let failed = 0;
   for (const repo of repos) {
     const kind = repo.kind;
+    if (!repo.hasSignal) {
+      // UMB-060 item 2: previously dropped here in total silence (no `.git`, no
+      // skeleton-file marker) -- printed now so a reader can tell "correctly ruled
+      // out" apart from "the instrument never looked."
+      console.log(`## ${repo.zone}/${repo.name} — kind: UNCLASSIFIED (no signal)`);
+      console.log('  (no .git and no skeleton-file marker — not a project member)\n');
+      continue;
+    }
     console.log(`## ${repo.zone}/${repo.name} — kind: ${kind ?? 'UNCLASSIFIED'}`);
     if (!kind) {
       console.log('  (no skeleton-file table to compare — unclassified)\n');
