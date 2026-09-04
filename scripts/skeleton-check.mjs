@@ -260,7 +260,12 @@ async function main() {
   }
 
   if (failed > 0) {
-    console.error(`FAIL: ${failed} comparison(s) errored (not the same as DIFFERS — an actual read/compare failure).`);
+    // `failed` aggregates three distinct classes (a read/compare error, a LICENSE
+    // stub, a --settings mismatch) -- see the per-item lines above for which one(s)
+    // fired; the old wording named only the first class and misdescribed a run whose
+    // sole issue was a LICENSE stub or a settings FAIL as "an actual read/compare
+    // failure" (self-caught, UMB-054 item 3's own rot-canary pass).
+    console.error(`FAIL: ${failed} issue(s) found — a read/compare error, a LICENSE stub, or a --settings mismatch (see the lines above for which).`);
     process.exitCode = 1;
   }
 }

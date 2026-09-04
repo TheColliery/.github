@@ -69,6 +69,13 @@ function parseArgs(argv) {
   return out;
 }
 
+// A bare flag with no following value parses to boolean `true` (parseArgs above) --
+// never let that leak into a template placeholder as the literal string "true". Every
+// flag feeding the `values` object below is read through this guard.
+function asString(v) {
+  return typeof v === 'string' ? v : undefined;
+}
+
 function copyDirRecursive(src, dest) {
   fs.mkdirSync(dest, { recursive: true });
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
@@ -312,11 +319,11 @@ async function main() {
 
   const now = new Date();
   const values = {
-    REPO_NAME: args.name || path.basename(absTarget),
-    ORG: args.org || 'TheColliery',
-    YEAR: args.year || String(now.getFullYear()),
-    COPYRIGHT_HOLDER: args.holder || 'HetCreep',
-    LICENSE_BADGE: (!licenseIsFile && args.license) || 'Apache-2.0',
+    REPO_NAME: asString(args.name) || path.basename(absTarget),
+    ORG: asString(args.org) || 'TheColliery',
+    YEAR: asString(args.year) || String(now.getFullYear()),
+    COPYRIGHT_HOLDER: asString(args.holder) || 'HetCreep',
+    LICENSE_BADGE: (!licenseIsFile && asString(args.license)) || 'Apache-2.0',
   };
   fillPlaceholders(absTarget, values);
   console.log(`filled placeholders: ${Object.keys(values).join(', ')}`);

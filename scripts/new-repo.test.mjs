@@ -56,6 +56,20 @@ test('new-repo.mjs published-code (already ships a full-text LICENSE): unaffecte
   fs.rmSync(path.dirname(target), { recursive: true, force: true });
 });
 
+test('new-repo.mjs published-code, bare --license (no value, parses to boolean true): the badge falls back to Apache-2.0, never leaks the literal "true"', () => {
+  // rot-canary QUICK self-catch: a bare flag with no following value parses to
+  // boolean `true` (parseArgs), and `args.license || 'Apache-2.0'` let that boolean
+  // through untouched because `true` is truthy -- fillPlaceholders then coerced it to
+  // the literal string "true" via Array.join(), landing in the shipped README badge.
+  const target = path.join(scratchDir(), 'r');
+  const res = run(['published-code', '--name', 'x', target, '--license']);
+  assert.equal(res.status, 0, res.stderr);
+  const readme = fs.readFileSync(path.join(target, 'README.md'), 'utf8');
+  assert.match(readme, /badge\/license-Apache-2\.0-blue/);
+  assert.doesNotMatch(readme, /badge\/license-true-blue/);
+  fs.rmSync(path.dirname(target), { recursive: true, force: true });
+});
+
 test('new-repo.mjs article, --license as a bare SPDX string (not a file): still refuses, badge falls back cleanly', () => {
   // A bare "MIT" string is not an existing file path, so it is read as the OLD
   // LICENSE_BADGE-only meaning -- the LICENSE body is never touched and stays the stub.
