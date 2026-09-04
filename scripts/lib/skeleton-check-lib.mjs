@@ -120,12 +120,14 @@ export function classify(repoDir) {
 // strict per-kind SIGNATURE test: a folder can carry a generic marker (a CHANGELOG.md)
 // without carrying the specific combination classify() needs to name WHICH kind it is —
 // that folder still belongs in the report, as UNCLASSIFIED, rather than silently
-// dropped. Exhibit: GachaRateDesignDatum, a GitBook-change-request-published article
-// with no `.git` of its own and none of `article`'s classify() signature files either
-// (it does not Git-Sync, so it never gained `.gitbook.yaml`/`SUMMARY.md`) — but it does
-// carry a root `CHANGELOG.md`, one of `article`'s own skeleton files, which is enough
-// to say "this folder is a kind-object the instrument should look at," even though
-// classify() honestly cannot yet say which kind.
+// dropped. Exhibit (fixture-shaped, not a live one — see UMB-060 below for the real
+// case this was first measured against): a folder carrying only a root `CHANGELOG.md`
+// — one of `article`'s own skeleton files, but not a specific enough combination for
+// classify() to say WHICH kind — still belongs in the report as UNCLASSIFIED, never
+// silently dropped. GachaRateDesignDatum WAS this exhibit until UMB-060 gave
+// change-request-published articles their own marker (`ARTICLE_CHANGEREQUEST_MARKER`
+// below) — once that marker is placed on its own folder, classify() names it directly
+// and it stops needing this fallback path at all.
 export function hasAnyKindMarker(repoDir) {
   if (fs.existsSync(path.join(repoDir, ARTICLE_PRIVATE_MARKER))) return true;
   if (fs.existsSync(path.join(repoDir, ARTICLE_CHANGEREQUEST_MARKER))) return true;
