@@ -41,12 +41,17 @@ jobs:
           set -euo pipefail
           for t in scripts/verify-landing.test.mjs scripts/update-readme.test.mjs \
                    scripts/release-conform.test.mjs scripts/skeleton-check.test.mjs \
-                   scripts/license-check.test.mjs scripts/new-repo.test.mjs; do
+                   scripts/license-check.test.mjs scripts/new-repo.test.mjs \
+                   scripts/doc-refs.test.mjs; do
             [ -f "$t" ] || { echo "::error::listed test file missing: $t"; exit 1; }
           done
           node --test scripts/verify-landing.test.mjs scripts/update-readme.test.mjs \
                       scripts/release-conform.test.mjs scripts/skeleton-check.test.mjs \
-                      scripts/license-check.test.mjs scripts/new-repo.test.mjs
+                      scripts/license-check.test.mjs scripts/new-repo.test.mjs \
+                      scripts/doc-refs.test.mjs
+
+      - name: Doc references (every markdown link resolves — UMB-057)
+        run: node scripts/doc-refs.mjs
 
       - name: Verify the landing (no-Thai · org-row · dated)
         run: node scripts/verify-landing.mjs
