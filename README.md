@@ -2,6 +2,8 @@
 
 This repository houses the global configuration, landing page profile, central installation scripts, and shared developer doctrines for **[TheColliery](https://github.com/TheColliery)** organization.
 
+📖 **Full documentation:** [hetcreep.gitbook.io/thecolliery](https://hetcreep.gitbook.io/thecolliery)
+
 ---
 
 ## ⛏️ Active Repositories

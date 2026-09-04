@@ -16,6 +16,10 @@
   <img src="https://img.shields.io/badge/License-Per_Zone-lightgrey?style=for-the-badge" alt="Licence: per zone, see below">
 </p>
 
+<p align="center">
+  📖 <a href="https://hetcreep.gitbook.io/thecolliery">Full documentation</a>
+</p>
+
 ---
 
 ## 🏗️ What is TheColliery?
