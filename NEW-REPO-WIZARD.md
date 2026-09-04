@@ -5,10 +5,16 @@
 > Free-plan private repo, Bankfire-shaped) · article (a GitBook-published standard,
 > SpriteDesignDatum-shaped).** One command replaces the manual walk for everything a
 > skeleton owns: `node .github/scripts/new-repo.mjs <kind> [--overlay coal-skill|llm-deploy]
-> --name <repo> --license <spdx> <target-dir>`. It copies `templates/<kind>/` (+ the named
-> overlay), fills `{{PLACEHOLDER}}` tokens it can from flags, and refuses a non-empty
-> target—content-only placeholders (a README's "what it is" prose, a SECURITY.md's threat
-> model) are left for a human, named in the script's own output. `node
+> --name <repo> --license <spdx-or-a-file-path> [--license-id <spdx-or-name>]
+> <target-dir>`. It copies `templates/<kind>/` (+ the named overlay), fills
+> `{{PLACEHOLDER}}` tokens it can from flags, and refuses a non-empty target—content-only
+> placeholders (a README's "what it is" prose, a SECURITY.md's threat model) are left for
+> a human, named in the script's own output. **The licence-identity triangle (UMB-058 +
+> UMB-059): the README badge, NOTICE and the LICENSE body must agree, in both
+> directions—a bare `--license` SPDX string that contradicts the shipped body REFUSES; a
+> `--license <file>` derives the badge/NOTICE from the substituted body's own identity
+> and REFUSES an unidentifiable one (a licence outside the flock's 5-licence portfolio)
+> unless `--license-id` states it explicitly.** `node
 > .github/scripts/skeleton-check.mjs` is the companion DERIVING instrument—it walks every
 > zone directory carrying either a `.git` of its own OR at least one file from any kind's
 > own skeleton (`.git` is one enumeration signal, never the sole gate—a folder published

@@ -18,8 +18,8 @@
 //
 // Usage:
 //   node scripts/new-repo.mjs <kind> [--overlay coal-skill|llm-deploy] \
-//     --name <repo> --license <spdx-or-a-file-path> [--org TheColliery] [--holder "Name"] \
-//     [--year 2026] <target-dir>
+//     --name <repo> --license <spdx-or-a-file-path> [--license-id <spdx-or-name>] \
+//     [--org TheColliery] [--holder "Name"] [--year 2026] <target-dir>
 //
 //   node scripts/new-repo.mjs --apply-settings <kind> --repo <owner>/<name>
 //
@@ -35,6 +35,15 @@
 // exit) if the target's own LICENSE is still stub-shaped (lib/license-check-lib.mjs's
 // isLicenseStub), leaving the partial copy on disk for the human to fix by hand or
 // re-run with a real --license file into a fresh target.
+//
+// THE LICENCE-IDENTITY TRIANGLE (UMB-058 + UMB-059): the badge/NOTICE and the LICENSE
+// body must agree, in BOTH directions. A bare --license STRING that contradicts the
+// shipped body's identified licence REFUSES (UMB-058). A --license FILE has its badge
+// DERIVED from identifyLicense() over the substituted body, never the hardcoded
+// Apache-2.0 default (UMB-059) — an unidentifiable substituted body (a bespoke
+// licence outside the flock's 5-licence portfolio) REFUSES unless --license-id names
+// it explicitly. --license-id is meaningful ONLY alongside a --license FILE whose body
+// identifyLicense() cannot recognize; it is ignored otherwise.
 
 import fs from 'fs';
 import path from 'path';
@@ -318,19 +327,40 @@ async function main() {
     }
   }
 
-  // UMB-058: the licence-identity triangle. A --license SPDX STRING only fills the
-  // README badge/NOTICE text (LICENSE_BADGE below) -- it never touches the LICENSE
-  // BODY (a FILE path does that, handled separately above). So a bare `--license MIT`
-  // against a kind whose skeleton ships a full Apache-2.0 body would otherwise ship a
-  // repo where the badge says MIT, NOTICE says MIT, and the actual legalcode is
-  // Apache-2.0 -- three surfaces, silently disagreeing. Scoped to the SPDX-string case
-  // only (`!licenseIsFile`), matching exactly what a bare string can and cannot touch;
-  // a --license FILE already replaces the body itself, so there is no badge-vs-body
-  // triangle to check there (the body IS whatever was supplied). Identified from the
-  // BODY, never guessed: an unrecognized body (a bespoke proprietary notice) is not a
-  // contradiction, since there is nothing to compare the claim against.
-  const licenseBadge = (!licenseIsFile && asString(args.license)) || 'Apache-2.0';
-  if (!licenseIsFile) {
+  // UMB-058/059: the licence-identity triangle, both legs. A --license SPDX STRING
+  // only fills the README badge/NOTICE text -- it never touches the LICENSE BODY (a
+  // FILE path does that, handled separately above). Two shapes, two rules:
+  //
+  //   - SPDX-STRING leg (UMB-058): a bare `--license MIT` against a kind whose
+  //     skeleton ships a full Apache-2.0 body would otherwise ship a repo where the
+  //     badge/NOTICE say MIT and the legalcode says Apache-2.0 -- REFUSE on a
+  //     contradiction between the claimed string and the identified body.
+  //   - FILE leg (UMB-059, UMB-058's own named pending gap): the OPPOSITE failure --
+  //     a --license FILE replaces the body outright, but the badge previously fell
+  //     back to the hardcoded 'Apache-2.0' default REGARDLESS of what the
+  //     substituted body actually was, so a real non-Apache LICENSE (e.g. Chotmeter's
+  //     FSL-1.1-Apache-2.0, ChotUnitDatum's CC-BY-4.0) shipped with a badge/NOTICE
+  //     that silently lied about it. The badge now DERIVES from identifyLicense()
+  //     over the substituted body; an unidentifiable body (a bespoke licence) has no
+  //     identity to derive, so the run REFUSES unless the human states one explicitly
+  //     via --license-id (never silently defaults again -- a silent default is
+  //     exactly the defect this leg exists to close).
+  let licenseBadge;
+  if (licenseIsFile) {
+    const identifiedFromFile = identifyLicense(licenseContent);
+    const explicitId = asString(args['license-id']);
+    if (identifiedFromFile) {
+      licenseBadge = identifiedFromFile;
+    } else if (explicitId) {
+      licenseBadge = explicitId;
+    } else {
+      console.error(`FAIL: ${licensePath}'s substituted body (from ${args.license}) does not match any of the flock's recognized licences, and no --license-id was given.`);
+      console.error('Supply --license-id <spdx-or-name> to state this licence explicitly for the README badge and NOTICE -- the badge no longer silently defaults to Apache-2.0 for a substituted body.');
+      process.exitCode = 1;
+      return;
+    }
+  } else {
+    licenseBadge = asString(args.license) || 'Apache-2.0';
     const identifiedFromBody = identifyLicense(licenseContent);
     if (identifiedFromBody && normalizeLicenseId(identifiedFromBody) !== normalizeLicenseId(licenseBadge)) {
       console.error(`FAIL: --license ${JSON.stringify(licenseBadge)} contradicts ${licensePath}'s own body, identified as ${identifiedFromBody}.`);

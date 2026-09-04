@@ -174,12 +174,12 @@ test('new-repo.mjs published-code, --license <an arbitrary unrecognized string> 
   fs.rmSync(path.dirname(target), { recursive: true, force: true });
 });
 
-test('new-repo.mjs article, --license <a real MIT body file> (licenseIsFile=true): SUCCEEDS -- the identity check is scoped to the SPDX-string case only, never the file-substitution case (UMB-058)', () => {
-  // A --license FILE already replaces the body outright; there is no separate badge
-  // claim to contradict it (the badge falls back to the hardcoded default when a
-  // file is used -- a separate, pre-existing, undocumented-badge limitation this
-  // item does not extend the check to cover, named here rather than silently
-  // widening scope).
+test('new-repo.mjs published-code, --license <a real MIT body file> (licenseIsFile=true): SUCCEEDS, badge/NOTICE DERIVE MIT from the substituted body (UMB-058 + UMB-059)', () => {
+  // UPDATED (UMB-059): the file-substitution case now ALSO derives its badge from
+  // identifyLicense() over the substituted body -- it is no longer scoped out. The
+  // pre-fix behaviour this test used to only prove exit 0 for is now asserted
+  // directly: the badge is MIT, not the old hardcoded Apache-2.0 default.
+  // published-code, not article: article's own skeleton ships no NOTICE file at all.
   const root = scratchDir();
   const licenseFile = path.join(root, 'MIT.txt');
   const mit = [
@@ -191,7 +191,134 @@ test('new-repo.mjs article, --license <a real MIT body file> (licenseIsFile=true
   ].join('\n');
   fs.writeFileSync(licenseFile, mit);
   const target = path.join(root, 'r');
-  const res = run(['article', '--name', 'x', '--license', licenseFile, target]);
+  const res = run(['published-code', '--name', 'x', '--license', licenseFile, target]);
   assert.equal(res.status, 0, res.stderr);
+  const notice = fs.readFileSync(path.join(target, 'NOTICE'), 'utf8');
+  const readme = fs.readFileSync(path.join(target, 'README.md'), 'utf8');
+  assert.match(notice, /licensed under MIT/);
+  assert.match(readme, /badge\/license-MIT-blue/);
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+// ---------------------------------------------------------------------------------
+// UMB-059: the --license FILE leg. Real non-Apache LICENSE fixtures, per the dispatch
+// ("Chotmeter's FSL-1.1-Apache-2.0 or ChotUnitDatum's CC-BY-4.0") -- verbatim excerpts
+// of the real distinctive headers, same sourcing as license-check.test.mjs's own
+// fixtures, kept inline so this stays hermetic (no cross-repo read in CI).
+
+// sourced: Articles/ChotUnitDatum/LICENSE lines 1, 57, 59, and the real Section 2.a.1
+// grant clause every CC-BY-4.0 legalcode carries (real file, read 2026-09-04) -- long
+// enough (and carries the real "hereby grants" grant-clause language, isLicenseStub's
+// own SUBSTANTIVE_MARKER) to clear the stub-refusal and actually reach the
+// identity-derivation this test targets, same as the BESPOKE_PROPRIETARY_TEXT fixture
+// above needed to.
+const REAL_CC_BY_4_FILE = [
+  'Attribution 4.0 International',
+  '',
+  '=======================================================================',
+  '',
+  'Using Creative Commons Public Licenses',
+  '',
+  'Creative Commons Attribution 4.0 International Public License',
+  '',
+  'By exercising the Licensed Rights (defined below), You accept and agree',
+  'to be bound by the terms and conditions of this Creative Commons',
+  'Attribution 4.0 International Public License ("Public License").', '',
+  'Section 2 -- Scope.', '',
+  'a. License grant.', '',
+  '   1. Subject to the terms and conditions of this Public License, the',
+  '      Licensor hereby grants You a worldwide, royalty-free,',
+  '      non-sublicensable, non-exclusive, irrevocable license to exercise',
+  '      the Licensed Rights in the Licensed Material.',
+].join('\n');
+
+test('new-repo.mjs published-code, --license <a REAL CC-BY-4.0 file, the ChotUnitDatum shape>: badge/NOTICE derive CC-BY-4.0 -- NEVER the old hardcoded Apache-2.0 default (UMB-059, the standing regression exhibit)', () => {
+  // This is the exact defect UMB-059 exists to close, kept as a standing test per
+  // the dispatch: before this fix, EVERY --license FILE shipped a badge/NOTICE
+  // claiming Apache-2.0 regardless of the substituted body's real identity -- a
+  // genuinely non-Apache body (this one) would have silently shipped mislabeled.
+  // published-code, not article: article's own skeleton ships no NOTICE file at all.
+  const root = scratchDir();
+  const licenseFile = path.join(root, 'CC-BY-4.0.txt');
+  fs.writeFileSync(licenseFile, REAL_CC_BY_4_FILE);
+  const target = path.join(root, 'r');
+  const res = run(['published-code', '--name', 'x', '--license', licenseFile, target]);
+  assert.equal(res.status, 0, res.stderr);
+  const notice = fs.readFileSync(path.join(target, 'NOTICE'), 'utf8');
+  const readme = fs.readFileSync(path.join(target, 'README.md'), 'utf8');
+  assert.match(notice, /licensed under CC-BY-4\.0/);
+  assert.doesNotMatch(notice, /Apache/);
+  assert.match(readme, /badge\/license-CC-BY-4\.0-blue/);
+  assert.doesNotMatch(readme, /badge\/license-Apache/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('new-repo.mjs published-code, --license <a REAL FSL-1.1-Apache-2.0-shaped file, the Chotmeter shape, embeds the full Apache-2.0 text>: badge/NOTICE derive FSL-1.1-Apache-2.0, never Apache-2.0 (UMB-059, the ORDER-IS-LOAD-BEARING collision case at the CLI level)', () => {
+  // The same collision identifyLicense()'s own ordering exists to prevent (proven
+  // red-first at the lib level in license-check.test.mjs): a real FSL body embeds
+  // the FULL Apache-2.0 legalcode verbatim. Proves the CLI's derivation inherits
+  // that correctness rather than re-implementing (and potentially re-breaking) it.
+  const root = scratchDir();
+  const licenseFile = path.join(root, 'FSL.txt');
+  const realApache = fs.readFileSync(path.join(path.dirname(SCRIPT), '..', 'templates', 'published-code', 'LICENSE'), 'utf8');
+  const fsl = '# Functional Source License, Version 1.1, ALv2 Future License\n\n## Abbreviation\nFSL-1.1-ALv2\n\n' + realApache;
+  fs.writeFileSync(licenseFile, fsl);
+  const target = path.join(root, 'r');
+  const res = run(['published-code', '--name', 'x', '--license', licenseFile, target]);
+  assert.equal(res.status, 0, res.stderr);
+  const notice = fs.readFileSync(path.join(target, 'NOTICE'), 'utf8');
+  assert.match(notice, /licensed under FSL-1\.1-Apache-2\.0/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+// Realistic bespoke proprietary text (the real Kolwen/CoalKiln shape) -- long/
+// substantive enough (carries a WARRANTY disclaimer, isLicenseStub's own
+// SUBSTANTIVE_MARKER) to clear the EARLIER stub-refusal and actually reach the
+// identity-derivation logic this test targets, while matching none of the 5
+// identifyLicense() signatures.
+const BESPOKE_PROPRIETARY_TEXT = [
+  'Kolwen — Repository License', '',
+  'Copyright (c) 2026 HetCreep / TheColliery. All rights reserved.', '',
+  'The contents of this repository — documentation, text, images, and any other',
+  'material — are proprietary and confidential. No part of this repository may be',
+  'reproduced, distributed, or transmitted in any form without prior written',
+  'permission from the copyright holder.', '',
+  'THIS SOFTWARE IS PROVIDED WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.', '',
+].join('\n');
+
+test('new-repo.mjs published-code, --license <a bespoke unidentifiable body file>, no --license-id: REFUSES -- never silently defaults to Apache-2.0 again (UMB-059)', () => {
+  const root = scratchDir();
+  const licenseFile = path.join(root, 'Bespoke.txt');
+  fs.writeFileSync(licenseFile, BESPOKE_PROPRIETARY_TEXT);
+  const target = path.join(root, 'r');
+  const res = run(['published-code', '--name', 'x', '--license', licenseFile, target]);
+  assert.notEqual(res.status, 0, res.stdout);
+  assert.match(res.stderr, /does not match any of the flock's recognized licences, and no --license-id was given/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('new-repo.mjs published-code, --license <a bespoke unidentifiable body file> --license-id "Kolwen Proprietary": SUCCEEDS, the explicit id becomes the badge/NOTICE (UMB-059)', () => {
+  const root = scratchDir();
+  const licenseFile = path.join(root, 'Bespoke.txt');
+  fs.writeFileSync(licenseFile, BESPOKE_PROPRIETARY_TEXT);
+  const target = path.join(root, 'r');
+  const res = run(['published-code', '--name', 'x', '--license', licenseFile, '--license-id', 'Kolwen-Proprietary', target]);
+  assert.equal(res.status, 0, res.stderr);
+  const notice = fs.readFileSync(path.join(target, 'NOTICE'), 'utf8');
+  const readme = fs.readFileSync(path.join(target, 'README.md'), 'utf8');
+  assert.match(notice, /licensed under Kolwen-Proprietary/);
+  assert.match(readme, /badge\/license-Kolwen-Proprietary-blue/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('new-repo.mjs published-code, --license-id given but --license is a bare SPDX string (not a file): --license-id is ignored, the ordinary UMB-058 contradiction check still runs (UMB-059 scope boundary)', () => {
+  // --license-id is meaningful only alongside a --license FILE whose body
+  // identifyLicense() cannot recognize (per the usage comment this unit updated).
+  // Passing it beside a bare string must not accidentally suppress UMB-058's own
+  // contradiction refusal.
+  const target = path.join(scratchDir(), 'r');
+  const res = run(['published-code', '--name', 'x', '--license', 'MIT', '--license-id', 'Whatever', target]);
+  assert.notEqual(res.status, 0, res.stdout);
+  assert.match(res.stderr, /contradicts .*LICENSE's own body, identified as Apache-2\.0/);
+  fs.rmSync(path.dirname(target), { recursive: true, force: true });
 });
