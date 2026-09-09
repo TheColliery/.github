@@ -85,11 +85,39 @@ A missed stable Release is back-filled from its CHANGELOG entry, never skipped.
 ## A Release body is re-read after every write
 
 **MUST — every Release create/patch (`POST`/`PATCH .../releases/{id}`) is followed by a
-GET on that same release and a length/byte compare of the returned `body` against the
-intended text, before the return says "published."** (`AGENTS.md`'s "A RELEASE BODY IS
-RE-READ AFTER EVERY WRITE" bullet, UMB-050/CoalFace r18b, cited not restated — a 200
-status on the create/patch call is evidence the request was well-formed, never evidence
-the body it carried was the intended text.)
+GET on that same release and a SHA256 compare over the UTF-8 BYTES of the returned
+`body` against the intended text, before the return says "published." NEVER a length
+compare — a length match proves nothing when the corruption is a byte-for-byte
+substitution.** (`AGENTS.md`'s "A RELEASE BODY IS RE-READ AFTER EVERY WRITE" bullet,
+UMB-050/CoalFace r18b, cited not restated — a 200 status on the create/patch call is
+evidence the request was well-formed, never evidence the body it carried was the
+intended text.)
+
+**Measured, CoalWorks r29 (CoalHearth's r29 gate-OUT, `CoalWorks/CoalHearth/MEMORY.md`,
+2026-09-10 — re-derive from that room's own record, never trust this line alone):
+`Invoke-RestMethod -Body <string>` re-encoded every em dash in the payload to a plain
+hyphen. The API answered 200. The published body's LENGTH equalled the intended
+text's length — an em dash and a hyphen are both one character — so a length compare
+would have read this as identical when it was not.** Only a SHA256 over the actual
+bytes caught it. The cure CoalHearth shipped, now the flock's own standard for this
+call: build the request body as UTF-8 bytes explicitly —
+`[Text.Encoding]::UTF8.GetBytes($payload)` — and set `charset=utf-8` on the request's
+content type, rather than handing `Invoke-RestMethod` a plain string and trusting its
+own default encoding.
+
+```powershell
+$bytes = [Text.Encoding]::UTF8.GetBytes($payload)
+Invoke-RestMethod -Uri $url -Method Patch -Body $bytes `
+  -ContentType 'application/json; charset=utf-8' -Headers $headers
+```
+
+This is a SEPARATE trap from the ETS-decoration one below — both live under the same
+PS 5.1 heading because both defeat the same MUST (a byte-faithful publish) through the
+same tool, but neither cure substitutes for the other: the `[string]` cast strips
+provider metadata a piped `Get-Content -Raw` carries; the explicit UTF-8 byte array
+stops `Invoke-RestMethod`'s own string-body path from re-encoding characters outside
+its default codepage. A script guarding against one is not thereby guarded against
+the other.
 
 **The mechanism** (`AGENTS.md` Hard-won lessons "PS 5.1," cited not restated): PowerShell
 5.1's `Get-Content -Raw` attaches ETS NoteProperties (`PSPath`/`PSParentPath`/
