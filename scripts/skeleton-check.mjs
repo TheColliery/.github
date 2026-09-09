@@ -28,6 +28,7 @@ import path from 'path';
 import { fileURLToPath } from 'node:url';
 import { findRepos as findReposLib, SKELETON_FILES, TEMPLATE_DIR_FOR_KIND } from './lib/skeleton-check-lib.mjs';
 import { isLicenseStub, licenseIdentityMismatches } from './lib/license-check-lib.mjs';
+import { anyRulesetCovers } from './lib/ruleset-match.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const githubRepo = path.resolve(scriptDir, '..');
@@ -164,9 +165,22 @@ async function diffSettings(kind, ownerRepo, settingsPath) {
   if (settings.ruleset?.status === 'n/a') {
     console.log(`    ruleset: N/A (${settings.ruleset.reason})`);
   } else if (settings.ruleset?.name) {
-    const r = await ghGet(token, `${base}/rulesets`);
-    const found = Array.isArray(r.json) && r.json.some((rs) => rs.name === settings.ruleset.name && rs.enforcement === 'active');
-    console.log(`    ruleset "${settings.ruleset.name}": ${found ? 'identical (present, active)' : 'DIFFERS (not found active)'}`);
+    // CWK-069 (the CoalWorks chief's own instrument ruling): matched by RULES, never by
+    // NAME. A room commonly already carries an active branch ruleset enforcing the same
+    // rules under a name of its own choosing (its own CI-required ruleset, say) -- a
+    // name-only compare reported that room as "missing main-guard" when it was already
+    // fully covered. The list endpoint returns no `rules` array; each active
+    // branch-targeting candidate is re-fetched for its own detail before comparing.
+    const wantedTypes = (settings.ruleset.rules || []).map((rule) => rule.type);
+    const list = await ghGet(token, `${base}/rulesets`);
+    const candidates = Array.isArray(list.json) ? list.json.filter((rs) => rs.enforcement === 'active' && rs.target === 'branch') : [];
+    const details = [];
+    for (const c of candidates) {
+      const d = await ghGet(token, `${base}/rulesets/${c.id}`);
+      if (d.json) details.push(d.json);
+    }
+    const covered = anyRulesetCovers(details, wantedTypes);
+    console.log(`    ruleset (rules: ${wantedTypes.join('+')}): ${covered ? 'identical (covered by an existing active ruleset, matched by rules -- not necessarily named "' + settings.ruleset.name + '")' : `DIFFERS (no active branch ruleset on the default branch covers ${wantedTypes.join('+')})`}`);
   }
 }
 

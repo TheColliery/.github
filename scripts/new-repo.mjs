@@ -49,6 +49,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
 import { isLicenseStub, identifyLicense, normalizeLicenseId } from './lib/license-check-lib.mjs';
+import { anyRulesetCovers } from './lib/ruleset-match.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const templatesRoot = path.join(scriptDir, '..', 'templates');
@@ -225,21 +226,43 @@ async function applySettings(kind, ownerRepo) {
   }
 
   if (settings.ruleset && settings.ruleset.name) {
-    const { $noRequiredStatusChecksNote, $ifItEverBecomesAvailableNote, ...rulesetBody } = settings.ruleset;
-    const r = await ghRequest(token, 'POST', `${base}/rulesets`, rulesetBody);
-    // A 422 here is the expected shape of "a ruleset with this name already exists" —
-    // idempotent-create, not a failure (GitHub's rulesets API has no PUT-by-name).
-    const ok = r.ok || r.status === 422;
-    results.push({ surface: 'ruleset', ok, status: r.status, note: r.status === 422 ? 'already exists (treated as applied)' : undefined });
+    // CWK-069/UMB-072: matched by RULES, never by NAME (same reasoning as
+    // skeleton-check.mjs's own diff, cited not restated) -- AND, load-bearing here on
+    // the WRITE side specifically: an uncovered room is NEVER auto-created into. The
+    // shipped convention's own ruleset carries no `bypass_actors` -- creating it blind
+    // on a room whose maintainer pushes directly to the default branch could block the
+    // maintainer's own next push. That is the owner's press, not this script's; an
+    // uncovered room is reported PENDING, never applied.
+    const wantedTypes = (settings.ruleset.rules || []).map((rule) => rule.type);
+    const list = await ghRequest(token, 'GET', `${base}/rulesets`);
+    const candidates = Array.isArray(list.json) ? list.json.filter((rs) => rs.enforcement === 'active' && rs.target === 'branch') : [];
+    const details = [];
+    for (const c of candidates) {
+      const d = await ghRequest(token, 'GET', `${base}/rulesets/${c.id}`);
+      if (d.json) details.push(d.json);
+    }
+    const covered = anyRulesetCovers(details, wantedTypes);
+    if (covered) {
+      results.push({ surface: 'ruleset', ok: true, status: 'N/A', reason: `already covered by an existing active branch ruleset (matched by rules ${wantedTypes.join('+')}, not name "${settings.ruleset.name}") -- no new ruleset created` });
+    } else {
+      results.push({ surface: 'ruleset', ok: true, status: 'PENDING', reason: `no active branch ruleset on the default branch covers ${wantedTypes.join('+')} -- creating "${settings.ruleset.name}" is NOT applied here: the shipped convention carries no bypass_actors, and a ruleset that could block the maintainer's own direct pushes is the owner's press, never auto-applied` });
+    }
   } else if (settings.ruleset) {
     results.push({ surface: 'ruleset', ok: true, status: 'N/A', reason: settings.ruleset.reason });
   }
 
   console.log(`applySettings: ${kind} -> ${owner}/${repo}`);
   for (const r of results) {
-    const line = r.status === 'N/A' ? `  ${r.surface}: N/A (${r.reason || 'no reason recorded'})` : `  ${r.surface}: ${r.ok ? 'ok' : 'FAIL'} (HTTP ${r.status}${r.note ? ', ' + r.note : ''})`;
+    // PENDING (CWK-069/UMB-072): a surface this script deliberately did NOT apply and
+    // is returning to the human as a decision -- same reporting tier as N/A (never an
+    // HTTP status line, never a FAIL), but semantically distinct: N/A means "nothing to
+    // apply here"; PENDING means "something to apply, withheld on purpose."
+    let line;
+    if (r.status === 'N/A') line = `  ${r.surface}: N/A (${r.reason || 'no reason recorded'})`;
+    else if (r.status === 'PENDING') line = `  ${r.surface}: PENDING (${r.reason || 'no reason recorded'})`;
+    else line = `  ${r.surface}: ${r.ok ? 'ok' : 'FAIL'} (HTTP ${r.status}${r.note ? ', ' + r.note : ''})`;
     console.log(line);
-    if (!r.ok && r.status !== 'N/A') process.exitCode = 1;
+    if (!r.ok && r.status !== 'N/A' && r.status !== 'PENDING') process.exitCode = 1;
   }
 }
 
