@@ -138,8 +138,6 @@ async function ghRequest(token, method, urlPath, body) {
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  // 422 on the ruleset endpoint most commonly means "a ruleset with this name already
-  // exists" — treated as success (idempotent create), never retried as a new object.
   let json = null;
   try { json = await res.json(); } catch {} // a 2xx with no body (some PUT endpoints) is not an error
   return { ok: res.ok, status: res.status, json };
