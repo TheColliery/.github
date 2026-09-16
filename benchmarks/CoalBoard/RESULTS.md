@@ -24,6 +24,21 @@ per-arm table, the pre-registered decision-rule outputs, a 13-seed sensitivity r
 and scoring caveats, and a standing re-run offer to the vendor. Raw safe-to-publish artefacts:
 [`results/security-audit-2026-09-16/`](results/security-audit-2026-09-16/).
 
+**Addendum 1 (2026-09-16 19:20–20:45 UTC, scored 2026-09-17, judge model `claude-haiku-4-5-20251001`,
+CoalBoard v2.4.2, permission regime `acceptEdits`; full stamp in the addendum) — the judge chair:**
+reseats the JUDGE at the weakest model tier (a haiku main) over strong-tier lenses forced there by two
+**research-only levers not shipped in the product** (three convened runs), against three
+whole-weak-tier floors, to ask how much of a verdict survives unattended when the reader deciding it
+is weak. Weak-judge/strong-lens median recall **0.867** at strict precision **≈0.947** (vs the
+strong-judge board's own 0.867/0.889) — **JUDGE-ROBUST**, retaining 38 of 39 lens-union **seeds**
+across the three runs, one true seed silently dropped. Workflow completion: **10 of 12** collected
+(the two misses, both on the third-party skill's own floor arm, are a directory-scope miss, not a
+failure to finish — that same arm also carried a handful of real permission denials this round,
+disclosed rather than smoothed over). A prior same-day pass under a mismatched permission regime is
+named and set aside as confounded — see the addendum for both lessons it left standing. Details:
+[`SECURITY-AUDIT-2026-09-16.md`](SECURITY-AUDIT-2026-09-16.md)'s Addendum 1; raw artefacts
+[`results/security-audit-2026-09-16/round4/`](results/security-audit-2026-09-16/round4/).
+
 ---
 
 ## 2026-07-03 — solo-vs-board, strong-solo and weak-solo, mirrored

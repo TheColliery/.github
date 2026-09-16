@@ -285,3 +285,253 @@ its own recorded arm tag), `SCORE-public.md` (the scoring record with every seed
 by its trap class — §3 through §7 of this record trace to it). The full scoring record, the sealed
 answer key, and every arm's own findings and artifacts are withheld — publishing them would hand out
 the fixed problems and their answers.
+
+---
+
+## Addendum 1 — Round 4b, the judge chair
+
+<!--
+version-frozen: measured 2026-09-16 19:20:10-20:44:56 UTC, scored 2026-09-17. A dated snapshot on
+top of the same frozen-snapshot ruling as the record above — not tracked, not auto-re-run.
+-->
+
+**Measured:** round 4b, 2026-09-16 19:20:10-20:44:56 UTC (scored 2026-09-17) — judge/orchestrating
+model `claude-haiku-4-5-20251001` throughout — worker models, where a board convened, `claude-opus-5`
+/ `claude-opus-4-8` (billing mix explained in the receipts oddity note, main record above) -
+CoalBoard **v2.4.2** with two research-only levers applied ONLY to the weak-judge/strong-lens arm and
+restored to stock immediately after (verified: 0 mismatches against the pinned defs' originals after
+restore) — the Claude Code subagent-model environment override and an agent-definition `model:` field
+pin; **neither lever is part of the shipped product's default behaviour**, and every other arm in
+this addendum ran CoalBoard exactly as installed — `cloudflare/security-audit-skill` commit `c1c8a8c`,
+quick profile — Claude Code **2.1.273** — permission regime `acceptEdits` (tools pre-approved),
+verified at every run's own init event.
+
+### The question
+
+Rounds 1-3 above measured both systems with a strong judge, which can mask a pipeline whose verdicts
+rest on assertion rather than a re-followable method. This addendum reseats the JUDGE at the weakest
+model tier and asks what survives: does a security verdict still hold when the reader deciding it is
+weak? The owner's framing runs in two axes, in order — first, are the SHARED FACTORS an order needs
+complete (a tool cannot judge reachability it was never told about, whatever its strength); only then
+does the judge SEAT's own strength become the question this addendum answers. A weak judge seat that
+holds is a candidate for safe automation; one that fails means a human seat is not optional there.
+
+### Arms as run
+
+- **A-h2** — the skill's quick profile with everything at the weakest tier (its critic and verifier
+  inherit the session model by design — no single seat can be weakened alone; this is the skill's
+  FLOOR, not an isolated judge test).
+- **B-h2** — CoalBoard's own floor: the weakest tier for the judge (main) and for every lens.
+- **C-h2** — the solo control at the weakest tier.
+- **B-hje2** — the true weak-judge measurement: the judge (main) held at the weakest tier while the
+  four lens seats are forced to the strong tier by the two research levers above; all three runs
+  convened the full board (verified per run at the receipt).
+
+**Pre-registered rules** (quoted, A/B/C mapped to the same arms as the design above):
+- **JUDGE-ROBUST** — decoy false positives = 0 in all three rounds AND median strict precision drops
+  by < 0.10 vs the strong-judge (rounds 1-3) median.
+- **JUDGE-DEPENDENT** — decoy false positives > 0 in two or more rounds, OR median strict precision
+  drops by >= 0.20.
+- **In between** — reported as such, no label.
+- **H-method (a hypothesis, never a pass/fail):** precision under a weak judge tracks the fraction of
+  verdicts backed by an executed method (a probe that ran, a reproducible input->output trace, a range
+  check against a live-fetched source) rather than an unrun assertion.
+
+### A prior, confounded pass — named and set aside
+
+A first attempt at this measurement ran earlier the same day under the harness's default permission
+mode rather than a pre-approved one. Under that mode, nearly every report write, worker probe, and
+advisory fetch was refused outright (2-24 refusals per run), so what it actually measured was the
+permission regime closing off the method channel at the weak tier, not the judge. Its own headline
+numbers, cited once for the comparison and never as the measurement: recall/strict-precision medians
+ran 0.333/0.625 (skill floor), 0.400/0.778 (board floor), 0.267/1.000 (solo floor), 0.733/0.926
+(weak-judge/strong-lens, three convened runs). Two things from that pass stand un-re-tested here: the
+one time a weak judge was offered a look-alike non-bug to accept — from a weak lens, in a floor arm
+— it accepted it; and no lens of any strength, weak or strong, proposed a decoy in any of this
+addendum's own twelve runs, so "would a weak judge accept a look-alike a strong lens actually
+proposed" stays untested either way. The rest of this addendum re-runs the design under an
+equivalent pre-approved permission regime — `acceptEdits` with tools pre-approved rather than rounds
+1-3's `auto`, not byte-identical in mechanism but effectively the same shape for the board, solo, and
+weak-judge/strong-lens arms, all of which saw zero refusals in every one of their nine runs. **The
+skill's own floor arm (A-h2) is the one exception, and it is named rather than smoothed over:** its
+three rounds still saw 1, 3, and 6 permission-denial events respectively — far below the confounded
+pass's 2-24, but not zero. Every one of them was either a PowerShell script-block heuristic or a
+worker sub-agent hitting the harness's "permission prompts are not available in this context" rule;
+none was a report-write denial, and the skill still reached its own final workflow stage in all three
+rounds regardless (§Results, below).
+
+### Results
+
+**Per-arm tables** (n = 3; min / median / max):
+
+| metric | A-h2 (skill floor) | B-h2 (board floor) | C-h2 (solo floor) | **B-hje2** (weak judge, strong lenses) |
+|---|---|---|---|---|
+| recall /15 seeds | 0.200 / **0.267** / 0.333 | 0.267 / **0.400** / 0.467 | 0.200 / **0.267** / 0.400 | 0.800 / **0.867** / 0.933 |
+| recall /13 seeds (sensitivity) | 0.231 / **0.308** / 0.385 | 0.308 / **0.385** / 0.462 | 0.231 / **0.308** / 0.385 | 0.769 / **0.923** / 0.923 |
+| precision (strict) | 0.800 / **0.889** / 1.000 | 0.667 / **0.727** / 0.800 | 0.857 / **1.000** / 1.000 | approx.0.92 / **approx.0.947** / approx.0.95 |
+| decoy false positives | 0 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 0 |
+| method-backed verdict fraction | 0 / **0** / 0.429 | 0.111 / **0.182** / 0.200 | 0 / **0** / 0 | 0.186 / **0.211** / 0.308 |
+| findings presented | 5 / 7 / 9 | 5 / 9 / 11 | 3 / 4 / 7 | 19 / 26 / 43 |
+| cost USD | 1.53 / **1.81** / 1.83 | 1.36 / **1.38** / 1.40 | 0.26 / **0.27** / 0.28 | 5.74 / **6.04** / 6.71 |
+| wall seconds (orchestrator) | 506 / **540** / 756 | 320 / **327** / 361 | 76 / **139** / 180 | 506 / **616** / 737 |
+| turns | 5 / 6 / 6 | 2 / 2 / 2 | 20 / 21 / 22 | 2 / 2 / 6 |
+
+Wall time above is the orchestrator's own measured duration, the same convention as the main record;
+each run's own receipt `duration_ms` disagrees with it in every arm here too (e.g. one A-h2 round
+reads roughly 125 seconds of `duration_ms` against 540 seconds of orchestrator wall) — recorded, not
+interpreted, per the main record's identical note.
+
+**Workflow completion:** every run in every arm reached its own final reporting stage — no run stalled
+mid-workflow under this permission regime. **Collection** (whether the deliverable landed where the
+lab could gather it) reached **10 of 12** — A-h2's own two misses wrote their complete final output to
+the session's working scratch instead of the run's designated output directory, because that directory
+sat outside what the run had been granted access to; this is a path-scope miss, not a permission
+denial and not an incomplete audit. Every B-h2, C-h2, and B-hje2 run collected cleanly.
+
+**Rule outputs, with the label that moved from the confounded pass, named:**
+
+| arm | median strict precision | delta vs strong-judge median | **rule output** |
+|---|---|---|---|
+| A-h2 | 0.889 | -0.011 | **JUDGE-ROBUST** |
+| B-h2 | 0.727 | -0.162 | in between, no label |
+| C-h2 | 1.000 | 0.000 | **JUDGE-ROBUST** |
+| **B-hje2** | 0.947 | **+0.058** (precision rose) | **JUDGE-ROBUST** |
+
+The skill's own label **moved**: under the confounded pass its precision (0.625) read JUDGE-DEPENDENT;
+under the like-for-like regime it reads 0.889, JUDGE-ROBUST. The dependence measured in the confounded
+pass was the harness refusing the skill's writes and probes and scoring it on truncated output, not
+the model tier degrading its judgment — once the harness stopped refusing, the same weak tier held.
+The board-floor and solo-floor labels were unchanged across both passes.
+
+**B-hje2 is the arm the question is actually about**, and it is JUDGE-ROBUST, with three stated
+limits: (1) the decoy criterion was never stimulated — no strong lens proposed a look-alike in any of
+these three runs, so "would a weak judge accept one" stays untested at this lens strength; (2) most of
+the measured precision is inherited from the strong lenses' own precision, not manufactured by the
+judge; (3) the judge's own distinct contribution is best read as **retention** — across the three
+convened runs the weak judge kept **38 of the 39** seeds its strong lenses' combined union produced
+(14/14, 12/12, 12/13 per run). The one loss: one lens-reported seed was silently dropped from the
+judge's final report in one of the three runs, although the lens that raised it had reported it
+plainly. No finding was inverted, no seed was invented, and no decoy was accepted in any run.
+
+**H-method, reported as the paired numbers, not a verdict:** A-h2 (0.889 precision, 0.00 method) -
+B-h2 (0.727, 0.18) — C-h2 (1.000, 0.00) — B-hje2 (0.947, 0.21). **The hypothesis is not confirmed by
+this round, and is arguably contradicted at the extremes:** the highest-precision arm (the solo
+control, 1.000) has the lowest method fraction of all (0.00) — it buys precision by saying little and
+running nothing, not by grounding its claims. What the round does show, in the direction the owner's
+principle points: the arm whose verdicts rest most on method (B-hje2) also holds the highest recall at
+high precision together — method appears to buy coverage without costing precision, rather than
+precision directly.
+
+**Trap-class recall** (T1-T4 pooled, min/median/max across three rounds): A-h2
+0.0/**0.1**/0.2 — B-h2 0.0/**0.2**/0.3 — C-h2 0.0/**0.0**/0.1 — **B-hje2
+0.7/0.8/0.9** — for comparison, the strong-judge (rounds 1-3) medians on the same axis were 0.2 (skill)
+/ 0.8 (board) / 0.2 (solo). The weak-judge/strong-lens arm's trap-class recall matches the strong-judge
+board's own, closely. **T0 recall does not sit uniformly near ceiling across arms**, worth stating
+plainly rather than assuming: B-hje2 hits the full 5-of-5 every round; the floor-tier board holds
+steady at 4-of-5 every round; the skill's floor holds steady at 3-of-5 every round; the solo floor
+varies 3-to-5-of-5 across its three rounds.
+
+**T1-class (post-training-cutoff advisory) miss taxonomy, as classes:** the skill was scoped away from
+this class by its own offline design in every run; the solo control never looked in any run; the board
+matched two of the three T1-class instances correctly in multiple runs at both tiers, and one
+instance was never matched by any board run at either tier — every board run that reached it fetched
+live advisory data and attached an advisory other than the seeded one. This is the identical single-
+instance wrong-advisory pattern named in the main record above (there too, exactly one T1-class
+instance was the board's sole correlated miss), now confirmed to reproduce at a weaker judge tier as
+well as the strong one — never the whole T1 class, one specific instance of it, both times.
+
+### Our own defect (queued, not shipped)
+
+The board's own documented per-seat model ladder is a PROSE instruction the orchestrating session must
+turn into an actual spawn parameter — it is not enforced mechanically, and nothing in the shipped
+product stops a user from setting a price-setting configuration that a weak orchestrating session
+then silently ignores. Measured on runs where **no lever was engaged**, across every such board run
+on disk at write time: a strong orchestrating session applied the ladder on the large majority of its
+spawns; a weak orchestrating session applied it on none of its spawns, regardless of whether the
+price-setting configuration was set. This is the real, still-open defect, and it is exactly why the
+weak-judge/strong-lens measurement in this addendum needed the two research-only levers named in the
+stamp in the first place — with a lever forcibly engaged, the spawn parameter DOES show up (confirmed
+in every one of this addendum's own weak-judge/strong-lens runs), which demonstrates the lever works,
+not that the underlying defect is fixed: a user gets neither lever by default. **Queued fix, not
+built:** a floor tier baked into the lens seat definitions themselves (so a weak orchestrating session
+cannot lower them below it, while the prose ladder still raises them), and the billed model of every
+seat printed in the board's own report (so a substitution or a dropped parameter is visible after the
+fact). Separately, and worth naming as a distinct fact: in this addendum's own twelve runs, the
+board's seats convened correctly and used the right agent roles in every run but one (which convened
+three of its four seats) — the seat-substitution failures seen in the earlier, confounded pass did
+not reproduce here. The skill's own floor arm still saw a handful of permission denials in this
+addendum (above), so this improvement cannot be credited to a fully refusal-free regime; the most
+that can be said is that the board's own seats convened correctly this time, without claiming to know
+exactly why the earlier pass's substitution failures do not recur.
+
+### Human-review artefact — disagreements the weak judge resolved without any exchange
+
+No deadlock, cross-examination, or tiebreaker convened in any of the twelve runs; every board report
+asserted a clean consensus. Reading the raw per-lens returns against the judge's final report surfaces
+real disagreements resolved silently. In one weak-judge/strong-lens convened run, three of the four
+strong lenses independently proposed different technical readings of the same T0-class network-
+boundary defect, and the judge folded them into a single finding with no visible exchange between the
+lenses — the merged finding held up as correct on inspection, but was reached with no cross-exam.
+Separately, and at the OPPOSITE tier — a floor run, both judge and lens at the weakest tier — the
+judge's own report header stated flatly that no runtime verification had occurred in that run, while
+one of its own weak-tier lenses' output from the identical run showed an executed check had, in fact,
+been run: the board's own summary misdescribed its own board's method, at the tier with no research
+lever involved at all. Neither of these changed the scored recall or precision, and both are exactly
+the class of thing the design's original human-review provision exists to surface for a person
+reading the raw returns afterward — recorded here as that artefact, not scored as a finding.
+
+### Caveats (in addition to those already stated above, which still hold)
+
+- **n = 3 per arm, one target, unaudited.** Everything above compounds the caveats already stated for
+  the main record; a weaker judge on a small n is a smaller, not a different, kind of signal.
+- **The two research-only levers are not the shipped product.** Nothing in B-hje2's numbers describes
+  what a user gets by installing CoalBoard today — they describe what the board's verdict quality
+  looks like once its own documented tier ladder actually reaches the spawn, which currently needs an
+  environment override and a definition-file pin neither shipped nor documented as user-facing.
+- **Host-load figures for this addendum carry an extra instrument gap:** the sampler's own arm-tagging
+  did not fire correctly during this window (every sample landed under one generic tag rather than a
+  per-run one), so the per-run load figures in the raw artefacts are derived from the orchestrator's
+  own timing log rather than the sampler's tags — named so nobody re-derives them the same way rounds
+  1-3 were derived and gets a different number.
+- **The decoy criterion at strong-lens strength remains unstimulated**, as stated above — this
+  addendum neither confirms nor refutes whether a weak judge would accept a look-alike a strong lens
+  actually proposed to it.
+- **The `claude-opus-4-8` id appears beside `claude-opus-5` inside the strong lenses' own billing** —
+  the same documented safety-classifier fallback named in the main record above (a security audit of a
+  seeded target predictably trips a "could enable cyber harm" classifier on some requests; Anthropic's
+  own docs, platform.claude.com/docs/en/build-with-claude/refusals-and-fallback, state the category
+  explicitly covers benign security work and that the platform re-serves the declined request on a
+  fallback model automatically) — recorded, not interpreted; no comparative rate is claimed against
+  the main record, which does not itself state one. The pattern appeared only inside this addendum's
+  strong-tier lens billing and never in any weak-tier-only arm here.
+
+### The automation-ceiling reading
+
+Where the judge seat itself is weak, a verdict built on strong lenses substantially survives at this
+lens strength: precision holds, recall holds close to what a strong judge reaches on the same lenses,
+and every run completes its workflow and delivers its report unattended. The one measured failure mode
+is narrow and specific — a weak judge can silently drop a true seed one of its own lenses reported,
+without inverting it or replacing it with something worse; that happened once in thirty-nine kept
+seeds across three runs here. The limits on trusting any of these systems unattended at the weakest
+tier are therefore not primarily about the judge's own intelligence — they are, in order: whether the
+harness's own permission regime is set to let the method channel run at all (a misconfigured regime
+can make a working pipeline look broken, exactly as the earlier confounded pass did, and even this
+addendum's own like-for-like regime still refused a handful of the skill's own worker probes — a
+regime can be MOSTLY clear and still cost a floor arm real coverage), and then whether the READER
+doing the finding, at whatever tier, can reach the classes of defect that need grounding outside the
+model's own training prior — which no judge strength repairs, and which is the same limit the main
+record above already measured at the strong-judge tier.
+
+### Raw artefacts
+
+[`results/security-audit-2026-09-16/round4/`](results/security-audit-2026-09-16/round4/) -
+`receipts-r4b.json` (the twelve round-4b runs) and `receipts-r4-confounded.json` (the seventeen
+round-4 runs, including five whose weak-judge/strong-lens measurement never validly landed — two
+whose lens seating never applied its model parameter at all, one whose research lever went untested
+because the orchestrating session substituted other agents for the board's own seats, and two counted
+only as receipts because no board convened in them at all) — each entry: cost, turns, wall duration,
+the model-usage breakdown, and whether that run's board convened the seats it was told to.
+`orchestrate4.log` (both passes, one shared log). `SCORE-R4B-public.md` (the scoring record for this
+addendum with every seed identifier replaced by its trap class). The full scoring records for both
+passes, the sealed key, and every run's own findings are withheld for the same reason as the main
+record above.
