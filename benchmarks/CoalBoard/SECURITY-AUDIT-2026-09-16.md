@@ -13,10 +13,12 @@ initial install) ·
 **CoalBoard v2.4.2**, audit mode, as installed at run time ·
 **solo control**: one plain `claude -p` session, no delegation, no skill ·
 model IDs exactly as the run receipts' `modelUsage` report them: `claude-opus-5`, `claude-opus-4-8`,
-`claude-haiku-4-5-20251001` (⚠️ unverified against Anthropic's own model documentation at time of
-writing — verify before citing any of the three ids elsewhere; the orchestrator pinned the bare
-`opus` alias for every run, and `claude-opus-4-8` appears beside `claude-opus-5` in every one of the
-nine receipts — recorded here as a receipts oddity, not interpreted) ·
+`claude-haiku-4-5-20251001` (verified 2026-09-16 against Anthropic’s models overview,
+platform.claude.com/docs/en/models/overview: `claude-opus-5` and `claude-haiku-4-5-20251001` are the
+current Claude API IDs of Claude Opus 5 and Claude Haiku 4.5; `claude-opus-4-8` is Claude Opus 4.8,
+listed there as a legacy model still available; the orchestrator pinned the bare `opus` alias for
+every run, and `claude-opus-4-8` appears beside `claude-opus-5` in every one of the nine receipts —
+recorded here as a receipts oddity, not interpreted) ·
 Claude Code 2.1.273 at run time.
 
 ## TL;DR

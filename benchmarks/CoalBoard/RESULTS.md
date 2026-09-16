@@ -8,7 +8,7 @@
 
 **Measured:** 2026-09-16 (UTC) · CoalBoard **v2.4.2**, audit mode · `cloudflare/security-audit-skill`
 commit `c1c8a8c` (quick profile) · a plain solo `-p` control · model ids `claude-opus-5` /
-`claude-opus-4-8` / `claude-haiku-4-5-20251001` (⚠️ unverified) throughout, n = 3 rounds per arm,
+`claude-opus-4-8` / `claude-haiku-4-5-20251001` (verified 2026-09-16 against Anthropic’s models overview) throughout, n = 3 rounds per arm,
 one seeded target (withheld) — full stamp incl. Claude Code version in the linked record below.
 
 > **TL;DR (disclosure: we build CoalBoard, one of the three arms compared):** the skill's quick
