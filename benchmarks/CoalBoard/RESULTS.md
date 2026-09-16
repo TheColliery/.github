@@ -30,8 +30,11 @@ reseats the JUDGE at the weakest model tier (a haiku main) over strong-tier lens
 **research-only levers not shipped in the product** (three convened runs), against three
 whole-weak-tier floors, to ask how much of a verdict survives unattended when the reader deciding it
 is weak. Weak-judge/strong-lens median recall **0.867** at strict precision **≈0.947** (vs the
-strong-judge board's own 0.867/0.889) — **JUDGE-ROBUST**, retaining 38 of 39 lens-union **seeds**
-across the three runs, one true seed silently dropped. Workflow completion: **10 of 12** collected
+strong-judge board's own 0.867/0.889) — **JUDGE-ROBUST** by the pre-registered rule, read with its
+limits: the verdict held on RETENTION (38 of 39 lens-union **seeds** kept across the three runs, one
+true seed silently dropped), the precision is largely the strong lenses' own, whether a weak judge
+rejects a look-alike stays untested (no strong lens proposed one), and the whole-weak-tier board
+read "in between". Workflow completion: **10 of 12** collected
 (the two misses, both on the third-party skill's own floor arm, are a directory-scope miss, not a
 failure to finish — that same arm also carried a handful of real permission denials this round,
 disclosed rather than smoothed over). A prior same-day pass under a mismatched permission regime is
