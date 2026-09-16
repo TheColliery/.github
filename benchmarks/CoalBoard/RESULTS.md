@@ -1,4 +1,32 @@
-# CoalBoard solo-vs-board results—strong-solo and weak-solo, mirrored (2026-07-03)
+# CoalBoard benchmark records
+
+## 2026-09-16 — CoalBoard audit mode vs cloudflare/security-audit-skill vs a solo control
+
+<!-- version-frozen: measured 2026-09-16 (UTC) with CoalBoard v2.4.2 and security-audit-skill
+     commit c1c8a8c installed; a dated snapshot, not tracked, not auto-re-run on either product's
+     update. Re-run on request only. -->
+
+**Measured:** 2026-09-16 (UTC) · CoalBoard **v2.4.2**, audit mode · `cloudflare/security-audit-skill`
+commit `c1c8a8c` (quick profile) · a plain solo `-p` control · model ids `claude-opus-5` /
+`claude-opus-4-8` / `claude-haiku-4-5-20251001` (⚠️ unverified) throughout, n = 3 rounds per arm,
+one seeded target (withheld) — full stamp incl. Claude Code version in the linked record below.
+
+> **TL;DR (disclosure: we build CoalBoard, one of the three arms compared):** the skill's quick
+> profile matched a single-agent review of the same model tier on recall (0.467 median, 15 seeds,
+> n = 3) at **≈ 14.5×** its median cost. CoalBoard's audit mode reached **0.867** median recall at
+> **≈ 3.9× less** median cost than the skill. Precision held ≥ 0.857 median strict across all three
+> arms, zero decoy false positives in any round. n = 3, one target — a measured signal, not a
+> verdict; the "theirs weaker" reading holds at the pooled median and in 2 of 3 individual rounds
+> (see the full record for the round that didn't clear it).
+
+**Full record:** [`SECURITY-AUDIT-2026-09-16.md`](SECURITY-AUDIT-2026-09-16.md) — design, every
+per-arm table, the pre-registered decision-rule outputs, a 13-seed sensitivity recompute, host-load
+and scoring caveats, and a standing re-run offer to the vendor. Raw safe-to-publish artefacts:
+[`results/security-audit-2026-09-16/`](results/security-audit-2026-09-16/).
+
+---
+
+## 2026-07-03 — solo-vs-board, strong-solo and weak-solo, mirrored
 
 **Measured:** 2026-07-03 · CoalBoard **v1.5.5** (the skill installed at run time) · two arms on two platforms: Claude Code / **Opus 4.8** (strong solo) and Antigravity / **Gemini 3.5 Flash** (weak solo) · the 5 `tasks.md` error-not-allowed tasks, judge-run scoring per [`README.md`](README.md).
 <!-- version-frozen: measured with v1.5.5 installed; re-run to update. -->

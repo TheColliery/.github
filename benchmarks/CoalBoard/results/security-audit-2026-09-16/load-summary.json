@@ -1,0 +1,83 @@
+{
+  "A-r1": {
+    "n": 217,
+    "cpu_min": 4,
+    "cpu_median": 27,
+    "cpu_max": 100,
+    "free_ram_mb_min": 10757,
+    "claude_exe_min": 16,
+    "claude_exe_max": 17
+  },
+  "B-r1": {
+    "n": 71,
+    "cpu_min": 7,
+    "cpu_median": 19,
+    "cpu_max": 52,
+    "free_ram_mb_min": 12867,
+    "claude_exe_min": 16,
+    "claude_exe_max": 18
+  },
+  "C-r1": {
+    "n": 23,
+    "cpu_min": 7,
+    "cpu_median": 26,
+    "cpu_max": 68,
+    "free_ram_mb_min": 14545,
+    "claude_exe_min": 16,
+    "claude_exe_max": 17
+  },
+  "A-r2": {
+    "n": 201,
+    "cpu_min": 4,
+    "cpu_median": 19,
+    "cpu_max": 76,
+    "free_ram_mb_min": 11586,
+    "claude_exe_min": 16,
+    "claude_exe_max": 18
+  },
+  "B-r2": {
+    "n": 74,
+    "cpu_min": 5,
+    "cpu_median": 21.5,
+    "cpu_max": 57,
+    "free_ram_mb_min": 13062,
+    "claude_exe_min": 16,
+    "claude_exe_max": 18
+  },
+  "C-r2": {
+    "n": 35,
+    "cpu_min": 7,
+    "cpu_median": 19,
+    "cpu_max": 61,
+    "free_ram_mb_min": 14459,
+    "claude_exe_min": 15,
+    "claude_exe_max": 16
+  },
+  "A-r3": {
+    "n": 164,
+    "cpu_min": 4,
+    "cpu_median": 21,
+    "cpu_max": 90,
+    "free_ram_mb_min": 9832,
+    "claude_exe_min": 16,
+    "claude_exe_max": 22
+  },
+  "B-r3": {
+    "n": 97,
+    "cpu_min": 12,
+    "cpu_median": 32,
+    "cpu_max": 86,
+    "free_ram_mb_min": 9954,
+    "claude_exe_min": 16,
+    "claude_exe_max": 19
+  },
+  "C-r3": {
+    "n": 46,
+    "cpu_min": 13,
+    "cpu_median": 35,
+    "cpu_max": 86,
+    "free_ram_mb_min": 10383,
+    "claude_exe_min": 16,
+    "claude_exe_max": 18
+  }
+}
