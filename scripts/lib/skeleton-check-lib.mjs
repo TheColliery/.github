@@ -8,6 +8,18 @@
 import fs from 'fs';
 import path from 'path';
 
+// origin URL (read from a repo's own .git/config -- FILE data) -> { owner, repo } | null.
+// The pair is spliced into an API request PATH that carries the operator's token, so it
+// is parsed by ALLOWLIST, never `[^/]+`: fetch() collapses `..` AND its percent-encoded
+// spelling `%2e%2e` (WHATWG dot-segment), so a permissive owner such as `%2e%2e` would
+// retarget the request to another API endpoint (`/repos/%2e%2e/user/x` -> `/user/x`).
+// GitHub owner names are alphanumerics + hyphens; repo names here stay dot-free, exactly
+// as before -- a dotted repo is a SKIP, never a guess.
+export function parseGithubOrigin(url) {
+  const m = String(url).match(/github\.com[:/]([A-Za-z0-9-]+)\/([A-Za-z0-9_-]+?)(?:\.git)?$/);
+  return m ? { owner: m[1], repo: m[2] } : null;
+}
+
 // Skeleton-owned files per kind, relative to templates/<kind>/. A room may carry more
 // files than this (its own README body, its own SOURCES.md, ...) — those are not
 // skeleton-owned and are out of this instrument's scope by design.

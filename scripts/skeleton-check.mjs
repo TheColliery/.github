@@ -26,7 +26,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
-import { findRepos as findReposLib, SKELETON_FILES, TEMPLATE_DIR_FOR_KIND } from './lib/skeleton-check-lib.mjs';
+import { findRepos as findReposLib, SKELETON_FILES, TEMPLATE_DIR_FOR_KIND, parseGithubOrigin } from './lib/skeleton-check-lib.mjs';
 import { isLicenseStub, licenseIdentityMismatches } from './lib/license-check-lib.mjs';
 import { anyRulesetCovers } from './lib/ruleset-match.mjs';
 
@@ -84,10 +84,9 @@ function getOwnerRepo(repoDir) {
   if (!originBlock) return null;
   const urlMatch = originBlock[0].match(/url\s*=\s*(\S+)/);
   if (!urlMatch) return null;
-  const url = urlMatch[1];
-  // https://github.com/OWNER/REPO(.git) or git@github.com:OWNER/REPO(.git)
-  const m = url.match(/github\.com[:/]([^/]+)\/([^/.]+?)(?:\.git)?$/);
-  return m ? { owner: m[1], repo: m[2] } : null;
+  // https://github.com/OWNER/REPO(.git) or git@github.com:OWNER/REPO(.git). The pair goes
+  // into an API request path with the token attached, so it is allowlist-parsed in the lib.
+  return parseGithubOrigin(urlMatch[1]);
 }
 
 async function ghGet(token, urlPath) {

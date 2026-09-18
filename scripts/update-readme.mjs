@@ -15,6 +15,16 @@ function authHeaders() {
   };
 }
 
+// Network data ends up as text in a README badge URL, and encodeURIComponent leaves
+// ( ) ! * ~ ' unescaped -- a string could break the markdown link. Parse ONCE at the
+// boundary (only a safe non-negative integer, or a missing field = 0, gets through) so
+// nothing downstream ever handles response text. Never echoes the offending value.
+function asCount(value, field, repo) {
+  if (value === undefined || value === null) return 0;
+  if (Number.isSafeInteger(value) && value >= 0) return value;
+  throw new Error(`${repo}: traffic ${field} is not a non-negative integer (got ${typeof value})`);
+}
+
 async function fetchRepoClones(repo) {
   const url = `https://api.github.com/repos/${repo}/traffic/clones`;
   console.log(`Fetching clones for ${repo}...`);
@@ -22,7 +32,8 @@ async function fetchRepoClones(repo) {
   if (!res.ok) {
     throw new Error(`Failed to fetch clones for ${repo} (${res.status}: ${res.statusText})`);
   }
-  return res.json();
+  const body = await res.json();
+  return { count: asCount(body?.count, 'count', repo), uniques: asCount(body?.uniques, 'uniques', repo) };
 }
 
 // Returns the empty-clone sentinel so the caller can continue with the other repos.
@@ -161,4 +172,4 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   main();
 }
 
-export { badgeSpecs, updateFileStats, assertEveryBadgeMatched };
+export { badgeSpecs, updateFileStats, assertEveryBadgeMatched, fetchRepoClones };

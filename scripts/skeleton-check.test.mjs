@@ -6,7 +6,7 @@ import path from 'path';
 import {
   classify, hasAnyKindMarker, findRepos, SKELETON_FILES,
   ARTICLE_PRIVATE_MARKER, ARTICLE_CHANGEREQUEST_MARKER, PRIVATE_WORKING_MARKER,
-  TEMPLATE_DIR_FOR_KIND,
+  TEMPLATE_DIR_FOR_KIND, parseGithubOrigin,
 } from './lib/skeleton-check-lib.mjs';
 
 // A scratch zones-root, one fixture per test to keep each hermetic. Every fixture is
@@ -321,4 +321,42 @@ test('SKELETON_FILES: CHANGELOG.md is absent from published-code/private-working
   // Gacha exhibit only needs CHANGELOG.md to be OUTSIDE the two non-article kinds.
   assert.equal(SKELETON_FILES.article.includes('CHANGELOG.md'), true);
   assert.equal(SKELETON_FILES['article (private)'].includes('CHANGELOG.md'), true);
+});
+
+// --- parseGithubOrigin (code-scanning #6: .git/config data must not steer the API path) ---
+
+test('parseGithubOrigin: the https, .git-suffixed, ssh and credentialed forms all parse', () => {
+  assert.deepEqual(parseGithubOrigin('https://github.com/TheColliery/CoalMine'), { owner: 'TheColliery', repo: 'CoalMine' });
+  assert.deepEqual(parseGithubOrigin('https://github.com/TheColliery/CoalMine.git'), { owner: 'TheColliery', repo: 'CoalMine' });
+  assert.deepEqual(parseGithubOrigin('git@github.com:HetCreep/CoalMine.git'), { owner: 'HetCreep', repo: 'CoalMine' });
+  assert.deepEqual(parseGithubOrigin('https://user:tok@github.com/Some-Org/a_b-c.git'), { owner: 'Some-Org', repo: 'a_b-c' });
+});
+
+test('parseGithubOrigin: an owner or repo that is a dot-segment (literal or percent-encoded) is REFUSED -- RED against the permissive [^/]+ regex', () => {
+  for (const evil of [
+    'https://github.com/%2e%2e/user',
+    'https://github.com/%2E%2E/user',
+    'https://github.com/../user',
+    'https://github.com/TheColliery/%2e%2e',
+    'https://github.com/TheColliery/..',
+  ]) {
+    assert.equal(parseGithubOrigin(evil), null, evil);
+  }
+});
+
+test('parseGithubOrigin: query/fragment/space/percent smuggling in owner or repo is REFUSED', () => {
+  for (const evil of [
+    'https://github.com/own?x=1/repo',
+    'https://github.com/owner/repo?x=1',
+    'https://github.com/owner/repo#frag',
+    'https://github.com/own%2Fer/repo',
+    'https://github.com/owner/re po',
+  ]) {
+    assert.equal(parseGithubOrigin(evil), null, evil);
+  }
+});
+
+test('parseGithubOrigin: a dotted repo name stays a SKIP (null), unchanged from the old [^/.] rule', () => {
+  assert.equal(parseGithubOrigin('https://github.com/TheColliery/.github'), null);
+  assert.equal(parseGithubOrigin('https://github.com/owner/foo.bar.git'), null);
 });

@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const mod = await import('./update-readme.mjs');
-const { badgeSpecs, updateFileStats, assertEveryBadgeMatched } = mod;
+const { badgeSpecs, updateFileStats, assertEveryBadgeMatched, fetchRepoClones } = mod;
 
 const STATS = {
   combinedClones: '3.0k+', combinedUniques: '682+',
@@ -93,4 +93,43 @@ test('assertEveryBadgeMatched: a badge matched NOWHERE (drift) → fail loud (ex
   assert.equal(process.exitCode, 1, 'an unmatched badge must set exitCode 1');
   assert.match(errors.join('\n'), /CoalBoard_Downloads/, 'must name the drifted badge');
   process.exitCode = prev;
+});
+
+// --- fetchRepoClones: the traffic API response is parsed at the boundary (code-scanning #2) ---
+// count/uniques end up as text in a README badge URL, and encodeURIComponent leaves ( ) ! * ~ '
+// unescaped -- so only a number, or a missing field, may pass. Anything else is a per-repo FAIL
+// (fetchRepoClonesSafe turns the throw into the {0,0} sentinel + exitCode 1, the existing path).
+async function withFakeApi(body, fn) {
+  const realFetch = globalThis.fetch;
+  const hadToken = 'PAT_TOKEN' in process.env;
+  const prevToken = process.env.PAT_TOKEN;
+  process.env.PAT_TOKEN = 'test-token';
+  globalThis.fetch = async () => ({ ok: true, status: 200, statusText: 'OK', json: async () => body });
+  try {
+    return await fn();
+  } finally {
+    globalThis.fetch = realFetch;
+    if (hadToken) process.env.PAT_TOKEN = prevToken; else delete process.env.PAT_TOKEN;
+  }
+}
+
+test('fetchRepoClones: a real traffic body yields exactly {count, uniques} -- the daily clones array is dropped', async () => {
+  const got = await withFakeApi({ count: 1834, uniques: 398, clones: [{ timestamp: 'x', count: 1, uniques: 1 }] }, () => fetchRepoClones('o/r'));
+  assert.deepEqual(got, { count: 1834, uniques: 398 });
+});
+
+test('fetchRepoClones: a missing count/uniques reads 0 (the old `|| 0` tolerance, kept)', async () => {
+  assert.deepEqual(await withFakeApi({}, () => fetchRepoClones('o/r')), { count: 0, uniques: 0 });
+  assert.deepEqual(await withFakeApi({ count: null, uniques: 7 }, () => fetchRepoClones('o/r')), { count: 0, uniques: 7 });
+});
+
+test('fetchRepoClones: a non-numeric count is REFUSED -- a string carrying badge/markdown metacharacters must not reach the README (RED before the boundary parse)', async () => {
+  await assert.rejects(withFakeApi({ count: '1)![x](y', uniques: 1 }, () => fetchRepoClones('o/r')), /count is not a non-negative integer/);
+  await assert.rejects(withFakeApi({ count: 1, uniques: '5' }, () => fetchRepoClones('o/r')), /uniques is not a non-negative integer/);
+});
+
+test('fetchRepoClones: negative, fractional, NaN-like and unsafe numbers are REFUSED', async () => {
+  for (const bad of [-1, 1.5, 2 ** 60, Infinity]) {
+    await assert.rejects(withFakeApi({ count: bad, uniques: 0 }, () => fetchRepoClones('o/r')), /count is not a non-negative integer/, String(bad));
+  }
 });
