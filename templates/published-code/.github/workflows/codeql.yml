@@ -38,7 +38,7 @@ jobs:
     # The gate MUST sit on the steps, never on the job: hashFiles() is not available in a
     # job-level `if:` (GitHub's context-availability table), and a job-level use makes the
     # whole workflow invalid -- a run with zero jobs that reads "failure" (the 2026-09-03
-    # seed did exactly that; scripts/template-workflows.test.mjs now guards it).
+    # seed did exactly that; TheColliery/.github's scripts/template-workflows.test.mjs guards it).
     permissions:
       security-events: write
     steps:
