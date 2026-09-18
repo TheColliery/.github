@@ -20,6 +20,7 @@ export const SKELETON_FILES = {
     '.github/workflows/ci.yml', '.github/workflows/codeql.yml',
     '.github/workflows/dependabot-auto-merge.yml', '.github/workflows/markdownlint.yml',
     '.github/workflows/scorecard.yml',
+    '.github/workflows/coverage.yml', '.github/scripts/lcov-to-cobertura.mjs',
     '.github/ISSUE_TEMPLATE/bug-report.yml', '.github/ISSUE_TEMPLATE/config.yml',
   ],
   'private-working': [

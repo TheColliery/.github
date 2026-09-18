@@ -20,7 +20,7 @@ A Coal* room is a `published-code` repo (L1) carrying the 5 Standard Systems (L2
 | Docs spine | Full [DOC-PATTERN.md](./DOC-PATTERN.md) spine (README/SECURITY/CONTRIBUTING/CODE_OF_CONDUCT/PRIVACY) | None — LICENSE only | LICENSE + CONTRIBUTING + CHANGELOG |
 | LICENSE | Full text (never SPDX-only, never a stub) | Full text | Full text |
 | `.githooks/` | `pre-commit` + `pre-push` | `pre-push` | none shipped in the base skeleton |
-| Workflows | `ci.yml` · `codeql.yml` · `markdownlint.yml` · `scorecard.yml` · `dependabot-auto-merge.yml` | one `gate.yml` (single OS/Node — sized to a shared Free-plan Actions-minutes pool, never the 3-OS×2-Node published-code matrix) | `check.yml` + `watch-sources.yml` (monthly cron) |
+| Workflows | `ci.yml` · `codeql.yml` · `markdownlint.yml` · `scorecard.yml` · `coverage.yml` (report-only — never a gate, never a required check) · `dependabot-auto-merge.yml` | one `gate.yml` (single OS/Node — sized to a shared Free-plan Actions-minutes pool, never the 3-OS×2-Node published-code matrix) | `check.yml` + `watch-sources.yml` (monthly cron) |
 | `dependabot.yml` | Yes | Not shipped in the base skeleton | Not shipped in the base skeleton |
 | Release mechanics | Full [RELEASE-PATTERN.md](./RELEASE-PATTERN.md) chain | N/A — a private working repo does not cut public Releases | Full chain where the repo tags versions |
 | Publishing dialect | N/A unless the repo also publishes to GitBook | N/A | GitBook shared dialect where the repo is GitBook-synced |
