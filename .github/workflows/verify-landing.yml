@@ -1,0 +1,57 @@
+name: verify-landing
+
+# Mechanical gate for the landing repo's LOCAL marks — the recurring "shipped X without sweeping Y"
+# class. Fails the run (red X) when: a visitor front door (profile/ · benchmarks/ · root README.md)
+# carries unmarked Thai, a benchmark has no org-landing row, or a benchmark record is undated.
+# Runs on every push + PR so a miss is caught by the machine, not the human's eye.
+# SCOPE: .github-local only. Cross-repo README front doors + prose judgment are NOT gated —
+# see SWEEP-MARKS.md + the human. A green run is NOT "all SWEEP-MARKS swept".
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 22
+
+      - name: Unit-test every scripts/*.test.mjs (enumerated, fails loud on a missing file)
+        # UMB-055 item 2: this repo's other four test files (release-conform,
+        # skeleton-check, license-check, new-repo -- the template/skeleton tooling)
+        # never ran in CI before this step; only the landing pair did. `node --test`
+        # SILENTLY ignores a missing path argument (node/runtime.md §2) -- never the
+        # directory form either, which throws MODULE_NOT_FOUND on Node 24 -- so every
+        # listed file's existence is checked FIRST, failing loud, before node --test
+        # ever runs. This is the SAME enumerated list `.githooks/pre-commit`/
+        # `pre-push` run locally -- widen both together, never one without the other.
+        run: |
+          set -euo pipefail
+          for t in scripts/verify-landing.test.mjs scripts/update-readme.test.mjs \
+                   scripts/release-conform.test.mjs scripts/skeleton-check.test.mjs \
+                   scripts/license-check.test.mjs scripts/new-repo.test.mjs \
+                   scripts/doc-refs.test.mjs scripts/ruleset-match.test.mjs; do
+            [ -f "$t" ] || { echo "::error::listed test file missing: $t"; exit 1; }
+          done
+          node --test scripts/verify-landing.test.mjs scripts/update-readme.test.mjs \
+                      scripts/release-conform.test.mjs scripts/skeleton-check.test.mjs \
+                      scripts/license-check.test.mjs scripts/new-repo.test.mjs \
+                      scripts/doc-refs.test.mjs scripts/ruleset-match.test.mjs
+
+      - name: Doc references (every markdown link resolves — UMB-057)
+        run: node scripts/doc-refs.mjs
+
+      - name: Verify the landing (no-Thai · org-row · dated)
+        run: node scripts/verify-landing.mjs

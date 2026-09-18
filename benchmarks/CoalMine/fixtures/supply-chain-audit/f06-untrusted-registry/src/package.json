@@ -1,0 +1,12 @@
+{
+  "name": "inventory-sync",
+  "version": "2.4.0",
+  "private": true,
+  "scripts": {
+    "start": "node sync.js"
+  },
+  "dependencies": {
+    "fast-xml-parser": "4.4.0",
+    "p-queue": "8.0.1"
+  }
+}

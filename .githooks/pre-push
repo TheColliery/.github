@@ -1,0 +1,31 @@
+#!/bin/sh
+# Repo gate — wired as BOTH pre-commit and pre-push (identical bytes).
+# Runs the same fail-loud pair CI runs (.github/workflows/verify-landing.yml).
+#
+# Enable once per clone — git deliberately refuses to let a repo configure its
+# own hooks, so the files travel with the clone but the pointer does not:
+#   git config core.hooksPath .githooks
+#
+# Fails CLOSED on purpose: a missing node or a missing script blocks the commit
+# instead of passing quietly (hooks-safety.md 1.0 — a git pre-* hook MUST be
+# able to abort; scripts-quality.md 1 — CLI scripts fail loud).
+
+# `node --test` silently ignores a missing path arg (on Node 24 it is reinterpreted
+# as a zero-match name filter), so a renamed test would drop out of the gate with a
+# green exit. This repo has no scripts/test.mjs runner to own the list — check first.
+#
+# UMB-055 item 2: widened to EVERY scripts/*.test.mjs (not just the landing pair) —
+# the same enumerated list .github/workflows/verify-landing.yml now runs, so this
+# hook's own header comment ("runs the same fail-loud pair CI runs") stays true.
+for t in scripts/verify-landing.test.mjs scripts/update-readme.test.mjs \
+         scripts/release-conform.test.mjs scripts/skeleton-check.test.mjs \
+         scripts/license-check.test.mjs scripts/new-repo.test.mjs \
+         scripts/doc-refs.test.mjs scripts/ruleset-match.test.mjs; do
+  [ -f "$t" ] || { echo "gate: missing $t" >&2; exit 1; }
+done
+node --test scripts/verify-landing.test.mjs scripts/update-readme.test.mjs \
+            scripts/release-conform.test.mjs scripts/skeleton-check.test.mjs \
+            scripts/license-check.test.mjs scripts/new-repo.test.mjs \
+            scripts/doc-refs.test.mjs scripts/ruleset-match.test.mjs || exit 1
+node scripts/verify-landing.mjs || exit 1
+node scripts/doc-refs.mjs

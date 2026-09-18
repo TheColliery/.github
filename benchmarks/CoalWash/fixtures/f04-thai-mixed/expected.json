@@ -1,0 +1,17 @@
+{
+  "fixture": "f04-thai-mixed",
+  "description": "Mixed Thai/English store. Beyond dedup, this probes ENCODING fidelity: muscle needles carry composed Thai sara-am (U+0E33) and curly quotes — a rewrite that decomposes or re-encodes them breaks the exact match and correctly scores as fact-loss.",
+  "expectNoOp": false,
+  "muscle": [
+    { "id": "m01", "needle": "คำสั่ง deploy = `make ship-prod`", "note": "deploy command fact (composed U+0E33 in คำ)" },
+    { "id": "m02", "needle": "ทำ NFC normalize ก่อน diff เสมอ", "note": "workflow rule (composed U+0E33 in ทำ)" },
+    { "id": "m03", "needle": "v0.9.2", "note": "version token" },
+    { "id": "m04", "needle": "[[workflow]]", "note": "index link" },
+    { "id": "m05", "needle": "[[translation-notes]]", "note": "index link" },
+    { "id": "m06", "needle": "คำแปล canonical ของ “guild” = “กิลด์”", "note": "glossary lock (curly quotes must survive verbatim)" },
+    { "id": "m07", "needle": "จุด ASCII สามจุด", "note": "ellipsis convention kernel" }
+  ],
+  "fat": [
+    { "id": "f01", "needle": "ขอย้ำรายละเอียดเดิมซ้ำอีกครั้งแบบเต็ม ๆ เพื่อความครบถ้วนของบันทึกนี้", "class": "duplicate", "note": "token-free Thai verbose restatement filler, planted in both files" }
+  ]
+}

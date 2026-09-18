@@ -1,0 +1,1 @@
+Our widget handles up to 10,000 events/sec at 99.9% uptime, includes a 30-day refund policy, and supports 50+ third-party tool integrations.

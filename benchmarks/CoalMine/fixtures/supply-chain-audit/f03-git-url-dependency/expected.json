@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/package.json", "line": 9, "category": "git-url-dependency", "severity": "HIGH", "note": "dependency pulled from a mutable git branch over plain http — no commit pin, no registry integrity" }
+] }

@@ -1,0 +1,28 @@
+{
+  "$comment": "UMB-048 — the file half of UMB-045 item 7. Encoded from scratchpad/dispatch/template-repos/repo-settings-applied-2026-09-03.json, which main already APPLIED to template-published-code via REST on the owner's order (2026-09-03) — new-repo.mjs --apply-settings must be idempotent so re-running it against that repo is a no-op, never a re-apply that could drift the live settings.",
+  "kind": "published-code",
+  "repoPatch": {
+    "is_template": false,
+    "has_issues": true, "has_wiki": false, "has_projects": false, "has_discussions": false,
+    "allow_merge_commit": false, "allow_squash_merge": true, "allow_rebase_merge": false,
+    "delete_branch_on_merge": true, "allow_update_branch": true, "allow_auto_merge": true
+  },
+  "$repoPatchNote": "is_template is false HERE by design — this file also targets every real room new-repo.mjs scaffolds FROM the published-code skeleton, and a scaffolded room is not itself a template. The three GitHub template repos (template-published-code et al.) already carry is_template:true, applied once at creation, never re-derived from this file.",
+  "vulnerabilityAlerts": { "endpoint": "PUT /repos/{owner}/{repo}/vulnerability-alerts", "enable": true },
+  "automatedSecurityFixes": { "endpoint": "PUT /repos/{owner}/{repo}/automated-security-fixes", "enable": true },
+  "secretScanning": {
+    "status": "enabled",
+    "pushProtection": "enabled",
+    "note": "requires GHAS or a public repo — published-code is always public, so this is unconditional here"
+  },
+  "privateVulnerabilityReporting": { "endpoint": "PUT /repos/{owner}/{repo}/private-vulnerability-reporting", "enable": true },
+  "actionsWorkflowToken": { "default_workflow_permissions": "read", "can_approve_pull_request_reviews": false },
+  "ruleset": {
+    "name": "main-guard",
+    "target": "branch",
+    "enforcement": "active",
+    "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
+    "rules": [ { "type": "deletion" }, { "type": "non_fast_forward" } ],
+    "$noRequiredStatusChecksNote": "UMB-048 item 4's caveat, encoded here rather than only in prose: this ruleset deliberately carries NO required_status_checks rule. The red-fix (.github commit da15148) gates every skeleton CI step — and the whole CodeQL job — on hashFiles(<script>) != '', so a step can legitimately SKIP rather than run on a freshly scaffolded repo with no scripts/ yet. A required-status-check ruleset binds on the JOB's own name (e.g. 'gate', 'all-green'), which still reports success when every step inside it skips — so naming a job here would be SAFE by that same property. The caveat is real anyway: a required check must name a job that ALWAYS EXISTS in the workflow run (never a job gated out entirely by an `if:` at the job level, e.g. CodeQL's `analyze` job) or the ruleset blocks every push forever waiting for a check that never reports. Where a room DOES want required checks, name 'gate'/'all-green' (job-level `if:` is absent, only its STEPS are hashFiles-gated) — never 'analyze (javascript)' from codeql.yml until that room ships real JS/TS source."
+  }
+}

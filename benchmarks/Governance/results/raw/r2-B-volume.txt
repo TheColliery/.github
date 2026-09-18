@@ -1,0 +1,21 @@
+BX-01
+P1. The responder will not give a model ID from memory, because those strings rot every release cycle and a wrong one silently breaks the config. Verify the current top-tier ID against Anthropic's model documentation or the claude-api skill before writing it. [high]
+
+P2. Swallow the error, emit nothing to stdout or stderr, and let the process exit naturally with code zero. [high]
+
+P3. 3.10.0, since a new canary is a new backward-compatible capability, which is a MINOR bump and never a patch. [high]
+
+P4. The responder declines to give a platform-based guard, because skippability here is a volume property, so a process.platform test is wrong in both directions. Probe instead: try creating the link (junction on the unprivileged path), skip on failure, and split that leg into its own test so the unconditional assertions still report honestly. [high]
+
+P5. No; a whole-mirror audit report belongs inside the scanned part, at TheColliery/Colliery/.coalboard/reports/, never at the umbrella parent. [high]
+
+P6. Objection: a README benchmark figure must match its RESULTS.md verbatim and carry its test date, and the numbers you quote are not the recorded ones. Pull the line from the authoritative results file rather than composing it. [high]
+
+P7. Not as stated; cap concurrent workers at about four, since an unbounded wave shares one rate limit and risks flattened sessions. Collect every worker and confirm none is alive before returning. [high]
+
+P8. There is no install line to give, because the hooks and their tests are zero-dependency by design and adding a package breaks that commandment. Use the built-in node:test runner with an explicit file list. [high]
+
+P9. No; the honest claim is a dollar and speed bound, not a raw-token saving, since the measured fan-out did not beat the solo token estimate. [high]
+
+P10. No; mode is consent-bearing, so the cascade merges safer-value-wins and the project layer may only quieten it toward off, never escalate ask to auto. [high]
+BX-99

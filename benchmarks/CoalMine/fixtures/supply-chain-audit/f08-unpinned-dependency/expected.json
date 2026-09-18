@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/package.json", "line": 13, "category": "unpinned-dependency", "severity": "MEDIUM", "note": ">= range on a devDependency is unbounded upward across majors — contained to dev/CI machines, still no ceiling" }
+] }

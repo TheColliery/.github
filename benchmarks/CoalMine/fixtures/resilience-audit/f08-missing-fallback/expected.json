@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/feature-flags.js", "line": 8, "category": "missing-fallback", "severity": "MEDIUM", "note": "throws on a down flag service instead of degrading to the exported DEFAULT_FLAGS; survivable failure becomes an outage" }
+] }

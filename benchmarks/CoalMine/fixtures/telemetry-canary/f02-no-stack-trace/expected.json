@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/login-handler.js", "line": 11, "category": "no-stack-trace", "severity": "HIGH", "note": "logger.error(e.message) drops the stack trace; auth failures logged without error context (should be logger.error(e) or { err: e })" }
+] }

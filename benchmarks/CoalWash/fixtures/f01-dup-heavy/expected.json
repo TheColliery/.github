@@ -1,0 +1,19 @@
+{
+  "fixture": "f01-dup-heavy",
+  "description": "Cross-file verbose duplicates + hedging padding. Correct run: dedup keeps the canonical statement (build-notes), cuts the token-free restatements and the hedge; every fact kernel, link, version, and date survives.",
+  "expectNoOp": false,
+  "muscle": [
+    { "id": "m01", "needle": "Node pinned at 22.4.1", "note": "toolchain pin — the canonical copy" },
+    { "id": "m02", "needle": "[[build-notes]]", "note": "index link" },
+    { "id": "m03", "needle": "[[release-notes]]", "note": "index link" },
+    { "id": "m04", "needle": "[[tooling]]", "note": "index link" },
+    { "id": "m05", "needle": "v2.3.1 shipped 2026-05-14", "note": "release fact (version + date)" },
+    { "id": "m06", "needle": ".cache/turbo", "note": "cache location fact" },
+    { "id": "m07", "needle": "ripgrep replaces grep in scripts", "note": "tool decision kernel" },
+    { "id": "m08", "needle": "CI matrix: ubuntu + windows + macos", "note": "CI fact" }
+  ],
+  "fat": [
+    { "id": "f01", "needle": "To restate the point already captured elsewhere in this store", "class": "duplicate", "note": "token-free verbose restatement filler, planted in release-notes.md and tooling.md" },
+    { "id": "f02", "needle": "it is perhaps worth pausing here to reflect at some length", "class": "over-verbose", "note": "hedging paragraph adding nothing project-specific" }
+  ]
+}

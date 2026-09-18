@@ -1,0 +1,11 @@
+{ "findings": [
+  { "file": "README.md", "line": 7, "category": "stale-version", "note": "Node.js 14 is EOL — current LTS is 22" },
+  { "file": "README.md", "line": 8, "category": "stale-version", "note": "npm 6.x is outdated — current is 10.x" },
+  { "file": "README.md", "line": 14, "category": "stale-version", "note": "datasync@3.2.1 — verify against registry" },
+  { "file": "README.md", "line": 17, "category": "stale-version", "note": "TypeScript 4.7 is outdated — current is 5.x" },
+  { "file": "README.md", "line": 23, "category": "stale-version", "note": "PostgreSQL 12.x is EOL" },
+  { "file": "README.md", "line": 24, "category": "stale-version", "note": "MySQL 5.7 is EOL" },
+  { "file": "README.md", "line": 25, "category": "stale-version", "note": "MongoDB 4.4 is EOL" },
+  { "file": "README.md", "line": 44, "category": "stale-date", "note": "'2024-03-15' release date is over a year old" },
+  { "file": "README.md", "line": 46, "category": "stale-date", "note": "'January 2024' last-reviewed stamp is over a year old" }
+] }

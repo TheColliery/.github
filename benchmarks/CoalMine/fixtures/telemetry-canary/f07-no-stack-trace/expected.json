@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/import-job.js", "line": 11, "category": "no-stack-trace", "severity": "HIGH", "note": "error logged with reason: err.message only, structured but stack trace dropped; should log { err } so the failure is debuggable" }
+] }

@@ -1,0 +1,26 @@
+Contract walk — READ THE SKILL AND REPORT WHAT YOU WOULD DO, IN WHAT ORDER. DO NOT ACTUALLY DO ANY OF IT.
+
+## What to read (read all of it before answering)
+C:\Users\zxc59\.claude\plugins\cache\coalmine\coalmine\3.14.0\skills\rot-canary\SKILL.md
+If it points at another file and you judge that file necessary to decide the situation below, you MAY read it — then say which file you read and why.
+
+## The situation to walk
+The user typed:
+> "ช่วยสแกน rot-canary ทั้ง repo แบบ deep ก่อนขึ้น release ให้หน่อย เจองานเดะ ๆ ในนี้ต้องรื้อเยอะ ผลสแกนอาจกระทบหลาย category"
+Extra context: this is a manual invocation (not the Stop-hook auto-scan), whole-repo scope, no .coalmine.json in this project (factory defaults apply), a human is present in the session.
+
+## What to answer — answer as numbered items EXACTLY as listed. Do not add headings. Do not skip an item.
+1. **Does this skill's activation condition apply?** — yes/no, and which sentence in SKILL.md made you decide that (quote it).
+2. **The sequence of steps you would take** — a numbered list, step 1, 2, 3, ... to the end. List EVERY step, do not abbreviate. Walk ONE path on the information you have — if information is insufficient, follow the skill's own unknown/default rule and say where you got stuck.
+3. **The tier you would pick, and the score that produced it** — state which of the four scoring criteria (①②③④) you counted as hit or not-hit for THIS situation, the resulting score, and the tier it maps to.
+4. **Points where you must ask the user's permission first** — how many, where in the sequence, and what each one asks.
+5. **Points that are absolutely forbidden** — list every prohibition SKILL.md states for fix mode.
+6. **Where the output goes** — describe the output shape and where it is presented (file vs in-session).
+7. **If a confirmed finding falls in another canary's domain** — what does the skill tell you to do, and name the other canary(ies) it would name for THIS scenario if any findings warranted it.
+8. **What in SKILL.md you read and were NOT sure about** — name it directly: which sentence is ambiguous, or where you had to guess. If there is nothing, write "none".
+
+## RAILS
+- Never actually do the work, under any circumstance — do not spawn, do not write a file, do not edit a file, do not run a command that changes anything. This is read-and-report-what-you-would-do, nothing else.
+- Do not search the web. Do not read any other repo.
+- Answer from what you read in the file, not from general knowledge about code-scanning tools — if SKILL.md does not say it, write "SKILL.md does not say".
+- Answer in English, except technical terms and text quoted from the file (keep those verbatim).

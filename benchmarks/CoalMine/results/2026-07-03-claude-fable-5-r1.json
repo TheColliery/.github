@@ -1,0 +1,21 @@
+{
+  "model": "claude-fable-5 (skill ON)",
+  "date": "2026-07-03",
+  "skillVersion": "3.8.4",
+  "rep": 1,
+  "findings": [
+    {"fixture":"f01-dead-code","file":"src/report.js","line":5,"category":"dead-code","severity":"MEDIUM"},
+    {"fixture":"f01-dead-code","file":"src/report.js","line":11,"category":"dead-code","severity":"MEDIUM"},
+    {"fixture":"f02-dead-code","file":"src/util.js","line":5,"category":"dead-code","severity":"MEDIUM"},
+    {"fixture":"f03-resource-leak","file":"src/poller.js","line":10,"category":"resource-leak","severity":"HIGH"},
+    {"fixture":"f04-resource-leak","file":"src/header.js","line":8,"category":"resource-leak","severity":"HIGH"},
+    {"fixture":"f05-concurrency","file":"src/write-once.js","line":4,"category":"concurrency","severity":"HIGH"},
+    {"fixture":"f06-concurrency","file":"src/totals.js","line":7,"category":"concurrency","severity":"HIGH"},
+    {"fixture":"f07-silent-failure","file":"src/settings.js","line":7,"category":"silent-failure","severity":"HIGH"},
+    {"fixture":"f08-silent-failure","file":"src/importer.js","line":11,"category":"silent-failure","severity":"HIGH"},
+    {"fixture":"f09-bug-prone","file":"src/cart-sum.js","line":3,"category":"bug-prone","severity":"CRITICAL"},
+    {"fixture":"f10-bug-prone","file":"src/quantity.js","line":5,"category":"bug-prone","severity":"HIGH"},
+    {"fixture":"f11-input-boundary","file":"src/files.js","line":6,"category":"input-boundary","severity":"CRITICAL"},
+    {"fixture":"f12-doc-rot","file":"src/pricing.js","line":1,"category":"doc-rot","severity":"LOW"}
+  ]
+}

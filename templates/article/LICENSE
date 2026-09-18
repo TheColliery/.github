@@ -1,0 +1,19 @@
+{{ARTICLE_TITLE}}
+
+Copyright {{YEAR}} {{COPYRIGHT_HOLDER}}
+
+This work is licensed under the Creative Commons Attribution-NonCommercial-NoDerivatives 4.0
+International License. To view a copy of this license, visit
+https://creativecommons.org/licenses/by-nc-nd/4.0/ or send a letter to Creative Commons, PO Box
+1866, Mountain View, CA 94042, USA.
+
+Measurements, numbers, and facts stated in this work are not copyrightable. Anyone may
+independently re-measure the same public corpora and publish their own numbers under their own
+name, without permission.
+
+For a licence outside these terms — commercial use, adaptation, or redistribution of this
+document — contact {{COPYRIGHT_HOLDER}} directly.
+
+<!-- {{LICENSE_NAME}} is the flock default for the Articles zone (per the LICENSE-PORTFOLIO
+     ruling); a room whose owner chose a different licence replaces this file's terms and the
+     README/CONTRIBUTING license lines together, never one without the other. -->

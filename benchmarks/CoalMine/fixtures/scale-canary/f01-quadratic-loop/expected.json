@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/dedupe-tags.js", "line": 6, "category": "quadratic-loop", "severity": "CRITICAL", "note": "Array.includes linear scan inside the loop over a growable tag list — O(N^2) on the user-facing post-save path; use a Set" }
+] }

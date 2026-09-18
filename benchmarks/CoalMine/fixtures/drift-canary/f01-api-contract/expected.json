@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/api-client.js", "line": 5, "category": "api-contract", "severity": "CRITICAL", "note": "api-handler.js defines the contract as body.quantity (line 4); the client sends qty, so quantity arrives undefined and every request 400s - the handler is authoritative, the client drifted" }
+] }

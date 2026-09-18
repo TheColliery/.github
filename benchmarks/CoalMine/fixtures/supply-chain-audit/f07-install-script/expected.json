@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/install.sh", "line": 5, "category": "install-script", "severity": "CRITICAL", "note": "install script downloads remote code over plain http and executes it — no checksum, no signature" }
+] }
