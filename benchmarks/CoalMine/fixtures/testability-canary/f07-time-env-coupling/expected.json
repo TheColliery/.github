@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/payout.js", "line": 8, "category": "time-env-coupling", "severity": "CRITICAL", "note": "fs.appendFileSync write buried inside the payout calculation - an un-mockable external write fires on every call" }
+] }

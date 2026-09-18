@@ -1,0 +1,17 @@
+{
+  "model": "claude-opus-4.8 (skill ON)",
+  "date": "2026-07-03",
+  "skillVersion": "3.8.4",
+  "suite": "telemetry-canary",
+  "rep": 3,
+  "findings": [
+    {"fixture":"f01-silent-catch","file":"src/export-worker.js","line":7,"category":"silent-catch","severity":"CRITICAL"},
+    {"fixture":"f02-no-stack-trace","file":"src/login-handler.js","line":11,"category":"no-stack-trace","severity":"HIGH"},
+    {"fixture":"f03-unstructured-log","file":"src/orders-api.js","line":7,"category":"unstructured-log","severity":"MEDIUM"},
+    {"fixture":"f04-no-correlation-id","file":"src/inventory-client.js","line":4,"category":"no-correlation-id","severity":"LOW"},
+    {"fixture":"f05-missing-metric","file":"src/checkout.js","line":6,"category":"missing-metric","severity":"MEDIUM"},
+    {"fixture":"f06-silent-catch","file":"src/account-close.js","line":7,"category":"silent-catch","severity":"CRITICAL"},
+    {"fixture":"f07-no-stack-trace","file":"src/import-job.js","line":11,"category":"no-stack-trace","severity":"HIGH"},
+    {"fixture":"f08-no-correlation-id","file":"src/upload-consumer.js","line":7,"category":"no-correlation-id","severity":"LOW"}
+  ]
+}

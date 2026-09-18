@@ -1,0 +1,64 @@
+name: watch-sources
+
+# CADENCE: monthly, not daily. The sources an article cites are specifications, vendor
+# documentation, and tool defaults — things that move on a scale of years. A daily job
+# over the same sources would produce ~365 identical green reports a year and teach
+# everyone to close the tab, which is worse than no watch at all.
+#
+# TWO THINGS THAT CAN SILENTLY KILL THIS, once it is live:
+#   * GitHub disables scheduled workflows in a repository with no activity for 60 days.
+#     A quiet documentation repository hits that easily. Nothing announces it.
+#   * A scheduled run is best-effort and can be dropped entirely under load.
+# Neither shows up as a red run. If the sweeps in REVALIDATION.md stop appearing, that
+# is the failure, and only a reader noticing the gap will catch it.
+#
+# THIS JOB DOES NOT COMMIT. It uploads the updated register as an artifact and prints
+# the sweep into the job summary. A bot writing into an append-only human register would
+# make the register look maintained while nobody read a word of it. A person lands the sweep.
+
+on:
+  schedule:
+    - cron: '0 6 1 * *' # 06:00 UTC on the 1st of each month
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# cancel-in-progress: TRUE -- the sweep uploads a per-run ARTIFACT, not a shared Release/tag
+# asset; a cancelled run simply never uploads it, with no partial or corrupted shared state
+# left behind (unlike claude-ai-zips.yml's per-tag Release asset). Monthly-cron besides, so
+# overlap is vanishingly rare (SKILL-REPO-PATTERN.md's concurrency MUST, cited not restated).
+concurrency:
+  group: watch-sources-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      # Findings never fail this job. It reports; it does not judge. Being UNABLE TO LOOK
+      # does fail it, with exit 2: a missing or unreadable SOURCES.md would otherwise
+      # produce a green tick every month while nothing was watched at all.
+      #
+      # GATED ON tools/watch-sources.mjs EXISTING — this skeleton ships the workflow,
+      # never the sweeper itself (genuinely bespoke per article repo). Both steps below
+      # would otherwise fail permanently on a bare "Use this template" repo: the sweep
+      # has nothing to run, and the artifact upload has no REVALIDATION.md to find.
+      # hashFiles() returns '' when nothing matches, so both are cleanly SKIPPED (not
+      # silently passed) until the room's own sweeper lands.
+      - name: Sweep the external sources
+        if: hashFiles('tools/watch-sources.mjs') != ''
+        run: node tools/watch-sources.mjs >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: hashFiles('tools/watch-sources.mjs') != ''
+        with:
+          name: revalidation-${{ github.run_id }}
+          path: REVALIDATION.md
+          if-no-files-found: error

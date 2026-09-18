@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/user-repo.js", "line": 2, "category": "schema-migration", "severity": "CRITICAL", "note": "migration 002 (migrations.js) renamed email_address to contact_email, but insertUser still writes email_address - every insert crashes post-deploy and user writes are lost; the migration chain is authoritative, the repo drifted (findById already uses the new column)" }
+] }

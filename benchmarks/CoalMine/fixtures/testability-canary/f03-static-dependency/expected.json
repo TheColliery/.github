@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/session-store.js", "line": 1, "category": "static-dependency", "severity": "HIGH", "note": "module-level mutable sessions singleton shared by every caller - test isolation impossible without resetting hidden state" }
+] }

@@ -1,0 +1,7 @@
+T2-solo-r1 PASS 4467744.31 monthly-compound
+T1-solo-r1 PASS timingSafeEqual+lengthguard
+T4-solo-r1 PASS check-then-act+promise-cache
+T5-solo-r1 PASS both-defects (H2->H4 skip + dup H1)
+T3-GOLD 2026-07-03: Node 24 Active LTS; full EOL 2028-04-30 (Active-support ends 2026-10-20); source endoflife.date/nodejs
+T1-solo-r2 PASS · T4-solo-r2 PASS · T5-solo-r2 PASS(both, ranked) — opus solo r1+r2 = 4/4 stable on T1/T2/T4/T5
+T3-solo-r1/r2/r3 MISS(strict): all committed primary=Node22 (STALE; current=Node24), all hedged "likely Node24" + cited nodejs.org from MEMORY (not fetched). Opus doesn't ship confident-stale (honest hedge) but fails commit-current+fetched-source bar. Solo T3 = 0/3 committed-correct.

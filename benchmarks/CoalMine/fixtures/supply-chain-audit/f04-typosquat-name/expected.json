@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/package.json", "line": 10, "category": "typosquat-name", "severity": "HIGH", "note": "\"expresss\" (triple s) is a typosquat of express — a lookalike name is the classic malicious-package vector" }
+] }

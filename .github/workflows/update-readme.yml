@@ -1,0 +1,48 @@
+name: Update Traffic Stats Badges
+
+on:
+  schedule:
+    - cron: '15 0 * * *' # Daily at 00:15 UTC (07:15 AM Thailand time)
+  workflow_dispatch: # Allows manual trigger from the GitHub Actions UI
+
+jobs:
+  update-stats:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # least-privilege: granted at the JOB, not the whole workflow
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Push with the same user PAT the traffic step already requires: the
+          # dependabot-auto-merge-gate ruleset (required status checks) rejects a
+          # github-actions[bot] direct push (GH013, no Integration bypass possible —
+          # no app installed on the org), while the PAT's owner carries the ruleset's
+          # admin RepositoryRole bypass. checkout persists this credential for the
+          # push step below.
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 22
+
+      - name: Run Stats Update Script
+        env:
+          # Only PAT_TOKEN — the traffic API needs a user PAT; GITHUB_TOKEN can't satisfy it
+          # (403), so exposing it only enabled a silent wrong-token fallback. Missing PAT now
+          # fails loud in the script. The push step below uses checkout's own git auth.
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: node scripts/update-readme.mjs
+
+      - name: Commit and Push Changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add profile/README.md README.md
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: update traffic stats badges"
+            git push origin main
+          else
+            echo "No changes in traffic stats detected."
+          fi

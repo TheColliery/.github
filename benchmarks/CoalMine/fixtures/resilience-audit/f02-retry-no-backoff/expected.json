@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/event-publisher.js", "line": 2, "category": "retry-no-backoff", "severity": "HIGH", "note": "infinite retry loop with no backoff, delay, or attempt cap; a down broker causes a hot retry storm" }
+] }

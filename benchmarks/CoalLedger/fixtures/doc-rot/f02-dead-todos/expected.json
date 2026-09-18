@@ -1,0 +1,7 @@
+{ "findings": [
+  { "file": "ARCHITECTURE.md", "line": 13, "category": "dead-marker", "note": "TODO marker — undated, open-ended" },
+  { "file": "ARCHITECTURE.md", "line": 19, "category": "dead-marker", "note": "FIXME marker — undated" },
+  { "file": "ARCHITECTURE.md", "line": 25, "category": "dead-marker", "note": "'Coming soon: Q2 2025' — date has passed, promise unresolved" },
+  { "file": "ARCHITECTURE.md", "line": 29, "category": "dead-marker", "note": "HTML comment TODO — architecture diagram never added" },
+  { "file": "ARCHITECTURE.md", "line": 35, "category": "dead-marker", "note": "TBD marker — deployment docs never written" }
+] }

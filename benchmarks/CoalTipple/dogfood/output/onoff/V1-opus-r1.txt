@@ -1,0 +1,1 @@
+The widget processes up to 10,000 events per second at 99.9% uptime, includes a 30-day money-back guarantee, and integrates with over 50 tools out of the box.

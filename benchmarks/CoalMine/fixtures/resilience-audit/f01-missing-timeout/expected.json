@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/inventory-client.js", "line": 4, "category": "missing-timeout", "severity": "HIGH", "note": "fetch call has no timeout or AbortSignal; a stalled inventory API hangs the caller forever" }
+] }

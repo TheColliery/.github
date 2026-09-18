@@ -1,0 +1,47 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      # CodeQL analyzes js/ts only — NO markdown needs a security scan, so skip ALL docs (a doc-only commit doesn't run CodeQL). Shipped SKILL.md/commands consistency is ci.yml's job (verify dist-sync), not CodeQL's.
+      - '**.md'
+      - 'LICENSE'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      # CodeQL analyzes js/ts only — NO markdown needs a security scan, so skip ALL docs (a doc-only commit doesn't run CodeQL). Shipped SKILL.md/commands consistency is ci.yml's job (verify dist-sync), not CodeQL's.
+      - '**.md'
+      - 'LICENSE'
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+# cancel-in-progress: TRUE -- a superseded CodeQL run simply never uploads its SARIF, and the
+# previous analysis stands; nothing is left half-written. The newer push analyzes the newer tree,
+# which is the state anyone cares about.
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: analyze (javascript)
+    runs-on: ubuntu-latest
+    # GATED ON AT LEAST ONE JS/TS SOURCE FILE EXISTING — CodeQL's javascript-typescript
+    # analyzer fails outright ("no source code was seen during the build") against a bare
+    # "Use this template" repo, which ships docs + CI only and has zero .js/.mjs/.cjs/.ts
+    # files until the room's own scripts land. hashFiles() returns '' when nothing
+    # matches, so the whole job is cleanly SKIPPED (not silently passed) until then.
+    if: hashFiles('**/*.js', '**/*.mjs', '**/*.cjs', '**/*.ts', '**/*.tsx') != ''
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
+        with:
+          languages: javascript-typescript
+          queries: security-and-quality
+      - uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4

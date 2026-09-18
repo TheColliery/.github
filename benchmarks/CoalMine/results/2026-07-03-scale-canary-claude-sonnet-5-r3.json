@@ -1,0 +1,17 @@
+{
+  "model": "claude-sonnet-5 (skill ON)",
+  "date": "2026-07-03",
+  "skillVersion": "3.8.4",
+  "suite": "scale-canary",
+  "rep": 3,
+  "findings": [
+    {"fixture":"f01-quadratic-loop","file":"src/dedupe-tags.js","line":6,"category":"quadratic-loop","severity":"CRITICAL"},
+    {"fixture":"f02-n-plus-one-query","file":"src/order-totals.js","line":8,"category":"n-plus-one-query","severity":"HIGH"},
+    {"fixture":"f03-unbounded-growth","file":"src/session-cache.js","line":6,"category":"unbounded-growth","severity":"MEDIUM"},
+    {"fixture":"f04-blocking-main-loop","file":"src/config-route.js","line":6,"category":"blocking-main-loop","severity":"HIGH"},
+    {"fixture":"f05-resource-leak","file":"src/append-audit.js","line":5,"category":"resource-leak","severity":"CRITICAL"},
+    {"fixture":"f06-quadratic-loop","file":"src/join-profiles.js","line":7,"category":"quadratic-loop","severity":"CRITICAL"},
+    {"fixture":"f07-n-plus-one-query","file":"src/enrich-users.js","line":7,"category":"n-plus-one-query","severity":"HIGH"},
+    {"fixture":"f08-blocking-main-loop","file":"src/login-route.js","line":8,"category":"blocking-main-loop","severity":"HIGH"}
+  ]
+}

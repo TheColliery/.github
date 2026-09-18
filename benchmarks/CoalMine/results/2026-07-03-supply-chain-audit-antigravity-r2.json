@@ -1,0 +1,65 @@
+{
+  "model": "Antigravity (Gemini 3.5 Flash (Medium))",
+  "date": "2026-07-03",
+  "skillVersion": "3.8.4",
+  "suite": "supply-chain-audit",
+  "rep": 2,
+  "findings": [
+    {
+      "fixture": "f01-install-script",
+      "file": "src/package.json",
+      "line": 7,
+      "category": "install-script",
+      "severity": "CRITICAL"
+    },
+    {
+      "fixture": "f02-unpinned-dependency",
+      "file": "src/package.json",
+      "line": 10,
+      "category": "unpinned-dependency",
+      "severity": "LOW"
+    },
+    {
+      "fixture": "f03-git-url-dependency",
+      "file": "src/package.json",
+      "line": 9,
+      "category": "git-url-dependency",
+      "severity": "HIGH"
+    },
+    {
+      "fixture": "f04-typosquat-name",
+      "file": "src/package.json",
+      "line": 10,
+      "category": "typosquat-name",
+      "severity": "CRITICAL"
+    },
+    {
+      "fixture": "f05-tarball-url-dependency",
+      "file": "src/package.json",
+      "line": 9,
+      "category": "tarball-url-dependency",
+      "severity": "HIGH"
+    },
+    {
+      "fixture": "f06-untrusted-registry",
+      "file": "src/.npmrc",
+      "line": 2,
+      "category": "untrusted-registry",
+      "severity": "HIGH"
+    },
+    {
+      "fixture": "f07-install-script",
+      "file": "src/install.sh",
+      "line": 5,
+      "category": "install-script",
+      "severity": "CRITICAL"
+    },
+    {
+      "fixture": "f08-unpinned-dependency",
+      "file": "src/package.json",
+      "line": 13,
+      "category": "unpinned-dependency",
+      "severity": "LOW"
+    }
+  ]
+}

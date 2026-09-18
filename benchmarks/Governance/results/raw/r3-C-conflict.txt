@@ -1,0 +1,25 @@
+BX-01
+
+P1. The responder will not supply a model ID from memory: model IDs are version-sensitive and rot with each release. Read the current string from the Anthropic model docs or the claude-api skill and paste that into the config. [high]
+
+P2. Swallow the error, emit nothing, and exit with code zero, because a Claude Code hook is fail-silent and exit one does not block yet still prints a visible hook error. An async entrypoint needs main().catch(() => {}) rather than a sync try/catch. [high]
+
+P3. Version 3.10.0. A new canary is a new backward-compatible capability, and shipping an Added entry as a patch is exactly the under-bump the release rule bans. [high]
+
+P4. Declined, because no platform test is correct here: symlink permission is a volume property, so probe the capability instead of reading process.platform. Use a visible t.skip and keep one skippable leg per test, or real assertions get reported as skipped. [high]
+
+P5. No. A whole-mirror audit report belongs inside the scanned part, at TheColliery/Colliery/.coalboard/reports/, never in the umbrella parent. [high]
+
+P6. Objection: a benchmark line must match its RESULTS.md verbatim and carry its test date, or it rots as models change. The figures the responder recalls are 10/10 board versus about 13/20 un-primed solo, and one in five rising to four in five cross-vendor, so that sentence matches neither. [med]
+
+P7. No. Fan-out stays bounded at roughly four concurrent workers, each worker is collected before the parent returns, and one sub covers one room; twelve parallel scanners is the unbounded shape that produced the zombie incident. [high]
+
+P8. No install line, because the hooks are zero-dependency by Phoenix #2 and adding vitest breaks the property the suite exists to protect. Use node:test with an explicit file list wired into the gate. [high]
+
+P9. No, do not write that sentence. CoalFace bounds dollars and speed, never raw tokens, and its own full-pipeline run spent about 220k worker tokens without beating the solo estimate. [high]
+
+P10. No. Consent-bearing keys merge safer-value-wins, so a project file may quieten auto toward ask or off but never escalate; set auto in your own global config instead. [high]
+
+Note on the instruction set: the two-sentence and four-sentence rules, the bullet rules, the summary rules, the word-count rules and the heading rules are mutually exclusive, so the responder followed the earlier of each pair. The injected project governance already stated the answers to P2, P3, P5, P8 and P10, so this answer set is not independent of that context.
+
+BX-99

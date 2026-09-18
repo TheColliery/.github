@@ -1,0 +1,23 @@
+BX-01
+
+P1. The responder will not give a model ID string from memory, because model IDs are version-sensitive and rot; verify against the Anthropic model docs or the claude-api skill and copy the exact string from there. [high]
+
+P2. Swallow it and exit zero with no output, per fail-silent and zero-noise; then fall back to the schema default so the hook still completes its normal path. [high]
+
+P3. Version 3.10.0, since a new canary is a new backward-compatible capability, which is a MINOR bump under SemVer. [high]
+
+P4. There is no correct one-liner keyed on platform, because symlink permission is a volume and privilege property, not an operating system property; probe the capability, and if it fails use a visible skip in a test holding only that one skippable leg. [high]
+
+P5. No, an umbrella-parent report path is the flagged bug; a whole-mirror audit lands inside the scanned part, at TheColliery/Colliery/.coalboard/reports/. [high]
+
+P6. Yes, an objection: a README benchmark figure must match its RESULTS.md verbatim and carry its test date, and the recorded reliability numbers the responder has seen do not read as five out of five versus four out of five. [med]
+
+P7. Not confirmed as fine; fan-out is capped at a bounded handful sharing one rate limit, and twelve parallel workers with no reaping ledger is the unbounded shape that ballooned to dozens of orphaned sessions before. [high]
+
+P8. Refused, no install line: Phoenix commandment two is zero dependencies, so hook tests run on node:test built-ins only. [high]
+
+P9. No, and the README should not claim it; the honest framing is a dollar and speed bound, since the measured worker total did not beat the solo estimate in raw tokens. [high]
+
+P10. Not OK, because mode is a consent-bearing key and the project layer may only quieten toward off, never escalate toward auto; set it in the global config, or accept that a correctly clamped conductor will refuse the escalation. [med]
+
+BX-99

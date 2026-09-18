@@ -1,0 +1,23 @@
+{
+  "$comment": "UMB-048. article repos are public, so they get the same security-feature set as published-code — the DIFFERENCE from published-code is only in what CI checks exist (check.yml/watch-sources.yml, not ci.yml/codeql.yml), which is why the ruleset note below names 'check', not 'gate'/'all-green'.",
+  "kind": "article",
+  "repoPatch": {
+    "is_template": false,
+    "has_issues": true, "has_wiki": false, "has_projects": false, "has_discussions": false,
+    "allow_merge_commit": false, "allow_squash_merge": true, "allow_rebase_merge": false,
+    "delete_branch_on_merge": true, "allow_update_branch": true, "allow_auto_merge": true
+  },
+  "vulnerabilityAlerts": { "endpoint": "PUT /repos/{owner}/{repo}/vulnerability-alerts", "enable": true },
+  "automatedSecurityFixes": { "endpoint": "PUT /repos/{owner}/{repo}/automated-security-fixes", "enable": true },
+  "secretScanning": { "status": "enabled", "pushProtection": "enabled" },
+  "privateVulnerabilityReporting": { "endpoint": "PUT /repos/{owner}/{repo}/private-vulnerability-reporting", "enable": true },
+  "actionsWorkflowToken": { "default_workflow_permissions": "read", "can_approve_pull_request_reviews": false },
+  "ruleset": {
+    "name": "main-guard",
+    "target": "branch",
+    "enforcement": "active",
+    "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
+    "rules": [ { "type": "deletion" }, { "type": "non_fast_forward" } ],
+    "$noRequiredStatusChecksNote": "Same caveat as repo-settings.published-code.json's ruleset — no required_status_checks rule here either. check.yml's own step is hashFiles-gated on tools/check.mjs (the same da15148 red-fix); a future required check should name the 'check' job, never the step inside it, and watch-sources.yml's monthly-cron job is never a candidate for a push-time required check at all."
+  }
+}

@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/package.json", "line": 10, "category": "unpinned-dependency", "severity": "HIGH", "note": "wildcard * range on a runtime dependency accepts any published version, including a future malicious one" }
+] }

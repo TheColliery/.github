@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/append-audit.js", "line": 5, "category": "resource-leak", "severity": "CRITICAL", "note": "file descriptor opened on every call and never closed — descriptor exhaustion crashes the process on the normal path; close in a finally" }
+] }

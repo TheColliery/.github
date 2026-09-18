@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/join-profiles.js", "line": 7, "category": "quadratic-loop", "severity": "CRITICAL", "note": "Array.find scan of profiles inside the map over users — O(N*M) on the user-facing admin export as both tables grow; index profiles by userId in a Map first" }
+] }

@@ -1,0 +1,112 @@
+name: claude-ai-zips
+
+# claude.ai installs skills as a ZIP only, and its skill-listing description cap is 200
+# chars vs our own cross-platform 1024 (desc-cap.mjs). On a version tag: stage every
+# skill with its description deterministically trimmed to the platform cap
+# (scripts/build-claude-ai-zips.mjs — a DERIVED artifact, source skills/*/SKILL.md is
+# never edited), zip each staged directory, and attach the ZIPs to the GitHub Release
+# as assets. The user downloads a ZIP from the Release and uploads it to claude.ai
+# directly. Canonical exemplar: CoalMine (board #40 / C2-v2 design).
+#
+# The combined ref-type+stability gate step below is ported from CoalFace's own fork
+# (commit 6f1f3458009c039de44fa2c3fcd548222b0ebc2b, 2026-08-22) — UMB-045 letter (B),
+# 2026-09-03. CoalFace merged two checks CoalMine ran as a job-level `if:` plus a
+# separate step into one step with an env-driven if/elif chain, closing a real gap: a
+# `workflow_dispatch` run against the default branch has GITHUB_REF_NAME == the branch
+# name (e.g. "main") — no hyphen — so a shape-only pre-release check alone would read
+# "stable" and attempt a Release literally named after the branch. Both conditions must
+# hold for is_stable=true.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {} # manual re-run against a tag ref whose push-triggered run already failed
+
+# Minimal top-level token (Scorecard Token-Permissions best practice); only the
+# build-zips job escalates to the write scope it needs to create the Release and
+# upload assets — never grant contents:write at the top level for a single job's need.
+permissions:
+  contents: read
+
+# cancel-in-progress: FALSE, deliberately (AGENTS.md's UMB-052 CANON CORRECTIONS exhibit is
+# THIS workflow's own class, cited not restated: CoalMine's prior v3.17.1 asset race, two
+# overlapping claude-ai-zips runs uploading to the same tag). Serialising is the fix;
+# CANCELLING is not, because a run killed mid-upload can leave the Release carrying a
+# partial or missing ZIP with nothing to signal it -- a broken install path for a user,
+# which is strictly worse than a slow one. The group is keyed on the TAG (ref_name),
+# not the branch, because the asset collision is per-Release.
+concurrency:
+  group: claude-ai-zips-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build-zips:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # only this job creates the Release and uploads assets
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: "Check the ref is a STABLE tag, not a branch or a pre-release tag (tags = beta + stable, Releases = stable-only; this job creates a Release, implicitly \"Latest\", for any ref this workflow runs against. A hyphen check alone answers \"is this tag stable\" but never \"is this even a tag\" — workflow_dispatch is enabled and its UI defaults the ref picker to the default branch, so a manual re-run against a branch (GITHUB_REF_NAME=\"main\", no hyphen) would pass a shape-only check and create a Release literally named \"main\". Both conditions must hold for is_stable=true; the hyphen check alone is still correct for its own question.)"
+        id: gate
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          if [[ "${REF_TYPE}" != "tag" ]]; then
+            echo "is_stable=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::ref_type is '${REF_TYPE}', not a tag -- skipping claude.ai ZIP packaging (a workflow_dispatch run against a branch has no tag to package)"
+          elif [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+            echo "is_stable=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::${GITHUB_REF_NAME} is a pre-release tag -- Releases are stable-only here, skipping claude.ai ZIP packaging"
+          else
+            echo "is_stable=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify plugin/ dist is current (fail loud, never zip a stale dist)
+        if: steps.gate.outputs.is_stable == 'true'
+        run: node scripts/verify.mjs
+
+      - name: Stage trimmed-description skill directories
+        if: steps.gate.outputs.is_stable == 'true'
+        run: node scripts/build-claude-ai-zips.mjs
+
+      - name: Zip each staged skill directory
+        if: steps.gate.outputs.is_stable == 'true'
+        run: |
+          set -euo pipefail
+          cd dist-claude-ai
+          for d in */; do
+            name="${d%/}"
+            (cd "$name" && zip -r "../${name}.zip" . -x '.*')
+          done
+          ls -la *.zip
+
+      - name: Generate SHA256SUMS.txt for the ZIPs
+        if: steps.gate.outputs.is_stable == 'true'
+        run: |
+          set -euo pipefail
+          cd dist-claude-ai
+          sha256sum *.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      # This trigger fires on the tag push, possibly BEFORE a separate REST call creates
+      # the Release -- a single idempotent `create`, swallowing the one expected
+      # already-exists failure mode directly, is more reliable than a view-then-create probe.
+      - name: Ensure the GitHub Release exists for this tag
+        if: steps.gate.outputs.is_stable == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --generate-notes || \
+            gh release view "${GITHUB_REF_NAME}" >/dev/null || \
+            { echo "::error::release create failed AND release view failed -- this is not the expected already-exists race" >&2; exit 1; }
+
+      - name: Attach ZIPs + SHA256SUMS.txt to the GitHub Release for this tag
+        if: steps.gate.outputs.is_stable == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${GITHUB_REF_NAME}" dist-claude-ai/*.zip dist-claude-ai/SHA256SUMS.txt --clobber

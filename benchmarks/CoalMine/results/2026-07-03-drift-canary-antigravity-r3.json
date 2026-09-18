@@ -1,0 +1,65 @@
+{
+  "model": "Antigravity (Gemini 3.5 Flash (Medium))",
+  "date": "2026-07-03",
+  "skillVersion": "3.8.4",
+  "suite": "drift-canary",
+  "rep": 3,
+  "findings": [
+    {
+      "fixture": "f01-api-contract",
+      "file": "src/api-client.js",
+      "line": 5,
+      "category": "api-contract",
+      "severity": "CRITICAL"
+    },
+    {
+      "fixture": "f02-schema-migration",
+      "file": "src/user-repo.js",
+      "line": 2,
+      "category": "schema-migration",
+      "severity": "CRITICAL"
+    },
+    {
+      "fixture": "f03-serialization-drift",
+      "file": "src/event-reader.js",
+      "line": 5,
+      "category": "serialization-drift",
+      "severity": "HIGH"
+    },
+    {
+      "fixture": "f04-config-drift",
+      "file": "src/config.js",
+      "line": 5,
+      "category": "config-drift",
+      "severity": "MEDIUM"
+    },
+    {
+      "fixture": "f05-library-contract",
+      "file": "src/money.js",
+      "line": 3,
+      "category": "library-contract",
+      "severity": "CRITICAL"
+    },
+    {
+      "fixture": "f06-serialization-drift",
+      "file": "src/prefs-reader.js",
+      "line": 6,
+      "category": "serialization-drift",
+      "severity": "HIGH"
+    },
+    {
+      "fixture": "f07-config-drift",
+      "file": "src/uploader.js",
+      "line": 2,
+      "category": "config-drift",
+      "severity": "MEDIUM"
+    },
+    {
+      "fixture": "f08-library-contract",
+      "file": "src/tax.js",
+      "line": 4,
+      "category": "library-contract",
+      "severity": "LOW"
+    }
+  ]
+}

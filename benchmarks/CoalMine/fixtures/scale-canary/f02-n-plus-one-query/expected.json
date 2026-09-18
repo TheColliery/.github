@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/order-totals.js", "line": 8, "category": "n-plus-one-query", "severity": "HIGH", "note": "one order_lines query per order row inside the loop — N+1 round-trips; batch with a JOIN or IN() prefetch" }
+] }

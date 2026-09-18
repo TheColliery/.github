@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/shipping.js", "line": 2, "category": "time-env-coupling", "severity": "MEDIUM", "note": "process.env.SHIP_REGION read mid-computation with no abstraction - the cost depends on ambient environment state" }
+] }

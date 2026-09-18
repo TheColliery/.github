@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/checkout.js", "line": 3, "category": "missing-metric", "severity": "MEDIUM", "note": "checkout money path has no counter/histogram instrumentation; success and failure rates invisible in dashboards (logs alone are not metrics)" }
+] }

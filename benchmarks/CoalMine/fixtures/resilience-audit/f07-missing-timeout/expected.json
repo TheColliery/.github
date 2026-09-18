@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/webhook-notify.js", "line": 4, "category": "missing-timeout", "severity": "HIGH", "note": "https.request sets no timeout option and no req.setTimeout; a stalled partner endpoint holds the socket open forever" }
+] }

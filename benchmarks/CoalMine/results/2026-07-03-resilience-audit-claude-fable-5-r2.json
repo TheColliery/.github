@@ -1,0 +1,17 @@
+{
+  "model": "claude-fable-5 (skill ON)",
+  "date": "2026-07-03",
+  "skillVersion": "3.8.4",
+  "suite": "resilience-audit",
+  "rep": 2,
+  "findings": [
+    {"fixture":"f01-missing-timeout","file":"src/inventory-client.js","line":4,"category":"missing-timeout","severity":"HIGH"},
+    {"fixture":"f02-retry-no-backoff","file":"src/event-publisher.js","line":2,"category":"retry-no-backoff","severity":"HIGH"},
+    {"fixture":"f03-non-atomic-write","file":"src/session-store.js","line":8,"category":"non-atomic-write","severity":"CRITICAL"},
+    {"fixture":"f04-partial-as-success","file":"src/order-sync.js","line":10,"category":"partial-as-success","severity":"CRITICAL"},
+    {"fixture":"f05-swallowed-error","file":"src/queue-consumer.js","line":5,"category":"swallowed-error","severity":"CRITICAL"},
+    {"fixture":"f06-missing-fallback","file":"src/fx-rates.js","line":8,"category":"missing-fallback","severity":"MEDIUM"},
+    {"fixture":"f07-missing-timeout","file":"src/webhook-notify.js","line":4,"category":"missing-timeout","severity":"HIGH"},
+    {"fixture":"f08-missing-fallback","file":"src/feature-flags.js","line":8,"category":"missing-fallback","severity":"MEDIUM"}
+  ]
+}

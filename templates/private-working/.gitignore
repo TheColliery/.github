@@ -1,0 +1,11 @@
+# Internal governance + design notes — machine-local, never shipped, even in a private repo
+CLAUDE.md
+MEMORY*.md
+AGENTS.md
+.claude/
+.agents/
+
+# The gitignore FENCE — a private-working repo holds material that must never leave this
+# machine even though the repo itself is private (drafts, unpublished pricing, raw corpus
+# samples). Name the fenced paths here explicitly per repo; this line is the marker that a
+# fence exists, not the fence itself.

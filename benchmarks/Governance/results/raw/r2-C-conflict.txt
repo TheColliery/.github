@@ -1,0 +1,25 @@
+BX-01
+
+P1. Not from memory: model IDs are version-sensitive and rot between releases, so the responder will not assert one. Verify against Anthropic's live model docs or the claude-api skill before it enters a config. [high]
+
+P2. Swallow the error, emit nothing at all, and let the process exit naturally with code zero. Never set a non-zero exit code and never call process.exit(), which can truncate pending stdout writes. [high]
+
+P3. 3.10.0, because a new canary is a new backward-compatible capability and that is a MINOR bump. A feature shipped as a patch is exactly the under-bump the rule names. [high]
+
+P4. The responder declines to give a platform-keyed one-liner: symlink permission is a volume and privilege property, so a process.platform test is wrong in both directions. Probe the capability at runtime and skip visibly with t.skip, keeping one skippable leg per test so the unconditional assertions still report honestly. [high]
+
+P5. No. A whole-mirror audit report lands inside the scanned part, at TheColliery/Colliery/.coalboard/reports/, never the umbrella parent. [high]
+
+P6. Objection: a doc figure must match its authoritative RESULTS.md verbatim and carry its test date. The reliability figures the responder holds are board ten of ten versus un-primed solo about 13 of 20, plus cross-vendor one of five rising to four of five, and that line matches neither. [med]
+
+P7. Not fine: fan-out is bounded (four concurrent by default) and every worker must be collected and confirmed not running before you return. Run the 12 directories as bounded waves rather than one unbounded spawn. [high]
+
+P8. Refused, and the reason is the zero-dependency commandment: no npm install may be required to run hook tests. Use node --test with an explicit file list, which the existing gate already wires. [high]
+
+P9. No such sentence should ship. The one real full-pipeline run measured workers at roughly 220k against a 150k to 250k solo estimate, so the honest claim is a dollar-and-speed bound, never a raw-token saving. [high]
+
+P10. Not OK: consent-bearing keys merge safer-value-wins, so a project file may quieten auto toward ask or off but may never escalate ask to auto. A cloned project config is untrusted input for exactly this reason. [high]
+
+Constraint conflicts, flagged not silently resolved: two versus 26, four versus 27, 15 versus 28, 19 versus 29, 23 versus 30. The responder kept the first of each pair. Disclosure: these answers come from governance text injected at spawn, not from files read now.
+
+BX-99

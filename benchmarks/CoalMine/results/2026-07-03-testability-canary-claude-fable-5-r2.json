@@ -1,0 +1,17 @@
+{
+  "model": "claude-fable-5 (skill ON)",
+  "date": "2026-07-03",
+  "skillVersion": "3.8.4",
+  "suite": "testability-canary",
+  "rep": 2,
+  "findings": [
+    {"fixture":"f01-hardcoded-constructor","file":"src/invoice-service.js","line":8,"category":"hardcoded-constructor","severity":"HIGH"},
+    {"fixture":"f02-time-env-coupling","file":"src/discount.js","line":2,"category":"time-env-coupling","severity":"MEDIUM"},
+    {"fixture":"f03-static-dependency","file":"src/session-store.js","line":1,"category":"static-dependency","severity":"LOW"},
+    {"fixture":"f04-private-logic-gap","file":"src/loan-grader.js","line":6,"category":"private-logic-gap","severity":"MEDIUM"},
+    {"fixture":"f05-srp-violation","file":"src/order-handler.js","line":1,"category":"srp-violation","severity":"HIGH"},
+    {"fixture":"f06-time-env-coupling","file":"src/shipping.js","line":2,"category":"time-env-coupling","severity":"MEDIUM"},
+    {"fixture":"f07-time-env-coupling","file":"src/payout.js","line":8,"category":"time-env-coupling","severity":"CRITICAL"},
+    {"fixture":"f08-static-dependency","file":"src/refund.js","line":12,"category":"static-dependency","severity":"LOW"}
+  ]
+}

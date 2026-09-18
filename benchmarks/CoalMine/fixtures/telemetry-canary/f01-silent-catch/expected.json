@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/export-worker.js", "line": 7, "category": "silent-catch", "severity": "HIGH", "note": "catch swallows warehouse push errors with no log; failed orders stay queued and retry invisibly, so export failures never reach operators" }
+] }

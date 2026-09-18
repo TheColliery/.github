@@ -1,0 +1,3 @@
+{ "findings": [
+  { "file": "src/fx-rates.js", "line": 8, "category": "missing-fallback", "severity": "MEDIUM", "note": "throws on rates-service failure even when lastGoodRates holds a usable cached value; no graceful degrade" }
+] }
