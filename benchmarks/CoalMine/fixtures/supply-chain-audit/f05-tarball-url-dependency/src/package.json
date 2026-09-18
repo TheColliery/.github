@@ -7,6 +7,6 @@
   },
   "dependencies": {
     "stats-lite": "https://cdn.fastmirror-npm.net/stats-lite-2.2.0.tgz",
-    "undici": "6.19.2"
+    "undici": "6.28.0"
   }
 }
