@@ -34,14 +34,19 @@ jobs:
     # analyzer fails outright ("no source code was seen during the build") against a bare
     # "Use this template" repo, which ships docs + CI only and has zero .js/.mjs/.cjs/.ts
     # files until the room's own scripts land. hashFiles() returns '' when nothing
-    # matches, so the whole job is cleanly SKIPPED (not silently passed) until then.
-    if: hashFiles('**/*.js', '**/*.mjs', '**/*.cjs', '**/*.ts', '**/*.tsx') != ''
+    # matches, so the init/analyze STEPS are cleanly SKIPPED (not silently passed) until then.
+    # The gate MUST sit on the steps, never on the job: hashFiles() is not available in a
+    # job-level `if:` (GitHub's context-availability table), and a job-level use makes the
+    # whole workflow invalid -- a run with zero jobs that reads "failure" (the 2026-09-03
+    # seed did exactly that; scripts/template-workflows.test.mjs now guards it).
     permissions:
       security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
+      - if: hashFiles('**/*.js', '**/*.mjs', '**/*.cjs', '**/*.ts', '**/*.tsx') != ''
+        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
         with:
           languages: javascript-typescript
           queries: security-and-quality
-      - uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
+      - if: hashFiles('**/*.js', '**/*.mjs', '**/*.cjs', '**/*.ts', '**/*.tsx') != ''
+        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
