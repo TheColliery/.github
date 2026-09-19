@@ -17,7 +17,9 @@
 //               fail, when it is absent — an unset token is an expected local condition).
 //   --clone <kind>=<path>: an explicit local clone path for one of the three GitHub template
 //               repos (published-code/private-working/article), diffed against templates/<kind>/
-//               the same way a live room is. Repeatable, one per kind. Replaces the old
+//               like a live room, EXCEPT that a template repo keeps the source's {{TOKEN}} slots
+//               (a file differing only in those slots reads "expected", and the licence-identity
+//               check skips a {{TOKEN}} badge/NOTICE value -- UMB-123). Repeatable, one per kind. Replaces the old
 //               hardcoded "<umbrellaRoot>/template-<kind>" guess (UMB-045's own named gap,
 //               closed here per UMB-048 item 3) — omit a kind to skip its template-repo section.
 //
