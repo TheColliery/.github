@@ -20,6 +20,21 @@ export function parseGithubOrigin(url) {
   return m ? { owner: m[1], repo: m[2] } : null;
 }
 
+// A GitHub TEMPLATE repo's copy of a skeleton file is the source with its `{{TOKEN}}`
+// slots filled (or left) -- NOTICE reads "licensed under the Apache License, Version 2.0."
+// where the source reads "licensed under {{LICENSE_BADGE}}.". True when `liveText` is
+// `templateText` with each token replaced by some non-empty text on ONE line: only a slot
+// may differ, never the text around it, and a slot cannot swallow a line. A template
+// with no tokens is an exact (CRLF-normalized) compare. Used ONLY for a template-repo
+// clone; a real room's file is compared exactly, so a leftover token there stays drift.
+export function matchesWithPlaceholders(templateText, liveText) {
+  const norm = (s) => String(s).replace(/\r\n/g, '\n');
+  const parts = norm(templateText).split(/\{\{[A-Z0-9_]+\}\}/);
+  if (parts.length === 1) return norm(templateText) === norm(liveText);
+  const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^${parts.map(escape).join('[^\\n]+')}$`).test(norm(liveText));
+}
+
 // Skeleton-owned files per kind, relative to templates/<kind>/. A room may carry more
 // files than this (its own README body, its own SOURCES.md, ...) — those are not
 // skeleton-owned and are out of this instrument's scope by design.

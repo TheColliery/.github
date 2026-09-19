@@ -26,7 +26,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
-import { findRepos as findReposLib, SKELETON_FILES, TEMPLATE_DIR_FOR_KIND, parseGithubOrigin } from './lib/skeleton-check-lib.mjs';
+import { findRepos as findReposLib, SKELETON_FILES, TEMPLATE_DIR_FOR_KIND, parseGithubOrigin, matchesWithPlaceholders } from './lib/skeleton-check-lib.mjs';
 import { isLicenseStub, licenseIdentityMismatches } from './lib/license-check-lib.mjs';
 import { anyRulesetCovers } from './lib/ruleset-match.mjs';
 
@@ -48,12 +48,12 @@ function normalizeLineEndings(buf) {
 // comparison to license-check-lib.mjs's pure licenseIdentityMismatches (UMB-058) --
 // the fs access lives here, at the gate; the comparison logic lives in the lib,
 // where it is directly unit-testable with inline fixtures.
-function checkLicenseIdentity(repoDir, licenseContent) {
+function checkLicenseIdentity(repoDir, licenseContent, opts) {
   const readmePath = path.join(repoDir, 'README.md');
   const readme = fs.existsSync(readmePath) ? fs.readFileSync(readmePath, 'utf8') : '';
   const noticePath = path.join(repoDir, 'NOTICE');
   const notice = fs.existsSync(noticePath) ? fs.readFileSync(noticePath, 'utf8') : '';
-  return licenseIdentityMismatches(licenseContent, readme, notice);
+  return licenseIdentityMismatches(licenseContent, readme, notice, opts);
 }
 
 function compareFile(templatePath, livePath) {
@@ -67,6 +67,19 @@ function compareFile(templatePath, livePath) {
   const tLines = tn.split('\n').length;
   const lLines = ln.split('\n').length;
   return `DIFFERS (template ${tLines}L vs live ${lLines}L)`;
+}
+
+// A GitHub TEMPLATE repo keeps the source's `{{TOKEN}}` slots (or fills them: NOTICE reads
+// "licensed under the Apache License, Version 2.0."), so a byte compare would call that
+// drift forever. Only for a template-repo clone -- a real room is compared exactly.
+function compareTemplateRepoFile(templatePath, livePath) {
+  const base = compareFile(templatePath, livePath);
+  if (!base.startsWith('DIFFERS')) return base;
+  const template = fs.readFileSync(templatePath, 'utf8');
+  if (!/\{\{[A-Z0-9_]+\}\}/.test(template)) return base;
+  return matchesWithPlaceholders(template, fs.readFileSync(livePath, 'utf8'))
+    ? 'expected (only {{TOKEN}} slots differ, by design in a template repo)'
+    : base;
 }
 
 // --settings support ------------------------------------------------------------------
@@ -301,14 +314,14 @@ async function main() {
       const clonePath = path.join(templateRepoDir, rel);
       if (!fs.existsSync(templatePath)) continue;
       try {
-        console.log(`  ${rel}: ${compareFile(templatePath, clonePath)}`);
+        console.log(`  ${rel}: ${compareTemplateRepoFile(templatePath, clonePath)}`);
         if (rel === 'LICENSE' && fs.existsSync(clonePath)) {
           const cloneContent = fs.readFileSync(clonePath, 'utf8');
           if (isLicenseStub(cloneContent)) {
             console.log('  LICENSE: STUB (a name/URL pointer, not the licence\'s own text -- replace with a full licence body)');
             failed++;
           } else {
-            const mismatches = checkLicenseIdentity(templateRepoDir, cloneContent);
+            const mismatches = checkLicenseIdentity(templateRepoDir, cloneContent, { templateRepo: true });
             for (const m of mismatches) {
               console.log(`  LICENSE: badge/notice mismatch (${m})`);
               failed++;

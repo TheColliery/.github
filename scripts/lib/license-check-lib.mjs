@@ -81,8 +81,17 @@ export function identifyLicense(content) {
 // Comparing either form to the other needs both stripped of separators and case before
 // the comparison means anything.
 export function normalizeLicenseId(id) {
-  return String(id || '').toLowerCase().replace(/[-_\s]+/g, '');
+  let s = String(id || '').trim();
+  // A NOTICE may name a licence by its OFFICIAL long name ("the Apache License, Version
+  // 2.0") rather than its SPDX id -- the same licence, not a contradiction (UMB-123: the
+  // template repo's own NOTICE reads that way). Only Apache-2.0's long name is aliased,
+  // because it is the only one met in the estate; add another when one is actually met.
+  if (/^(?:the\s+)?apache\s+license,?\s+(?:version\s+)?2(?:\.0)?$/i.test(s)) s = 'Apache-2.0';
+  return s.toLowerCase().replace(/[-_\s]+/g, '');
 }
+
+// A `{{TOKEN}}` left in a captured badge/NOTICE value: a scaffold's fill-in slot.
+const PLACEHOLDER_VALUE_RE = /^\{\{\s*[A-Z0-9_]+\s*\}\}$/;
 
 const BADGE_RE = /badge\/license-(.+?)-blue\b/;
 // GREEDY, not lazy: a licence id itself commonly contains a literal "." (Apache-2.0's
@@ -99,21 +108,28 @@ const NOTICE_RE = /is licensed under (.+)\.\s*$/m;
  * `readmeContent`/`noticeContent` may be `''` (the surface is absent) -- an absent
  * surface has nothing to contradict and is silently skipped, never flagged.
  *
+ * `{ templateRepo: true }` (UMB-123) is for a GitHub TEMPLATE repo only: its README badge
+ * and NOTICE legitimately keep the `{{TOKEN}}` slot a scaffold fills, so a captured value
+ * that IS a placeholder is skipped. Nothing else is relaxed -- a real wrong badge in a
+ * template repo still mismatches, and the default mode (every real repo) still flags a
+ * leftover placeholder.
+ *
  * Returns a list of mismatch description strings -- empty when the body is
  * unidentifiable (nothing to compare a claim against) or every surface found agrees.
  */
-export function licenseIdentityMismatches(licenseContent, readmeContent, noticeContent) {
+export function licenseIdentityMismatches(licenseContent, readmeContent, noticeContent, { templateRepo = false } = {}) {
   const identified = identifyLicense(licenseContent);
   if (!identified) return [];
   const mismatches = [];
+  const expectedSlot = (v) => templateRepo && PLACEHOLDER_VALUE_RE.test(v.trim());
 
   const badgeMatch = readmeContent && readmeContent.match(BADGE_RE);
-  if (badgeMatch && normalizeLicenseId(badgeMatch[1]) !== normalizeLicenseId(identified)) {
+  if (badgeMatch && !expectedSlot(badgeMatch[1]) && normalizeLicenseId(badgeMatch[1]) !== normalizeLicenseId(identified)) {
     mismatches.push(`README badge says "${badgeMatch[1]}", body identifies as ${identified}`);
   }
 
   const noticeMatch = noticeContent && noticeContent.match(NOTICE_RE);
-  if (noticeMatch && normalizeLicenseId(noticeMatch[1]) !== normalizeLicenseId(identified)) {
+  if (noticeMatch && !expectedSlot(noticeMatch[1]) && normalizeLicenseId(noticeMatch[1]) !== normalizeLicenseId(identified)) {
     mismatches.push(`NOTICE says "${noticeMatch[1]}", body identifies as ${identified}`);
   }
 

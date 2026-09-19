@@ -203,3 +203,53 @@ test('licenseIdentityMismatches: an unidentifiable body (the real Kolwen/CoalKil
 test('licenseIdentityMismatches: absent README/NOTICE (empty strings, the real private-working shape -- no NOTICE shipped) -> no mismatches, an absent surface has nothing to contradict', () => {
   assert.deepEqual(licenseIdentityMismatches(REAL_APACHE_TEXT, '', ''), []);
 });
+
+// ---------------------------------------------------------------------------------
+// UMB-123 -- the two false positives `skeleton-check --clone` carried against the
+// template repo itself (measured 2026-09-19): (1) its README keeps the deliberate
+// `{{LICENSE_BADGE}}` placeholder a scaffold fills; (2) its NOTICE spells the licence by
+// its official long name, "the Apache License, Version 2.0", not by SPDX id.
+
+const TEMPLATE_README_BADGE = '![license](https://img.shields.io/badge/license-{{LICENSE_BADGE}}-blue)\n';
+const TEMPLATE_REPO_NOTICE = '{{REPO_NAME}}\nCopyright {{YEAR}} {{COPYRIGHT_HOLDER}}\n\nThis product is part of the TheColliery series (https://github.com/TheColliery)\nand is licensed under the Apache License, Version 2.0.\n';
+
+test('normalizeLicenseId: the official long name of Apache-2.0 (with or without a leading "the") equals the SPDX id -- RED before the alias', () => {
+  assert.equal(normalizeLicenseId('the Apache License, Version 2.0'), normalizeLicenseId('Apache-2.0'));
+  assert.equal(normalizeLicenseId('Apache License, Version 2.0'), normalizeLicenseId('Apache-2.0'));
+  assert.equal(normalizeLicenseId('Apache License 2.0'), normalizeLicenseId('Apache-2.0'));
+});
+
+test('normalizeLicenseId: the long-name alias does not widen into other licences or versions', () => {
+  assert.notEqual(normalizeLicenseId('the Apache License, Version 1.1'), normalizeLicenseId('Apache-2.0'));
+  assert.notEqual(normalizeLicenseId('the MIT License'), normalizeLicenseId('Apache-2.0'));
+  assert.notEqual(normalizeLicenseId('the Apache License, Version 2.0 with exceptions'), normalizeLicenseId('Apache-2.0'));
+});
+
+test('licenseIdentityMismatches: a NOTICE that names Apache-2.0 by its long name is NOT a mismatch (any repo, not only a template)', () => {
+  assert.deepEqual(licenseIdentityMismatches(REAL_APACHE_TEXT, REAL_README_BADGE_MATCHING, TEMPLATE_REPO_NOTICE), []);
+});
+
+test('licenseIdentityMismatches: a long-name NOTICE for a DIFFERENT licence is still a mismatch', () => {
+  const notice = 'x\nand is licensed under the MIT License.\n';
+  const result = licenseIdentityMismatches(REAL_APACHE_TEXT, REAL_README_BADGE_MATCHING, notice);
+  assert.equal(result.length, 1);
+  assert.match(result[0], /NOTICE says "the MIT License"/);
+});
+
+test('licenseIdentityMismatches: a REAL repo whose README badge is still the {{LICENSE_BADGE}} placeholder IS flagged -- the default mode is unchanged', () => {
+  const result = licenseIdentityMismatches(REAL_APACHE_TEXT, TEMPLATE_README_BADGE, '');
+  assert.equal(result.length, 1);
+  assert.match(result[0], /README badge says "\{\{LICENSE_BADGE\}\}"/);
+});
+
+test('licenseIdentityMismatches: { templateRepo: true } accepts the {{...}} placeholder badge AND NOTICE token -- RED before the option', () => {
+  assert.deepEqual(licenseIdentityMismatches(REAL_APACHE_TEXT, TEMPLATE_README_BADGE, '', { templateRepo: true }), []);
+  const tokenNotice = 'x\nand is licensed under {{LICENSE_BADGE}}.\n';
+  assert.deepEqual(licenseIdentityMismatches(REAL_APACHE_TEXT, REAL_README_BADGE_MATCHING, tokenNotice, { templateRepo: true }), []);
+});
+
+test('licenseIdentityMismatches: { templateRepo: true } skips ONLY placeholders -- a real wrong badge in a template repo is still flagged', () => {
+  const result = licenseIdentityMismatches(REAL_APACHE_TEXT, REAL_README_BADGE_MIT, '', { templateRepo: true });
+  assert.equal(result.length, 1);
+  assert.match(result[0], /README badge says "MIT"/);
+});

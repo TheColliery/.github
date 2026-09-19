@@ -6,7 +6,7 @@ import path from 'path';
 import {
   classify, hasAnyKindMarker, findRepos, SKELETON_FILES,
   ARTICLE_PRIVATE_MARKER, ARTICLE_CHANGEREQUEST_MARKER, PRIVATE_WORKING_MARKER,
-  TEMPLATE_DIR_FOR_KIND, parseGithubOrigin,
+  TEMPLATE_DIR_FOR_KIND, parseGithubOrigin, matchesWithPlaceholders,
 } from './lib/skeleton-check-lib.mjs';
 
 // A scratch zones-root, one fixture per test to keep each hermetic. Every fixture is
@@ -359,4 +359,41 @@ test('parseGithubOrigin: query/fragment/space/percent smuggling in owner or repo
 test('parseGithubOrigin: a dotted repo name stays a SKIP (null), unchanged from the old [^/.] rule', () => {
   assert.equal(parseGithubOrigin('https://github.com/TheColliery/.github'), null);
   assert.equal(parseGithubOrigin('https://github.com/owner/foo.bar.git'), null);
+});
+
+// --- matchesWithPlaceholders (UMB-123): a TEMPLATE repo's file is the source with its
+// {{TOKENS}} filled or left; only a placeholder slot may differ, never the text around it ---
+
+const NOTICE_SOURCE = '{{REPO_NAME}}\nCopyright {{YEAR}} {{COPYRIGHT_HOLDER}}\n\nThis product is part of the TheColliery series (https://github.com/TheColliery)\nand is licensed under {{LICENSE_BADGE}}.\n';
+
+test('matchesWithPlaceholders: the real NOTICE shape -- one token slot filled with prose, the rest untouched -- matches', () => {
+  const live = '{{REPO_NAME}}\nCopyright {{YEAR}} {{COPYRIGHT_HOLDER}}\n\nThis product is part of the TheColliery series (https://github.com/TheColliery)\nand is licensed under the Apache License, Version 2.0.\n';
+  assert.equal(matchesWithPlaceholders(NOTICE_SOURCE, live), true);
+});
+
+test('matchesWithPlaceholders: every slot filled (a scaffolded file) matches too', () => {
+  const live = 'CoalX\nCopyright 2026 HetCreep\n\nThis product is part of the TheColliery series (https://github.com/TheColliery)\nand is licensed under Apache-2.0.\n';
+  assert.equal(matchesWithPlaceholders(NOTICE_SOURCE, live), true);
+});
+
+test('matchesWithPlaceholders: a change in the text AROUND a slot is real drift -- RED against a compare that ignored the whole line', () => {
+  const live = 'CoalX\nCopyright 2026 HetCreep\n\nThis product belongs to somebody else (https://example.com)\nand is licensed under Apache-2.0.\n';
+  assert.equal(matchesWithPlaceholders(NOTICE_SOURCE, live), false);
+});
+
+test('matchesWithPlaceholders: a slot cannot swallow extra lines, and cannot be empty', () => {
+  const extra = 'CoalX\nCopyright 2026 HetCreep\nINJECTED LINE\n\nThis product is part of the TheColliery series (https://github.com/TheColliery)\nand is licensed under Apache-2.0.\n';
+  assert.equal(matchesWithPlaceholders(NOTICE_SOURCE, extra), false);
+  const empty = '\nCopyright 2026 HetCreep\n\nThis product is part of the TheColliery series (https://github.com/TheColliery)\nand is licensed under Apache-2.0.\n';
+  assert.equal(matchesWithPlaceholders(NOTICE_SOURCE, empty), false);
+});
+
+test('matchesWithPlaceholders: a template with no tokens is an exact compare (CRLF-normalized), never a wildcard', () => {
+  assert.equal(matchesWithPlaceholders('a\nb\n', 'a\r\nb\r\n'), true);
+  assert.equal(matchesWithPlaceholders('a\nb\n', 'a\nc\n'), false);
+});
+
+test('matchesWithPlaceholders: regex metacharacters in the template text are literal, not patterns', () => {
+  assert.equal(matchesWithPlaceholders('cost (a+b)* {{X}}.\n', 'cost (a+b)* 5.\n'), true);
+  assert.equal(matchesWithPlaceholders('cost (a+b)* {{X}}.\n', 'cost aab 5.\n'), false);
 });
