@@ -14,7 +14,9 @@
 // Usage: node scripts/skeleton-check.mjs [--settings] [--clone <kind>=<path> ...]
 //   --settings: also diff each live repo's GitHub settings against templates/repo-settings.*.json
 //               via REST GET calls (needs GITHUB_TOKEN in the environment; SKIPs, does not
-//               fail, when it is absent — an unset token is an expected local condition).
+//               fail, when it is absent — an unset token is an expected local condition). For a
+//               published-code repo it also judges the gate ruleset's bypass_actors against the
+//               canon value (lib/ruleset-match.mjs GATE_RULESET_BYPASS, from SWEEP-MARKS.md -- UMB-131).
 //   --clone <kind>=<path>: an explicit local clone path for one of the three GitHub template
 //               repos (published-code/private-working/article), diffed against templates/<kind>/
 //               like a live room, EXCEPT that a template repo keeps the source's {{TOKEN}} slots
@@ -30,7 +32,7 @@ import path from 'path';
 import { fileURLToPath } from 'node:url';
 import { findRepos as findReposLib, SKELETON_FILES, TEMPLATE_DIR_FOR_KIND, parseGithubOrigin, matchesWithPlaceholders } from './lib/skeleton-check-lib.mjs';
 import { isLicenseStub, licenseIdentityMismatches } from './lib/license-check-lib.mjs';
-import { anyRulesetCovers } from './lib/ruleset-match.mjs';
+import { anyRulesetCovers, gateBypassVerdicts } from './lib/ruleset-match.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const githubRepo = path.resolve(scriptDir, '..');
@@ -195,6 +197,11 @@ async function diffSettings(kind, ownerRepo, settingsPath) {
     }
     const covered = anyRulesetCovers(details, wantedTypes);
     console.log(`    ruleset (rules: ${wantedTypes.join('+')}): ${covered ? 'identical (covered by an existing active ruleset, matched by rules -- not necessarily named "' + settings.ruleset.name + '")' : `DIFFERS (no active branch ruleset on the default branch covers ${wantedTypes.join('+')})`}`);
+    // UMB-131: the gate ruleset's bypass list -- a room can pass the coverage row above and still have
+    // lost its admin bypass (CoalMine, 2026-09-17 org transfer); judged against the canon value.
+    // Only published-code: the gate exists for dependabot-auto-merge.yml, which article repos do not ship
+    // (a "no gate" line there would be a false positive -- measured on SpriteDesignDatum).
+    if (kind === 'published-code') for (const v of gateBypassVerdicts(details)) console.log(`    ${v.text}`);
   }
 }
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rulesetCoversRules, anyRulesetCovers } from './lib/ruleset-match.mjs';
+import { rulesetCoversRules, anyRulesetCovers, GATE_RULESET_BYPASS, bypassActorsDiffer, gateBypassVerdicts } from './lib/ruleset-match.mjs';
 
 const WANTED = ['deletion', 'non_fast_forward'];
 
@@ -71,4 +71,87 @@ test('anyRulesetCovers: one covering ruleset among several non-covering ones is 
 
 test('anyRulesetCovers: an empty list never covers', () => {
   assert.equal(anyRulesetCovers([], WANTED), false);
+});
+
+// --- UMB-131: the gate ruleset's bypass list ---------------------------------------------
+// CoalMine's `dependabot-auto-merge-gate` lost its bypass actor in the 2026-09-17 org
+// transfer (`bypass_actors: []`) and `--settings` never noticed: it compared only whether
+// SOME ruleset covers deletion+non_fast_forward. The canon (SWEEP-MARKS.md, the gate row)
+// states the value: RepositoryRole Admin (actor_id 5), bypass_mode always.
+
+const ADMIN_ALWAYS = { actor_id: 5, actor_type: 'RepositoryRole', bypass_mode: 'always' };
+
+function gate(overrides = {}) {
+  return {
+    name: 'dependabot-auto-merge-gate',
+    enforcement: 'active',
+    target: 'branch',
+    conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: [] } },
+    rules: [{ type: 'required_status_checks', parameters: { required_status_checks: [{ context: 'all-green' }] } }],
+    bypass_actors: [ADMIN_ALWAYS],
+    ...overrides,
+  };
+}
+
+test('GATE_RULESET_BYPASS is exactly the canon value: RepositoryRole 5, always', () => {
+  assert.deepEqual(GATE_RULESET_BYPASS, [ADMIN_ALWAYS]);
+});
+
+test('bypassActorsDiffer: the canon list matches -> null (order and key order do not matter)', () => {
+  assert.equal(bypassActorsDiffer([ADMIN_ALWAYS]), null);
+  assert.equal(bypassActorsDiffer([{ bypass_mode: 'always', actor_type: 'RepositoryRole', actor_id: 5 }]), null);
+});
+
+test('bypassActorsDiffer: an EMPTY list -- the real CoalMine shape after the transfer -- differs, RED against a check that never looked', () => {
+  const d = bypassActorsDiffer([]);
+  assert.ok(d);
+  assert.deepEqual(d.live, []);
+  assert.deepEqual(d.want, [ADMIN_ALWAYS]);
+});
+
+test('bypassActorsDiffer: a missing/null list reads as empty, never throws', () => {
+  assert.ok(bypassActorsDiffer(undefined));
+  assert.ok(bypassActorsDiffer(null));
+});
+
+test('bypassActorsDiffer: a different mode, a different actor id, or an EXTRA actor all differ (exact set, not "contains")', () => {
+  assert.ok(bypassActorsDiffer([{ ...ADMIN_ALWAYS, bypass_mode: 'pull_request' }]));
+  assert.ok(bypassActorsDiffer([{ ...ADMIN_ALWAYS, actor_id: 4 }]));
+  assert.ok(bypassActorsDiffer([ADMIN_ALWAYS, { actor_id: 1, actor_type: 'OrganizationAdmin', bypass_mode: 'always' }]));
+});
+
+test('gateBypassVerdicts: a gate ruleset with the canon bypass -> one ok verdict', () => {
+  const v = gateBypassVerdicts([gate()]);
+  assert.equal(v.length, 1);
+  assert.equal(v[0].ok, true);
+  assert.match(v[0].text, /"dependabot-auto-merge-gate" bypass_actors: identical/);
+});
+
+test('gateBypassVerdicts: the real CoalMine shape (gate with bypass_actors []) -> DIFFERS naming the ruleset, want and live', () => {
+  const v = gateBypassVerdicts([gate({ bypass_actors: [] })]);
+  assert.equal(v.length, 1);
+  assert.equal(v[0].ok, false);
+  assert.match(v[0].text, /"dependabot-auto-merge-gate" bypass_actors: DIFFERS/);
+  assert.match(v[0].text, /want \[.*"actor_id":5.*\], live \[\]/);
+});
+
+test('gateBypassVerdicts: no active required-status-checks ruleset on the default branch -> one DIFFERS verdict (a disabled, tag-targeted or feature-branch gate does not count)', () => {
+  for (const list of [[], [gate({ enforcement: 'disabled' })], [gate({ target: 'tag' })], [gate({ conditions: { ref_name: { include: ['refs/heads/release/*'], exclude: [] } } })]]) {
+    const v = gateBypassVerdicts(list);
+    assert.equal(v.length, 1);
+    assert.equal(v[0].ok, false);
+    assert.match(v[0].text, /no active required_status_checks ruleset/);
+  }
+});
+
+test('gateBypassVerdicts: a ruleset without a required_status_checks rule (e.g. main-guard) is not a gate and is not judged on bypass', () => {
+  const mainGuard = gate({ name: 'main-guard', rules: [{ type: 'deletion' }, { type: 'non_fast_forward' }], bypass_actors: [] });
+  const v = gateBypassVerdicts([mainGuard, gate()]);
+  assert.equal(v.length, 1);
+  assert.equal(v[0].ok, true);
+});
+
+test('gateBypassVerdicts: two gates are each judged', () => {
+  const v = gateBypassVerdicts([gate(), gate({ name: 'second-gate', bypass_actors: [] })]);
+  assert.deepEqual(v.map((x) => x.ok), [true, false]);
 });
