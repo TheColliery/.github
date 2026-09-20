@@ -111,7 +111,7 @@ async function ghGet(token, urlPath) {
     headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' },
   });
   let json = null;
-  try { json = await res.json(); } catch {}
+  try { json = await res.json(); } catch {} // a body-less/non-JSON reply is not an error: status + ok still come from the HTTP response
   return { status: res.status, ok: res.ok, json };
 }
 
