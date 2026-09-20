@@ -3,8 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   classify, hasAnyKindMarker, findRepos, SKELETON_FILES,
+  detailsKind, detailsVerdict, formatDetailsTable,
   ARTICLE_PRIVATE_MARKER, ARTICLE_CHANGEREQUEST_MARKER, PRIVATE_WORKING_MARKER,
   TEMPLATE_DIR_FOR_KIND, parseGithubOrigin, matchesWithPlaceholders,
 } from './lib/skeleton-check-lib.mjs';
@@ -396,4 +399,200 @@ test('matchesWithPlaceholders: a template with no tokens is an exact compare (CR
 test('matchesWithPlaceholders: regex metacharacters in the template text are literal, not patterns', () => {
   assert.equal(matchesWithPlaceholders('cost (a+b)* {{X}}.\n', 'cost (a+b)* 5.\n'), true);
   assert.equal(matchesWithPlaceholders('cost (a+b)* {{X}}.\n', 'cost aab 5.\n'), false);
+});
+
+// ---------------------------------------------------------------------------------
+// UMB-128: `--details` -- the REPO DETAILS surface (About description · website · topics)
+// measured for every org repo against DOC-PATTERN.md §"Repo details". Pure logic in the lib;
+// the CLI is spawned below with a fetch stub and must never send a write.
+
+const BASE = ['claude-code', 'claude', 'ai-agents', 'agent-skills', 'ai-coding', 'developer-tools'];
+const LANDING = 'https://github.com/TheColliery';
+
+// A repo object as `GET /orgs/{org}/repos` returns it -- only the fields the instrument reads.
+function repoObj(name, over = {}) {
+  return { name, private: false, archived: false, is_template: false, description: 'A real description.', homepage: LANDING, topics: [...BASE, 'extra'], ...over };
+}
+
+test('detailsKind: a public Coal* repo is a room; any other public repo is public-other', () => {
+  assert.equal(detailsKind(repoObj('CoalMine')), 'room');
+  assert.equal(detailsKind(repoObj('.github')), 'public-other');
+  assert.equal(detailsKind(repoObj('Kolwen')), 'public-other');
+});
+
+test('detailsKind: archived, template (either visibility) and private come out BEFORE room/public-other', () => {
+  assert.equal(detailsKind(repoObj('CoalOld', { archived: true })), 'archived');
+  assert.equal(detailsKind(repoObj('template-published-code', { is_template: true })), 'template');
+  assert.equal(detailsKind(repoObj('template-private-working', { is_template: true, private: true })), 'template');
+  assert.equal(detailsKind(repoObj('CoalGob', { private: true })), 'private', 'a private Coal* repo is not a public room');
+  assert.equal(detailsKind(repoObj('Bankfire', { private: true })), 'private');
+});
+
+test('detailsVerdict (room): the full floor -- description, website, all six base topics -- is OK', () => {
+  const v = detailsVerdict(repoObj('CoalMine'));
+  assert.equal(v.status, 'OK');
+  assert.deepEqual(v.reasons, []);
+});
+
+test('detailsVerdict (room): each missing base topic is named -- and only the missing ones', () => {
+  const v = detailsVerdict(repoObj('CoalWash', { topics: ['claude-code', 'ai-agents', 'agent-skills', 'developer-tools', 'memory-management'] }));
+  assert.equal(v.status, 'FAIL');
+  assert.equal(v.reasons.length, 1);
+  assert.match(v.reasons[0], /topics missing the base floor: claude, ai-coding$/);
+});
+
+test('detailsVerdict (room): the OLD base token `skills` does not satisfy `agent-skills` (DOC-PATTERN amended 2026-07-25)', () => {
+  const v = detailsVerdict(repoObj('CoalMine', { topics: ['claude-code', 'claude', 'ai-agents', 'skills', 'ai-coding', 'developer-tools'] }));
+  assert.equal(v.status, 'FAIL');
+  assert.match(v.reasons[0], /missing the base floor: agent-skills$/);
+});
+
+test('detailsVerdict: an empty or whitespace-only description FAILS, for a room and for public-other', () => {
+  for (const name of ['CoalMine', 'Kolwen']) {
+    for (const description of [null, '', '   ']) {
+      const v = detailsVerdict(repoObj(name, { description }));
+      assert.equal(v.status, 'FAIL', `${name} ${JSON.stringify(description)}`);
+      assert.ok(v.reasons.some((r) => /description is empty/.test(r)), name);
+    }
+  }
+});
+
+test('detailsVerdict: an empty website FAILS; a website that is NOT the org landing is fine (a better front door is allowed)', () => {
+  const none = detailsVerdict(repoObj('CoalMine', { homepage: '' }));
+  assert.equal(none.status, 'FAIL');
+  assert.ok(none.reasons.some((r) => /website is empty/.test(r)));
+  assert.equal(detailsVerdict(repoObj('.github', { homepage: 'https://hetcreep.gitbook.io/thecolliery' })).status, 'OK');
+  assert.equal(detailsVerdict(repoObj('CoalMine', { homepage: null })).status, 'FAIL');
+});
+
+test('detailsVerdict (public-other, the Kolwen shape 2026-09-20: no topics, no website): FAILS on both, and NEVER demands the Coal* skill-suite base set', () => {
+  const v = detailsVerdict(repoObj('Kolwen', { topics: [], homepage: '' }));
+  assert.equal(v.status, 'FAIL');
+  assert.equal(v.reasons.length, 2);
+  assert.ok(v.reasons.some((r) => /no topics/.test(r)));
+  assert.ok(v.reasons.some((r) => /website is empty/.test(r)));
+  assert.ok(!v.reasons.some((r) => /base floor/.test(r)), 'the base set is the skill-suite floor -- demanding agent-skills of a model repo would be an off-target topic');
+  assert.equal(detailsVerdict(repoObj('Kolwen', { topics: ['llm'], homepage: 'https://kolwen.com' })).status, 'OK');
+});
+
+test('detailsVerdict: template, private and archived repos are N/A even when EMPTY -- no floor is invented for a kind DOC-PATTERN does not define', () => {
+  const empty = { description: null, homepage: null, topics: [] };
+  for (const [kind, over] of [['template', { is_template: true }], ['private', { private: true }], ['archived', { archived: true }]]) {
+    const v = detailsVerdict(repoObj('X', { ...over, ...empty }));
+    assert.equal(v.status, 'N/A', kind);
+    assert.equal(v.kind, kind);
+    assert.equal(v.reasons.length, 1, kind);
+  }
+});
+
+// The org as read at the API 2026-09-20 (`GET /orgs/TheColliery/repos`, 16 repos), reduced to
+// the fields the instrument reads. Rooms carry the base set; Kolwen has no topics / website.
+function liveOrg() {
+  const room = (name) => repoObj(name, { topics: [...BASE, 'code-quality'] });
+  return [
+    repoObj('.github', { homepage: 'https://hetcreep.gitbook.io/thecolliery' }),
+    repoObj('Bankfire', { private: true, homepage: '', topics: [] }),
+    repoObj('Bankfire-gate', { private: true, homepage: '', topics: [] }),
+    repoObj('Chotmeter', { private: true, homepage: '', topics: [] }),
+    repoObj('ChotUnitDatum', { private: true, homepage: '', topics: [] }),
+    room('CoalBoard'), room('CoalFace'), room('CoalHearth'), room('CoalLedger'), room('CoalMine'), room('CoalTipple'), room('CoalWash'),
+    repoObj('Kolwen', { homepage: '', topics: [] }),
+    repoObj('template-article', { is_template: true, homepage: '', topics: [] }),
+    repoObj('template-private-working', { is_template: true, private: true, homepage: '', topics: [] }),
+    repoObj('template-published-code', { is_template: true, homepage: '', topics: [] }),
+  ];
+}
+
+test('formatDetailsTable: the live 16-repo org -> one row per repo, exactly the two Kolwen FAIL lines, and reconciled counts', () => {
+  const org = liveOrg();
+  const { table, fails, counts } = formatDetailsTable(org);
+  assert.equal(org.length, 16);
+  for (const r of org) assert.ok(table.some((l) => l.startsWith(r.name.padEnd(24))), `a row for ${r.name}`);
+  assert.deepEqual(fails, [
+    'FAIL Kolwen (public-other): no topics -- DOC-PATTERN §Repo details: every specific a searcher would type',
+    'FAIL Kolwen (public-other): website is empty -- DOC-PATTERN §Repo details: the org landing unless the tool has a better front door',
+  ]);
+  assert.deepEqual(counts, { ok: 8, fail: 1, na: 7 }, 'OK = 7 rooms + .github; FAIL = Kolwen; N/A = 4 private + 3 templates');
+  assert.equal(counts.ok + counts.fail + counts.na, org.length);
+});
+
+test('formatDetailsTable: a long description is truncated in the table (never the verdict) and the input is not mutated', () => {
+  const long = 'x'.repeat(300);
+  const org = [repoObj('CoalMine', { description: long })];
+  const before = JSON.stringify(org);
+  const { table } = formatDetailsTable(org);
+  const row = table.find((l) => l.startsWith('CoalMine'));
+  assert.ok(row.length < 200, row.length);
+  assert.ok(row.includes('...'));
+  assert.equal(JSON.stringify(org), before);
+});
+
+// ---- the CLI, spawned with a fetch stub preloaded (NODE_OPTIONS=--import) ---------------
+
+const SKELETON_SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'skeleton-check.mjs');
+const DETAILS_STUB = `
+import fs from 'node:fs';
+const S = JSON.parse(process.env.STUB_STATE);
+globalThis.fetch = async (url, init = {}) => {
+  const p = String(url).replace('https://api.github.com', '');
+  fs.appendFileSync(process.env.STUB_LOG, JSON.stringify({ method: init.method || 'GET', path: p }) + '\\n');
+  if (p.startsWith('/orgs/TheColliery/repos')) {
+    const page = Number(new URL(String(url)).searchParams.get('page') || '1');
+    const headers = page < S.pages.length ? { link: '<https://api.github.com/orgs/TheColliery/repos?per_page=100&type=all&page=' + (page + 1) + '>; rel="next"' } : {};
+    return new Response(JSON.stringify(S.pages[page - 1]), { status: S.status || 200, headers });
+  }
+  return new Response('{}', { status: 404 });
+};
+`;
+
+function runDetails(pages, { token = 'stub-token', status } = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'details-test-'));
+  const stubFile = path.join(dir, 'stub.mjs');
+  const logFile = path.join(dir, 'calls.jsonl');
+  fs.writeFileSync(stubFile, DETAILS_STUB);
+  fs.writeFileSync(logFile, '');
+  const env = { ...process.env, NODE_OPTIONS: `--import=${pathToFileURL(stubFile).href}`, STUB_LOG: logFile, STUB_STATE: JSON.stringify({ pages, status }) };
+  if (token === null) delete env.GITHUB_TOKEN; else env.GITHUB_TOKEN = token;
+  const res = spawnSync(process.execPath, [SKELETON_SCRIPT, '--details'], { encoding: 'utf8', env });
+  const calls = fs.readFileSync(logFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  fs.rmSync(dir, { recursive: true, force: true });
+  return { res, calls };
+}
+
+test('skeleton-check.mjs --details (the live org shape): prints a row per repo, the Kolwen FAIL lines, exits 1 -- and sends ONLY reads (READ-ONLY rail)', () => {
+  const { res, calls } = runDetails([liveOrg()]);
+  assert.equal(res.status, 1, res.stdout + res.stderr);
+  assert.match(res.stdout, /FAIL Kolwen \(public-other\): no topics/);
+  assert.match(res.stdout, /FAIL Kolwen \(public-other\): website is empty/);
+  assert.match(res.stdout, /16 repos: 8 OK · 1 FAIL · 7 N\/A/);
+  assert.ok(calls.length >= 1);
+  assert.deepEqual(calls.filter((c) => c.method !== 'GET'), [], '--details must never write: no description, website, topic or visibility');
+});
+
+test('skeleton-check.mjs --details follows the Link: rel="next" header -- a repo on page 2 is judged, not silently dropped', () => {
+  const org = liveOrg();
+  const { res, calls } = runDetails([org.slice(0, 8), org.slice(8)]);
+  assert.match(res.stdout, /16 repos:/, res.stdout + res.stderr);
+  assert.match(res.stdout, /Kolwen/);
+  assert.equal(calls.filter((c) => c.path.startsWith('/orgs/TheColliery/repos')).length, 2);
+});
+
+test('skeleton-check.mjs --details with every repo at the floor: exit 0', () => {
+  const { res } = runDetails([[repoObj('CoalMine'), repoObj('template-x', { is_template: true, topics: [] })]]);
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  assert.match(res.stdout, /2 repos: 1 OK · 0 FAIL · 1 N\/A/);
+});
+
+test('skeleton-check.mjs --details without GITHUB_TOKEN: FAILS loudly (the private repos would silently vanish from the table) and makes no call', () => {
+  const { res, calls } = runDetails([liveOrg()], { token: null });
+  assert.equal(res.status, 1);
+  assert.match(res.stderr + res.stdout, /GITHUB_TOKEN/);
+  assert.deepEqual(calls, []);
+});
+
+test('skeleton-check.mjs --details when the list call fails: exit 1 naming the HTTP status, never an empty "clean" table', () => {
+  const { res } = runDetails([[]], { status: 500 });
+  assert.equal(res.status, 1);
+  assert.match(res.stderr + res.stdout, /HTTP 500/);
+  assert.doesNotMatch(res.stdout, /0 repos: 0 OK/);
 });

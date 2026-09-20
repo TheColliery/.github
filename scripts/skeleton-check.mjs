@@ -12,11 +12,17 @@
 // lib/skeleton-check-lib.mjs's own `hasAnyKindMarker` for the mechanism + exhibit.
 //
 // Usage: node scripts/skeleton-check.mjs [--settings] [--clone <kind>=<path> ...]
+//        node scripts/skeleton-check.mjs --details
 //   --settings: also diff each live repo's GitHub settings against templates/repo-settings.*.json
 //               via REST GET calls (needs GITHUB_TOKEN in the environment; SKIPs, does not
 //               fail, when it is absent — an unset token is an expected local condition). For a
 //               published-code repo it also judges the gate ruleset's bypass_actors against the
 //               canon value (lib/ruleset-match.mjs GATE_RULESET_BYPASS, from SWEEP-MARKS.md -- UMB-131).
+//   --details:  its OWN mode (no local walk): one table of every repo in the org -- About description,
+//               website, topics, visibility -- diffed against DOC-PATTERN.md §Repo details, a FAIL line
+//               per gap, exit 1 on any FAIL (UMB-128). READ-ONLY at the API: it never writes a value --
+//               a room's reviewer holds its own About. Needs GITHUB_TOKEN (without it the private repos
+//               would silently vanish from the table, so its absence FAILS instead of skipping).
 //   --clone <kind>=<path>: an explicit local clone path for one of the three GitHub template
 //               repos (published-code/private-working/article), diffed against templates/<kind>/
 //               like a live room, EXCEPT that a template repo keeps the source's {{TOKEN}} slots
@@ -30,7 +36,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
-import { findRepos as findReposLib, SKELETON_FILES, TEMPLATE_DIR_FOR_KIND, parseGithubOrigin, matchesWithPlaceholders } from './lib/skeleton-check-lib.mjs';
+import { findRepos as findReposLib, SKELETON_FILES, TEMPLATE_DIR_FOR_KIND, parseGithubOrigin, matchesWithPlaceholders, formatDetailsTable } from './lib/skeleton-check-lib.mjs';
 import { isLicenseStub, licenseIdentityMismatches } from './lib/license-check-lib.mjs';
 import { anyRulesetCovers, gateBypassVerdicts } from './lib/ruleset-match.mjs';
 
@@ -112,7 +118,46 @@ async function ghGet(token, urlPath) {
   });
   let json = null;
   try { json = await res.json(); } catch {} // a body-less/non-JSON reply is not an error: status + ok still come from the HTTP response
-  return { status: res.status, ok: res.ok, json };
+  return { status: res.status, ok: res.ok, json, link: res.headers.get('link') };
+}
+
+// --details support (UMB-128) ---------------------------------------------------------
+
+const DETAILS_ORG = 'TheColliery';
+const DETAILS_MAX_PAGES = 10; // 1,000 repos; more than that is a loud FAIL, never a silently partial table
+
+// Every repo of the org, private ones included (the token decides), following the Link header.
+async function fetchOrgRepos(token) {
+  const first = `/orgs/${DETAILS_ORG}/repos?per_page=100&type=all`;
+  const repos = [];
+  let next = first;
+  for (let page = 0; next && page < DETAILS_MAX_PAGES; page++) {
+    const r = await ghGet(token, next);
+    if (!r.ok || !Array.isArray(r.json)) throw new Error(`GET ${next} -> HTTP ${r.status}`);
+    repos.push(...r.json);
+    // The next URL is response data that gets the token attached: pin it to this org's list endpoint.
+    const m = (r.link || '').match(/<https:\/\/api\.github\.com(\/orgs\/TheColliery\/repos\?[^>]+)>;\s*rel="next"/);
+    next = m ? m[1] : null;
+  }
+  if (next) throw new Error(`the org has more than ${DETAILS_MAX_PAGES} pages of repos -- the details table would be partial`);
+  return repos;
+}
+
+async function runDetails() {
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) {
+    console.error('FAIL: --details needs GITHUB_TOKEN in the environment (without it the private repos are absent from the table).');
+    process.exitCode = 1;
+    return;
+  }
+  const { table, fails, summary } = formatDetailsTable(await fetchOrgRepos(token));
+  console.log(`Repo details (DOC-PATTERN.md §Repo details) -- every repo of ${DETAILS_ORG}:\n`);
+  for (const line of table) console.log(line);
+  console.log('');
+  for (const line of fails) console.log(line);
+  if (fails.length) console.log('');
+  console.log(summary);
+  if (fails.length) process.exitCode = 1;
 }
 
 // Compares one non-N/A settings entry's fields against the live GET response and prints
@@ -220,6 +265,10 @@ function parseCloneArgs(argv) {
 
 async function main() {
   const args = process.argv.slice(2);
+  if (args.includes('--details')) {
+    await runDetails();
+    return;
+  }
   const withSettings = args.includes('--settings');
   const clones = parseCloneArgs(args);
 

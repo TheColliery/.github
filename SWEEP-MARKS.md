@@ -134,6 +134,7 @@ every surface that enumerates the suite, then read the RENDERED landing as a hum
 panel) is the gate a visitor passes BEFORE ever seeing the README—it outranks the README
 in sweep order, and the review lane verifies it FIRST on every release/launch. A polished
 README behind a stale About loses the visitor before the README loads.
+`node scripts/skeleton-check.mjs --details` is its instrument: one read-only table of every org repo's About description, website, topics and visibility against `DOC-PATTERN.md` §Repo details, a FAIL line per gap—it reports, and a room's own values stay with its reviewer.
 
 ### GitHub repo settings—the creation-time setup · **Owner: MAIN** (the marks above keep enumeration IN SYNC; this is the one-time repo CONFIG the mark registry did not cover)
 

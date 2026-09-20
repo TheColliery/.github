@@ -1,12 +1,13 @@
 // skeleton-check-lib.mjs — pure repo-discovery + classification logic for
 // skeleton-check.mjs, split out for unit testing (UMB-054 item 1's red-first test).
 // No network, no file-comparison — just "what repos exist under these zone dirs, and
-// what kind (if any) is each one." skeleton-check.mjs is a plain CLI tool, not a GATE
+// what kind (if any) is each one" (+ the `--details` verdicts on a repo's About, UMB-128). skeleton-check.mjs is a plain CLI tool, not a GATE
 // under node/runtime.md §1's scope (no enumerate-and-report contract needing dynamic
 // lib imports) — this file is imported statically, top-level, by design.
 
 import fs from 'fs';
 import path from 'path';
+import { isCoalRoomName } from './coal-team.mjs';
 
 // origin URL (read from a repo's own .git/config -- FILE data) -> { owner, repo } | null.
 // The pair is spliced into an API request PATH that carries the operator's token, so it
@@ -219,4 +220,72 @@ export function findRepos(zonesRoot, zones) {
     }
   }
   return repos;
+}
+
+// UMB-128 -- `--details`: the REPO DETAILS surface (About description · website · topics)
+// judged against DOC-PATTERN.md §"Repo details". Pure: the caller fetches the org's repo
+// list (`GET /orgs/{org}/repos`) and hands the objects here. The instrument REPORTS; it never
+// writes a value -- the room's reviewer holds its own (REPO-DETAILS OWNERSHIP).
+//
+// DOC-PATTERN defines the floor only for a public Coal* skill room ("the flock base set ...
+// the floor--present on every sibling"); for any other kind the section is silent, so no
+// floor is invented for it:
+//   room          description + website + the six base topics.
+//   public-other  description + website + at least one topic. The Website and Topics rows
+//                 bind any public front door; the six-token base is the SKILL-SUITE floor
+//                 and would be an off-target topic on, say, a model repo -- never demanded.
+//   template / private / archived  N/A (reported as a pending decision, not a floor).
+export const ORG_LANDING = 'https://github.com/TheColliery';
+export const BASE_TOPICS = Object.freeze(['claude-code', 'claude', 'ai-agents', 'agent-skills', 'ai-coding', 'developer-tools']);
+
+const DETAILS_NA = {
+  archived: 'archived -- not a live front door',
+  template: 'template repo -- DOC-PATTERN §Repo details defines no floor for one (decision pending)',
+  private: 'private -- no visitor reads its About; DOC-PATTERN §Repo details binds the public card',
+};
+
+/** 'archived' | 'template' | 'private' | 'room' | 'public-other' -- first match wins. */
+export function detailsKind(repo) {
+  if (repo.archived) return 'archived';
+  if (repo.is_template) return 'template';
+  if (repo.private) return 'private';
+  return isCoalRoomName(repo.name) ? 'room' : 'public-other';
+}
+
+/** { kind, status: 'OK' | 'FAIL' | 'N/A', reasons: string[] } for one org repo object. */
+export function detailsVerdict(repo) {
+  const kind = detailsKind(repo);
+  if (kind in DETAILS_NA) return { kind, status: 'N/A', reasons: [DETAILS_NA[kind]] };
+  const topics = Array.isArray(repo.topics) ? repo.topics : [];
+  const reasons = [];
+  if (!(repo.description ?? '').trim()) reasons.push('description is empty -- DOC-PATTERN §Repo details: ONE clear About that is accurate and non-stale');
+  if (kind === 'room') {
+    const missing = BASE_TOPICS.filter((t) => !topics.includes(t));
+    if (missing.length) reasons.push(`topics missing the base floor: ${missing.join(', ')}`);
+  } else if (topics.length === 0) {
+    reasons.push('no topics -- DOC-PATTERN §Repo details: every specific a searcher would type');
+  }
+  if (!(repo.homepage ?? '').trim()) reasons.push('website is empty -- DOC-PATTERN §Repo details: the org landing unless the tool has a better front door');
+  return { kind, status: reasons.length ? 'FAIL' : 'OK', reasons };
+}
+
+const clip = (s, n) => (s.length > n ? `${s.slice(0, n - 3)}...` : s);
+const sameUrl = (a, b) => a.replace(/\/+$/, '').toLowerCase() === b.replace(/\/+$/, '').toLowerCase();
+
+/** One table row per repo (sorted by name), the FAIL lines, and reconciled counts. Does not mutate `repos`. */
+export function formatDetailsTable(repos) {
+  const rows = [...repos].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase())).map((r) => ({ r, v: detailsVerdict(r) }));
+  const w = Math.max(24, ...rows.map(({ r }) => r.name.length));
+  const table = [`${'REPO'.padEnd(w)} ${'VISIBILITY'.padEnd(10)} ${'KIND'.padEnd(12)} ${'TOPICS'.padEnd(6)} ${'WEBSITE'.padEnd(28)} ${'VERDICT'.padEnd(7)} DESCRIPTION`];
+  const fails = [];
+  const counts = { ok: 0, fail: 0, na: 0 };
+  for (const { r, v } of rows) {
+    const site = (r.homepage ?? '').trim();
+    const siteCell = !site ? '-' : sameUrl(site, ORG_LANDING) ? 'org landing' : clip(site, 28);
+    const desc = (r.description ?? '').trim();
+    table.push(`${r.name.padEnd(w)} ${(r.private ? 'private' : 'public').padEnd(10)} ${v.kind.padEnd(12)} ${String((r.topics ?? []).length).padEnd(6)} ${siteCell.padEnd(28)} ${v.status.padEnd(7)} ${desc ? clip(desc, 60) : '-'}`);
+    if (v.status === 'FAIL') for (const reason of v.reasons) fails.push(`FAIL ${r.name} (${v.kind}): ${reason}`);
+    counts[v.status === 'OK' ? 'ok' : v.status === 'FAIL' ? 'fail' : 'na']++;
+  }
+  return { table, fails, counts, summary: `${rows.length} repos: ${counts.ok} OK · ${counts.fail} FAIL · ${counts.na} N/A` };
 }
