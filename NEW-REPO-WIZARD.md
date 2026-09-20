@@ -86,7 +86,7 @@
 
 ## Phase F—Org landing · owner: **`.github` deputy** (steps 1-4, 7-8) + each new room's own people (steps 5-6, 9)
 
-21. `SWEEP-MARKS.md` §"Event 4—New skill/tool launch" already enumerates the full 9-mark list with an owner per mark—**cited, not copied here.** A copied count drifts; this org has measured that exact drift once already (the `SKILL_REGISTRY.md` rule against embedding version numbers exists for the identical reason).
+21. `SWEEP-MARKS.md` §"Event 4—New skill/tool launch" already enumerates the full mark list with an owner per mark—**cited, not copied here.** A copied count drifts; this org has measured that exact drift once already (the `SKILL_REGISTRY.md` rule against embedding version numbers exists for the identical reason).
 
 ## Where the org has a rule but no mechanism—every instance found while writing this
 
@@ -95,11 +95,11 @@
 - Step 10 (local governance file shape)—no written pattern for the room `CLAUDE.md`'s `@import` shape; it exists only as convention across live rooms.
 - Step 13 (`fetch-depth: 0`)—no gate asserts every repo's `ci.yml` carries it; CoalMine's own fix landed reactively, after the SKIP had already been silently wrong.
 - Step 18 (repo settings)—no API-diff tool compares a new repo's settings against a live sibling automatically; `SWEEP-MARKS.md` itself names this as a manual comparison, and separately notes a `repo-setup.mjs` that COULD script the whole settings table does not exist.
-- Step 21 (org landing marks)—the 9-mark list is a checklist a human/head executes by reading it; nothing fails CI if a mark is missed.
+- Step 21 (org landing marks)—the mark list is a checklist a human/head executes by reading it; nothing fails CI if a mark is missed.
 
 ## What I pointed at versus what I had to write fresh
 
-**Pointed at (no restatement, verified current against the file):** `SKILL-REPO-PATTERN.md` (shape, layers, New-repo checklist), `DOC-PATTERN.md` (public docs, repo-details), `SWEEP-MARKS.md` (Event 4's 9 marks, the repo-settings table), `scripts-quality.md` (hooks-not-installed-by-cloning), `node/runtime.md` §6 (Node floor), `AGENTS.md` (REPO-DETAILS OWNERSHIP, no-external-assumption, GitHub/`gh`-removed facts), `MEMORY.md` (GitHub org facts, the Apache-2.0 relicense note).
+**Pointed at (no restatement, verified current against the file):** `SKILL-REPO-PATTERN.md` (shape, layers, New-repo checklist), `DOC-PATTERN.md` (public docs, repo-details), `SWEEP-MARKS.md` (Event 4's mark list, the repo-settings table), `scripts-quality.md` (hooks-not-installed-by-cloning), `node/runtime.md` §6 (Node floor), `AGENTS.md` (REPO-DETAILS OWNERSHIP, no-external-assumption, GitHub/`gh`-removed facts), `MEMORY.md` (GitHub org facts, the Apache-2.0 relicense note).
 
 **Written fresh here (no existing pattern named it):** the local-governance-file-shape gap (step 10), the explicit per-repo-vs-org-level workflow split (step 11, verified by directly checking which files exist where—this distinction was not written down anywhere before this document), and the "fourth-tense" mechanism-or-none list above, which is this document's own accounting, not copied from any source.
 

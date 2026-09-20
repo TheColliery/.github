@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'new-repo.mjs');
 
@@ -342,4 +342,102 @@ test('repo-settings.private-working.json: allowAutoMerge is encoded as an N/A-wi
   const settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
   assert.equal(settings.allowAutoMerge?.status, 'n/a');
   assert.ok(typeof settings.allowAutoMerge.reason === 'string' && settings.allowAutoMerge.reason.length > 20, 'the N/A cell must carry a real reason, not a placeholder');
+});
+
+// ---------------------------------------------------------------------------------
+// UMB-127: --apply-settings on a published-code Coal* room also keeps the GitHub `Coal*`
+// team (membership at Read + the description derived from the team's repo list), and
+// `--dry-run` makes the WHOLE apply write-free. Spawns the REAL script with a fetch stub
+// preloaded (NODE_OPTIONS=--import), so the assertion is on the HTTP calls it actually
+// made -- never a re-derivation of its logic. The stub is stateful just enough for the
+// read-back: a PUT adds the repo to the team list, a PATCH sets the description.
+
+const TEAM_STUB = `
+import fs from 'node:fs';
+const S = JSON.parse(process.env.STUB_STATE);
+globalThis.fetch = async (url, init = {}) => {
+  const p = String(url).replace('https://api.github.com', '');
+  const method = init.method || 'GET';
+  fs.appendFileSync(process.env.STUB_LOG, JSON.stringify({ method, path: p }) + '\\n');
+  const reply = (status, obj) => new Response(status === 204 ? null : JSON.stringify(obj), { status });
+  if (method === 'GET' && p === '/repos/TheColliery/' + S.repo.name) return reply(200, S.repo);
+  if (method === 'GET' && p === '/orgs/TheColliery/teams/coal') return reply(200, { description: S.description });
+  if (method === 'GET' && p.startsWith('/orgs/TheColliery/teams/coal/repos')) return reply(200, S.teamRepos);
+  if (method === 'GET' && p.endsWith('/rulesets')) return reply(200, []);
+  if (method === 'PUT' && p === '/orgs/TheColliery/teams/coal/repos/TheColliery/' + S.repo.name) {
+    S.teamRepos = [...S.teamRepos.filter((r) => r.name !== S.repo.name), { ...S.repo, role_name: 'read' }];
+    return reply(204);
+  }
+  if (method === 'PATCH' && p === '/orgs/TheColliery/teams/coal') {
+    S.description = JSON.parse(init.body).description;
+    return reply(200, { description: S.description });
+  }
+  return reply(200, {});
+};
+`;
+
+const STUB_DESC = "The Coal* skill series: CoalMine, CoalTipple, CoalBoard, CoalHearth, CoalFace, CoalWash, CoalLedger. Members hold Read on the seven public rooms (the least role: review requests and mentions); every change still lands through a pull request. This team is the one place a member's Coal* access comes from.";
+const STUB_TEAM = [
+  ['CoalMine', 1259836955], ['CoalTipple', 1269347378], ['CoalBoard', 1273752906], ['CoalHearth', 1285876949],
+  ['CoalFace', 1286819933], ['CoalWash', 1294577372], ['CoalLedger', 1294577413],
+].map(([name, id]) => ({ name, id, private: false, role_name: 'read' }));
+
+function runWithTeamStub(args, repo) {
+  const dir = scratchDir();
+  const stubFile = path.join(dir, 'stub.mjs');
+  const logFile = path.join(dir, 'calls.jsonl');
+  fs.writeFileSync(stubFile, TEAM_STUB);
+  fs.writeFileSync(logFile, '');
+  const res = spawnSync(process.execPath, [SCRIPT, ...args], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      GITHUB_TOKEN: 'stub-token',
+      NODE_OPTIONS: `--import=${pathToFileURL(stubFile).href}`,
+      STUB_LOG: logFile,
+      STUB_STATE: JSON.stringify({ repo, teamRepos: STUB_TEAM, description: STUB_DESC }),
+    },
+  });
+  const calls = fs.readFileSync(logFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  fs.rmSync(dir, { recursive: true, force: true });
+  return { res, calls };
+}
+
+const NEW_ROOM = { name: 'CoalNext', id: 1300000000, private: false };
+
+test('new-repo.mjs --apply-settings published-code --dry-run (a NEW Coal* room): sends ZERO writes anywhere -- not the team calls, not the repo PATCH/PUTs -- and names what it would do (UMB-127)', () => {
+  const { res, calls } = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalNext', '--dry-run'], NEW_ROOM);
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  assert.deepEqual(calls.filter((c) => c.method !== 'GET'), [], 'dry-run must make no write call');
+  assert.match(res.stdout, /coalTeam: DRY-RUN .*PUT \/orgs\/TheColliery\/teams\/coal\/repos\/TheColliery\/CoalNext/);
+  assert.match(res.stdout, /repoPatch: DRY-RUN/);
+});
+
+test('new-repo.mjs --apply-settings published-code --dry-run (a room already on the team, the LIVE canon): coalTeam IN-SYNC, zero writes (UMB-127)', () => {
+  const { res, calls } = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalMine', '--dry-run'], { name: 'CoalMine', id: 1259836955, private: false });
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  assert.deepEqual(calls.filter((c) => c.method !== 'GET'), []);
+  assert.match(res.stdout, /coalTeam: IN-SYNC .*equals the live one \(304 chars\)/);
+});
+
+test('new-repo.mjs --apply-settings published-code (LIVE, a NEW Coal* room): PUT the team membership, then PATCH the description, then the read-back passes (UMB-127)', () => {
+  const { res, calls } = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalNext'], NEW_ROOM);
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  const teamWrites = calls.filter((c) => c.method !== 'GET' && c.path.startsWith('/orgs/'));
+  assert.deepEqual(teamWrites.map((c) => `${c.method} ${c.path}`), [
+    'PUT /orgs/TheColliery/teams/coal/repos/TheColliery/CoalNext',
+    'PATCH /orgs/TheColliery/teams/coal',
+  ]);
+  assert.match(res.stdout, /coalTeam: ok/);
+});
+
+test('new-repo.mjs --apply-settings published-code on a NON-Coal repo, and any other kind on a Coal name: no team call at all (UMB-127)', () => {
+  const a = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/Kolwen', '--dry-run'], { name: 'Kolwen', id: 5, private: false });
+  assert.equal(a.res.status, 0, a.res.stdout + a.res.stderr);
+  assert.deepEqual(a.calls.filter((c) => c.path.includes('/teams/')), []);
+  assert.match(a.res.stdout, /coalTeam: N\/A/);
+  const b = runWithTeamStub(['--apply-settings', 'article', '--repo', 'TheColliery/CoalNext', '--dry-run'], NEW_ROOM);
+  assert.equal(b.res.status, 0, b.res.stdout + b.res.stderr);
+  assert.deepEqual(b.calls.filter((c) => c.path.includes('/teams/')), []);
+  assert.doesNotMatch(b.res.stdout, /coalTeam/);
 });

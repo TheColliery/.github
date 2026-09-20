@@ -112,7 +112,7 @@ versions—CoalWash + CoalLedger launched already scanned at v2.3.11 while the o
 suite-wide re-scan that brings every repo to the SAME version, then bumps the baseline to match,
 closes it. **Owner:** the skillspector deputy tracks it.
 
-## Event 4—New skill/tool launch (a new sibling) · 9 marks
+## Event 4—New skill/tool launch (a new sibling) · 10 marks
 
 | # | Mark | Where | Owner |
 |---|---|---|---|
@@ -125,6 +125,7 @@ closes it. **Owner:** the skillspector deputy tracks it.
 | 7 | Tool registry entry | machine-local `SKILL_REGISTRY.md` | MAIN |
 | 8 | Updater registration | machine-local `update-tools.ps1` | MAIN |
 | 9 | New repo's own repo-details (About description + topics + website per DOC-PATTERN's repo-details shape; Releases panel seeded) | repo settings | the NEW room's reviewer |
+| 10 | GitHub team `Coal*` (a Coal* room only, else N/A): add the repo to the team at Read and re-issue the description with the new room named. The description is DERIVED from the team's own repo list, never hand-typed | org team `TheColliery/coal`—`node scripts/new-repo.mjs --apply-settings published-code --repo TheColliery/<Room> --dry-run`, then the same without `--dry-run`; read the team back at the API | MAIN (an org-level write; the script does the PUT + PATCH) |
 
 Rule: a suite-size number (tool count, sibling list) is a one-flock invariant—grep-sweep
 every surface that enumerates the suite, then read the RENDERED landing as a human.
@@ -138,7 +139,7 @@ README behind a stale About loses the visitor before the README loads.
 
 > **The settings half is the one that gets SKIPPED** (proven live at the CoalWash + CoalLedger launch, 2026-07-09: the 8 enumeration marks + repo-details were done, but Discussions / delete-branch-on-merge / secret-scanning + push-protection + Dependabot-security-updates were all left at their disabled defaults). Why: the enumeration marks produce a visible FILE DIFF (you see the row you added), the settings produce NONE (an API state change, invisible in git)—so a launch that "looks done" in the diff is not. **On every new-sibling launch, run BOTH halves and VERIFY the settings via the API afterward, comparing against a live sibling** (`GET /repos/{owner}/{repo}` + `.../actions/permissions/workflow`).
 
-The 8 marks above sweep the enumeration surfaces so a new sibling is *listed* everywhere. Separately, a new repo needs its GitHub SETTINGS set once—the mark registry covers up-to-date drift, NOT creation. Apply these (API-scriptable via `PATCH /repos/{owner}/{repo}` + the code-security/actions endpoints):
+The marks above sweep the enumeration surfaces so a new sibling is *listed* everywhere. Separately, a new repo needs its GitHub SETTINGS set once—the mark registry covers up-to-date drift, NOT creation. Apply these (API-scriptable via `PATCH /repos/{owner}/{repo}` + the code-security/actions endpoints):
 
 | Setting | Value | Field / where |
 |---|---|---|

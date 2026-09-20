@@ -11,6 +11,11 @@
 // re-applied by running this — the PATCH/PUT calls below are naturally idempotent, they
 // set a value rather than toggling one).
 //
+// --dry-run (UMB-127) makes the WHOLE apply write-free: every GET still runs, every
+// PATCH/PUT is reported as DRY-RUN and never sent. For a published-code PUBLIC Coal*
+// room the apply also keeps the GitHub `Coal*` team (lib/coal-team.mjs): the room's
+// membership at Read, and the team description regenerated from the team's own repo list.
+//
 // Zero-dependency (Phoenix #2) — uses Node's built-in global `fetch`, never a library;
 // fail-loud CLI (scripts-quality.md §1). GITHUB_TOKEN is read from the environment; per
 // house rule the `gh` CLI is never invoked (it belongs to a separate session on this
@@ -21,7 +26,7 @@
 //     --name <repo> --license <spdx-or-a-file-path> [--license-id <spdx-or-name>] \
 //     [--org TheColliery] [--holder "Name"] [--year 2026] <target-dir>
 //
-//   node scripts/new-repo.mjs --apply-settings <kind> --repo <owner>/<name>
+//   node scripts/new-repo.mjs --apply-settings <kind> --repo <owner>/<name> [--dry-run]
 //
 // <kind> is one of: published-code | private-working | article
 //
@@ -50,6 +55,7 @@ import path from 'path';
 import { fileURLToPath } from 'node:url';
 import { isLicenseStub, identifyLicense, normalizeLicenseId } from './lib/license-check-lib.mjs';
 import { anyRulesetCovers } from './lib/ruleset-match.mjs';
+import { syncCoalTeam } from './lib/coal-team.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const templatesRoot = path.join(scriptDir, '..', 'templates');
@@ -147,7 +153,7 @@ async function ghRequest(token, method, urlPath, body) {
 // endpoint (private_vulnerability_reporting on a private repo, a ruleset without a paid
 // org plan) is an EXPECTED outcome for some kinds, per repo-settings.<kind>.json's own
 // "n/a" entries, and must read as a named skip, never as a script crash.
-async function applySettings(kind, ownerRepo) {
+async function applySettings(kind, ownerRepo, dry) {
   const token = process.env.GITHUB_TOKEN;
   if (!token) {
     console.error('FAIL: GITHUB_TOKEN is not set in the environment.');
@@ -172,9 +178,14 @@ async function applySettings(kind, ownerRepo) {
 
   const results = [];
   const base = `/repos/${owner}/${repo}`;
+  // --dry-run: a read goes out, a write is reported and never sent (one choke point, so no
+  // surface below can forget the flag).
+  const req = (method, urlPath, body) => (dry && method !== 'GET'
+    ? Promise.resolve({ ok: true, status: 'DRY-RUN', json: null })
+    : ghRequest(token, method, urlPath, body));
 
   if (settings.repoPatch) {
-    const r = await ghRequest(token, 'PATCH', base, settings.repoPatch);
+    const r = await req('PATCH', base, settings.repoPatch);
     results.push({ surface: 'repoPatch', ok: r.ok, status: r.status });
   }
 
@@ -188,19 +199,19 @@ async function applySettings(kind, ownerRepo) {
   }
 
   if (settings.vulnerabilityAlerts?.enable) {
-    const r = await ghRequest(token, 'PUT', `${base}/vulnerability-alerts`);
+    const r = await req('PUT', `${base}/vulnerability-alerts`);
     results.push({ surface: 'vulnerabilityAlerts', ok: r.ok, status: r.status });
   }
 
   if (settings.automatedSecurityFixes?.enable) {
-    const r = await ghRequest(token, 'PUT', `${base}/automated-security-fixes`);
+    const r = await req('PUT', `${base}/automated-security-fixes`);
     results.push({ surface: 'automatedSecurityFixes', ok: r.ok, status: r.status });
   }
 
   if (settings.secretScanning?.status === 'enabled') {
     // Secret scanning + push protection are toggled through the repo PATCH endpoint's
     // own security_and_analysis object — not a separate PUT/POST endpoint.
-    const r = await ghRequest(token, 'PATCH', base, {
+    const r = await req('PATCH', base, {
       security_and_analysis: {
         secret_scanning: { status: 'enabled' },
         secret_scanning_push_protection: { status: settings.secretScanning.pushProtection === 'enabled' ? 'enabled' : 'disabled' },
@@ -212,14 +223,14 @@ async function applySettings(kind, ownerRepo) {
   }
 
   if (settings.privateVulnerabilityReporting?.enable) {
-    const r = await ghRequest(token, 'PUT', `${base}/private-vulnerability-reporting`);
+    const r = await req('PUT', `${base}/private-vulnerability-reporting`);
     results.push({ surface: 'privateVulnerabilityReporting', ok: r.ok, status: r.status });
   } else {
     results.push({ surface: 'privateVulnerabilityReporting', ok: true, status: 'N/A', reason: settings.privateVulnerabilityReporting?.reason });
   }
 
   if (settings.actionsWorkflowToken) {
-    const r = await ghRequest(token, 'PUT', `${base}/actions/permissions/workflow`, settings.actionsWorkflowToken);
+    const r = await req('PUT', `${base}/actions/permissions/workflow`, settings.actionsWorkflowToken);
     results.push({ surface: 'actionsWorkflowToken', ok: r.ok, status: r.status });
   }
 
@@ -232,11 +243,11 @@ async function applySettings(kind, ownerRepo) {
     // maintainer's own next push. That is the owner's press, not this script's; an
     // uncovered room is reported PENDING, never applied.
     const wantedTypes = (settings.ruleset.rules || []).map((rule) => rule.type);
-    const list = await ghRequest(token, 'GET', `${base}/rulesets`);
+    const list = await req('GET', `${base}/rulesets`);
     const candidates = Array.isArray(list.json) ? list.json.filter((rs) => rs.enforcement === 'active' && rs.target === 'branch') : [];
     const details = [];
     for (const c of candidates) {
-      const d = await ghRequest(token, 'GET', `${base}/rulesets/${c.id}`);
+      const d = await req('GET', `${base}/rulesets/${c.id}`);
       if (d.json) details.push(d.json);
     }
     const covered = anyRulesetCovers(details, wantedTypes);
@@ -249,7 +260,14 @@ async function applySettings(kind, ownerRepo) {
     results.push({ surface: 'ruleset', ok: true, status: 'N/A', reason: settings.ruleset.reason });
   }
 
-  console.log(`applySettings: ${kind} -> ${owner}/${repo}`);
+  // UMB-127: the GitHub `Coal*` team -- a new-sibling enumeration surface. Only a
+  // published-code room can be on it; syncCoalTeam itself declines a private / non-Coal repo.
+  if (kind === 'published-code') {
+    const t = await syncCoalTeam({ call: req, owner, repoName: repo, dry });
+    results.push({ surface: 'coalTeam', ...t });
+  }
+
+  console.log(`applySettings: ${kind} -> ${owner}/${repo}${dry ? ' (DRY-RUN: no write is sent)' : ''}`);
   for (const r of results) {
     // PENDING (CWK-069/UMB-072): a surface this script deliberately did NOT apply and
     // is returning to the human as a decision -- same reporting tier as N/A (never an
@@ -258,9 +276,11 @@ async function applySettings(kind, ownerRepo) {
     let line;
     if (r.status === 'N/A') line = `  ${r.surface}: N/A (${r.reason || 'no reason recorded'})`;
     else if (r.status === 'PENDING') line = `  ${r.surface}: PENDING (${r.reason || 'no reason recorded'})`;
+    else if (r.status === 'DRY-RUN' || r.status === 'IN-SYNC') line = `  ${r.surface}: ${r.status} (${r.reason || 'no write made'})`;
+    else if (r.reason) line = `  ${r.surface}: ${r.ok ? 'ok' : 'FAIL'} (${r.status === 'FAIL' ? '' : 'HTTP ' + r.status + ', '}${r.reason})`;
     else line = `  ${r.surface}: ${r.ok ? 'ok' : 'FAIL'} (HTTP ${r.status}${r.note ? ', ' + r.note : ''})`;
     console.log(line);
-    if (!r.ok && r.status !== 'N/A' && r.status !== 'PENDING') process.exitCode = 1;
+    if (!r.ok) process.exitCode = 1;
   }
 }
 
@@ -282,7 +302,7 @@ async function main() {
       process.exitCode = 1;
       return;
     }
-    await applySettings(kind, args.repo);
+    await applySettings(kind, args.repo, args['dry-run'] === true);
     return;
   }
 
