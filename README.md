@@ -50,6 +50,12 @@ This repository houses the global configuration, landing page profile, central i
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalLedger?style=flat-square&logo=github)](https://github.com/TheColliery/CoalLedger/network/members)
   [![Downloads](https://img.shields.io/badge/CoalLedger_Downloads-216%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalLedger)
   [![Developers](https://img.shields.io/badge/CoalLedger_Developers-82%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalLedger)
+* **[CoalGob](https://github.com/TheColliery/CoalGob)** *(beta)*: Recoverable-delete guard for AI coding agents—beta, classifier only: a zero-dependency parser that reads a shell command and returns DESTRUCTION / OUT_OF_SCOPE / NO_MATCH. No hook and no interception yet, so nothing is blocked or rerouted today, and NO_MATCH is never a safety claim.
+  <br>
+  [![Stars](https://img.shields.io/github/stars/TheColliery/CoalGob?style=flat-square&logo=github)](https://github.com/TheColliery/CoalGob/stargazers)
+  [![Forks](https://img.shields.io/github/forks/TheColliery/CoalGob?style=flat-square&logo=github)](https://github.com/TheColliery/CoalGob/network/members)
+  [![Downloads](https://img.shields.io/badge/CoalGob_Downloads-0%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalGob)
+  [![Developers](https://img.shields.io/badge/CoalGob_Developers-0%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalGob)
 
 ---
 
