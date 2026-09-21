@@ -30,13 +30,24 @@ jobs:
             | sed -E 's/.*"([^"]+)".*/\1/' || true)
           pinned=$(tr -d '[:space:]' < .skillspector-version 2>/dev/null || true)
           echo "upstream='$upstream'  pinned='$pinned'"
+          # A skip must never read as a clean bill: an unreadable version means this weekly run did NOT
+          # watch (the E1 re-scan trigger of the SkillSpector auto-program). So the skip path names itself --
+          # a ::warning:: annotation on the run plus a step-summary block -- and STILL exits 0: a transient
+          # upstream fetch failure must not turn every Monday red (a red run is a next-turn obligation).
+          # The values are deliberately NOT echoed into the annotation (untrusted external text).
+          skip() {
+            echo "::warning title=skillspector-version-watch skipped::$1 -- this run did NOT check for a new SkillSpector version"
+            { echo "### skillspector-version-watch: SKIPPED"; echo; echo "$1. The weekly check did not run; if this repeats, the SkillSpector re-scan trigger is silent."; } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            exit 0
+          }
           if [ -z "$upstream" ] || [ -z "$pinned" ]; then
-            echo "version unreadable -- skipping (no false alert)"; exit 0
+            skip "version unreadable (upstream $([ -n "$upstream" ] && echo readable || echo UNREADABLE), pinned .skillspector-version $([ -n "$pinned" ] && echo readable || echo UNREADABLE))"
           fi
           # $upstream comes from a mutable external file -> validate it is a plain numeric
           # version BEFORE it reaches any gh argument (no flag/quote/newline injection).
           if ! [[ "$upstream" =~ ^[0-9]+(\.[0-9]+){1,3}$ ]]; then
-            echo "upstream version failed the numeric format check ('$upstream') -- skipping"; exit 0
+            echo "upstream version failed the numeric format check ('$upstream')"
+            skip "upstream version failed the numeric format check"
           fi
           if [ "$upstream" = "$pinned" ]; then
             echo "up to date ($pinned)"; exit 0
