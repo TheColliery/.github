@@ -55,17 +55,42 @@ export function hasPsObjectLeak(body) {
   return PS_LEAK_MARKERS.some((marker) => body.includes(marker));
 }
 
+// A SemVer pre-release identifier: a hyphen right after MAJOR.MINOR.PATCH (v0.1.0-beta.1, v2.0.0-rc.1).
+const PRERELEASE_TAG = /^v?\d+\.\d+\.\d+-[0-9A-Za-z.-]+/;
+
+/**
+ * THE LAUNCH FORM (owner 2026-09-21, RELEASE-PATTERN.md "Which tags get a Release"): a repo whose FIRST public version is a pre-release form gets ONE
+ * Release marked prerelease:true as its launch announcement; later pre-release tags stay tag-only;
+ * the first stable closes the form. So the one conformant prerelease Release is the repo's OLDEST
+ * published Release. Returns that Release's tag_name, or null when the oldest published Release is
+ * stable (or there is none). Order-independent; drafts are not published and are ignored.
+ */
+export function launchFormTag(releases) {
+  const published = (releases ?? []).filter((r) => r && !r.draft);
+  if (published.length === 0) return null;
+  const oldest = published.reduce((a, b) => (Date.parse(b.created_at) < Date.parse(a.created_at) ? b : a));
+  return oldest.prerelease === true ? oldest.tag_name : null;
+}
+
 /**
  * Run every mechanical check against one GitHub Release object (the REST API shape:
  * name, tag_name, body, prerelease, draft). Returns an array of finding strings —
  * empty means clean. Caller filters to published (non-draft) releases before calling.
+ * `ctx.launchTag` (from launchFormTag over the repo's releases) names the one prerelease Release
+ * the launch form allows; a caller that passes no ctx gets the original stable-only reading.
  */
-export function checkRelease(release, repoName) {
+export function checkRelease(release, repoName, ctx = {}) {
   const findings = [];
   const title = release.name ?? '';
 
   if (release.prerelease === true) {
-    findings.push('prerelease=true on a published Release (tags=beta+stable / Releases=stable-only — a beta/rc tag gets no Release at all)');
+    if (ctx.launchTag !== undefined && ctx.launchTag === release.tag_name) {
+      if (!PRERELEASE_TAG.test(release.tag_name ?? '')) {
+        findings.push(`prerelease=true on tag '${release.tag_name}', which has no SemVer pre-release identifier (the launch form is for a beta/rc/alpha first version)`);
+      }
+    } else {
+      findings.push(`prerelease=true on a published Release that is not the repo's launch-form Release (tags=beta+stable / Releases=stable-only, plus exactly ONE launch-form pre-release Release: the repo's first)`);
+    }
   }
 
   if (isBareVersionTitle(title)) {

@@ -3,7 +3,8 @@
 // zero enforcement anywhere in the tree until this file. Reads every repo's PUBLISHED
 // GitHub Releases (unauthenticated, public, GET only) and checks the MECHANICAL half of
 // the pattern only: title shape (bare-version, repo-prefix, separator), prerelease===false
-// on a published Release, body non-empty, emoji-in-heading, and (UMB-050/053) whether the
+// on a published Release (except the repo's ONE launch-form Release, its oldest — the 2026-09-21
+// ruling), body non-empty, emoji-in-heading, and (UMB-050/053) whether the
 // body carries the PS-5.1 ETS-object-leak signature — this audit CANNOT byte-compare a
 // published body against "the intended text" (it never saw the intent, only the published
 // result), so it detects the known defect's structural shape instead; the byte/length
@@ -30,16 +31,19 @@ import path from 'node:path';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
-// The 8 org repos as of 2026-08 (MEMORY.md "GitHub / org facts"). CoalMine still sits at
-// HetCreep/CoalMine pending the marketplace-review transfer; the rest are under TheColliery.
+// The seven Coal rooms + CoalGob (public beta since 2026-09-21) + the org landing repo, all under
+// TheColliery. CoalMine moved in from HetCreep/CoalMine on 2026-09-17 (the old address only
+// redirects; a read of it is a read of a dead name) and CoalGob is the launch-form exhibit
+// (checkRelease's ctx.launchTag), so a room missing here is a room whose Releases nobody checks.
 const REPOS = [
-  { owner: 'HetCreep', repo: 'CoalMine' },
+  { owner: 'TheColliery', repo: 'CoalMine' },
   { owner: 'TheColliery', repo: 'CoalTipple' },
   { owner: 'TheColliery', repo: 'CoalBoard' },
   { owner: 'TheColliery', repo: 'CoalHearth' },
   { owner: 'TheColliery', repo: 'CoalFace' },
   { owner: 'TheColliery', repo: 'CoalWash' },
   { owner: 'TheColliery', repo: 'CoalLedger' },
+  { owner: 'TheColliery', repo: 'CoalGob' },
   { owner: 'TheColliery', repo: '.github' },
 ];
 
@@ -63,9 +67,11 @@ async function main() {
   // lib import is dynamic, inside the try, so a missing/corrupt lib produces a FAIL line
   // instead of an uncaught ERR_MODULE_NOT_FOUND stack trace with zero output.
   let checkRelease;
+  let launchFormTag;
   try {
     const lib = await import(pathToFileURL(path.join(HERE, 'lib', 'release-conform-lib.mjs')).href);
     checkRelease = lib.checkRelease;
+    launchFormTag = lib.launchFormTag;
   } catch (e) {
     console.error(`[release-conform] FAIL: cannot load lib/release-conform-lib.mjs: ${e.message}`);
     process.exitCode = 1;
@@ -83,10 +89,12 @@ async function main() {
     try {
       const releases = await fetchReleases(owner, repo);
       const published = releases.filter((r) => !r.draft);
+      // THE LAUNCH FORM: the one prerelease Release a repo may carry is its OLDEST (RELEASE-PATTERN.md).
+      const launchTag = launchFormTag(published);
       console.log(`${owner}/${repo} — ${releases.length} release(s), ${published.length} published`);
       for (const release of published) {
         publishedCount++;
-        const findings = checkRelease(release, repo);
+        const findings = checkRelease(release, repo, { launchTag });
         if (findings.length === 0) {
           console.log(`  ✓ ${release.tag_name}`);
         } else {
