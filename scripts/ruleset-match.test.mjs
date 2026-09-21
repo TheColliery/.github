@@ -183,3 +183,51 @@ test('anyRulesetCovers / gateBypassVerdicts pass the default branch through: a g
   assert.equal(v.length, 1);
   assert.match(v[0].text, /no active required_status_checks ruleset/);
 });
+
+// UMB-112 residue 9: GitHub lets a ruleset name the default branch outright (`refs/heads/main`) instead of
+// with `~DEFAULT_BRANCH`. rulesetCoversRules only recognised the two symbolic forms, so a ruleset written
+// the explicit way was reported as not covering -- a false "main-guard missing", and a name-blind write
+// path would then try to CREATE a second, redundant ruleset (the failure CWK-069 exists to prevent). The
+// include list is now matched against the default ref with the same fnmatch-style matcher the exclude
+// list already uses -- which needs the default branch NAME, so without it an explicit include still
+// cannot be judged (false, never a guess).
+test('rulesetCoversRules: an explicit refs/heads/<default> include covers the default branch (UMB-112 residue 9)', () => {
+  const rs = ruleset({ conditions: { ref_name: { include: ['refs/heads/main'], exclude: [] } } });
+  assert.equal(rulesetCoversRules(rs, WANTED, 'main'), true);
+});
+
+test('rulesetCoversRules: an explicit include cannot be judged without the default branch name -- false, never a guess (UMB-112 residue 9)', () => {
+  const rs = ruleset({ conditions: { ref_name: { include: ['refs/heads/main'], exclude: [] } } });
+  assert.equal(rulesetCoversRules(rs, WANTED), false);
+});
+
+test('rulesetCoversRules: an explicit include of ANOTHER branch does not cover the default branch (UMB-112 residue 9 control)', () => {
+  const rs = ruleset({ conditions: { ref_name: { include: ['refs/heads/main'], exclude: [] } } });
+  assert.equal(rulesetCoversRules(rs, WANTED, 'trunk'), false);
+  const rel = ruleset({ conditions: { ref_name: { include: ['refs/heads/release/*'], exclude: [] } } });
+  assert.equal(rulesetCoversRules(rel, WANTED, 'main'), false);
+});
+
+test('rulesetCoversRules: a glob include that reaches the default branch covers it (UMB-112 residue 9)', () => {
+  for (const inc of ['refs/heads/ma*', 'refs/heads/**', 'refs/heads/m?in']) {
+    const rs = ruleset({ conditions: { ref_name: { include: [inc], exclude: [] } } });
+    assert.equal(rulesetCoversRules(rs, WANTED, 'main'), true, inc);
+  }
+});
+
+test('rulesetCoversRules: an explicit include that the same ruleset also EXCLUDES does not cover (UMB-112 residue 9 x row 21)', () => {
+  const rs = ruleset({ conditions: { ref_name: { include: ['refs/heads/main'], exclude: ['refs/heads/main'] } } });
+  assert.equal(rulesetCoversRules(rs, WANTED, 'main'), false);
+});
+
+test('gateBypassVerdicts: a gate that names the default branch explicitly is still found and judged (UMB-112 residue 9)', () => {
+  const gate = ruleset({
+    name: 'explicit-gate',
+    conditions: { ref_name: { include: ['refs/heads/main'], exclude: [] } },
+    rules: [{ type: 'required_status_checks' }],
+    bypass_actors: [...GATE_RULESET_BYPASS],
+  });
+  const v = gateBypassVerdicts([gate], GATE_RULESET_BYPASS, 'main');
+  assert.equal(v.length, 1);
+  assert.equal(v[0].ok, true, v[0].text);
+});

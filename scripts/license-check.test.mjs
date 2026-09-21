@@ -296,3 +296,29 @@ test('isLicenseStub: a short PROPRIETARY licence (all rights reserved, prior wri
   ].join('\n');
   assert.equal(isLicenseStub(proprietary), false);
 });
+
+// UMB-112 residue (5): new-repo.mjs copies the WORKING-TREE bytes of a template LICENSE. On a Windows
+// checkout core.autocrlf=true rewrites an unpinned file to CRLF, so the same template would scaffold
+// different legal-text bytes per platform. Every template LICENSE must therefore have platform-
+// independent bytes: either text UNSET (article, private-working: root .gitattributes) or eol pinned
+// to lf (published-code: its own nested .gitattributes, which BEATS a root line for that path --
+// measured with git check-attr, so a root '-text' for it would be a dead line).
+test('every templates/*/LICENSE has platform-independent bytes (text unset, or eol=lf)', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const { fileURLToPath } = await import('node:url');
+  const nodeFs = await import('node:fs');
+  const nodePath = await import('node:path');
+  const repo = nodePath.resolve(nodePath.dirname(fileURLToPath(import.meta.url)), '..');
+  const dirs = nodeFs.readdirSync(nodePath.join(repo, 'templates'), { withFileTypes: true }).filter((d) => d.isDirectory());
+  const licenses = dirs.map((d) => 'templates/' + d.name + '/LICENSE').filter((p) => nodeFs.existsSync(nodePath.join(repo, p)));
+  assert.ok(licenses.length >= 3, 'templates with a LICENSE found: ' + licenses.join(','));
+  const bad = [];
+  for (const p of licenses) {
+    const r = spawnSync('git', ['check-attr', 'text', 'eol', '--', p], { cwd: repo, encoding: 'utf8' });
+    assert.equal(r.status, 0, 'git check-attr failed for ' + p + ': ' + r.stderr);
+    const text = (r.stdout.match(/: text: (\S+)/) || [])[1];
+    const eol = (r.stdout.match(/: eol: (\S+)/) || [])[1];
+    if (!(text === 'unset' || eol === 'lf')) bad.push(p + ' (text=' + text + ', eol=' + eol + ')');
+  }
+  assert.deepEqual(bad, [], 'these template LICENSE files would scaffold different bytes on a CRLF checkout');
+});

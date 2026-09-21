@@ -54,6 +54,56 @@ test('new-repo.mjs article: the scaffold ships the pages its own CONTRIBUTING + 
   fs.rmSync(path.dirname(target), { recursive: true, force: true });
 });
 
+// UMB-112 residue (4): SUMMARY.md listed README / SOURCES / GOVERNANCE / the standard file and the
+// scaffold shipped none of them, so a fresh article repo's table of contents was four dead links. The
+// property is general -- EVERY relative link in the scaffold's SUMMARY.md must land on a file the
+// scaffold shipped -- so it is asserted as the property, not as a list of four names.
+test('new-repo.mjs article: every relative link in the scaffold SUMMARY.md resolves to a shipped file (UMB-112 residue 4)', () => {
+  const target = path.join(scratchDir(), 'r');
+  const res = run(['article', '--name', 'x', target]);
+  assert.equal(res.status, 0, res.stderr);
+  const summary = fs.readFileSync(path.join(target, 'SUMMARY.md'), 'utf8');
+  const links = [...summary.matchAll(/\]\(([^)#\s]+)\)/g)].map((m) => m[1]).filter((l) => !/^[a-z]+:/i.test(l));
+  assert.ok(links.length >= 8, 'SUMMARY.md links found: ' + links.join(','));
+  const dangling = links.filter((l) => !fs.existsSync(path.join(target, l)));
+  assert.deepEqual(dangling, [], 'SUMMARY.md links to files the scaffold did not ship');
+  for (const f of ['README.md', 'SOURCES.md', 'GOVERNANCE.md', '{{STANDARD_FILE}}.md']) {
+    const body = fs.readFileSync(path.join(target, f), 'utf8');
+    assert.match(body, /PLACEHOLDER/, f + ' must say it is a placeholder the author replaces');
+  }
+  fs.rmSync(path.dirname(target), { recursive: true, force: true });
+});
+
+// UMB-112 row 27 + residue 8: the generic published-code scaffold told EVERY new repo to "rebuild plugin/",
+// keep a SSOT file, and run hooks Phoenix-pure -- three Coal-skill-only instructions in a section that also
+// serves repos with no plugin. Row 27 moved the gate commands to the overlay; the sibling bullets in the
+// same "Development Rules" section were left. They now live in overlay-coal-skill/OVERLAY-README.md and the
+// section carries one token, so a non-plugin repo is never told to rebuild a directory it does not have.
+test('new-repo.mjs published-code: the CONTRIBUTING Development Rules section carries no Coal-plugin-only bullet (UMB-112 residue 8)', () => {
+  const target = path.join(scratchDir(), 'r');
+  const res = run(['published-code', '--name', 'x', target]);
+  assert.equal(res.status, 0, res.stderr);
+  const c = fs.readFileSync(path.join(target, 'CONTRIBUTING.md'), 'utf8').replace(/\r\n/g, '\n');
+  const start = c.indexOf('### Development Rules');
+  assert.ok(start >= 0, 'the section exists');
+  const section = c.slice(start, c.indexOf('\n---', start));
+  assert.doesNotMatch(section, /plugin\//, 'no plugin/ instruction in the generic scaffold');
+  assert.doesNotMatch(section, /Single Source of Truth|SSOT/, 'no SSOT-file instruction in the generic scaffold');
+  assert.doesNotMatch(section, /Phoenix/, 'no Phoenix-doctrine bullet in the generic scaffold');
+  assert.match(section, /\{\{DEVELOPMENT_RULES\}\}/, 'the repo-specific rules are a token the repo fills');
+  assert.match(section, /Add unit tests/, 'the generic bullets stay');
+  assert.match(section, /Language & tone/, 'the generic bullets stay');
+  fs.rmSync(path.dirname(target), { recursive: true, force: true });
+});
+
+test('overlay-coal-skill README carries the three bullets the generic CONTRIBUTING no longer does (UMB-112 residue 8)', () => {
+  const overlay = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'templates', 'overlay-coal-skill', 'OVERLAY-README.md'), 'utf8').replace(/\r\n/g, '\n');
+  assert.match(overlay, /\{\{DEVELOPMENT_RULES\}\}/);
+  assert.ok(overlay.includes('is the Single Source of Truth** for {{SSOT_CONTENT}}'), 'the SSOT bullet, tokens intact');
+  assert.ok(overlay.includes('**Synchronize `plugin/`:**'), 'the plugin/ sync bullet');
+  assert.ok(overlay.includes('**Keep hooks Phoenix-pure:**'), 'the hooks bullet');
+});
+
 test('new-repo.mjs article, --license <a pointer STUB file>: still REFUSES (non-zero exit, stub named) -- the refusal contract outlives the template fix', () => {
   const root = scratchDir();
   const stubFile = path.join(root, 'stub.txt');

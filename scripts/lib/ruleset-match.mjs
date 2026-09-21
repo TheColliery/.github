@@ -31,11 +31,14 @@ export function rulesetCoversRules(ruleset, wantedTypes, defaultBranch) {
   if (!ruleset || ruleset.enforcement !== 'active') return false;
   if (ruleset.target !== 'branch') return false;
   const refInclude = ruleset.conditions?.ref_name?.include || [];
-  // `~DEFAULT_BRANCH` is GitHub's own condition syntax for "the repo's default branch,
-  // whatever it is named" -- `~ALL` also covers it (a broader condition still applies).
-  const targetsDefaultBranch = refInclude.includes('~DEFAULT_BRANCH') || refInclude.includes('~ALL');
-  if (!targetsDefaultBranch) return false;
   const defaultRef = defaultBranch ? `refs/heads/${defaultBranch}` : null;
+  // `~DEFAULT_BRANCH` is GitHub's own condition syntax for "the repo's default branch,
+  // whatever it is named" -- `~ALL` also covers it (a broader condition still applies). A ruleset may
+  // also NAME the branch (`refs/heads/main`) or glob it (`refs/heads/**`); that needs the default
+  // branch name to judge, so without it only the two symbolic forms count (UMB-112 residue 9).
+  const targetsDefaultBranch = refInclude.includes('~DEFAULT_BRANCH') || refInclude.includes('~ALL')
+    || (defaultRef !== null && refInclude.some((p) => refPatternMatches(p, defaultRef)));
+  if (!targetsDefaultBranch) return false;
   const exclude = ruleset.conditions?.ref_name?.exclude || [];
   if (exclude.some((p) => p === '~DEFAULT_BRANCH' || p === '~ALL' || (defaultRef !== null && refPatternMatches(p, defaultRef)))) return false;
   const haveTypes = new Set((ruleset.rules || []).map((r) => r.type));
