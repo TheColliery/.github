@@ -8,17 +8,17 @@ headline, the org-landing benchmark row, and Thai prose reaching a public doc.)
 
 **Integration with the org dispatch model:** any sub dispatched for one of these events
 gets the event's mark list embedded verbatim in its contract; the review lane verifies
-every mark was touched (or explicitly N/A); the main gates the push on mark-complete.
+every mark was touched (or explicitly N/A); the belt end gates the push on mark-complete—the room's department head for a room, MAIN only for an org-level surface with no head (`AGENTS.md`, THE BELT-END ROSTER).
 
 **Owners.** Every mark below names the role that SWEEPS it—the marks are DIVIDED among the
 staff, never defaulted to main. The roles: the three residents of the affected repo (**coder** ·
 **doc-writer** · **reviewer**), the three org-level deputies (**`.github` deputy** = landing +
 pattern docs · **skillspector deputy** = scan pins · **benchmark deputy** = every measured number
-the series publishes), and **MAIN** (the gate, plus the git/API mechanics only).
+the series publishes), the room's **department head** (the belt end: FINAL CHECK, then the tag, the Release and the push for its own room), and **MAIN** (org-level surfaces with no head, plus their machine-local mechanics).
 
-**Main's final check.** Main does NOT sweep marks. Main verifies **mark-complete WITH EVIDENCE** —
+**The belt end's final check.** The belt end does NOT sweep marks—it is the room's department head for its own room, MAIN only for an org-level surface with no head (`AGENTS.md`, THE BELT-END ROSTER). It verifies **mark-complete WITH EVIDENCE** —
 every mark touched or explicitly N/A, each carrying the evidence its owner produced—then runs the
-gates/build AS the gate, and commits, tags, pushes, releases. A mark reported as swept WITHOUT
+gates/build AS the gate, and commits, tags, pushes, releases; main reads the head's return and can overrule it. A mark reported as swept WITHOUT
 evidence counts as UNSWEPT: a sub's output is suspect input until source-verified.
 
 **ORG-SYNC RIDES THE PUSH.** Nothing automated keeps the org landing true—the derivable half
@@ -26,8 +26,8 @@ evidence counts as UNSWEPT: a sub's output is suspect input until source-verifie
 a JUDGMENT claim no machine can own. The chokepoint is the push, so the sync rides it: on a release,
 a capability change, a platform tier moving, a benchmark re-run, or a description/install-path
 change—not every commit—the org docs are re-synced before the push. The ROOM supplies the claim
-text for its own tool; nobody authors a claim about a room they do not own. Main NAMES who synced
-the org docs or marks it N/A—"pushed" is not a report, and silence means the station did not run.
+text for its own tool; nobody authors a claim about a room they do not own. The pusher NAMES who synced
+the org docs or marks it N/A (a room's department head for its own room, main for an org-level surface)—"pushed" is not a report, and silence means the station did not run.
 
 ## Mechanically gated (no longer swept by eye)
 
@@ -66,8 +66,8 @@ half of provenance are still manual. A figure without date+version is not publis
 |---|---|---|---|
 | 1 | `version-pin:` lines match plugin.json (mechanical gate) | `verify.mjs checkVersionPins` | coder (owns `verify.mjs`) |
 | 2 | CHANGELOG entry (keep-a-changelog) | `CHANGELOG.md` | coder; doc-writer reviews the shape |
-| 3 | Annotated tag pushed | `git tag -a vX.Y.Z` + `--follow-tags` | MAIN |
-| 4 | GitHub Release—STABLE tags only (beta = tag-only). The notes carry the CHANGELOG entry's content; a gate receipt (test counts · VERIFY · CI) or a cross-repo pointer may ride along ONLY if verified at press | `gh`/REST release | MAIN presses; reviewer verifies the notes against the CHANGELOG entry FIRST |
+| 3 | Annotated tag pushed | `git tag -a vX.Y.Z` + `--follow-tags` | the room's department head |
+| 4 | GitHub Release—STABLE tags only (beta = tag-only). The notes carry the CHANGELOG entry's content; a gate receipt (test counts · VERIFY · CI) or a cross-repo pointer may ride along ONLY if verified at press | `gh`/REST release | the room's department head presses, then RE-READS the body after every create/patch—GET + length/byte compare against the intended text ([re-read rail](RELEASE-PATTERN.md#a-release-body-is-re-read-after-every-write), UMB-050); reviewer verifies the notes against the CHANGELOG entry FIRST |
 | 5 | **Repo details—the front-MOST door, checked BEFORE the README** (About description incl. counts/status · topics · website link · Releases panel shows the new stable · license auto-detect) | repo settings + the rendered repo page | room reviewer (standing duty) |
 | 6 | Org landing suite table (version/status per tool) | `.github/profile/README.md` | `.github` deputy—**report the sync by name, or mark it N/A; silence = the station did not run** |
 | 7 | Mirror refresh ("push offline") | `clean-export.ps1` | MAIN |
