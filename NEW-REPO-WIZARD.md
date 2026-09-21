@@ -34,7 +34,7 @@
 >
 > **This is an ENUMERATION, not a design.** Every pattern named below already exists somewhere in the org; this document is the ORDERED LIST a human or a room head walks through when a new repo is born, with each step pointing at the file that governs it. Where a step has no pattern, that is said plainly rather than invented here. Duplicating a governing file's content here would create a second source of truth that rots—so this file is one line plus a pointer, per step.
 >
-> **First customer: CoalGob**, founded 2026-08-04 as org repo #8, **LOCAL ONLY—no remote yet** (main's ruling). This wizard is what CoalGob runs before that changes.
+> **First customer: CoalGob**, founded 2026-08-04 as org repo #8; **public beta since 2026-09-21** (`TheColliery/CoalGob`), local-only until then. This wizard is what CoalGob ran before that changed.
 >
 > **Org-level, UNREVIEWED.** This document was produced by the umbrella doc-writer with no INSPECT pass—`AGENTS.md`'s own deputies-INSPECT gap names org-level work as reviewed-by-nobody-yet, and this is org-level. Say so rather than let silence imply it passed a review it never got.
 
