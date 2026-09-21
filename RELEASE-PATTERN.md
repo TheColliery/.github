@@ -181,10 +181,7 @@ lock left behind by an interrupted run no longer blocks the next one.
 - A lock file left by an interrupted run blocked every later run until it was deleted by
   hand. The lock is now reclaimed once its owning process is gone.
 
-**What you need to do:** nothing — update at your convenience. `cacheDir` defaults to the
-previous behaviour for anyone who does not set it.
-
 Gate: 148 tests green, VERIFY clean, CI green on the supported Node matrix.
 ```
 
-Why it passes: the lead is one plain sentence · part 2 keeps the entry's own `### Added` / `### Fixed` headings · part 3 answers the action question explicitly instead of leaving it unsaid · the gate line was re-run at press. Part 5 is absent because nothing applies—a back-filled one would add a single line such as `Back-dated for tag v1.3.0 (published 2026-05-02); written from that version's CHANGELOG entry.`
+Why it passes: the lead is one plain sentence · part 2 keeps the entry's own `### Added` / `### Fixed` headings · part 3 is omitted because the release asks nothing of the reader (the rule is to leave the block out, never to write "nothing to do here") · the gate line was re-run at press. Part 5 is absent because nothing applies—a back-filled one would add a single line such as `Back-dated for tag v1.3.0 (published 2026-05-02); written from that version's CHANGELOG entry.`

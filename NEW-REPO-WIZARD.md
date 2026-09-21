@@ -6,7 +6,7 @@
 > SpriteDesignDatum-shaped).** One command replaces the manual walk for everything a
 > skeleton owns: `node .github/scripts/new-repo.mjs <kind> [--overlay coal-skill|llm-deploy]
 > --name <repo> --license <spdx-or-a-file-path> [--license-id <spdx-or-name>]
-> <target-dir>`. It copies `templates/<kind>/` (+ the named overlay), fills
+> <target-dir>` (paths are from the UMBRELLA root; inside this repo drop the leading `.github/`—`node scripts/new-repo.mjs …`—and the same holds for `skeleton-check.mjs` below). It copies `templates/<kind>/` (+ the named overlay), fills
 > `{{PLACEHOLDER}}` tokens it can from flags, and refuses a non-empty target—content-only
 > placeholders (a README's "what it is" prose, a SECURITY.md's threat model) are left for
 > a human, named in the script's own output. **The licence-identity triangle (UMB-058 +

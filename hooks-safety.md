@@ -15,7 +15,7 @@ This document outlines the design standards for Node.js-based terminal hooks, gi
 
 ## 1. Exception Isolation & Graceful Fallbacks
 
-- **No Blocking Failures:** All hooks must wrap their core execution logic in try-catch blocks. If a hook fails (e.g., due to file system permission issues or missing dependencies), it must SWALLOW the error and exit gracefully with code `0`, producing NO output (per Phoenix #13—Zero Noise; a logged warning would violate it, and the shipped hooks are silent). It must never cause the parent process (git, CLI, or agent) to fail or abort.
+- **No Blocking Failures (agent-platform hooks—a Claude Code hook and its kin):** Every such hook must wrap its core execution logic in try-catch blocks. If it fails (e.g., due to file system permission issues or missing dependencies), it must SWALLOW the error and exit gracefully with code `0`, producing NO output (per Phoenix #13—Zero Noise; a logged warning would violate it, and the shipped hooks are silent). It must never cause the parent agent to fail or abort. **A git `pre-commit`/`pre-push` gate is the opposite by design:** a non-zero exit is how it blocks, so it fails LOUD on its own terms (the full exit-code-by-host table is the canonical source's §1.0, omitted here).
 - **Graceful degradation:** If external binaries (e.g., `git`, `node`, or stack-specific compilers) are missing or fail, the script should fallback to reporting mode or a safe default state rather than throwing unhandled exceptions.
 
 ## 2. Execution Latency & Performance
@@ -62,7 +62,7 @@ All CoalMine hooks and canary skill scripts must conform to the Phoenix Canary p
 | 1 | ไม่ขับถ่าย | **Zero Garbage** | Delete every temp file on completion or failure. Use `finally` blocks to guarantee cleanup. |
 | 2 | ไม่กินอาหาร | **Zero Dependencies** | Use only Node.js built-in modules (`fs`, `path`, `os`). No `npm install` required to run. |
 | 3 | ไม่หายใจ | **Zero Latency** | `PostToolUse` hooks must add ≤5ms of work beyond interpreter startup on the happy path (no file match); total wall-clock ≤100ms including a scan. Node startup itself (~50–80ms) dominates—budget the work, not the process. |
-| 4 | ไม่มีทางตาย | **Fail-silent** | Wrap all logic in `try { main(); } catch {}`; never set a non-zero exit code. Let the process exit naturally—do NOT call `process.exit()`, it can truncate pending stdout writes (the Stop hook's JSON nudge). Never crash the parent agent. |
+| 4 | ไม่มีทางตาย | **Fail-silent** | In an agent-platform hook, wrap all logic in `try { main(); } catch {}`; never set a non-zero exit code (a git gate blocks by exiting non-zero—see §1). Let the process exit naturally—do NOT call `process.exit()`, it can truncate pending stdout writes (the Stop hook's JSON nudge). Never crash the parent agent. |
 | 5 | ไม่สืบพันธุ์ | **Zero Side-effects** | Never spawn child processes, write to global config, or trigger other hooks as side effects. |
 | 6 | ไม่มีตัวตน | **Stateless** | No global state between invocations. Session state lives in temp files scoped by `session_id`, cleaned on stop. |
 | 7 | ไม่พึ่งพาใคร | **Offline-capable** | No network calls ever. All lookups must be local filesystem only. |

@@ -6,7 +6,7 @@ claude.ai can run **custom skills**: a ZIP containing a `SKILL.md` (YAML frontma
 - **No sync**—claude.ai skills are separate from Claude Code and the API. The same skill = separate installs per surface.
 
 > [!IMPORTANT]
-> **The install mechanics below are pending re-verification.** The plan requirements, the exact settings path, and the upload flow were last checked 2026-07-16 (31 days ago as of this note) and are version-sensitive—claude.ai moves. A pass was said to be in flight as of 2026-07-25; no evidence since then shows it landed, so that claim is retracted rather than carried forward unconfirmed. Treat the *menu path* and the *plan list* as unconfirmed and follow whatever the app currently shows. The capability table and the packaging rules below do not depend on it.
+> **The install mechanics below are pending re-verification.** The plan requirements, the exact settings path, and the upload flow were last checked 2026-07-16 and are version-sensitive—claude.ai moves. A pass was said to be in flight as of 2026-07-25; no evidence since then shows it landed, so that claim is retracted rather than carried forward unconfirmed. Treat the *menu path* and the *plan list* as unconfirmed and follow whatever the app currently shows. The capability table and the packaging rules below do not depend on it.
 
 ## Install
 
