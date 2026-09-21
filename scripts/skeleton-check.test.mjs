@@ -461,7 +461,7 @@ test('detailsVerdict: an empty website FAILS; a website that is NOT the org land
   const none = detailsVerdict(repoObj('CoalMine', { homepage: '' }));
   assert.equal(none.status, 'FAIL');
   assert.ok(none.reasons.some((r) => /website is empty/.test(r)));
-  assert.equal(detailsVerdict(repoObj('.github', { homepage: 'https://hetcreep.gitbook.io/thecolliery' })).status, 'OK');
+  assert.equal(detailsVerdict(repoObj('.github', { homepage: 'https://thecolliery.gitbook.io/thecolliery-docs/' })).status, 'OK');
   assert.equal(detailsVerdict(repoObj('CoalMine', { homepage: null })).status, 'FAIL');
 });
 
@@ -490,7 +490,7 @@ test('detailsVerdict: template, private and archived repos are N/A even when EMP
 function liveOrg() {
   const room = (name) => repoObj(name, { topics: [...BASE, 'code-quality'] });
   return [
-    repoObj('.github', { homepage: 'https://hetcreep.gitbook.io/thecolliery' }),
+    repoObj('.github', { homepage: 'https://thecolliery.gitbook.io/thecolliery-docs/' }),
     repoObj('Bankfire', { private: true, homepage: '', topics: [] }),
     repoObj('Bankfire-gate', { private: true, homepage: '', topics: [] }),
     repoObj('Chotmeter', { private: true, homepage: '', topics: [] }),
