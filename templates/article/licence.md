@@ -26,7 +26,7 @@ document — contact {{COPYRIGHT_HOLDER}} directly.
      README/CONTRIBUTING license lines together, never one without the other. -->
 
 The full legal code follows, verbatim from https://creativecommons.org/licenses/by-nc-nd/4.0/legalcode.txt
-(fetched twice, byte-equal; sha256 38762e3777f4ec00a6f769062a7c3f704fb78ce08303ecff88558da4c49cf9ea).
+(sha256 38762e3777f4ec00a6f769062a7c3f704fb78ce08303ecff88558da4c49cf9ea).
 
 Attribution-NonCommercial-NoDerivatives 4.0 International
 
