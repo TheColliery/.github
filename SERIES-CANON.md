@@ -18,6 +18,7 @@ A Coal* room is a `published-code` repo (L1) carrying the 5 Standard Systems (L2
 |---|---|---|---|
 | Visibility | Public | Private | Public |
 | Docs spine | Full [DOC-PATTERN.md](./DOC-PATTERN.md) spine (README/SECURITY/CONTRIBUTING/CODE_OF_CONDUCT/PRIVACY) | None — LICENSE only | LICENSE + CONTRIBUTING + CHANGELOG |
+| Community files | The org defaults in this repo's `.github/` folder (PR template, Code of Conduct, CONTRIBUTING, SUPPORT, SECURITY); a room's own file wins as a NAMED divergence. The PR template ships in the skeleton | None shipped in the skeleton | The PR template ships in the skeleton; the rest are inherited from the org defaults |
 | LICENSE | Full text (never SPDX-only, never a stub) | Full text | Full text |
 | `.githooks/` | `pre-commit` + `pre-push` | `pre-push` | none shipped in the base skeleton |
 | Workflows | `ci.yml` · `codeql.yml` · `markdownlint.yml` · `scorecard.yml` · `coverage.yml` (report-only — never a gate, never a required check) · `dependabot-auto-merge.yml` · `link-check.yml` (MUST per SKILL-REPO-PATTERN, but each room ships its OWN engine and no canonical one exists, so the template carries no copy — a named divergence, not silence) | one `gate.yml` (single OS/Node — sized to a shared Free-plan Actions-minutes pool, never the 3-OS×2-Node published-code matrix) | `check.yml` + `watch-sources.yml` (monthly cron) |

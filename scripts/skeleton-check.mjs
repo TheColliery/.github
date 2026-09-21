@@ -2,7 +2,8 @@
 // Walks every live clone under the umbrella (CoalWorks/*, LLMWorks/*, Articles/* — never
 // talongate, a partner workspace outside the series), classifies each by KIND from its
 // own files, and reports each skeleton-owned file as identical / DIFFERS (line count) /
-// absent. A DERIVING instrument only — it reports drift, it never fixes it (a DIFFERS row
+// absent (an ORG-DEFAULT file -- CODE_OF_CONDUCT, the PR template -- reads "inherits the org
+// default" when absent and NAMED DIVERGENCE when it differs, UMB-177). A DERIVING instrument only — it reports drift, it never fixes it (a DIFFERS row
 // is a finding for that room's own belt, not this script's to resolve).
 //
 // ENUMERATION (UMB-054 item 1): a directory is walked when it carries a real `.git` OR at
@@ -36,7 +37,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
-import { findRepos as findReposLib, SKELETON_FILES, TEMPLATE_DIR_FOR_KIND, parseGithubOrigin, matchesWithPlaceholders, formatDetailsTable } from './lib/skeleton-check-lib.mjs';
+import { findRepos as findReposLib, SKELETON_FILES, TEMPLATE_DIR_FOR_KIND, parseGithubOrigin, matchesWithPlaceholders, formatDetailsTable, liveFileVerdict } from './lib/skeleton-check-lib.mjs';
 import { isLicenseStub, licenseIdentityMismatches } from './lib/license-check-lib.mjs';
 import { anyRulesetCovers, gateBypassVerdicts } from './lib/ruleset-match.mjs';
 
@@ -309,7 +310,7 @@ async function main() {
       }
       try {
         const verdict = compareFile(templatePath, livePath);
-        console.log(`  ${rel}: ${verdict}`);
+        console.log(`  ${rel}: ${liveFileVerdict(rel, verdict)}`);
         // UMB-054 item 3: the owner's standing law is LICENSE = full text per part,
         // never SPDX-only, never a stub -- checked independently of the template diff
         // above (a live LICENSE identical to a STUB template is exactly the failure

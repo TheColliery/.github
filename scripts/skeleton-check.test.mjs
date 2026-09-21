@@ -10,6 +10,7 @@ import {
   detailsKind, detailsVerdict, formatDetailsTable,
   ARTICLE_PRIVATE_MARKER, ARTICLE_CHANGEREQUEST_MARKER, PRIVATE_WORKING_MARKER,
   TEMPLATE_DIR_FOR_KIND, parseGithubOrigin, matchesWithPlaceholders,
+  ORG_DEFAULT_FILES, liveFileVerdict,
 } from './lib/skeleton-check-lib.mjs';
 
 // A scratch zones-root, one fixture per test to keep each hermetic. Every fixture is
@@ -324,6 +325,25 @@ test('SKELETON_FILES: CHANGELOG.md is absent from published-code/private-working
   // Gacha exhibit only needs CHANGELOG.md to be OUTSIDE the two non-article kinds.
   assert.equal(SKELETON_FILES.article.includes('CHANGELOG.md'), true);
   assert.equal(SKELETON_FILES['article (private)'].includes('CHANGELOG.md'), true);
+});
+
+// --- UMB-177: the org-default community files ---
+
+test('SKELETON_FILES: the PR template is skeleton-owned by published-code and the public article kinds, never by the private kinds', () => {
+  const pr = '.github/PULL_REQUEST_TEMPLATE.md';
+  for (const kind of ['published-code', 'article', 'article (change-request)']) assert.ok(SKELETON_FILES[kind].includes(pr), kind);
+  for (const kind of ['private-working', 'article (private)']) assert.ok(!SKELETON_FILES[kind].includes(pr), kind);
+});
+
+test('liveFileVerdict: a live room WITHOUT an org-default file inherits it (not a gap); one WITH a different file is a NAMED divergence; every other file keeps its plain verdict', () => {
+  assert.deepEqual([...ORG_DEFAULT_FILES].sort(), ['.github/PULL_REQUEST_TEMPLATE.md', 'CODE_OF_CONDUCT.md']);
+  assert.match(liveFileVerdict('CODE_OF_CONDUCT.md', 'ABSENT'), /inherits the org default/);
+  assert.match(liveFileVerdict('.github/PULL_REQUEST_TEMPLATE.md', 'ABSENT'), /inherits the org default/);
+  assert.match(liveFileVerdict('CODE_OF_CONDUCT.md', 'DIFFERS (template 5L vs live 9L)'), /NAMED DIVERGENCE/);
+  assert.equal(liveFileVerdict('CODE_OF_CONDUCT.md', 'identical'), 'identical');
+  assert.equal(liveFileVerdict('SECURITY.md', 'ABSENT'), 'ABSENT'); // a room ships its own SECURITY.md: absent stays a finding
+  assert.equal(liveFileVerdict('CONTRIBUTING.md', 'ABSENT'), 'ABSENT');
+  assert.match(liveFileVerdict('SECURITY.md', 'DIFFERS (template 3L vs live 4L)'), /^DIFFERS/);
 });
 
 // --- parseGithubOrigin (code-scanning #6: .git/config data must not steer the API path) ---

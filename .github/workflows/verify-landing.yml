@@ -45,7 +45,7 @@ jobs:
                    scripts/doc-refs.test.mjs scripts/ruleset-match.test.mjs \
                    scripts/lcov-to-cobertura.test.mjs scripts/template-workflows.test.mjs scripts/coal-team.test.mjs \
                    scripts/test-roster.test.mjs templates/overlay-llm-deploy/scripts/post-deploy-check.test.mjs \
-                   scripts/gitbook-config.test.mjs; do
+                   scripts/gitbook-config.test.mjs scripts/community-files.test.mjs; do
             [ -f "$t" ] || { echo "::error::listed test file missing: $t"; exit 1; }
           done
           node --test scripts/verify-landing.test.mjs scripts/update-readme.test.mjs \
@@ -54,7 +54,7 @@ jobs:
                       scripts/doc-refs.test.mjs scripts/ruleset-match.test.mjs \
                       scripts/lcov-to-cobertura.test.mjs scripts/template-workflows.test.mjs scripts/coal-team.test.mjs \
                       scripts/test-roster.test.mjs templates/overlay-llm-deploy/scripts/post-deploy-check.test.mjs \
-                      scripts/gitbook-config.test.mjs
+                      scripts/gitbook-config.test.mjs scripts/community-files.test.mjs
 
       - name: Doc references (every markdown link resolves — UMB-057)
         run: node scripts/doc-refs.mjs

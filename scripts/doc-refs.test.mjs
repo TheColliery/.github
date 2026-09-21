@@ -128,3 +128,14 @@ test('doc-refs.mjs: a single-quoted or parenthesised title, and an angle-bracket
   assert.equal(res.status, 0, res.stderr + res.stdout);
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test('doc-refs.mjs: scope covers the org-default community files under .github/ and the patterns/ space, not only the root and profile/ (UMB-177)', () => {
+  for (const dir of ['.github', 'patterns']) {
+    const root = scratchRoot();
+    write(path.join(root, dir, 'CONTRIBUTING.md'), '[gone](./nowhere.md) is not here.\n');
+    const res = run(root);
+    assert.equal(res.status, 1, dir + ': ' + res.stderr + res.stdout);
+    assert.match(res.stdout + res.stderr, /nowhere\.md/);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

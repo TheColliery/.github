@@ -50,6 +50,7 @@ export const SKELETON_FILES = {
     '.github/workflows/scorecard.yml',
     '.github/workflows/coverage.yml', '.github/scripts/lcov-to-cobertura.mjs',
     '.github/ISSUE_TEMPLATE/bug-report.yml', '.github/ISSUE_TEMPLATE/config.yml',
+    '.github/PULL_REQUEST_TEMPLATE.md',
   ],
   'private-working': [
     'LICENSE', '.gitignore',
@@ -59,6 +60,7 @@ export const SKELETON_FILES = {
   article: [
     'LICENSE', 'CONTRIBUTING.md', 'CHANGELOG.md', '.gitbook.yaml',
     '.github/workflows/check.yml', '.github/workflows/watch-sources.yml',
+    '.github/PULL_REQUEST_TEMPLATE.md',
   ],
   // UMB-055 item 1 (main's Option-A-amended ruling): a private, unpublished article --
   // never GitBook-synced, cuts no public Release -- declares this with a repo-root
@@ -91,8 +93,24 @@ export const SKELETON_FILES = {
   'article (change-request)': [
     'LICENSE', 'CONTRIBUTING.md', 'CHANGELOG.md',
     '.github/workflows/check.yml', '.github/workflows/watch-sources.yml',
+    '.github/PULL_REQUEST_TEMPLATE.md',
   ],
 };
+
+// UMB-177. Files the org's public `.github` repository serves as DEFAULTS to every repo that ships none of its
+// own (docs.github.com, "Creating a default community health file"). For a LIVE room, absence is the intended
+// state (it inherits) and a differing file is a deliberate override: a NAMED divergence, never silence. Everything
+// else in a skeleton keeps its plain verdict, and a template-repo clone (--clone) is judged by the plain verdict
+// too, since a repo born from a template should carry the file.
+export const ORG_DEFAULT_FILES = new Set(['CODE_OF_CONDUCT.md', '.github/PULL_REQUEST_TEMPLATE.md']);
+
+/** The printed verdict for one skeleton file of a LIVE room: compareFile's verdict, restated for org-default files. */
+export function liveFileVerdict(rel, verdict) {
+  if (!ORG_DEFAULT_FILES.has(rel)) return verdict;
+  if (verdict === 'ABSENT') return 'absent: inherits the org default (the .github repo)';
+  if (verdict.startsWith('DIFFERS')) return verdict + ' -- NAMED DIVERGENCE: this room overrides the org default';
+  return verdict;
+}
 
 // The repo-root marker declaring a private, unpublished `article` (UMB-055 item 1).
 // An empty sentinel file -- presence is the whole signal, since classify() reads only

@@ -6,7 +6,8 @@
 // only an actual `[text](path)` link — the one shape a reader can click, and the one shape
 // GitHub itself resolves against this repo — is a real claim this gate can verify).
 //
-// Scope: every `*.md` at this repo's root, plus `profile/*.md` (glob-derived, never a
+// Scope: every `*.md` at this repo's root, plus `profile/*.md`, `.github/*.md` (the org-default community
+// files, UMB-177) and `patterns/*.md` (the GitBook Patterns space, UMB-169) (glob-derived, never a
 // hardcoded file list — a new doc file is swept automatically, closing the class of
 // enumeration drift this org has hit before). Fenced code blocks and inline code spans that
 // wrap an ENTIRE `[text](target)`-looking sequence are excluded — those are illustrative
@@ -97,10 +98,12 @@ function fullyInsideACodeSpan(start, end, ranges) {
 function docFiles() {
   const root = fs.readdirSync(ROOT).filter((f) => f.toLowerCase().endsWith('.md'));
   const files = root.map((f) => f);
-  const profileDir = path.join(ROOT, 'profile');
-  if (fs.existsSync(profileDir) && fs.statSync(profileDir).isDirectory()) {
-    for (const f of fs.readdirSync(profileDir)) {
-      if (f.toLowerCase().endsWith('.md')) files.push(path.join('profile', f));
+  for (const sub of ['profile', '.github', 'patterns']) {
+    const dir = path.join(ROOT, sub);
+    if (fs.existsSync(dir) && fs.statSync(dir).isDirectory()) {
+      for (const f of fs.readdirSync(dir)) {
+        if (f.toLowerCase().endsWith('.md')) files.push(path.join(sub, f));
+      }
     }
   }
   return files.sort();

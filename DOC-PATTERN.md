@@ -125,9 +125,9 @@ A tool whose own architecture carries a security story appends ONE tool-specific
 <!-- coalmine: verified 2026-09-02 · exemplar GitHub Open Source Guides "Starting a project" (opensource.guide/starting-a-project—the LICENSE·README·CONTRIBUTING·CODE_OF_CONDUCT four-file floor) · revalidate 90d -->
 ## CODE_OF_CONDUCT.md
 
-Absent from every shipped repo today—our repos take outside issues and PRs, so the variable genuinely transfers; this is a NEW required file, not a table cell inside CONTRIBUTING.md's old "License & Conduct" row.
+Every public repo carries one: inherited from the org default (see Org defaults, below) or its own file, which is then a named divergence. Our repos take outside issues and PRs, so the variable genuinely transfers; it is its own file, not a table cell inside CONTRIBUTING.md's old "License & Conduct" row.
 
-- **Content: name a well-known text rather than draft one.** The [Contributor Covenant](https://www.contributor-covenant.org/) is the usual choice industry-wide—link its current version, do not paste and fork it (a pasted-and-forked copy drifts from the upstream text it claims to be).
+- **Content: name a well-known text rather than draft one.** The [Contributor Covenant](https://www.contributor-covenant.org/) is the usual choice industry-wide. The ONE verbatim copy (3.0) lives in the org default; a room's own file links the current version rather than pasting another copy (a pasted-and-forked copy drifts from the upstream text it claims to be).
 - **One line naming the enforcement contact**—for a solo-maintainer org this is the same channel `SECURITY.md` already names for a private report; do not invent a second channel.
 - **Linked from `README.md`'s badge/links row and from `CONTRIBUTING.md` row 7**—a file nobody links to is a file nobody finds.
 
@@ -146,6 +146,20 @@ Keep-a-Changelog format at repo root—the FORMAT is flock-shared, the VOICE is 
 - **Every shipped tag has an entry.** An entry-less tag is the recurring miss (caught live twice in one day)—the entry lands *before* the tag, not after.
 - **The section types match the bump size** (the keep-a-changelog ↔ SemVer mapping, all six spec types—[keepachangelog.com/en/1.1.0](https://keepachangelog.com/en/1.1.0/)): an `### Added` or `### Deprecated` entry ⇒ MINOR-minimum · a breaking `### Removed`/`### Changed` ⇒ MAJOR · only `### Fixed` / non-breaking `### Changed` / a `### Security` patch ⇒ PATCH. A feature (or a deprecation notice) shipped under a PATCH number is the bug. **A `### Deprecated` entry follows the flock's own deprecation policy**—the window (deprecated at MINOR, removable at the flock's next MAJOR, never a fixed months-count borrowed from elsewhere) and the required fields (a marker, an actionable notice, the migration owner, and ship-text as the only channel—Phoenix #13 forecloses hook output) are governed at `.claude/rules/ecc/common/coding-style.md` §Deprecation (verified present at source 2026-09-02); the CoalWorks mirror at `CoalWorks/.claude/rules/scripts-quality.md` is CWK-050's to land, not yet present as of this write. This file does not restate the policy, only the CHANGELOG's own type-mapping consequence of it.
 - **Newest version first**, each under `## [X.Y.Z] - YYYY-MM-DD` (a leading `## [Unreleased]` block is fine). A released entry is IMMUTABLE—to correct one, add a forward-pointing note in the NEW entry ("Supersedes [X.Y.Z]'s '…' note—true when written; what changed since"), never edit the old text.
+
+## Org defaults (the `.github` repository's own `.github/` folder)
+
+GitHub serves five community files from the org's public `.github` repository to every repo that ships none of its own (root, `.github/` or `docs/`; `.github/` first). They live in `.github/` so the root stays lean and each is deliberately short: a long explanation is a link. A room's own file **wins**, a named divergence that `scripts/skeleton-check.mjs` reports (`inherits the org default` when absent, `NAMED DIVERGENCE` when it differs).
+
+| File | Holds |
+|---|---|
+| `CODE_OF_CONDUCT.md` | The Contributor Covenant 3.0 verbatim, with two named edits (the reporting channel filled in, the adopter's note removed). The contact is the private channel a repo's `SECURITY.md` names; there is no second channel. |
+| `CONTRIBUTING.md` | Open an issue first · the repository's own gates · the PR template · the Covenant and the Open Source Guides. |
+| `SECURITY.md` | Report through the repository's own Security tab; no e-mail address; what to expect. A room's own `# Verifying <Tool>` wins. |
+| `SUPPORT.md` | Where to ask, and the documentation link. |
+| `PULL_REQUEST_TEMPLATE.md` | The belt's gate as a five-item checklist. One file, copied byte-identical into `templates/published-code/` and `templates/article/` so a new repo is born with it. |
+
+`scripts/community-files.test.mjs` pins the size, the Covenant's text against its upstream hash, and the three copies of the PR template.
 
 ## Repo details (the front-MOST door—outranks the README)
 
