@@ -1,3 +1,8 @@
 # The git hooks are executed by /bin/sh — a CRLF working copy is "bad interpreter"
 # on Linux/macOS, and core.autocrlf=true would produce exactly that. Pin them to LF.
 /.githooks/** text eol=lf
+
+# The article scaffold LICENSE carries the CC BY-NC-ND 4.0 legalcode VERBATIM (sha256-pinned in
+# scripts/license-check.test.mjs); autocrlf would rewrite its line endings on a Windows checkout and
+# new-repo.mjs copies the working-tree bytes. Same pin Articles/GachaRateDesignDatum carries.
+/templates/article/LICENSE -text

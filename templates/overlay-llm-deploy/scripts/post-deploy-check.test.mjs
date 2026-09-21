@@ -36,6 +36,16 @@ test('post-deploy-check.mjs: the CodeQL #13 trivial-conditional pattern (`while 
   );
 });
 
+// UMB-112 row 26: a fetch with no timeout inside the wait loop lets ONE hung request outlive
+// the whole --wait budget (the loop only re-checks the clock BETWEEN requests). Source-text guard,
+// same reason as above: the script cannot run unfilled. The behaviour was also proved once by a
+// hung-socket spawn at authoring time (recorded in the UMB-112 return, not shipped).
+test('post-deploy-check.mjs: every fetch is bounded by the REMAINING wait budget (AbortSignal.timeout), never unbounded', () => {
+  const src = readFileSync(SCRIPT, 'utf8');
+  assert.match(src, /fetch\([^;]*signal:\s*AbortSignal\.timeout\(/, 'the probe fetch must carry signal: AbortSignal.timeout(<remaining budget>)');
+  assert.match(src, /remainingMs/, 'the timeout must derive from the remaining budget, not a constant that can exceed it');
+});
+
 test('post-deploy-check.mjs: the loop still exits on match via its own internal break, not via the while-condition', () => {
   // The property that makes the removed clause provably dead code: `if (matched) break;`
   // must still be the mechanism that ends the loop on a match, immediately after the

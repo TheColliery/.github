@@ -410,9 +410,13 @@ async function main() {
       return;
     }
   } else {
-    licenseBadge = asString(args.license) || 'Apache-2.0';
     const identifiedFromBody = identifyLicense(licenseContent);
-    if (identifiedFromBody && normalizeLicenseId(identifiedFromBody) !== normalizeLicenseId(licenseBadge)) {
+    const explicitBadge = asString(args.license);
+    // No --license: the badge follows the shipped body's own identified licence (the article scaffold ships
+    // CC BY-NC-ND 4.0, not Apache -- UMB-112 row 13 made that body real, and the hardcoded default then
+    // contradicted it); the flock default only backs an unidentifiable body.
+    licenseBadge = explicitBadge || identifiedFromBody || 'Apache-2.0';
+    if (explicitBadge && identifiedFromBody && normalizeLicenseId(identifiedFromBody) !== normalizeLicenseId(licenseBadge)) {
       console.error(`FAIL: --license ${JSON.stringify(licenseBadge)} contradicts ${licensePath}'s own body, identified as ${identifiedFromBody}.`);
       console.error('The README badge and NOTICE would claim one licence while the legalcode says another. Pass --license matching the body, or supply the body as a FILE (--license <path>) so all three agree.');
       process.exitCode = 1;

@@ -9,6 +9,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createHash } from 'node:crypto';
 
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'new-repo.mjs');
 
@@ -20,15 +21,49 @@ function scratchDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'new-repo-test-'));
 }
 
-test('new-repo.mjs article, no --license file: REFUSES (non-zero exit, stub named)', () => {
+// UMB-112 row 13: the article template used to ship a 19-line pointer STUB, so a scaffold
+// with no --license file always refused. The template now carries the full CC BY-NC-ND 4.0
+// legalcode (sha256-pinned tail), so the same command completes.
+test('new-repo.mjs article, no --license file: SUCCEEDS -- the scaffolded LICENSE carries the full legalcode (UMB-112 row 13)', () => {
   const target = path.join(scratchDir(), 'r');
   const res = run(['article', '--name', 'x', target]);
+  assert.equal(res.status, 0, res.stderr);
+  const body = fs.readFileSync(path.join(target, 'LICENSE'));
+  assert.ok(body.length > 19127);
+  assert.equal(createHash('sha256').update(body.subarray(body.length - 19127)).digest('hex'), '38762e3777f4ec00a6f769062a7c3f704fb78ce08303ecff88558da4c49cf9ea');
+  fs.rmSync(path.dirname(target), { recursive: true, force: true });
+});
+
+// UMB-112 rows 23 + 24: the article scaffold's own CONTRIBUTING and SUMMARY pointed at pages the
+// scaffold never shipped (ERRATA.md, licence.md), so every new article repo started with dangling
+// links. The scaffold now ships both, and licence.md reproduces LICENSE byte for byte (one document
+// on two faces -- a GitBook reader cannot browse LICENSE, so the page carries it).
+test('new-repo.mjs article: the scaffold ships the pages its own CONTRIBUTING + SUMMARY point at, and licence.md carries LICENSE verbatim (UMB-112 rows 23 + 24)', () => {
+  const target = path.join(scratchDir(), 'r');
+  const res = run(['article', '--name', 'x', target]);
+  assert.equal(res.status, 0, res.stderr);
+  for (const f of ['ERRATA.md', 'licence.md', 'CONTRIBUTING.md', 'CHANGELOG.md', 'LICENSE']) {
+    assert.ok(fs.existsSync(path.join(target, f)), f + ' must ship');
+  }
+  assert.match(fs.readFileSync(path.join(target, 'CONTRIBUTING.md'), 'utf8'), /\]\(ERRATA\.md\)/, 'the link this row is about is still there');
+  const summary = fs.readFileSync(path.join(target, 'SUMMARY.md'), 'utf8');
+  assert.match(summary, /\]\(licence\.md\)/);
+  assert.match(summary, /\]\(ERRATA\.md\)/);
+  const license = fs.readFileSync(path.join(target, 'LICENSE'), 'utf8');
+  assert.ok(fs.readFileSync(path.join(target, 'licence.md'), 'utf8').includes(license), 'licence.md must reproduce LICENSE verbatim');
+  fs.rmSync(path.dirname(target), { recursive: true, force: true });
+});
+
+test('new-repo.mjs article, --license <a pointer STUB file>: still REFUSES (non-zero exit, stub named) -- the refusal contract outlives the template fix', () => {
+  const root = scratchDir();
+  const stubFile = path.join(root, 'stub.txt');
+  fs.writeFileSync(stubFile, ['Some Article', '', 'Licensed under CC BY-NC-ND 4.0.', 'See https://creativecommons.org/licenses/by-nc-nd/4.0/', ''].join('\n'));
+  const target = path.join(root, 'r');
+  const res = run(['article', '--name', 'x', '--license', stubFile, target]);
   assert.notEqual(res.status, 0);
   assert.match(res.stderr, /licence STUB/);
-  // The state effect this refusal produces: LICENSE stays on disk as the stub, not
-  // silently absent -- a human re-reading the target sees exactly what tripped it.
-  assert.ok(fs.existsSync(path.join(target, 'LICENSE')));
-  fs.rmSync(path.dirname(target), { recursive: true, force: true });
+  assert.ok(fs.existsSync(path.join(target, 'LICENSE')), 'LICENSE stays on disk as the stub so a human sees what tripped it');
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test('new-repo.mjs article, --license <a real body file>: SUCCEEDS and the body lands verbatim', () => {
@@ -121,13 +156,14 @@ test('new-repo.mjs published-code, --license apache-2.0 (lowercase, matching the
   fs.rmSync(path.dirname(target), { recursive: true, force: true });
 });
 
-test('new-repo.mjs article, --license as a bare SPDX string (not a file): still refuses, badge falls back cleanly', () => {
-  // A bare "MIT" string is not an existing file path, so it is read as the OLD
-  // LICENSE_BADGE-only meaning -- the LICENSE body is never touched and stays the stub.
+test('new-repo.mjs article, --license as a bare SPDX string (not a file): a badge that contradicts the shipped legalcode REFUSES (UMB-058 triangle; UMB-112 row 13 made the body a real one)', () => {
+  // A bare "MIT" string is not an existing file path, so it is read as the LICENSE_BADGE-only
+  // meaning -- the LICENSE body is never touched; it now identifies as CC-BY-NC-ND-4.0, so MIT
+  // contradicts it (this used to refuse as a STUB, back when the template was a pointer).
   const target = path.join(scratchDir(), 'r');
   const res = run(['article', '--name', 'x', '--license', 'MIT', target]);
   assert.notEqual(res.status, 0);
-  assert.match(res.stderr, /licence STUB/);
+  assert.match(res.stderr, /contradicts .*LICENSE's own body, identified as CC-BY-NC-ND-4\.0/);
   fs.rmSync(path.dirname(target), { recursive: true, force: true });
 });
 

@@ -61,7 +61,9 @@ async function probe(origin) {
   const misses = [];
   for (const f of files) {
     const url = origin + (f === 'index.html' ? '' : f) + '?cb=' + Date.now();
-    const r = await fetch(url, { headers: { 'Cache-Control': 'no-cache' } });
+    // Bounded by what is LEFT of the wait budget: the loop below only re-reads the clock BETWEEN requests, so
+    // an unbounded fetch lets one hung connection outlive --wait entirely.
+    const r = await fetch(url, { headers: { 'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(remainingMs()) });
     if (!r.ok) throw new Error(`HTTP ${r.status} on ${f}`);
     if (TEXT.test(f)) {
       const live = normHtml(await r.text());
@@ -81,6 +83,7 @@ async function probe(origin) {
 // flight and goes red on a commit that is in fact fine. A mismatch RETRIES until the
 // budget runs out; only the final state is reported.
 const started = Date.now();
+const remainingMs = () => Math.max(1, Math.ceil(budget * 1000 - (Date.now() - started)));
 let matched = false, lastMisses = null, lastErr = {};
 while ((Date.now() - started) / 1000 < budget) {
   for (const origin of ORIGINS) {

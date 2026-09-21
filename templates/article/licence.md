@@ -1,3 +1,10 @@
+# Licence
+
+This is the repository's own `LICENSE` file, reproduced in full below so a reader of this page never
+has to leave it to learn their rights. The two are one document on two faces—change one, change the
+other in the same edit.
+
+```
 {{ARTICLE_TITLE}}
 
 Copyright {{YEAR}} {{COPYRIGHT_HOLDER}}
@@ -424,3 +431,4 @@ public licenses.
 
 Creative Commons may be contacted at creativecommons.org.
 
+```

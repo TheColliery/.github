@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import { isLicenseStub, STUB_MAX_LINES, identifyLicense, normalizeLicenseId, licenseIdentityMismatches } from './lib/license-check-lib.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -39,9 +40,18 @@ test('isLicenseStub: a real MIT LICENSE (short but substantive) is NOT a stub --
   assert.equal(isLicenseStub(MIT_TEXT), false);
 });
 
-test('isLicenseStub: the actual measured templates/article/LICENSE stub IS a stub', () => {
-  const content = fs.readFileSync(path.join(HERE, '..', 'templates', 'article', 'LICENSE'), 'utf8');
-  assert.equal(isLicenseStub(content), true);
+// UMB-112 row 13: the measured UMB-054 defect (a 19-line pointer to the CC BY-NC-ND 4.0
+// legalcode) is CLOSED -- the template now carries the legalcode itself. The verbatim
+// property is pinned by content, no network: the LAST 19,127 bytes of the file are
+// creativecommons.org's legalcode.txt (fetched twice, byte-equal, sha256 below, and equal to
+// the pinned copy Articles/GachaRateDesignDatum/LICENSE already carries).
+test('templates/article/LICENSE carries the FULL CC BY-NC-ND 4.0 legalcode: not a stub, identified, and its legalcode block is byte-identical to the pinned upstream text', () => {
+  const buf = fs.readFileSync(path.join(HERE, '..', 'templates', 'article', 'LICENSE'));
+  const content = buf.toString('utf8');
+  assert.equal(isLicenseStub(content), false, 'the article template LICENSE must not be a pointer stub');
+  assert.equal(identifyLicense(content), 'CC-BY-NC-ND-4.0');
+  assert.ok(buf.length > 19127, 'header + legalcode must be longer than the legalcode alone');
+  assert.equal(createHash('sha256').update(buf.subarray(buf.length - 19127)).digest('hex'), '38762e3777f4ec00a6f769062a7c3f704fb78ce08303ecff88558da4c49cf9ea');
 });
 
 test('isLicenseStub: the actual templates/published-code/LICENSE (full Apache-2.0) is NOT a stub', () => {

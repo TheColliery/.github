@@ -20,11 +20,7 @@ A first-time contributor: the gate commands in the next section ARE the getting-
 
 Keep the verification gates green before and after making edits:
 
-```bash
-node scripts/build-plugin.mjs   # re-sync the plugin distribution from source
-node scripts/verify.mjs         # validates config schemas, dist-sync, and repo consistency
-node scripts/test.mjs           # runs the zero-dependency test runner (node --test)
-```
+{{GATE_COMMANDS}}
 
 ### Development Rules
 * **{{SSOT_FILE}} is the Single Source of Truth** for {{SSOT_CONTENT}} — edit there, then rebuild `plugin/`. Do not hand-edit the generated distribution.

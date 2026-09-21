@@ -3,6 +3,18 @@
 Applied on top of `templates/published-code/` by `new-repo.mjs --overlay coal-skill` for a
 Coal* skill repo — the 5 Standard Systems' shipping mechanics.
 
+## CONTRIBUTING gate commands
+
+`templates/published-code/CONTRIBUTING.md` leaves `{{GATE_COMMANDS}}` for the repo's own gate
+commands, because the generic scaffold also serves repos that are not Coal skills. For a Coal
+skill, paste this block in its place:
+
+```bash
+node scripts/build-plugin.mjs   # re-sync the plugin distribution from source
+node scripts/verify.mjs         # validates config schemas, dist-sync, and repo consistency
+node scripts/test.mjs           # runs the zero-dependency test runner (node --test)
+```
+
 ## Included this pass
 
 - `.github/workflows/claude-ai-zips.yml` + `scripts/build-claude-ai-zips.mjs` — the

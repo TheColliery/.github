@@ -26,6 +26,9 @@ on:
       # A change to the checker itself must re-verify: otherwise the commit that fixes the
       # gate is the one commit the gate never runs on.
       - 'scripts/post-deploy-check.mjs'
+      # ...and so must a change to this workflow (its wait budget, its Node version): the commit
+      # that edits the gate's own definition is otherwise the one commit it never runs on.
+      - '.github/workflows/deploy-check.yml'
 
 permissions:
   contents: read

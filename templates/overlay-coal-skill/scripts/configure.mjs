@@ -96,7 +96,11 @@ function main() {
   try { rawConfig = fs.readFileSync(readPath, 'utf8').replace(/^﻿/, ''); } catch {}
   if (rawConfig !== null) {
     try {
-      cfg = JSON.parse(rawConfig) || {};
+      const parsed = JSON.parse(rawConfig);
+      // A config is a RECORD: `[]`, `"str"`, `42`, `true` and `null` all parse but are not one, and
+      // would flow on as `cfg` -- take the malformed path (backup + rebuild) instead.
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new TypeError('config is not a JSON object');
+      cfg = parsed;
     } catch (e) {
       process.exitCode = 1;
       try {
