@@ -596,3 +596,45 @@ test('skeleton-check.mjs --details when the list call fails: exit 1 naming the H
   assert.match(res.stderr + res.stdout, /HTTP 500/);
   assert.doesNotMatch(res.stdout, /0 repos: 0 OK/);
 });
+
+// UMB-112 row 22: diffSettings never looked at the repository GET's status, so a 403/404/5xx made every
+// repoPatch/secretScanning line read as ordinary DRIFT (exit 0) instead of a failed read.
+function scratchUmbrellaWithRoom() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'skel-settings-'));
+  const SRC = path.dirname(SKELETON_SCRIPT);
+  const gh = path.join(root, '.github');
+  fs.mkdirSync(path.join(gh, 'scripts', 'lib'), { recursive: true });
+  fs.copyFileSync(SKELETON_SCRIPT, path.join(gh, 'scripts', 'skeleton-check.mjs'));
+  for (const f of fs.readdirSync(path.join(SRC, 'lib'))) fs.copyFileSync(path.join(SRC, 'lib', f), path.join(gh, 'scripts', 'lib', f));
+  fs.mkdirSync(path.join(gh, 'templates'), { recursive: true });
+  fs.copyFileSync(path.join(SRC, '..', 'templates', 'repo-settings.published-code.json'), path.join(gh, 'templates', 'repo-settings.published-code.json'));
+  const room = path.join(root, 'CoalWorks', 'Demo');
+  write(path.join(room, '.git', 'config'), '[remote "origin"]\n\turl = https://github.com/TheColliery/Demo.git\n');
+  write(path.join(room, '.github', 'workflows', 'ci.yml'), 'x');
+  write(path.join(room, '.github', 'workflows', 'codeql.yml'), 'x');
+  return root;
+}
+function runSettingsWithStubStatus(status) {
+  const root = scratchUmbrellaWithRoom();
+  const stub = path.join(root, 'stub.mjs');
+  fs.writeFileSync(stub, "globalThis.fetch = async () => new Response('{}', { status: " + status + " });\n");
+  const res = spawnSync(process.execPath, [path.join(root, '.github', 'scripts', 'skeleton-check.mjs'), '--settings'], {
+    encoding: 'utf8',
+    env: { ...process.env, GITHUB_TOKEN: 'stub-token', NODE_OPTIONS: '--import=' + pathToFileURL(stub).href },
+  });
+  fs.rmSync(root, { recursive: true, force: true });
+  return res;
+}
+
+test('skeleton-check.mjs --settings: a non-2xx repository GET is a FAIL naming the path and status, exit 1 -- never ordinary drift (UMB-112 row 22)', () => {
+  const res = runSettingsWithStubStatus(403);
+  assert.equal(res.status, 1, res.stdout + res.stderr);
+  assert.match(res.stdout, /\[settings\]: FAIL \(GET \/repos\/TheColliery\/Demo -> HTTP 403/);
+  assert.doesNotMatch(res.stdout, /repoPatch\.[A-Za-z_]+: DIFFERS/, 'no per-field verdict may be printed off a failed read');
+});
+
+test('skeleton-check.mjs --settings: a 200 repository GET still prints the per-field verdicts and no settings FAIL (UMB-112 row 22 control)', () => {
+  const res = runSettingsWithStubStatus(200);
+  assert.doesNotMatch(res.stdout, /\[settings\]: FAIL/, res.stdout);
+  assert.match(res.stdout, /repoPatch\.[A-Za-z_]+: DIFFERS/);
+});

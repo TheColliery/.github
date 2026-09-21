@@ -191,3 +191,15 @@ test('checkRelease: emoji elsewhere in body prose (not a heading) is not flagged
   const findings = checkRelease(release, 'CoalWash');
   assert.equal(findings.some((f) => /body heading/.test(f)), false);
 });
+
+// UMB-112 row 20: "v1.2.3 -" classified as a hyphen-separated title with an EMPTY summary and raised
+// no finding -- the titleless-release class RELEASE-NOTES-TEMPLATE's own issue 1 records (v2.1.2).
+test('isBareVersionTitle: a version followed only by a separator (no summary) is bare (UMB-112 row 20)', () => {
+  for (const t of ['v1.2.3 -', 'v1.2.3 - ', 'v1.2.3 \u2014', 'v1.2.3:', '1.2.3 -']) assert.equal(isBareVersionTitle(t), true, JSON.stringify(t));
+  assert.equal(isBareVersionTitle('v1.2.3 - x'), false);
+});
+
+test('checkRelease: a title of "v2.1.2 -" is REPORTED as a bare version (UMB-112 row 20)', () => {
+  const f = checkRelease({ name: 'v2.1.2 -', body: 'notes', prerelease: false }, 'CoalX');
+  assert.ok(f.some((x) => /bare version with no summary/.test(x)), f.join(' | '));
+});

@@ -184,6 +184,9 @@ async function diffSettings(kind, ownerRepo, settingsPath) {
   console.log(`  [settings] vs templates/repo-settings.${kind}.json:`);
 
   const repoRes = await ghGet(token, base);
+  // A failed read is a FAIL, never ordinary drift: with a 403/404/5xx every per-field line below
+  // would be judged against an empty body (UMB-112 row 22, CodeRabbit).
+  if (!repoRes.ok) throw new Error(`GET ${base} -> HTTP ${repoRes.status}`);
   if (settings.repoPatch) diffFields('repoPatch', settings.repoPatch, repoRes.json);
 
   // UMB-062: allow_auto_merge lived inside repoPatch until this unit -- a free-org
@@ -240,13 +243,13 @@ async function diffSettings(kind, ownerRepo, settingsPath) {
       const d = await ghGet(token, `${base}/rulesets/${c.id}`);
       if (d.json) details.push(d.json);
     }
-    const covered = anyRulesetCovers(details, wantedTypes);
+    const covered = anyRulesetCovers(details, wantedTypes, repoRes.json?.default_branch);
     console.log(`    ruleset (rules: ${wantedTypes.join('+')}): ${covered ? 'identical (covered by an existing active ruleset, matched by rules -- not necessarily named "' + settings.ruleset.name + '")' : `DIFFERS (no active branch ruleset on the default branch covers ${wantedTypes.join('+')})`}`);
     // UMB-131: the gate ruleset's bypass list -- a room can pass the coverage row above and still have
     // lost its admin bypass (CoalMine, 2026-09-17 org transfer); judged against the canon value.
     // Only published-code: the gate exists for dependabot-auto-merge.yml, which article repos do not ship
     // (a "no gate" line there would be a false positive -- measured on SpriteDesignDatum).
-    if (kind === 'published-code') for (const v of gateBypassVerdicts(details)) console.log(`    ${v.text}`);
+    if (kind === 'published-code') for (const v of gateBypassVerdicts(details, undefined, repoRes.json?.default_branch)) console.log(`    ${v.text}`);
   }
 }
 

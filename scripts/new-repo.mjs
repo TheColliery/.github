@@ -243,6 +243,8 @@ async function applySettings(kind, ownerRepo, dry) {
     // maintainer's own next push. That is the owner's press, not this script's; an
     // uncovered room is reported PENDING, never applied.
     const wantedTypes = (settings.ruleset.rules || []).map((rule) => rule.type);
+    const repoInfo = await req('GET', base);
+    const defaultBranch = repoInfo.ok ? repoInfo.json?.default_branch : undefined;
     const list = await req('GET', `${base}/rulesets`);
     const candidates = Array.isArray(list.json) ? list.json.filter((rs) => rs.enforcement === 'active' && rs.target === 'branch') : [];
     const details = [];
@@ -250,7 +252,7 @@ async function applySettings(kind, ownerRepo, dry) {
       const d = await req('GET', `${base}/rulesets/${c.id}`);
       if (d.json) details.push(d.json);
     }
-    const covered = anyRulesetCovers(details, wantedTypes);
+    const covered = anyRulesetCovers(details, wantedTypes, defaultBranch);
     if (covered) {
       results.push({ surface: 'ruleset', ok: true, status: 'N/A', reason: `already covered by an existing active branch ruleset (matched by rules ${wantedTypes.join('+')}, not name "${settings.ruleset.name}") -- no new ruleset created` });
     } else {

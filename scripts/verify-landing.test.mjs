@@ -169,3 +169,39 @@ test('a "first run pending" digest with NO record anywhere is legal (honest laun
     assert.deepEqual(verifyLanding(root), [], 'pending with no backing record anywhere is not flagged');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+// UMB-112 row 9: the forward check was `sec[0].includes('**Tool**')` -- a bold mention ANYWHERE in the
+// section's prose satisfied it, so a benchmark with no row at all read as enumerated.
+test('a bold **Tool** mention in the section PROSE is not an enumeration row -- the forward check parses row/list shapes like the reverse one (UMB-112 row 9)', () => {
+  const root = fixture((r) => {
+    write(r, 'profile/README.md', '# Org\n\n## Benchmarks\n\nSee the **FakeTool** record for the numbers, measured 2026-07-03.\n');
+    write(r, 'benchmarks/FakeTool/RESULTS.md', '# FakeTool\n\nMeasured 2026-07-03.\n');
+  });
+  try {
+    assert.match(verifyLanding(root).join('\n'), /'FakeTool' is NOT listed in the Benchmarks section/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('a real table row and a real list entry both still enumerate a benchmark (UMB-112 row 9 control)', () => {
+  const root = fixture((r) => {
+    write(r, 'profile/README.md', '# Org\n\n## Benchmarks\n\n| Tool | Result |\n|---|---|\n| **RowTool** | 2026-07-03 |\n');
+    write(r, 'README.md', '# Repo\n\n## Series Benchmarks\n\n* **RowTool** -- ok.\n');
+    write(r, 'benchmarks/RowTool/RESULTS.md', '# RowTool\n\nMeasured 2026-07-03.\n');
+  });
+  try {
+    assert.deepEqual(verifyLanding(root), []);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// UMB-112 row 10: `files.some(...)` let "first run pending" in ANY benchmark file (a protocol README's
+// prose, say) exempt a digest that carries no date and no record at all.
+test('"first run pending" in a NON-digest file does not exempt an undated digest (UMB-112 row 10)', () => {
+  const root = fixture((r) => {
+    write(r, 'profile/README.md', '# Org\n\n## Benchmarks\n\n| Tool | Result |\n|---|---|\n| **PendTool** | pending |\n');
+    write(r, 'benchmarks/PendTool/README.md', '# Protocol\n\nThe first run pending a decision on the corpus is described below.\n');
+    write(r, 'benchmarks/PendTool/RESULTS.md', '# PendTool\n\nNo run yet, and no date.\n');
+  });
+  try {
+    assert.match(verifyLanding(root).join('\n'), /'PendTool' has NO dated record/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

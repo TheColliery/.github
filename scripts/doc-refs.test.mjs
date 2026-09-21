@@ -96,3 +96,35 @@ test('doc-refs.mjs: profile/*.md is swept too, not only the root (UMB-057)', () 
   assert.match(res.stderr, /FAIL profile[\\/]README\.md:1:/);
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+// UMB-112 row 19: the link pattern stopped at the FIRST ")" and only knew a double-quoted title.
+test('doc-refs.mjs: a destination containing balanced parentheses resolves (UMB-112 row 19)', () => {
+  const root = scratchRoot();
+  write(path.join(root, 'foo(bar).md'), 'x\n');
+  write(path.join(root, 'README.md'), '[paren](foo(bar).md) is here.\n');
+  const res = run(root);
+  assert.equal(res.status, 0, res.stderr + res.stdout);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('doc-refs.mjs: a dangling parenthesised destination is reported WHOLE, not cut at the first ")" (UMB-112 row 19)', () => {
+  const root = scratchRoot();
+  write(path.join(root, 'README.md'), '[gone](gone(bar).md) is not here.\n');
+  const res = run(root);
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /dangling link 'gone\(bar\)\.md'/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('doc-refs.mjs: a single-quoted or parenthesised title, and an angle-bracket destination with a space, resolve (UMB-112 row 19)', () => {
+  const root = scratchRoot();
+  write(path.join(root, 'real.md'), 'x\n');
+  write(path.join(root, 'real file.md'), 'x\n');
+  write(path.join(root, 'README.md'), [
+    "[a](real.md 'single title') and [b](real.md (paren title)) and [c](real.md \"title with (parens)\") and [d](<real file.md>) resolve.",
+    '',
+  ].join('\n'));
+  const res = run(root);
+  assert.equal(res.status, 0, res.stderr + res.stdout);
+  fs.rmSync(root, { recursive: true, force: true });
+});

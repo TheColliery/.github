@@ -155,3 +155,31 @@ test('gateBypassVerdicts: two gates are each judged', () => {
   const v = gateBypassVerdicts([gate(), gate({ name: 'second-gate', bypass_actors: [] })]);
   assert.deepEqual(v.map((x) => x.ok), [true, false]);
 });
+
+// UMB-112 row 21: `ref_name.exclude` was never read, so a `~ALL` ruleset that EXCLUDES the default branch
+// counted as covering it.
+const exclusion = (exclude) => ruleset({ conditions: { ref_name: { include: ['~ALL'], exclude } } });
+
+test('rulesetCoversRules: ~ALL that EXCLUDES the default branch does NOT cover it -- by name, by ~DEFAULT_BRANCH, by glob (UMB-112 row 21)', () => {
+  assert.equal(rulesetCoversRules(exclusion(['refs/heads/main']), WANTED, 'main'), false);
+  assert.equal(rulesetCoversRules(exclusion(['~DEFAULT_BRANCH']), WANTED), false, 'needs no branch name');
+  assert.equal(rulesetCoversRules(exclusion(['refs/heads/ma*']), WANTED, 'main'), false);
+});
+
+test('rulesetCoversRules: ~ALL excluding some OTHER branch still covers the default branch (UMB-112 row 21 control)', () => {
+  assert.equal(rulesetCoversRules(exclusion(['refs/heads/release/*']), WANTED, 'main'), true);
+  assert.equal(rulesetCoversRules(exclusion(['refs/heads/dev']), WANTED, 'main'), true);
+  assert.equal(rulesetCoversRules(exclusion([]), WANTED, 'main'), true);
+});
+
+test('rulesetCoversRules: the default-branch name is optional -- omitted, a ~DEFAULT_BRANCH include with an empty exclude still covers (existing callers unchanged)', () => {
+  assert.equal(rulesetCoversRules(ruleset(), WANTED), true);
+});
+
+test('anyRulesetCovers / gateBypassVerdicts pass the default branch through: a gate that excludes it is not the gate (UMB-112 row 21)', () => {
+  const gate = { ...exclusion(['refs/heads/main']), rules: [{ type: 'required_status_checks' }], bypass_actors: [] };
+  assert.equal(anyRulesetCovers([exclusion(['refs/heads/main'])], WANTED, 'main'), false);
+  const v = gateBypassVerdicts([gate], undefined, 'main');
+  assert.equal(v.length, 1);
+  assert.match(v[0].text, /no active required_status_checks ruleset/);
+});

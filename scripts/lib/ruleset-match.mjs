@@ -12,12 +12,22 @@
 // (`GET /repos/{owner}/{repo}/rulesets/{id}`, which does carry `rules`), and hands the
 // resolved detail objects here.
 
+// One ruleset ref pattern against a full ref (refs/heads/main), in GitHub's fnmatch-style rule
+// syntax: `*` stays inside one path segment, `**` crosses `/`, `?` is one non-slash character.
+function refPatternMatches(pattern, ref) {
+  if (pattern === ref) return true;
+  const body = pattern.split('**').map((seg) => seg.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]')).join('.*');
+  return new RegExp('^' + body + '$').test(ref);
+}
+
 /**
  * True when `ruleset` (a full ruleset detail object, from the single-ruleset GET) is
  * ACTIVE, targets the BRANCH type, applies to the repo's default branch, and its own
- * `rules` array covers every type named in `wantedTypes`.
+ * `rules` array covers every type named in `wantedTypes`. `defaultBranch` (a branch NAME,
+ * optional) lets an `exclude` pattern that names or globs the default branch be honoured; a
+ * `~DEFAULT_BRANCH`/`~ALL` exclude defeats coverage without it (UMB-112 row 21, CodeRabbit).
  */
-export function rulesetCoversRules(ruleset, wantedTypes) {
+export function rulesetCoversRules(ruleset, wantedTypes, defaultBranch) {
   if (!ruleset || ruleset.enforcement !== 'active') return false;
   if (ruleset.target !== 'branch') return false;
   const refInclude = ruleset.conditions?.ref_name?.include || [];
@@ -25,14 +35,17 @@ export function rulesetCoversRules(ruleset, wantedTypes) {
   // whatever it is named" -- `~ALL` also covers it (a broader condition still applies).
   const targetsDefaultBranch = refInclude.includes('~DEFAULT_BRANCH') || refInclude.includes('~ALL');
   if (!targetsDefaultBranch) return false;
+  const defaultRef = defaultBranch ? `refs/heads/${defaultBranch}` : null;
+  const exclude = ruleset.conditions?.ref_name?.exclude || [];
+  if (exclude.some((p) => p === '~DEFAULT_BRANCH' || p === '~ALL' || (defaultRef !== null && refPatternMatches(p, defaultRef)))) return false;
   const haveTypes = new Set((ruleset.rules || []).map((r) => r.type));
   return wantedTypes.every((t) => haveTypes.has(t));
 }
 
 /** True when ANY ruleset in `rulesetDetails` (an array of full detail objects) covers
  * every type in `wantedTypes` on the default branch, per rulesetCoversRules above. */
-export function anyRulesetCovers(rulesetDetails, wantedTypes) {
-  return (rulesetDetails || []).some((rs) => rulesetCoversRules(rs, wantedTypes));
+export function anyRulesetCovers(rulesetDetails, wantedTypes, defaultBranch) {
+  return (rulesetDetails || []).some((rs) => rulesetCoversRules(rs, wantedTypes, defaultBranch));
 }
 
 // UMB-131 -- the gate ruleset's BYPASS LIST. `dependabot-auto-merge-gate` makes the
@@ -64,8 +77,8 @@ export function bypassActorsDiffer(actual, expected = GATE_RULESET_BYPASS) {
  * ruleset detail objects (the single-ruleset GET -- the list endpoint carries no rules or
  * bypass_actors). A ruleset without that rule (main-guard) is not a gate and is not judged here.
  */
-export function gateBypassVerdicts(details, expected = GATE_RULESET_BYPASS) {
-  const gates = (details || []).filter((rs) => rulesetCoversRules(rs, ['required_status_checks']));
+export function gateBypassVerdicts(details, expected = GATE_RULESET_BYPASS, defaultBranch) {
+  const gates = (details || []).filter((rs) => rulesetCoversRules(rs, ['required_status_checks'], defaultBranch));
   if (gates.length === 0) {
     return [{ ok: false, text: 'ruleset bypass: DIFFERS (no active required_status_checks ruleset on the default branch -- SWEEP-MARKS expects the dependabot-auto-merge-gate)' }];
   }

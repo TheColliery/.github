@@ -8,8 +8,10 @@
 const EM_DASH = '—';
 // Common emoji ranges (pictographs, symbols, dingbats, arrows-as-emoji, variation selector).
 const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/u;
-// A bare `vX.Y.Z` with nothing after it (the banned "version alone, no summary" shape).
-const BARE_VERSION = /^v?\d+\.\d+\.\d+\s*$/;
+// A bare `vX.Y.Z` with nothing after it (the banned "version alone, no summary" shape) -- a
+// trailing separator with NO summary behind it counts too: "v2.1.2 -" is the titleless release
+// RELEASE-NOTES-TEMPLATE's issue 1 records (UMB-112 row 20, CodeRabbit).
+const BARE_VERSION = /^v?\d+\.\d+\.\d+\s*(?:[-\u2013\u2014:]\s*)?$/;
 
 /** Does `title` open with `repoName` as a literal prefix (the banned repo-name-prefix)? */
 export function hasRepoPrefix(title, repoName) {

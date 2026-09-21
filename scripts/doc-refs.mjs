@@ -29,7 +29,52 @@ const ROOT = process.argv[2]
   ? path.resolve(process.argv[2])
   : path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
-const LINK = /\[([^\]]*)\]\(([^)]+)\)/g;
+// Every `[text](destination "title")` on one line. The destination may contain balanced
+// parentheses (`foo(bar).md`) or sit in <angle brackets> (a space allowed); the optional title may be
+// "double", 'single' or (paren) quoted. A tail that does not parse as a link falls back to the
+// old reading (everything up to the first ")"), so a genuinely malformed link is still reported,
+// never silently skipped (UMB-112 row 19, CodeRabbit).
+function* linksIn(line) {
+  const OPEN = /\[([^\]]*)\]\(/g;
+  let m;
+  while ((m = OPEN.exec(line))) {
+    let i = OPEN.lastIndex;
+    while (line[i] === ' ' || line[i] === '\t') i++;
+    const from = i;
+    let target = null;
+    if (line[i] === '<') {
+      const j = line.indexOf('>', i);
+      if (j !== -1) { target = line.slice(i + 1, j); i = j + 1; }
+    } else {
+      let depth = 0;
+      for (; i < line.length; i++) {
+        const c = line[i];
+        if (c === '\\') { i++; continue; }
+        if (c === '(') depth++;
+        else if (c === ')') { if (depth === 0) break; depth--; } else if (/\s/.test(c) && depth === 0) break;
+      }
+      target = line.slice(from, i);
+    }
+    let ok = target !== null;
+    if (ok) {
+      while (/\s/.test(line[i] ?? '')) i++;
+      const q = line[i];
+      if (q === '"' || q === "'") { const j = line.indexOf(q, i + 1); if (j === -1) ok = false; else i = j + 1; }
+      else if (q === '(') { const j = line.indexOf(')', i + 1); if (j === -1) ok = false; else i = j + 1; }
+      while (/\s/.test(line[i] ?? '')) i++;
+      if (line[i] !== ')') ok = false;
+    }
+    if (ok) {
+      yield { start: m.index, end: i + 1, target: target.trim() };
+      OPEN.lastIndex = i + 1;
+      continue;
+    }
+    const close = line.indexOf(')', OPEN.lastIndex);
+    if (close === -1) continue;
+    yield { start: m.index, end: close + 1, target: line.slice(OPEN.lastIndex, close).trim().split(/\s+["']/)[0] };
+    OPEN.lastIndex = close + 1;
+  }
+}
 const CODE_SPAN = /`[^`]+`/g;
 
 function stripFences(text) {
@@ -70,13 +115,8 @@ function findDanglingRefs(relFile) {
   const dangling = [];
   lines.forEach((line, idx) => {
     const ranges = codeSpanRanges(line);
-    let m;
-    LINK.lastIndex = 0;
-    while ((m = LINK.exec(line))) {
-      const start = m.index;
-      const end = start + m[0].length;
+    for (const { start, end, target } of linksIn(line)) {
       if (fullyInsideACodeSpan(start, end, ranges)) continue;
-      let target = m[2].trim().split(/\s+"/)[0];
       if (/^(https?:|mailto:|#)/i.test(target)) continue;
       const [pathPart] = target.split('#');
       if (!pathPart) continue;

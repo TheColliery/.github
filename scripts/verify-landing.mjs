@@ -101,8 +101,12 @@ export function verifyLanding(root) {
       const sec = readFileSync(p, 'utf8').match(/##[^\n]*Benchmarks\b[\s\S]*?(?=\n##\s|$)/);
       if (!sec) continue; // this file does not enumerate benchmarks
       enumerated = true;
+      // Parse the SAME row/list shapes the reverse check below reads: a bold **Tool** mention
+      // anywhere in the section's prose is not an enumeration row (UMB-112 row 9, CodeRabbit).
+      const ROW_TOOL = /^(?:\|\s*|[-*]\s+)\*\*([A-Za-z][\w-]*)\*\*/gm;
+      const listed = new Set([...sec[0].matchAll(ROW_TOOL)].map((x) => x[1]));
       for (const tool of tools) {
-        if (!sec[0].includes(`**${tool}**`)) {
+        if (!listed.has(tool)) {
           fail(`benchmark '${tool}' is NOT listed in the Benchmarks section of ${relPath} (SWEEP-MARKS Event-1 enumeration miss — every enumerating surface must list every benchmark)`);
         }
       }
@@ -113,7 +117,6 @@ export function verifyLanding(root) {
       // renders fine but points at no record. record→row alone let those pass. The `*` bullet
       // is load-bearing: README.md's "Series Benchmarks" list uses `* **X**`, not `- **X**` —
       // omitting it left the reverse check blind to an orphan row on the repo README.
-      const ROW_TOOL = /^(?:\|\s*|[-*]\s+)\*\*([A-Za-z][\w-]*)\*\*/gm;
       let rm;
       while ((rm = ROW_TOOL.exec(sec[0])) !== null) {
         if (!tools.includes(rm[1])) {
@@ -143,7 +146,10 @@ export function verifyLanding(root) {
       // named "first run pending" beats an invented date (CoalWash launched with
       // protocol + fixtures + scorer, run pending). The date rule bites the
       // moment a real record lands.
-      const namedPending = files.some((f) => /first run pending/i.test(readFileSync(f, 'utf8')));
+      // Read from the DIGEST only (RESULTS.md): the phrase in a protocol README's prose must not
+      // exempt a digest that carries no date and no record (UMB-112 row 10, CodeRabbit).
+      const digest = files.find((f) => /[\\/]RESULTS\.md$/.test(f));
+      const namedPending = digest !== undefined && /first run pending/i.test(readFileSync(digest, 'utf8'));
       // A permanent "pending" is the OTHER half of the fabrication gap: once a real
       // dated record lands, a digest that still claims "first run pending" is either
       // stale bookkeeping or a fabricated row hiding behind the honest-placeholder

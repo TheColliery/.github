@@ -8,11 +8,15 @@
 // short REAL license. MIT's own canonical full text commonly renders at ~19-21 lines,
 // almost exactly as short as the measured 19-line stub this check exists to catch. A
 // bare length cutoff would misclassify a genuine MIT LICENSE as a stub. So a file is a
-// STUB only when it is BOTH short (<= STUB_MAX_LINES) AND carries none of the
-// substantive grant/disclaimer language every real license text uses even in its
-// shortest forms (MIT: "Permission is hereby granted" + "WITHOUT WARRANTY"; BSD:
-// "Redistribution and use"; ISC: "Permission to use, copy" + "WARRANTY"; Apache/CC:
-// both, at length). A name-and-URL pointer uses none of these words.
+// STUB only when it is BOTH short (<= STUB_MAX_LINES) AND carries no GRANT idiom
+// (MIT: "Permission is hereby granted"; BSD: "Redistribution and use"; ISC: "Permission
+// to use, copy"; Apache/CC: "hereby grants") and no RESERVATION idiom (a proprietary
+// licence grants nothing and reserves everything: "All rights reserved", "prior written
+// permission" -- measured on the real Bankfire and Kolwen LICENSE files, which a
+// grant-only test would have called stubs). A name-and-URL pointer uses none of them.
+// Warranty/indemnity words are NOT terms: a short body that only DISCLAIMS ("provided
+// AS IS, without warranty ...") reproduces nothing, so they never count on their own
+// (UMB-112 row 8, CodeRabbit).
 
 // The measured stub is 19L; MIT's own canonical text commonly renders at ~19-21L --
 // this clears that band with margin while staying far below every real full legalcode
@@ -27,7 +31,7 @@ export const STUB_MAX_LINES = 25;
 // is the actual multi-word idiom a real license's grant/disclaimer clause uses,
 // specific enough that a restriction sentence mentioning the same bare words does not
 // collide with it.
-const SUBSTANTIVE_MARKER = /permission is hereby granted|permission to use|redistribution and use|hereby grants?|warrant(?:y|ies)|indemnif/i;
+const SUBSTANTIVE_MARKER = /permission is hereby granted|permission to use|redistribution and use|hereby grants?|all rights reserved|prior written permission|proprietary and confidential/i;
 
 /** True when `content` looks like a LICENSE stub: a short pointer with no reproduced terms. */
 export function isLicenseStub(content) {

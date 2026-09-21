@@ -263,3 +263,36 @@ test('licenseIdentityMismatches: { templateRepo: true } skips ONLY placeholders 
   assert.equal(result.length, 1);
   assert.match(result[0], /README badge says "MIT"/);
 });
+
+// UMB-112 row 8: warranty/indemnity words ALONE made a short pointer read as a full licence.
+test('isLicenseStub: a short DISCLAIMER-only body (warranty and indemnity words, no GRANT) is a STUB (UMB-112 row 8)', () => {
+  const disclaimerOnly = [
+    'Example Article', '',
+    'Provided AS IS, WITHOUT WARRANTY OF ANY KIND. The author disclaims all',
+    'warranties and offers no indemnification.', '',
+    'See https://example.org/licence for the terms.', '',
+  ].join('\n');
+  assert.equal(isLicenseStub(disclaimerOnly), true);
+});
+
+test('isLicenseStub: a short body carrying a GRANT idiom is NOT a stub, with or without a disclaimer -- ISC / BSD / Apache-style openings (UMB-112 row 8)', () => {
+  const isc = 'ISC License\n\nCopyright (c) 2026 Example\n\nPermission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted.\n';
+  const bsd = 'BSD 2-Clause\n\nCopyright (c) 2026 Example\n\nRedistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met.\n';
+  const apache = 'Apache License 2.0\n\nSubject to the terms of this License, each Contributor hereby grants to You a perpetual, worldwide licence.\n';
+  for (const body of [isc, bsd, apache]) assert.equal(isLicenseStub(body), false, body.split('\n')[0]);
+});
+
+// The grant-only reading of row 8 would have called these REAL files stubs (measured on the live
+// Bankfire and Kolwen LICENSE files, 2026-09-21): a proprietary licence grants nothing and reserves
+// everything, so "All rights reserved" + "prior written permission" are its terms.
+test('isLicenseStub: a short PROPRIETARY licence (all rights reserved, prior written permission, no grant) is NOT a stub (UMB-112 row 8 control)', () => {
+  const proprietary = [
+    'Example — Repository License', '',
+    'Copyright (c) 2026 Example. All rights reserved.', '',
+    'The contents of this repository are proprietary and confidential. No part of it may be',
+    'reproduced, distributed, or transmitted in any form without prior written permission',
+    'from the copyright holder.', '',
+    'THIS SOFTWARE IS PROVIDED WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.', '',
+  ].join('\n');
+  assert.equal(isLicenseStub(proprietary), false);
+});
