@@ -1,6 +1,6 @@
 # Series Canon — L1 (TheColliery)
 
-> The series-wide shape every repo in every zone shares, written per **REPO KIND** rather than per species — the shape found when the seven Coal* repos were measured against each other (internal record, 2026-09-04). Companion to [SKILL-REPO-PATTERN.md](./SKILL-REPO-PATTERN.md), which is the **L2** layer on top of this one — the Coal* skill-repo species' own overlay (the 5 Standard Systems). Scope: the three series zones — **CoalWorks · LLMWorks · Articles** — a partner workspace under the same parent directory is not part of the series and is out of scope here.
+> The series-wide shape every repo in every zone shares, written per **REPO KIND** rather than per species — the shape found when the seven Coal\* repos were measured against each other (internal record, 2026-09-04). Companion to [SKILL-REPO-PATTERN.md](./SKILL-REPO-PATTERN.md), which is the **L2** layer on top of this one — the Coal* skill-repo species' own overlay (the 5 Standard Systems). Scope: the three series zones — **CoalWorks · LLMWorks · Articles** — a partner workspace under the same parent directory is not part of the series and is out of scope here.
 > **A single GitHub "template repository" object cannot express this shape.** The de-facto common shape breaks by REPO KIND, not by a single central template, so L1 is written per kind here, and the [`templates/<kind>/`](./templates/) directory in this repo is the machine-checkable embodiment of it — never a loose prose restatement.
 
 ## The two layers

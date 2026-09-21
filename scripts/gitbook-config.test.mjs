@@ -160,7 +160,15 @@ test('no front door points at the deleted old TheColliery GitBook site (hetcreep
   };
   walk('');
   const hits = files.filter((f) => f !== 'scripts/gitbook-config.test.mjs' && dead.test(read(f)));
-  assert.deepEqual(hits, [], 'these files still name the deleted site; the live door is https://thecolliery.gitbook.io/thecolliery-docs/');
-  assert.match(read('README.md'), /thecolliery\.gitbook\.io\/thecolliery-docs/);
-  assert.match(read('profile/README.md'), /thecolliery\.gitbook\.io\/thecolliery-docs/);
+  assert.deepEqual(hits, [], 'these files still name the deleted site');
+  // UMB-178 step 4: the link we PUBLISH is the stable https://thecolliery.org/docs (a Cloudflare redirect we own).
+  // docs.thecolliery.org is a GitBook custom domain on a TRIAL and thecolliery.gitbook.io redirects to it, so no
+  // front door may depend on either host. The only files that may name them are this test and the gate that bans
+  // them from a repo's website field.
+  const gitbookHosts = /thecolliery\.gitbook\.io|docs\.thecolliery\.org/;
+  const MAY_NAME = ['scripts/gitbook-config.test.mjs', 'scripts/lib/skeleton-check-lib.mjs', 'scripts/skeleton-check.test.mjs'];
+  const named = files.filter((f) => !MAY_NAME.includes(f) && gitbookHosts.test(read(f)));
+  assert.deepEqual(named, [], 'these files publish a GitBook host; the stable link is https://thecolliery.org/docs');
+  assert.match(read('README.md'), /https:\/\/thecolliery\.org\/docs\b/);
+  assert.match(read('profile/README.md'), /https:\/\/thecolliery\.org\/docs\b/);
 });

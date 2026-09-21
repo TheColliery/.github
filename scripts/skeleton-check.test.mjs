@@ -481,8 +481,19 @@ test('detailsVerdict: an empty website FAILS; a website that is NOT the org land
   const none = detailsVerdict(repoObj('CoalMine', { homepage: '' }));
   assert.equal(none.status, 'FAIL');
   assert.ok(none.reasons.some((r) => /website is empty/.test(r)));
-  assert.equal(detailsVerdict(repoObj('.github', { homepage: 'https://thecolliery.gitbook.io/thecolliery-docs/' })).status, 'OK');
+  assert.equal(detailsVerdict(repoObj('.github', { homepage: 'https://thecolliery.org/docs' })).status, 'OK');
   assert.equal(detailsVerdict(repoObj('CoalMine', { homepage: null })).status, 'FAIL');
+});
+
+test('detailsVerdict: a website that names a GitBook docs host FAILS (the stable link is https://thecolliery.org/docs); the stable link and the org landing are fine (UMB-178 step 4, RED before the rule)', () => {
+  for (const homepage of ['https://thecolliery.gitbook.io/thecolliery-docs/', 'https://docs.thecolliery.org/', 'http://DOCS.thecolliery.org/anything']) {
+    const v = detailsVerdict(repoObj('.github', { homepage }));
+    assert.equal(v.status, 'FAIL', homepage);
+    assert.ok(v.reasons.some((r) => /GitBook host/.test(r) && /thecolliery\.org\/docs/.test(r)), homepage + ': ' + v.reasons.join(' | '));
+  }
+  for (const homepage of ['https://thecolliery.org/docs', 'https://github.com/TheColliery', 'https://kolwen.com/', 'https://docs.thecolliery.org.example.com/']) {
+    assert.equal(detailsVerdict(repoObj('.github', { homepage })).status, 'OK', homepage);
+  }
 });
 
 test('detailsVerdict (public-other, the Kolwen shape 2026-09-20: no topics, no website): FAILS on both, and NEVER demands the Coal* skill-suite base set', () => {
@@ -510,7 +521,7 @@ test('detailsVerdict: template, private and archived repos are N/A even when EMP
 function liveOrg() {
   const room = (name) => repoObj(name, { topics: [...BASE, 'code-quality'] });
   return [
-    repoObj('.github', { homepage: 'https://thecolliery.gitbook.io/thecolliery-docs/' }),
+    repoObj('.github', { homepage: 'https://thecolliery.org/docs' }),
     repoObj('Bankfire', { private: true, homepage: '', topics: [] }),
     repoObj('Bankfire-gate', { private: true, homepage: '', topics: [] }),
     repoObj('Chotmeter', { private: true, homepage: '', topics: [] }),

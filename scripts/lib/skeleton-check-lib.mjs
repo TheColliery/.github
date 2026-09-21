@@ -256,6 +256,9 @@ export function findRepos(zonesRoot, zones) {
 export const ORG_LANDING = 'https://github.com/TheColliery';
 export const BASE_TOPICS = Object.freeze(['claude-code', 'claude', 'ai-agents', 'agent-skills', 'ai-coding', 'developer-tools']);
 
+// UMB-178 step 4: the docs site is published through the stable link, never through the GitBook host behind it.
+const GITBOOK_DOCS_HOST = /^https?:\/\/(thecolliery\.gitbook\.io|docs\.thecolliery\.org)(?:[/:?#]|$)/i;
+
 const DETAILS_NA = {
   archived: 'archived -- not a live front door',
   template: 'template repo -- DOC-PATTERN §Repo details defines no floor for one (decision pending)',
@@ -284,6 +287,7 @@ export function detailsVerdict(repo) {
     reasons.push('no topics -- DOC-PATTERN §Repo details: every specific a searcher would type');
   }
   if (!(repo.homepage ?? '').trim()) reasons.push('website is empty -- DOC-PATTERN §Repo details: the org landing unless the tool has a better front door');
+  else if (GITBOOK_DOCS_HOST.test(repo.homepage.trim())) reasons.push('website names a GitBook host (a trial-bound custom domain, or a URL that redirects to it) -- publish the stable link https://thecolliery.org/docs (UMB-178 step 4)');
   return { kind, status: reasons.length ? 'FAIL' : 'OK', reasons };
 }
 

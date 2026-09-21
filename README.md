@@ -2,7 +2,7 @@
 
 This repository houses the global configuration, landing page profile, central installation scripts, and shared developer doctrines for **[TheColliery](https://github.com/TheColliery)** organization.
 
-📖 **Full documentation:** [thecolliery.gitbook.io/thecolliery-docs](https://thecolliery.gitbook.io/thecolliery-docs/)
+📖 **Full documentation:** [thecolliery.org/docs](https://thecolliery.org/docs)
 
 ---
 
