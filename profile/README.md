@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  📖 <a href="https://hetcreep.gitbook.io/thecolliery">Full documentation</a>
+  📖 <a href="https://thecolliery.gitbook.io/thecolliery-docs/">Full documentation</a>
 </p>
 
 ---

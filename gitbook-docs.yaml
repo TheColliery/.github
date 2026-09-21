@@ -40,6 +40,12 @@ site:
           content:
             directory: ./benchmarks/CoalHearth
         - type: space
+          key: space-benchmarks-coalledger
+          title: CoalLedger
+          path: coalledger
+          content:
+            directory: ./benchmarks/CoalLedger
+        - type: space
           key: space-benchmarks-coalmine
           title: CoalMine
           path: coalmine
@@ -51,6 +57,12 @@ site:
           path: coaltipple
           content:
             directory: ./benchmarks/CoalTipple
+        - type: space
+          key: space-benchmarks-coalwash
+          title: CoalWash
+          path: coalwash
+          content:
+            directory: ./benchmarks/CoalWash
         - type: space
           key: space-benchmarks-governance
           title: Governance

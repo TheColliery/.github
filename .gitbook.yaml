@@ -1,7 +1,11 @@
-# GitBook space configuration for the TheColliery showcase site (space-level Git Sync, Basic plan).
-# The site publishes ONLY the pages listed in SUMMARY.md — benchmark fixtures, templates and
-# workflow files never enter the navigation. gitbook-docs.yaml (site-level, sections) stays in the
-# repo for the day the site moves to a plan that supports sections; it is not read by space-level sync.
+# GitBook SPACE-level configuration for the TheColliery showcase: the FALLBACK shape, written for the plan that
+# survives the Ultimate trial (space-level Git Sync, one space, Basic plan). While the trial runs the site does NOT
+# read this file: it reads gitbook-docs.yaml (site-level, sections), and this file sits outside every mapped
+# directory. It is kept WORKING underneath (scripts/gitbook-config.test.mjs pins it): the day the plan question is
+# settled against Ultimate, this is the structure to fall back to.
+# The space publishes ONLY the pages listed in SUMMARY.md — benchmark fixtures, templates and workflow files
+# never enter the navigation. (Under site-level sync each benchmark directory carries its OWN SUMMARY.md for the
+# same reason; the test keeps the two lists identical.)
 root: ./
 structure:
   readme: profile/README.md
