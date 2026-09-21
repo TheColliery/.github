@@ -4,9 +4,11 @@
 // check is AGGREGATE across files, not per-file.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const mod = await import('./update-readme.mjs');
 const { badgeSpecs, updateFileStats, assertEveryBadgeMatched, fetchRepoClones } = mod;
@@ -20,6 +22,7 @@ const STATS = {
   faceClones: '31+', faceUniques: '9+',
   washClones: '0+', washUniques: '0+',
   ledgerClones: '0+', ledgerUniques: '0+',
+  gobClones: '5+', gobUniques: '2+',
 };
 
 function withTmp(name, content, fn) {
@@ -33,8 +36,8 @@ function withTmp(name, content, fn) {
   }
 }
 
-test('badgeSpecs covers all 16 badges (2 global + 14 per-tool)', () => {
-  assert.equal(badgeSpecs(STATS).length, 16);
+test('badgeSpecs covers all 18 badges (2 global + 16 per-tool)', () => {
+  assert.equal(badgeSpecs(STATS).length, 18);
 });
 
 test('updateFileStats replaces a present badge and counts the hit', () => {
@@ -131,5 +134,72 @@ test('fetchRepoClones: a non-numeric count is REFUSED -- a string carrying badge
 test('fetchRepoClones: negative, fractional, NaN-like and unsafe numbers are REFUSED', async () => {
   for (const bad of [-1, 1.5, 2 ** 60, Infinity]) {
     await assert.rejects(withFakeApi({ count: bad, uniques: 0 }, () => fetchRepoClones('o/r')), /count is not a non-negative integer/, String(bad));
+  }
+});
+
+// --- CoalGob joins the traffic list (new-sibling launch, SWEEP-MARKS Event 4 mark 3) --------------------
+// The repo list lived in FOUR hard-coded places in main() (the fetch, the two sums, the stats object)
+// plus badgeSpecs, and nothing tied them together, so a launch that touched some and not the others
+// would have printed a green run. These tests pin the wiring end to end, not just the spec list.
+test('badgeSpecs carries a per-tool Downloads + Developers pair for CoalGob', () => {
+  const names = badgeSpecs(STATS).map((s) => s.name);
+  assert.ok(names.includes('CoalGob_Downloads'), names.join(','));
+  assert.ok(names.includes('CoalGob_Developers'), names.join(','));
+  const dl = badgeSpecs(STATS).find((s) => s.name === 'CoalGob_Downloads');
+  assert.match('CoalGob_Downloads-0%2B%20%2F%2014d-orange', dl.re);
+  assert.equal(dl.val, 'CoalGob_Downloads-' + encodeURIComponent('5+ / 14d') + '-orange');
+});
+
+// Every per-tool badge in the badge spec list has a matching entry in the README's Active Repositories list
+// and the other way round: a spec with no badge fails the aggregate check loudly at run time, but a badge
+// with no spec would silently freeze at its seed value.
+test('the root README carries exactly the per-tool badges the specs update (no frozen badge, no orphan spec)', () => {
+  const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  const inReadme = [...readme.matchAll(/(Coal[A-Za-z]+_(?:Downloads|Developers))-/g)].map((m) => m[1]);
+  const specs = badgeSpecs(STATS).map((s) => s.name).filter((n) => n.includes('_'));
+  assert.deepEqual([...new Set(inReadme)].sort(), [...specs].sort());
+  assert.equal(inReadme.length, specs.length, 'each per-tool badge appears exactly once');
+});
+
+// The CLI, spawned with a fetch stub preloaded (NODE_OPTIONS=--import): the assertion is on what it requests
+// and what it writes. Counts stay under 1000 so the expected badge text is exact (no k-rounding ambiguity).
+const TOOLS = ['CoalMine', 'CoalTipple', 'CoalBoard', 'CoalHearth', 'CoalFace', 'CoalWash', 'CoalLedger', 'CoalGob'];
+const TRAFFIC = { CoalMine: [300, 20], CoalTipple: [60, 10], CoalBoard: [20, 5], CoalHearth: [30, 5], CoalFace: [40, 4], CoalWash: [25, 3], CoalLedger: [25, 3], CoalGob: [44, 6] };
+const STUB_SRC = String.raw`import fs from 'node:fs';
+const T = JSON.parse(process.env.STUB_TRAFFIC);
+globalThis.fetch = async (url) => {
+  const m = String(url).match(/repos\/([^/]+)\/([^/]+)\/traffic\/clones/);
+  fs.appendFileSync(process.env.STUB_LOG, (m ? m[1] + '/' + m[2] : 'OTHER ' + url) + '\n');
+  const t = m && T[m[2]];
+  return { ok: !!t, status: t ? 200 : 404, statusText: t ? 'OK' : 'Not Found', json: async () => ({ count: t ? t[0] : 0, uniques: t ? t[1] : 0 }) };
+};
+`;
+
+test('update-readme CLI: fetches CoalGob, adds it to the combined sums, and rewrites its per-tool badges (RED before CoalGob was wired)', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'update-readme-cli-'));
+  try {
+    mkdirSync(path.join(dir, 'profile'));
+    writeFileSync(path.join(dir, 'profile', 'README.md'), 'Downloads-0%2B%20%2F%2014d-orange Developers-0%2B%20%2F%2014d-brightgreen\n');
+    writeFileSync(path.join(dir, 'README.md'), TOOLS.map((n) => `${n}_Downloads-0%2B%20%2F%2014d-orange ${n}_Developers-0%2B%20%2F%2014d-brightgreen`).join('\n') + '\n');
+    const log = path.join(dir, 'calls.log');
+    const stub = path.join(dir, 'stub.mjs');
+    writeFileSync(stub, STUB_SRC);
+    const res = spawnSync(process.execPath, [fileURLToPath(new URL('./update-readme.mjs', import.meta.url))], {
+      cwd: dir,
+      encoding: 'utf8',
+      env: { ...process.env, PAT_TOKEN: 'test-token', NODE_OPTIONS: '--import=' + pathToFileURL(stub).href, STUB_LOG: log, STUB_TRAFFIC: JSON.stringify(TRAFFIC) },
+    });
+    const calls = readFileSync(log, 'utf8').split('\n').filter(Boolean);
+    assert.ok(calls.some((c) => c.endsWith('/CoalGob')), 'CoalGob traffic must be requested: ' + calls.join(','));
+    assert.equal(res.status, 0, res.stderr + res.stdout);
+    const root = readFileSync(path.join(dir, 'README.md'), 'utf8');
+    const profile = readFileSync(path.join(dir, 'profile', 'README.md'), 'utf8');
+    assert.match(root, /CoalGob_Downloads-44%2B%20%2F%2014d-orange/);
+    assert.match(root, /CoalGob_Developers-6%2B%20%2F%2014d-brightgreen/);
+    // combined = 300+60+20+30+40+25+25+44 = 544 clones, 20+10+5+5+4+3+3+6 = 56 uniques (the sum INCLUDES CoalGob)
+    assert.match(profile, /Downloads-544%2B%20%2F%2014d-orange/);
+    assert.match(profile, /Developers-56%2B%20%2F%2014d-brightgreen/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

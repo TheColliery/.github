@@ -78,6 +78,8 @@ function badgeSpecs(stats) {
     { name: 'CoalWash_Developers', re: /CoalWash_Developers-[0-9a-zA-Z.%+]+-brightgreen/g, val: `CoalWash_Developers-${encodeURIComponent(stats.washUniques + ' / 14d')}-brightgreen` },
     { name: 'CoalLedger_Downloads', re: /CoalLedger_Downloads-[0-9a-zA-Z.%+]+-orange/g, val: `CoalLedger_Downloads-${encodeURIComponent(stats.ledgerClones + ' / 14d')}-orange` },
     { name: 'CoalLedger_Developers', re: /CoalLedger_Developers-[0-9a-zA-Z.%+]+-brightgreen/g, val: `CoalLedger_Developers-${encodeURIComponent(stats.ledgerUniques + ' / 14d')}-brightgreen` },
+    { name: 'CoalGob_Downloads', re: /CoalGob_Downloads-[0-9a-zA-Z.%+]+-orange/g, val: `CoalGob_Downloads-${encodeURIComponent(stats.gobClones + ' / 14d')}-orange` },
+    { name: 'CoalGob_Developers', re: /CoalGob_Developers-[0-9a-zA-Z.%+]+-brightgreen/g, val: `CoalGob_Developers-${encodeURIComponent(stats.gobUniques + ' / 14d')}-brightgreen` },
   ];
 }
 
@@ -117,7 +119,7 @@ function assertEveryBadgeMatched(perFileHits, stats) {
 
 async function main() {
   // Per-repo fetch: failures are non-fatal (logged + exitCode=1) so the other repos still update.
-  const [mineData, tippleData, boardData, hearthData, faceData, washData, ledgerData] = await Promise.all([
+  const [mineData, tippleData, boardData, hearthData, faceData, washData, ledgerData, gobData] = await Promise.all([
     fetchRepoClonesSafe('HetCreep/CoalMine'),
     fetchRepoClonesSafe('TheColliery/CoalTipple'),
     fetchRepoClonesSafe('TheColliery/CoalBoard'),
@@ -125,10 +127,11 @@ async function main() {
     fetchRepoClonesSafe('TheColliery/CoalFace'),
     fetchRepoClonesSafe('TheColliery/CoalWash'),
     fetchRepoClonesSafe('TheColliery/CoalLedger'),
+    fetchRepoClonesSafe('TheColliery/CoalGob'),
   ]);
 
-  const totalClones = (mineData.count || 0) + (tippleData.count || 0) + (boardData.count || 0) + (hearthData.count || 0) + (faceData.count || 0) + (washData.count || 0) + (ledgerData.count || 0);
-  const totalUniques = (mineData.uniques || 0) + (tippleData.uniques || 0) + (boardData.uniques || 0) + (hearthData.uniques || 0) + (faceData.uniques || 0) + (washData.uniques || 0) + (ledgerData.uniques || 0);
+  const totalClones = (mineData.count || 0) + (tippleData.count || 0) + (boardData.count || 0) + (hearthData.count || 0) + (faceData.count || 0) + (washData.count || 0) + (ledgerData.count || 0) + (gobData.count || 0);
+  const totalUniques = (mineData.uniques || 0) + (tippleData.uniques || 0) + (boardData.uniques || 0) + (hearthData.uniques || 0) + (faceData.uniques || 0) + (washData.uniques || 0) + (ledgerData.uniques || 0) + (gobData.uniques || 0);
 
   const stats = {
     combinedClones: formatStat(totalClones),
@@ -146,7 +149,9 @@ async function main() {
     washClones: formatStat(washData.count || 0),
     washUniques: formatStat(washData.uniques || 0),
     ledgerClones: formatStat(ledgerData.count || 0),
-    ledgerUniques: formatStat(ledgerData.uniques || 0)
+    ledgerUniques: formatStat(ledgerData.uniques || 0),
+    gobClones: formatStat(gobData.count || 0),
+    gobUniques: formatStat(gobData.uniques || 0)
   };
 
   console.log(`CoalMine - Clones: ${stats.mineClones}, Uniques: ${stats.mineUniques}`);
@@ -156,6 +161,7 @@ async function main() {
   console.log(`CoalFace - Clones: ${stats.faceClones}, Uniques: ${stats.faceUniques}`);
   console.log(`CoalWash - Clones: ${stats.washClones}, Uniques: ${stats.washUniques}`);
   console.log(`CoalLedger - Clones: ${stats.ledgerClones}, Uniques: ${stats.ledgerUniques}`);
+  console.log(`CoalGob - Clones: ${stats.gobClones}, Uniques: ${stats.gobUniques}`);
   console.log(`Combined - Clones: ${stats.combinedClones}, Uniques: ${stats.combinedUniques}`);
 
   // Update both profile/README.md and root README.md.
