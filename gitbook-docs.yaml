@@ -16,6 +16,68 @@ site:
           content:
             directory: ./profile
     - type: section
+      key: section-tools
+      title: Tools
+      path: tools
+      children:
+        - type: space
+          key: space-tools-coalmine
+          title: CoalMine
+          path: coalmine
+          default: true
+          draft: true
+          content:
+            directory: null
+        - type: space
+          key: space-tools-coaltipple
+          title: CoalTipple
+          path: coaltipple
+          draft: true
+          content:
+            directory: null
+        - type: space
+          key: space-tools-coalboard
+          title: CoalBoard
+          path: coalboard
+          draft: true
+          content:
+            directory: null
+        - type: space
+          key: space-tools-coalhearth
+          title: CoalHearth
+          path: coalhearth
+          draft: true
+          content:
+            directory: null
+        - type: space
+          key: space-tools-coalface
+          title: CoalFace
+          path: coalface
+          draft: true
+          content:
+            directory: null
+        - type: space
+          key: space-tools-coalwash
+          title: CoalWash
+          path: coalwash
+          draft: true
+          content:
+            directory: null
+        - type: space
+          key: space-tools-coalledger
+          title: CoalLedger
+          path: coalledger
+          draft: true
+          content:
+            directory: null
+        - type: space
+          key: space-tools-coalgob
+          title: CoalGob
+          path: coalgob
+          draft: true
+          content:
+            directory: null
+    - type: section
       key: section-benchmarks
       title: Benchmarks
       path: benchmarks
@@ -75,3 +137,15 @@ site:
           path: skill-determinism
           content:
             directory: ./benchmarks/SkillDeterminism
+    - type: section
+      key: section-patterns
+      title: Patterns
+      path: patterns
+      children:
+        - type: space
+          key: space-patterns
+          title: Patterns
+          path: overview
+          default: true
+          content:
+            directory: ./patterns

@@ -2,6 +2,17 @@
 
 * [TheColliery](profile/README.md)
 
+## Tools
+
+* [CoalMine](https://github.com/TheColliery/CoalMine)
+* [CoalTipple](https://github.com/TheColliery/CoalTipple)
+* [CoalBoard](https://github.com/TheColliery/CoalBoard)
+* [CoalHearth](https://github.com/TheColliery/CoalHearth)
+* [CoalFace](https://github.com/TheColliery/CoalFace)
+* [CoalWash](https://github.com/TheColliery/CoalWash)
+* [CoalLedger](https://github.com/TheColliery/CoalLedger)
+* [CoalGob](https://github.com/TheColliery/CoalGob)
+
 ## Benchmarks
 
 * [CoalBoard—with-the-board vs without-the-board](benchmarks/CoalBoard/README.md)

@@ -27,7 +27,7 @@ function parseSiteFile(text) {
   for (const line of text.split('\n')) {
     const head = line.match(/^(\s*)- type: ([\w-]+)/);
     if (head) { cur = { type: head[2], indent: head[1].length }; nodes.push(cur); continue; }
-    const kv = cur && line.match(/^\s+(key|title|path|default|directory): (.+?)\s*$/);
+    const kv = cur && line.match(/^\s+(key|title|path|default|directory|draft): (.+?)\s*$/);
     if (kv) cur[kv[1]] = kv[2];
   }
   // a space belongs to the nearest section above it that is indented less
@@ -59,7 +59,8 @@ test("gitbook-docs.yaml obeys the vendor's import rules (a violation fails the s
     assert.equal(kids.filter((x) => x.default === 'true').length, 1, `section ${s.key}: exactly one default space`);
     assert.equal(new Set(kids.map((k) => k.path)).size, kids.length, `section ${s.key}: space paths are unique`);
   }
-  for (const s of spaces) assert.ok(exists(path.posix.join(s.directory, 'README.md')), `${s.key}: ${s.directory}/README.md exists`);
+  // directory: null = the space does not inherit the site's repository (schema); it is wired to its OWN repo in the UI
+  for (const s of spaces.filter((x) => x.directory !== 'null')) assert.ok(exists(path.posix.join(s.directory, 'README.md')), s.key + ': ' + s.directory + '/README.md exists');
 });
 
 test('every benchmark directory has a space in gitbook-docs.yaml, and every benchmark space has a directory (RED before CoalLedger and CoalWash were added)', () => {
@@ -96,11 +97,49 @@ test('the fallback stays WORKING: .gitbook.yaml names files that exist, and ever
   assert.deepEqual(dangling, []);
 });
 
-test('the Home space (./profile) is self-contained: every relative target in its README lives inside profile/', () => {
-  const dir = 'profile';
-  const bad = mdLinks(read(`${dir}/README.md`)).concat([...read(`${dir}/README.md`).matchAll(/src="([^"]+)"/g)].map((m) => m[1]).filter((l) => !/^(https?:|#)/.test(l)))
-    .filter((l) => !exists(path.posix.join(dir, l.replace(/^\.\//, ''))));
-  assert.deepEqual(bad, [], 'a synced space cannot see files outside its mapped directory (vendor: keep every referenced asset inside it)');
+test('every space that reads a directory of THIS repo is self-contained: no relative target in its README leaves the directory', () => {
+  const dirs = spaces.map((s) => s.directory).filter((d) => d !== 'null').map((d) => d.replace(/^\.\//, ''));
+  assert.ok(dirs.includes('profile') && dirs.includes('patterns'), 'the Home and Patterns spaces are among them: ' + dirs.join(','));
+  for (const dir of dirs.filter((d) => !d.startsWith('benchmarks/'))) {
+    const text = read(dir + '/README.md');
+    const bad = mdLinks(text).concat([...text.matchAll(/src="([^"]+)"/g)].map((m) => m[1]).filter((l) => !/^(https?:|#)/.test(l)))
+      .filter((l) => !exists(path.posix.join(dir, l.replace(/^\.\//, ''))));
+    assert.deepEqual(bad, [], dir + ': a synced space cannot see files outside its mapped directory (vendor: keep every referenced asset inside it)');
+  }
+});
+
+// UMB-169. The Patterns are ONE space whose pages are outbound links to the seven doctrine documents, which live at
+// the repo root and are cited by name from ~89 files across the rooms (five shipped public links among them), so
+// they are not moved. The fallback book lists the same seven as in-book pages. Nothing is copied.
+const summaryGroup = (name) => {
+  const lines = read('SUMMARY.md').split('\n');
+  const i = lines.indexOf('## ' + name);
+  if (i < 0) return [];
+  const out = [];
+  for (const l of lines.slice(i + 1)) { if (l.startsWith('## ')) break; out.push(l); }
+  return [...out.join('\n').matchAll(/\]\(([^)\s]+)\)/g)].map((m) => m[1]);
+};
+const BLOB = 'https://github.com/TheColliery/.github/blob/main/';
+const ROOMS = ['CoalMine', 'CoalTipple', 'CoalBoard', 'CoalHearth', 'CoalFace', 'CoalWash', 'CoalLedger', 'CoalGob'];
+
+test('the Patterns space: patterns/SUMMARY.md links exactly the seven documents the fallback book lists, and each one exists', () => {
+  assert.ok(spaces.some((s) => s.directory === './patterns' && s.parent?.title === 'Patterns'), 'a Patterns section holds one space reading ./patterns');
+  const own = mdLinks(read('patterns/SUMMARY.md'));
+  const outbound = [...read('patterns/SUMMARY.md').matchAll(/\]\((https:\/\/[^)\s]+)\)/g)].map((m) => m[1]);
+  assert.deepEqual(own, ['README.md'], 'the only in-book page is the space README');
+  assert.equal(outbound.length, 7);
+  const files = outbound.map((u) => { assert.ok(u.startsWith(BLOB), u); return u.slice(BLOB.length); });
+  for (const f of files) assert.ok(exists(f), f + ' exists at the repo root (a rename or move must move this link too)');
+  assert.deepEqual([...files].sort(), summaryGroup('Patterns').sort(), 'the fallback ## Patterns group lists the same seven');
+  assert.equal(new Set(files).size, 7);
+});
+
+test('the Tools section: eight spaces that do not read this repository, and the fallback book links the same eight repos', () => {
+  const tools = spaces.filter((s) => s.parent?.title === 'Tools');
+  assert.deepEqual(tools.map((s) => s.title).sort(), [...ROOMS].sort());
+  assert.ok(tools.every((s) => s.directory === 'null'), 'directory: null on every Tools space (each is wired to its own repo in the UI)');
+  assert.equal(spaces.filter((s) => s.directory === 'null' && s.parent?.title !== 'Tools').length, 0, 'null-directory spaces exist only in Tools');
+  assert.deepEqual(summaryGroup('Tools').sort(), ROOMS.map((r) => 'https://github.com/TheColliery/' + r).sort());
 });
 
 // The old TheColliery site (site_3DpAx) was deleted when the home moved to a new GitBook organization; its
