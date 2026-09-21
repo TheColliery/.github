@@ -20,9 +20,11 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, existsSync, rmSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(HERE, 'post-deploy-check.mjs');
@@ -52,4 +54,47 @@ test('post-deploy-check.mjs: the loop still exits on match via its own internal 
   // inner for-loop, inside the while body.
   const src = readFileSync(SCRIPT, 'utf8');
   assert.match(src, /if\s*\(\s*matched\s*\)\s*break\s*;/, 'the internal break-on-match must still exist -- it is what makes the while-condition\'s own matched-check redundant');
+});
+
+// UMB-112 residue (7): the pause BETWEEN retry rounds was a constant 15 s, so a wait budget shorter
+// than that (or a round that ends near the deadline) overshot --wait by up to 15 s -- the exact
+// unbounded-wait class row 26 closed for the fetch. This one is a spawn test on a FILLED copy of the
+// script (placeholders replaced in a temp dir) with a stub preloaded that (a) answers every fetch
+// with a page that never matches and (b) records each setTimeout delay the script asks for and
+// fires it at once, so the assertion is on the requested delays, not on wall-clock. Red before the
+// fix: every recorded delay is 15000, against a 1000 ms budget.
+test('post-deploy-check.mjs: the pause between retry rounds never exceeds the remaining wait budget (spawn, filled copy)', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pdc-'));
+  try {
+    const assets = path.join(dir, 'public');
+    mkdirSync(assets);
+    writeFileSync(path.join(assets, 'index.html'), 'the committed page');
+    let src = readFileSync(SCRIPT, 'utf8');
+    src = src.replaceAll('{{ASSETS_DIR}}', assets.replaceAll('\\', '/'))
+      .replaceAll('{{PLACEHOLDER-primary-domain}}', 'primary.invalid')
+      .replaceAll('{{PLACEHOLDER-fallback-workers-dev-domain}}', 'fallback.invalid');
+    const filled = path.join(dir, 'post-deploy-check.mjs');
+    writeFileSync(filled, src);
+    const log = path.join(dir, 'delays.log');
+    const stub = path.join(dir, 'stub.mjs');
+    writeFileSync(stub, [
+      "import fs from 'node:fs';",
+      'const realSetTimeout = globalThis.setTimeout;',
+      'globalThis.setTimeout = (fn, ms, ...a) => { fs.appendFileSync(process.env.STUB_LOG, String(ms) + "\\n"); return realSetTimeout(fn, 0, ...a); };',
+      "globalThis.fetch = async () => ({ ok: true, text: async () => 'a stale page', arrayBuffer: async () => new ArrayBuffer(0) });",
+      '',
+    ].join('\n'));
+    const res = spawnSync(process.execPath, [filled, '--wait', '1'], {
+      encoding: 'utf8',
+      env: { ...process.env, NODE_OPTIONS: '--import=' + pathToFileURL(stub).href, STUB_LOG: log },
+    });
+    assert.equal(res.status, 1, 'a page that never matches must fail loud, exit 1: ' + res.stderr + res.stdout);
+    assert.match(res.stderr, /still not published after/);
+    assert.ok(existsSync(log), 'the retry loop must have paused at least once');
+    const delays = readFileSync(log, 'utf8').split('\n').filter(Boolean).map(Number);
+    assert.ok(delays.length >= 1);
+    assert.ok(Math.max(...delays) <= 1000, 'a pause longer than the 1000 ms budget was requested: ' + Math.max(...delays));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -23,10 +23,8 @@ Keep the verification gates green before and after making edits:
 {{GATE_COMMANDS}}
 
 ### Development Rules
-* **{{SSOT_FILE}} is the Single Source of Truth** for {{SSOT_CONTENT}} — edit there, then rebuild `plugin/`. Do not hand-edit the generated distribution.
-* **Synchronize `plugin/`:** rebuild the distribution after modifying source, hooks, or the manifest.
+{{DEVELOPMENT_RULES}}
 * **Add unit tests:** every shared helper carries a matching `*.test.mjs`.
-* **Keep hooks Phoenix-pure:** zero dependencies, fail-silent (wrap in try/catch, never exit non-zero), 100% local — hooks ship a hermetic spawn test.
 * **Language & tone:** shipped source files and documentation stay in English.
 
 ---
@@ -47,7 +45,7 @@ Keep the verification gates green before and after making edits:
 
 ## 🚀 Releasing (Maintainers)
 
-Bump version in `.claude-plugin/plugin.json` → add a CHANGELOG entry → ensure `verify.mjs` and `test.mjs` pass → commit → create a signed git tag (`vX.Y.Z`) → push `--follow-tags` → create a GitHub Release (stable tags only).
+Bump version in `.claude-plugin/plugin.json` → add a CHANGELOG entry → ensure `verify.mjs` and `test.mjs` pass → commit → create a signed git tag (`vX.Y.Z`) → push `--follow-tags` → create a GitHub Release (stable tags only, plus the one launch-form pre-release Release a repo's first public beta/rc gets — see the release pattern).
 
 ---
 

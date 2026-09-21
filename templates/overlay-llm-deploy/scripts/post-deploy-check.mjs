@@ -4,12 +4,14 @@
 // outside Actions, and has silently produced no build at all before (a real incident:
 // a stale page served until a human curled it).
 //
-// Sourced verbatim (mechanism) from Kolwen's live scripts/post-deploy-check.mjs
-// (LLMWorks/Kolwen, read 2026-09-03, UMB-045 letter (D); re-synced against Kolwen
-// commit 9c834a1, a CodeQL js/trivial-conditional fix — the while-loop's own internal
-// `if (matched) break;` already made the removed `!matched` clause dead code). The
-// ORIGINS list and the assets directory are {{PLACEHOLDER}}s — fill with this tool's
-// own domain(s) and dir.
+// Sourced from Kolwen's live scripts/post-deploy-check.mjs (LLMWorks/Kolwen, read
+// 2026-09-03, UMB-045 letter (D); re-synced against Kolwen commit 9c834a1, a CodeQL
+// js/trivial-conditional fix — the while-loop's own internal `if (matched) break;` already
+// made the removed `!matched` clause dead code). TWO declared divergences from Kolwen's
+// copy, both UMB-112 (2026-09-21): every fetch AND the pause between retry rounds are bounded
+// by what is left of the --wait budget (Kolwen's loop lets one hung request, or a 15 s
+// pause, outlive it). The ORIGINS list and the assets directory are {{PLACEHOLDER}}s —
+// fill with this tool's own domain(s) and dir.
 //
 // Usage: node scripts/post-deploy-check.mjs [--wait <seconds>]
 // Exit 0 = every deployed file matches. Exit 1 = a mismatch, or nothing could be observed.
@@ -99,7 +101,8 @@ while ((Date.now() - started) / 1000 < budget) {
     } catch (e) { lastErr[origin] = e.message; }
   }
   if (matched) break;
-  await new Promise(r => setTimeout(r, 15000));
+  // Bounded by what is LEFT of the budget, like the fetch above: a constant 15 s pause overshoots --wait by up to 15 s.
+  await new Promise(r => setTimeout(r, Math.min(15000, remainingMs())));
 }
 
 if (matched) {

@@ -6,9 +6,11 @@ name: deploy-check
 # LWK-077 O1-O3). Nothing in CI could see what was actually served; this job watches the
 # live page after a deploy.
 #
-# Sourced verbatim (shape) from Kolwen's live deploy-check.yml (LLMWorks/Kolwen/.github/
-# workflows/deploy-check.yml, read 2026-09-03, UMB-045 letter (D)) — the paths below are
-# {{PLACEHOLDER}}s, fill with this tool's own assets dir and script location.
+# Sourced from Kolwen's live deploy-check.yml (LLMWorks/Kolwen/.github/workflows/
+# deploy-check.yml, read 2026-09-03, UMB-045 letter (D)) — the paths below are
+# {{PLACEHOLDER}}s, fill with this tool's own assets dir and script location. ONE declared
+# divergence (UMB-112 row 25, 2026-09-21): the `paths:` list also names this workflow file
+# itself, so the commit that edits the gate's own definition is not the one commit it skips.
 #
 # PUSH ONLY, and a separate workflow on purpose: no deploy happens for a pull_request, so
 # this must never appear as a PR context. It is deliberately NOT in the required set — it

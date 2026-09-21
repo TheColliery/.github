@@ -1,16 +1,34 @@
 name: Publish to PyPI
 
-# Manual or tag-driven only. Never on every push — PyPI refuses a version that already
-# exists, so a push trigger would turn every commit into a red run.
+# Manual or tag-driven only. Never on every push — PyPI refuses a version that
+# already exists, so a push trigger would turn every commit into a red run.
 #
-# Sourced verbatim (mechanism) from Kolwen's live .github/workflows/publish-pypi.yml
-# (LLMWorks/Kolwen, read 2026-09-03, UMB-045 letter (D)). {{PY_DIR}} and the tag prefix
-# are the only per-tool variables — everything else, including the fail-safe TestPyPI
-# default, is load-bearing and should not be loosened.
+# Re-synced 2026-09-21 (UMB-112 residue 6) from Kolwen's live .github/workflows/publish-pypi.yml
+# (LLMWorks/Kolwen, blob eb9ed2ef3915b40f91ce7c1b9a65e10c9b3edf32: the LWK-135 signed-annotated-tag
+# gate). The substitutions are mechanical: Kolwen's own tag prefix becomes `{{TAG_PREFIX}}-v` and its `py`
+# package directory becomes `{{PY_DIR}}`. ONE declared divergence, the job-level `contents: read` below:
+# Kolwen is a PUBLIC repo, where checkout and the gate's API reads work without it, but a repo made
+# from this template may be private, and a job-level permissions block REPLACES the workflow-level
+# one, so without that line checkout and the gate would run with no read access. Everything else,
+# including the gate and the fail-safe TestPyPI default, is load-bearing: do not loosen it.
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "The {{TAG_PREFIX}}-v* tag to publish. Must be a signed annotated tag."
+        required: true
+        type: string
   push:
     tags: ["{{TAG_PREFIX}}-v*"]
+
+# cancel-in-progress: FALSE, and this is the strongest never-cancel in this repository.
+# PyPI refuses a re-upload of a version that already exists, so a publish killed midway is NOT
+# retryable at that version -- the only recovery is a version bump. Queue instead of cancel.
+# The group is deliberately CONSTANT, not per-ref: a tag push and a manual dispatch can target
+# the same version from different refs, and only one publish may be in flight repository-wide.
+concurrency:
+  group: publish-pypi
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -20,10 +38,62 @@ jobs:
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
-      contents: read # a job-level permissions block REPLACES the workflow-level one; without this line checkout runs with no read access
+      contents: read # a job-level permissions block REPLACES the workflow-level one; without this line checkout and the gate's API reads run with no read access (a private repo needs it; Kolwen, being public, does not)
       id-token: write # Trusted Publishing — no API token stored anywhere
     steps:
+      # ── THE GATE: only a SIGNED ANNOTATED tag may publish. Fail-closed, every branch. ─────────
+      # LWK-135. A publish is irreversible at its version, so "who authorised this exact tree" is
+      # answered before anything is built, never after.
+      #
+      # A LIGHTWEIGHT tag is a ref pointing straight at a commit: no tag object, nothing signed,
+      # nobody attributable. It FAILS here.
+      # An ANNOTATED tag has an object of type `tag`, and GitHub reports whether its signature
+      # verifies. `verified: false` FAILS -- including reason `unsigned`, and `unknown_key`, which
+      # means the signing key is not registered on the account as a SIGNING key.
+      # Any API error FAILS. There is no "could not check, proceeding" branch, by design.
+      - name: Require a signed annotated tag
+        id: gate
+        env:
+          # Through the environment, never interpolated into the script: a workflow_dispatch input
+          # is attacker-influenced text, and inlining it is the script-injection shape we ban.
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          REPO: ${{ github.repository }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$TAG" | grep -Eq '^{{TAG_PREFIX}}-v[A-Za-z0-9._-]+$' || {
+            echo "::error::refusing to publish: '$TAG' is not a {{TAG_PREFIX}}-v* tag name"; exit 1; }
+
+          api() { curl -sS --fail-with-body -H "Authorization: Bearer $TOKEN" \
+                    -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$REPO/$1"; }
+
+          ref_json=$(api "git/ref/tags/$TAG") || {
+            echo "::error::refusing to publish: cannot resolve tag $TAG at the API"; exit 1; }
+          obj_type=$(printf '%s' "$ref_json" | jq -r '.object.type')
+          obj_sha=$(printf '%s' "$ref_json" | jq -r '.object.sha')
+
+          if [ "$obj_type" != "tag" ]; then
+            echo "::error::refusing to publish: $TAG is a LIGHTWEIGHT tag -- no tag object, the ref points straight at a $obj_type. A release tag must be annotated and signed."
+            exit 1
+          fi
+
+          tag_json=$(api "git/tags/$obj_sha") || {
+            echo "::error::refusing to publish: cannot read the tag object for $TAG"; exit 1; }
+          verified=$(printf '%s' "$tag_json" | jq -r '.verification.verified')
+          reason=$(printf '%s' "$tag_json" | jq -r '.verification.reason')
+          commit=$(printf '%s' "$tag_json" | jq -r '.object.sha')
+
+          echo "tag=$TAG object=$obj_sha commit=$commit verified=$verified reason=$reason"
+          if [ "$verified" != "true" ]; then
+            echo "::error::refusing to publish: $TAG is annotated but its signature does not verify (reason: $reason). If that reads unknown_key, register the signing key on the account as a SIGNING key, or re-sign the tag. The gate is not the thing to soften."
+            exit 1
+          fi
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "$TAG is a signed annotated tag, verified. Publishing the tree at $commit."
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.gate.outputs.commit }}
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -35,16 +105,16 @@ jobs:
           python -m pip install --require-hashes -r requirements-build.txt
           python -m build
 
-      # WHERE THIS PUBLISHES, decided fail-safe: ONLY a clean release tag ({{TAG_PREFIX}}-vX.Y.Z,
-      # digits only) reaches real PyPI. Everything else — a PEP 440 pre-release or .devN, a tag
-      # with a word in it, and every workflow_dispatch, where ref_name is a BRANCH and not a
+      # WHERE THIS PUBLISHES, decided fail-safe: ONLY a clean release tag ({{TAG_PREFIX}}-vX.Y.Z, digits
+      # only) reaches real PyPI. Everything else — a PEP 440 pre-release or .devN, a tag with
+      # a word in it, and every workflow_dispatch, where ref_name is a BRANCH and not a
       # version at all — goes to TestPyPI.
       #
-      # The direction matters more than the cleverness: a wrong TestPyPI upload is harmless, a
-      # wrong PyPI upload is PERMANENT and can never be re-uploaded or reclaimed. Kolwen's own
-      # first cut of this tested the whole ref for the letters a/b/rc, which sent a .dev1 tag
-      # to real PyPI and every dispatch from `main` (it contains an 'a') to TestPyPI — wrong in
-      # both directions. Do not reintroduce that shape.
+      # The direction matters more than the cleverness: a wrong TestPyPI upload is harmless,
+      # a wrong PyPI upload is PERMANENT and can never be re-uploaded or reclaimed. The
+      # previous expression tested the whole ref for the letters a/b/rc, which sent
+      # {{TAG_PREFIX}}-v0.1.0.dev1 to real PyPI and every dispatch from `main` (it contains an 'a') to
+      # TestPyPI — wrong in both directions.
       - name: Decide publish target
         id: target
         env:
@@ -60,6 +130,7 @@ jobs:
             echo 'url=https://test.pypi.org/legacy/' >> "$GITHUB_OUTPUT"
             echo "$REF_TYPE $REF_NAME is not a clean release tag -> TestPyPI"
           fi
+
 
       - name: Publish
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2

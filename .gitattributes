@@ -6,3 +6,14 @@
 # scripts/license-check.test.mjs); autocrlf would rewrite its line endings on a Windows checkout and
 # new-repo.mjs copies the working-tree bytes. Same pin Articles/GachaRateDesignDatum carries.
 /templates/article/LICENSE -text
+
+# Same pin for the private-working scaffold LICENSE (new-repo.mjs copies working-tree bytes, so an
+# unpinned file scaffolds different bytes on a CRLF checkout). templates/published-code/LICENSE needs
+# no line: that template's own .gitattributes pins eol=lf, and a nested rule beats a root one for its
+# own path (git check-attr, scripts/license-check.test.mjs).
+/templates/private-working/LICENSE -text
+
+# The private-working scaffold's git hook: a CRLF working copy of a /bin/sh hook is "bad interpreter" on POSIX,
+# and new-repo.mjs copies working-tree bytes. (published-code's hooks are pinned by that template's own
+# nested .gitattributes; the root pin above for the repo's own hooks does not reach templates/.)
+/templates/private-working/.githooks/** text eol=lf

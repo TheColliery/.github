@@ -17,13 +17,17 @@ deploy files first, nothing here is invented.
   `LLMWorks/Kolwen/scripts/post-deploy-check.mjs` (read live 2026-09-03). The mechanism
   (fixed-point Cloudflare-injected-script stripping, dual-origin fallback for a
   datacenter-egress-hostile edge, retry-until-budget so an in-flight deploy isn't read as
-  a mismatch) is copied verbatim — genuinely load-bearing, do not simplify it away.
+  a mismatch) is copied from it — genuinely load-bearing, do not simplify it away. Three
+  declared divergences, all UMB-112: the script bounds every fetch and the pause between
+  retry rounds by the remaining `--wait` budget, and the workflow's `paths:` also names
+  itself; each file's header says so.
   `{{ASSETS_DIR}}` and the two `{{PLACEHOLDER}}` origin URLs need filling; the rest should
   not be loosened without re-deriving why each guard exists (the comments in the source
   file name the incident each one closes).
 - **`.github/workflows/publish-pypi.yml`** — the PyPI Trusted-Publishing workflow, sourced
-  from `LLMWorks/Kolwen/.github/workflows/publish-pypi.yml` (read live 2026-09-03). The
-  fail-safe TestPyPI-by-default routing (only a clean `{{TAG_PREFIX}}-vX.Y.Z` tag reaches
+  from `LLMWorks/Kolwen/.github/workflows/publish-pypi.yml` (re-synced 2026-09-21, including
+  the signed-annotated-tag gate: only a signed annotated tag may publish; one declared
+  divergence, a job-level `contents: read` a private repo needs). The fail-safe TestPyPI-by-default routing (only a clean `{{TAG_PREFIX}}-vX.Y.Z` tag reaches
   real PyPI, everything else — including every manual dispatch — goes to TestPyPI) is
   deliberately conservative: a wrong TestPyPI upload is harmless, a wrong real-PyPI upload
   is permanent. `{{PY_DIR}}` and `{{TAG_PREFIX}}` are the only variables; do not widen the

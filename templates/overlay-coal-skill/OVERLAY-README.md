@@ -15,6 +15,18 @@ node scripts/verify.mjs         # validates config schemas, dist-sync, and repo 
 node scripts/test.mjs           # runs the zero-dependency test runner (node --test)
 ```
 
+## CONTRIBUTING development rules
+
+`templates/published-code/CONTRIBUTING.md` leaves `{{DEVELOPMENT_RULES}}` at the top of its
+"Development Rules" list for the same reason: the three bullets below are about a plugin
+distribution and a hook layer, which a generic published-code repo does not have. For a Coal
+skill, paste them in its place (`{{SSOT_FILE}}` and `{{SSOT_CONTENT}}` name the file the
+generated copies are built from, and what it holds):
+
+* **{{SSOT_FILE}} is the Single Source of Truth** for {{SSOT_CONTENT}} — edit there, then rebuild `plugin/`. Do not hand-edit the generated distribution.
+* **Synchronize `plugin/`:** rebuild the distribution after modifying source, hooks, or the manifest.
+* **Keep hooks Phoenix-pure:** zero dependencies, fail-silent (wrap in try/catch, never exit non-zero), 100% local — hooks ship a hermetic spawn test.
+
 ## Included this pass
 
 - `.github/workflows/claude-ai-zips.yml` + `scripts/build-claude-ai-zips.mjs` — the

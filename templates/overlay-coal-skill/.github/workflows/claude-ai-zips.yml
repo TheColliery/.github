@@ -61,7 +61,7 @@ jobs:
             echo "::notice::ref_type is '${REF_TYPE}', not a tag -- skipping claude.ai ZIP packaging (a workflow_dispatch run against a branch has no tag to package)"
           elif [[ "${GITHUB_REF_NAME}" == *-* ]]; then
             echo "is_stable=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::${GITHUB_REF_NAME} is a pre-release tag -- Releases are stable-only here, skipping claude.ai ZIP packaging"
+            echo "::notice::${GITHUB_REF_NAME} is a pre-release tag -- ZIP packaging is stable-only (a repo's one launch-form pre-release Release is cut by hand, RELEASE-PATTERN.md), skipping claude.ai ZIP packaging"
           else
             echo "is_stable=true" >> "$GITHUB_OUTPUT"
           fi

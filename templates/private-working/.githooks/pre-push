@@ -6,18 +6,30 @@
 # after the fact. This hook runs BEFORE the push, on the one machine that exists, at zero
 # Actions minutes. CI is the second opinion.
 #
+# Fails CLOSED, like the published-code gate: a fence that skips itself when it cannot run
+# is no fence, so a missing node or a missing scripts/gate.mjs REFUSES the push with a
+# message that says why (hooks-safety.md 1.0 — a git pre-* hook MUST be able to abort).
+#
 # ENABLE (once per clone):  git config core.hooksPath .githooks
+#   This file must be committed executable (mode 100755): git silently SKIPS a hook that is
+#   not, on Linux and macOS, so the fence would simply not exist there.
 # BYPASS (and it is a real hole, named rather than hidden): git push --no-verify
 #   Nothing available on a Free private repo can close that. The fence is a discipline
 #   with a machine behind it, not a wall.
 
 if ! command -v node >/dev/null 2>&1; then
-  echo "pre-push: node not found — gate SKIPPED (visible skip, never a silent pass)" >&2
-  exit 0
+  echo "pre-push: node not found — push refused (this fence fails CLOSED). Install node, or --no-verify if you mean it." >&2
+  exit 1
+fi
+
+gate="$(git rev-parse --show-toplevel)/scripts/gate.mjs"
+if [ ! -f "$gate" ]; then
+  echo "pre-push: scripts/gate.mjs not found — push refused. The scaffold ships this fence, not the gate it runs: write scripts/gate.mjs (the same script gate.yml runs), or --no-verify if you mean it." >&2
+  exit 1
 fi
 
 echo "pre-push: running scripts/gate.mjs"
-node "$(git rev-parse --show-toplevel)/scripts/gate.mjs" || {
+node "$gate" || {
   echo "" >&2
   echo "pre-push: gate FAILED — push refused. Fix, or --no-verify if you mean it." >&2
   exit 1
