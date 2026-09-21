@@ -109,8 +109,9 @@ test('every space that reads a directory of THIS repo is self-contained: no rela
 });
 
 // UMB-169. The Patterns are ONE space whose pages are outbound links to the seven doctrine documents, which live at
-// the repo root and are cited by name from ~89 files across the rooms (five shipped public links among them), so
-// they are not moved. The fallback book lists the same seven as in-book pages. Nothing is copied.
+// the repo root and are cited by name from 78 files outside this repo (five shipped public URLs among them; derive
+// with the grep in the UMB-169 return), so they are not moved. The fallback book lists the same seven as in-book
+// pages. Nothing is copied.
 const summaryGroup = (name) => {
   const lines = read('SUMMARY.md').split('\n');
   const i = lines.indexOf('## ' + name);
