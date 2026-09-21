@@ -8,12 +8,12 @@ This repository houses the global configuration, landing page profile, central i
 
 ## ⛏️ Active Repositories
 
-* **[CoalMine](https://github.com/HetCreep/CoalMine)**: Quality-canary skills suite for AI coding agents—nine canaries plus the auto-cadence hooks that run them unprompted.
+* **[CoalMine](https://github.com/TheColliery/CoalMine)**: Quality-canary skills suite for AI coding agents—nine canaries plus the auto-cadence hooks that run them unprompted.
   <br>
-  [![Stars](https://img.shields.io/github/stars/HetCreep/CoalMine?style=flat-square&logo=github)](https://github.com/HetCreep/CoalMine/stargazers)
-  [![Forks](https://img.shields.io/github/forks/HetCreep/CoalMine?style=flat-square&logo=github)](https://github.com/HetCreep/CoalMine/network/members)
-  [![Downloads](https://img.shields.io/badge/CoalMine_Downloads-386%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/HetCreep/CoalMine)
-  [![Developers](https://img.shields.io/badge/CoalMine_Developers-116%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/HetCreep/CoalMine)
+  [![Stars](https://img.shields.io/github/stars/TheColliery/CoalMine?style=flat-square&logo=github)](https://github.com/TheColliery/CoalMine/stargazers)
+  [![Forks](https://img.shields.io/github/forks/TheColliery/CoalMine?style=flat-square&logo=github)](https://github.com/TheColliery/CoalMine/network/members)
+  [![Downloads](https://img.shields.io/badge/CoalMine_Downloads-386%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalMine)
+  [![Developers](https://img.shields.io/badge/CoalMine_Developers-116%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalMine)
 * **[CoalTipple](https://github.com/TheColliery/CoalTipple)**: Model/effort router—delegate-down to save, escalate-up for quality, with a fail-safe model-ranking Lock.
   <br>
   [![Stars](https://img.shields.io/github/stars/TheColliery/CoalTipple?style=flat-square&logo=github)](https://github.com/TheColliery/CoalTipple/stargazers)
@@ -65,7 +65,7 @@ You can install any or all tools in the series (`CoalMine`, `CoalTipple`, `CoalB
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/TheColliery/.github/main/install.mjs -o colliery-install.mjs
-node colliery-install.mjs all         # the whole suite (all 7)
+node colliery-install.mjs all         # the whole suite (all 7 installable; CoalGob is beta, no plugin yet)
 node colliery-install.mjs 3           # just CoalBoard
 node colliery-install.mjs 1 2 3       # CoalMine + CoalTipple + CoalBoard
 node colliery-install.mjs 6 7         # CoalWash + CoalLedger (beta)

@@ -81,7 +81,7 @@ Full key reference: `scripts/lib/config-schema.mjs` + the commented `platform-co
 
 {{REPO_NAME}} is {{ROLE_IN_SERIES}}:
 
-- [CoalMine](https://github.com/HetCreep/CoalMine) — quality canary suite
+- [CoalMine](https://github.com/TheColliery/CoalMine) — quality canary suite
 - [CoalTipple](https://github.com/TheColliery/CoalTipple) — model/effort router
 - [CoalBoard](https://github.com/TheColliery/CoalBoard) — multi-agent consensus board
 - [CoalHearth](https://github.com/TheColliery/CoalHearth) — session warm-resume

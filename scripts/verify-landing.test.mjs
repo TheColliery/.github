@@ -205,3 +205,21 @@ test('"first run pending" in a NON-digest file does not exempt an undated digest
     assert.match(verifyLanding(root).join('\n'), /'PendTool' has NO dated record/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('catches the retired HetCreep/CoalMine address on an install / landing surface (UMB-167, RED before the sweep)', () => {
+  const bench = '# Org\n\n## Benchmarks\n\n| Tool | Result |\n|---|---|\n| **FakeTool** | measured 2026-07-03 |\n';
+  const root = fixture((r) => {
+    write(r, 'profile/README.md', bench + '\n| **[CoalMine](https://github.com/HetCreep/CoalMine)** | old address |\n');
+    write(r, 'benchmarks/FakeTool/RESULTS.md', '# FakeTool result\n\nMeasured 2026-07-03.\n');
+    write(r, 'install.mjs', "run('claude', ['plugin', 'marketplace', 'add', 'HetCreep/CoalMine']);\n");
+    write(r, 'scripts/update-readme.mjs', "fetchRepoClonesSafe('HetCreep/CoalMine');\n");
+    write(r, 'README.md', '# Landing\n\n[CoalMine](https://github.com/TheColliery/CoalMine)\n'); // conforming
+  });
+  try {
+    const f = verifyLanding(root);
+    for (const surface of ['profile/README.md', 'install.mjs', 'scripts/update-readme.mjs']) {
+      assert.ok(f.some((x) => x.startsWith(surface + ': names the retired address')), surface + ' must be flagged: ' + f.join(' | '));
+    }
+    assert.ok(!f.some((x) => x.startsWith('README.md:')), 'a conforming surface is not flagged');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

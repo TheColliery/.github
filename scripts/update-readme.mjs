@@ -120,7 +120,7 @@ function assertEveryBadgeMatched(perFileHits, stats) {
 async function main() {
   // Per-repo fetch: failures are non-fatal (logged + exitCode=1) so the other repos still update.
   const [mineData, tippleData, boardData, hearthData, faceData, washData, ledgerData, gobData] = await Promise.all([
-    fetchRepoClonesSafe('HetCreep/CoalMine'),
+    fetchRepoClonesSafe('TheColliery/CoalMine'),
     fetchRepoClonesSafe('TheColliery/CoalTipple'),
     fetchRepoClonesSafe('TheColliery/CoalBoard'),
     fetchRepoClonesSafe('TheColliery/CoalHearth'),

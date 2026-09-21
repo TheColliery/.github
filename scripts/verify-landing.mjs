@@ -7,6 +7,7 @@
 //      unless the file declares "<!-- lang-exempt: reason -->" — the landing is language-universal.
 //   2. Every benchmarks/<Tool>/ has a row in the profile/README.md Benchmarks table (the CH miss).
 //   3. Every benchmarks/<Tool>/ carries a dated record (a benchmark without its date rots).
+//   4. No landing / install surface names the retired HetCreep/CoalMine address (an org repo since 2026-09-17).
 //
 // Fail-loud: any issue → non-zero exit + a listed reason (scripts-quality.md discipline).
 //
@@ -60,7 +61,7 @@ function mdFiles(dir, acc = []) {
   return acc;
 }
 
-/** Run the three checks against a repo root; returns an array of failure strings. */
+/** Run the four checks against a repo root; returns an array of failure strings. */
 export function verifyLanding(root) {
   const failures = [];
   const fail = (m) => failures.push(m);
@@ -78,6 +79,17 @@ export function verifyLanding(root) {
         fail(`THAI in front-door ${rel(f)}:${i + 1} — landing/benchmarks are English-only (mark intentional Thai with "<!-- lang-exempt: reason -->")`);
       }
     });
+  }
+
+  // --- 4. The retired CoalMine address (UMB-167). CoalMine moved into the org on 2026-09-17 and the old
+  //     HetCreep/CoalMine address only redirects; every surface a visitor installs from or reads names the
+  //     org address (SWEEP-MARKS Event 4 marks 1-4: the Active list, the suite table, the install path, the traffic script).
+  const RETIRED_ADDRESS = /HetCreep\/CoalMine\b/;
+  for (const relPath of ['README.md', 'profile/README.md', 'install.mjs', 'scripts/update-readme.mjs', 'templates/published-code/README.md']) {
+    const p = join(root, relPath);
+    if (existsSync(p) && RETIRED_ADDRESS.test(readFileSync(p, 'utf8'))) {
+      fail(relPath + ': names the retired address HetCreep/CoalMine (an org repo since 2026-09-17 — write TheColliery/CoalMine)');
+    }
   }
 
   // --- 2 & 3. Every benchmark dir is listed in EVERY surface that ENUMERATES benchmarks,
@@ -170,7 +182,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   if (failures.length) {
     console.error(`[verify-landing] FAIL — ${failures.length} issue(s):`);
     for (const f of failures) console.error('  ✗ ' + f);
-    console.error('\nScope: .github-LOCAL mechanical marks only (no-Thai · org-row · dated).');
+    console.error('\nScope: .github-LOCAL mechanical marks only (no-Thai · org-row · dated · CoalMine address).');
     console.error('Cross-repo README front doors + prose judgment are NOT gated — see SWEEP-MARKS.md + the human.');
     process.exit(1);
   }

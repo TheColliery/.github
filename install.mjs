@@ -23,7 +23,7 @@ function run(cmd, args) {
 // failed add never reaches install, and the function still returns false (→ exit 1).
 function installCoalMine() {
   // CoalMine ships as a Claude Code plugin (marketplace git URL) — see its README.
-  return run('claude', ['plugin', 'marketplace', 'add', 'HetCreep/CoalMine'])
+  return run('claude', ['plugin', 'marketplace', 'add', 'TheColliery/CoalMine'])
     && run('claude', ['plugin', 'install', 'coalmine@coalmine']);
 }
 function installCoalTipple() {
