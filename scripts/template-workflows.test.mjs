@@ -106,8 +106,9 @@ test('every template git hook is committed executable (100755) and pinned eol=lf
 
 test('private-working pre-push fails CLOSED when node is missing (exit 1, says so), never "gate SKIPPED" with exit 0', (t) => {
   if (!hasTool('sh', ['-c', 'exit 0'])) { t.skip('no sh on PATH'); return; }
-  // Shadow the regular builtin so "command -v node" reports node absent, whatever this box has installed.
-  const r = spawnSync('sh', ['-c', 'command() { return 1; }; . "$1"', 'sh', PW_PREPUSH], { encoding: 'utf8' });
+  // A PATH that holds no node, set INSIDE the shell (so the shell itself is found the normal way and no
+  // shell-specific trick is needed: dash on a Linux runner and bash on Windows both honour it).
+  const r = spawnSync('sh', ['-c', 'PATH=/nonexistent-dir; . "$1"', 'sh', PW_PREPUSH], { encoding: 'utf8' });
   assert.equal(r.status, 1, 'exit ' + r.status + ' stderr=' + r.stderr);
   assert.match(r.stderr, /node not found/);
   assert.doesNotMatch(r.stderr, /SKIPPED/);
