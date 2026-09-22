@@ -56,9 +56,16 @@ jobs:
         if: hashFiles('tools/watch-sources.mjs') != ''
         run: node tools/watch-sources.mjs >> "$GITHUB_STEP_SUMMARY"
 
+      # UMB-163 step 2: an explicit retention-days beats the vendor default of 90 (GitHub's
+      # own actions/upload-artifact README) for a monthly report nobody keeps past the month
+      # it lands in -- one cadence (~30 days) plus a buffer for a person to notice and land
+      # the sweep before the artifact is gone. Within the action's own 1-90 range; the
+      # separate org/repo Actions-artifact-retention SETTING (an owner/head UI click,
+      # 1-90 days on a public repo) is a ceiling on this value, never set here.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: hashFiles('tools/watch-sources.mjs') != ''
         with:
           name: revalidation-${{ github.run_id }}
           path: REVALIDATION.md
           if-no-files-found: error
+          retention-days: 35

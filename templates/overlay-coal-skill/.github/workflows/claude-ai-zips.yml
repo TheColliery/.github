@@ -93,20 +93,82 @@ jobs:
           sha256sum *.zip > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
-      # This trigger fires on the tag push, possibly BEFORE a separate REST call creates
-      # the Release -- a single idempotent `create`, swallowing the one expected
-      # already-exists failure mode directly, is more reliable than a view-then-create probe.
-      - name: Ensure the GitHub Release exists for this tag
+      # UMB-162 (a), "WRITE ONCE, DERIVE EVERYTHING" (owner-proposed, main-confirmed
+      # 2026-09-21): the CHANGELOG entry -- heading + a required one-line summary -- is the
+      # ONE thing a person writes. The Release title and body are DERIVED from it here, never
+      # composed by hand at press time; see RELEASE-PATTERN.md's own section for the full
+      # rule. scripts/release-notes.mjs fails loud (non-zero exit) on a missing/mismatched/
+      # summary-less entry -- a malformed CHANGELOG must stop the release, never fall back to
+      # a bare-titled one (UMB-162's own root cause).
+      - name: Derive the canon Release title + body from CHANGELOG.md
+        if: steps.gate.outputs.is_stable == 'true'
+        run: node scripts/release-notes.mjs
+
+      # This workflow is now the SOLE Release creator (UMB-162 (a)) -- a head no longer POSTs
+      # a Release by hand, so the race this step used to guard against (a separate REST call
+      # racing this trigger) is retired by construction. The one race that remains is a
+      # workflow_dispatch re-run of THIS SAME workflow for a tag it already created a Release
+      # for -- `concurrency: cancel-in-progress: false` above serializes a genuinely
+      # concurrent run, so this is a re-run AFTER an earlier one already finished (or partly
+      # finished). `edit`, not a bare `view`, so a re-run always converges the title/body back
+      # to the derived canon shape, idempotently, rather than merely confirming something
+      # exists.
+      - name: Ensure the GitHub Release exists, with the derived canon title + body
         if: steps.gate.outputs.is_stable == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --generate-notes || \
-            gh release view "${GITHUB_REF_NAME}" >/dev/null || \
-            { echo "::error::release create failed AND release view failed -- this is not the expected already-exists race" >&2; exit 1; }
+          gh release create "${GITHUB_REF_NAME}" --title "$(cat release-title.txt)" --notes-file release-body.md || \
+            gh release edit "${GITHUB_REF_NAME}" --title "$(cat release-title.txt)" --notes-file release-body.md || \
+            { echo "::error::release create failed AND release edit failed -- this is not the expected already-exists race" >&2; exit 1; }
 
-      - name: Attach ZIPs + SHA256SUMS.txt to the GitHub Release for this tag
+      # RELEASE-PATTERN.md "A Release body is re-read after every write", MUST -- a 200 on the
+      # create/edit call above is evidence the request was well-formed, never evidence the
+      # body it carried survived transport intact. SHA256 over UTF-8 bytes, never a length
+      # compare (the exact rail that caught the PS 5.1 ETS-decoration and em-dash-mangling
+      # incidents this file's own canon cites).
+      - name: Verify the published Release matches the derived title + body (byte-exact re-read)
         if: steps.gate.outputs.is_stable == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release view "${GITHUB_REF_NAME}" --json name,body | node scripts/verify-release-shape.mjs
+
+      # UMB-163's named divergence, closed here: `--clobber` used to run unconditionally on
+      # every invocation of this workflow, silently overwriting whatever a prior run had
+      # already published. Best-effort: absent on a genuine first run (nothing to download),
+      # which is the expected, non-error case -- `|| true` only swallows THAT, never a real
+      # network failure the next step would then also need to distinguish (out of scope here;
+      # a transient download failure surfaces as "no existing file" and is treated the same as
+      # first-run, the safe direction).
+      - name: Check for an already-published SHA256SUMS.txt on this tag's Release
+        if: steps.gate.outputs.is_stable == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release download "${GITHUB_REF_NAME}" -p 'SHA256SUMS.txt' -O existing-SHA256SUMS.txt --clobber 2>/dev/null || true
+
+      - name: Decide whether to upload, skip, or fail (a published version must never silently change)
+        id: decide
+        if: steps.gate.outputs.is_stable == 'true'
+        run: |
+          ACTION=$(node scripts/decide-upload.mjs dist-claude-ai/SHA256SUMS.txt existing-SHA256SUMS.txt)
+          echo "action=${ACTION}" >> "$GITHUB_OUTPUT"
+
+      - name: Attach ZIPs + SHA256SUMS.txt to the GitHub Release for this tag
+        if: steps.gate.outputs.is_stable == 'true' && steps.decide.outputs.action == 'upload-clobber'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${GITHUB_REF_NAME}" dist-claude-ai/*.zip dist-claude-ai/SHA256SUMS.txt --clobber
+
+      # UMB-163 step 2 (design), step 3 signed 2026-09-21 ("ใช่ เก็บ 2 ล็อกเลย", N=2): keeps
+      # the ZIP assets of the newest stable Release plus ONE previous, prunes the ZIPs (never
+      # the Release record, never the tag) off everything older. OFF by default -- a room's
+      # head opts in per repo via the `PRUNE_OLD_RELEASE_ZIPS` Actions variable (Settings ->
+      # Secrets and variables -> Actions -> Variables); nothing here prunes anything until
+      # that variable reads exactly "true", checked twice (the `if:` below, and again inside
+      # the script itself -- never trust one gate alone for a destructive action).
+      - name: Prune older stable release ZIP assets (kept latest + 1 previous; flag-gated, default OFF)
+        if: steps.gate.outputs.is_stable == 'true' && vars.PRUNE_OLD_RELEASE_ZIPS == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRUNE_OLD_RELEASE_ZIPS: ${{ vars.PRUNE_OLD_RELEASE_ZIPS }}
+        run: node scripts/prune-release-zips.mjs

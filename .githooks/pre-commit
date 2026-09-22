@@ -23,7 +23,14 @@ for t in scripts/verify-landing.test.mjs scripts/update-readme.test.mjs \
          scripts/doc-refs.test.mjs scripts/ruleset-match.test.mjs \
          scripts/lcov-to-cobertura.test.mjs scripts/template-workflows.test.mjs scripts/coal-team.test.mjs \
          scripts/test-roster.test.mjs templates/overlay-llm-deploy/scripts/post-deploy-check.test.mjs \
-         scripts/gitbook-config.test.mjs scripts/community-files.test.mjs; do
+         scripts/gitbook-config.test.mjs scripts/community-files.test.mjs \
+         templates/overlay-coal-skill/scripts/lib/release-shape.test.mjs \
+         templates/overlay-coal-skill/scripts/lib/release-prune.test.mjs \
+         templates/overlay-coal-skill/scripts/lib/asset-upload-mode.test.mjs \
+         templates/overlay-coal-skill/scripts/release-notes.test.mjs \
+         templates/overlay-coal-skill/scripts/verify-release-shape.test.mjs \
+         templates/overlay-coal-skill/scripts/decide-upload.test.mjs \
+         templates/overlay-coal-skill/scripts/prune-release-zips.test.mjs; do
   [ -f "$t" ] || { echo "gate: missing $t" >&2; exit 1; }
 done
 node --test scripts/verify-landing.test.mjs scripts/update-readme.test.mjs \
@@ -32,6 +39,13 @@ node --test scripts/verify-landing.test.mjs scripts/update-readme.test.mjs \
             scripts/doc-refs.test.mjs scripts/ruleset-match.test.mjs \
             scripts/lcov-to-cobertura.test.mjs scripts/template-workflows.test.mjs scripts/coal-team.test.mjs \
             scripts/test-roster.test.mjs templates/overlay-llm-deploy/scripts/post-deploy-check.test.mjs \
-            scripts/gitbook-config.test.mjs scripts/community-files.test.mjs || exit 1
+            scripts/gitbook-config.test.mjs scripts/community-files.test.mjs \
+            templates/overlay-coal-skill/scripts/lib/release-shape.test.mjs \
+            templates/overlay-coal-skill/scripts/lib/release-prune.test.mjs \
+            templates/overlay-coal-skill/scripts/lib/asset-upload-mode.test.mjs \
+            templates/overlay-coal-skill/scripts/release-notes.test.mjs \
+            templates/overlay-coal-skill/scripts/verify-release-shape.test.mjs \
+            templates/overlay-coal-skill/scripts/decide-upload.test.mjs \
+            templates/overlay-coal-skill/scripts/prune-release-zips.test.mjs || exit 1
 node scripts/verify-landing.mjs || exit 1
 node scripts/doc-refs.mjs
