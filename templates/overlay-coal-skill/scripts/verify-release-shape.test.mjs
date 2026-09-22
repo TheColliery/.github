@@ -25,6 +25,15 @@ test('verify-release-shape.mjs: matching title + body -> exit 0', () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('verify-release-shape.mjs: a published body that PRESERVES its trailing newline still matches -- rot-canary catch: the old code only trimmed the INTENDED side, so this exact shape would have false-failed every real release under this mechanism', () => {
+  const dir = scratch();
+  fs.writeFileSync(path.join(dir, 'release-title.txt'), 'v1.0.0 - a fix\n');
+  fs.writeFileSync(path.join(dir, 'release-body.md'), 'A fix.\n');
+  const res = run(dir, JSON.stringify({ name: 'v1.0.0 - a fix', body: 'A fix.\n' }));
+  assert.equal(res.status, 0, res.stderr);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('verify-release-shape.mjs: a title mismatch fails loud and names both strings, exit 1', () => {
   const dir = scratch();
   fs.writeFileSync(path.join(dir, 'release-title.txt'), 'v1.0.0 - a fix\n');

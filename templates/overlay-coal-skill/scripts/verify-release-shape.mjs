@@ -52,14 +52,22 @@ function main() {
     return;
   }
 
-  const titleMatch = sha256(published.name ?? '') === sha256(intendedTitle.trimEnd());
-  const bodyMatch = sha256(published.body ?? '') === sha256(intendedBody.trimEnd());
+  // Trim BOTH sides the same way, never only the intended one -- release-title.txt/
+  // release-body.md are written by release-notes.mjs with no guaranteed trailing newline
+  // convention on one side and GitHub's own on the other; whether the API preserves or
+  // strips a trailing newline on `body` is not something this file assumes either way.
+  // Trimming both sides identically removes that ambiguity as a source of a FALSE
+  // mismatch (which would block every future release under this mechanism) while still
+  // catching a real corruption -- a substituted character mid-body, the exact same-length
+  // em-dash-to-hyphen shape this rail exists for, trims away to nothing and still differs.
+  const titleMatch = sha256(published.name?.trim() ?? '') === sha256(intendedTitle.trim());
+  const bodyMatch = sha256(published.body?.trim() ?? '') === sha256(intendedBody.trim());
 
   if (titleMatch && bodyMatch) {
     console.log('verify-release-shape: published title + body match the derived CHANGELOG-sourced text, byte for byte');
     return;
   }
-  if (!titleMatch) console.error(`verify-release-shape: TITLE MISMATCH -- intended "${intendedTitle.trimEnd()}", published "${published.name}"`);
+  if (!titleMatch) console.error(`verify-release-shape: TITLE MISMATCH -- intended "${intendedTitle.trim()}", published "${published.name}"`);
   if (!bodyMatch) console.error('verify-release-shape: BODY MISMATCH -- the published body does not hash to the same bytes as the derived body (see RELEASE-PATTERN.md\'s PS 5.1 / Invoke-RestMethod trap class for how this happens even on a 200)');
   process.exitCode = 1;
 }
