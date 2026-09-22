@@ -129,6 +129,22 @@ test('doc-refs.mjs: a single-quoted or parenthesised title, and an angle-bracket
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+// Live incident (e682aa7 CI red): RELEASE-PATTERN.md linked `../AGENTS.md` -- a file that
+// exists on THIS machine (the private umbrella constitution, one level above the repo root)
+// but not on any CI runner or reader's clone. existsSync(targetAbs) alone says "found it" --
+// the gate needs to say "found it, but it is not MY file" for anything resolving outside ROOT.
+test('doc-refs.mjs: a link resolving OUTSIDE the repo root is dangling even when the target file exists on disk (e682aa7)', () => {
+  const root = scratchRoot();
+  const outside = path.join(path.dirname(root), `doc-refs-outside-${path.basename(root)}.md`);
+  write(outside, 'a real file, just not inside this repo\n');
+  write(path.join(root, 'README.md'), '[escapes](../' + path.basename(outside) + ') is not mine.\n');
+  const res = run(root);
+  assert.notEqual(res.status, 0, 'a link climbing above the repo root must fail even though the target exists: ' + res.stdout);
+  assert.match(res.stderr, /FAIL README\.md:1: dangling link/);
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(outside, { force: true });
+});
+
 test('doc-refs.mjs: scope covers the org-default community files under .github/ and the patterns/ space, not only the root and profile/ (UMB-177)', () => {
   for (const dir of ['.github', 'patterns']) {
     const root = scratchRoot();

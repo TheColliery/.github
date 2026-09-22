@@ -124,7 +124,16 @@ function findDanglingRefs(relFile) {
       const [pathPart] = target.split('#');
       if (!pathPart) continue;
       const targetAbs = path.resolve(dir, pathPart);
-      if (!fs.existsSync(targetAbs)) {
+      // Resolve-and-contain (node/runtime.md #4): existsSync alone says "found it somewhere
+      // on this disk" -- a link climbing above ROOT via `../..` can resolve to a real file
+      // that happens to sit outside the repo (e682aa7: RELEASE-PATTERN.md's `../AGENTS.md`
+      // hit the private umbrella constitution on this machine, absent on every CI runner and
+      // every reader's clone). A relative path from ROOT that starts with '..', or that is
+      // itself absolute (a different root/drive entirely), escapes containment and is
+      // dangling regardless of what exists at that address.
+      const rel = path.relative(ROOT, targetAbs);
+      const escapesRoot = rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel);
+      if (escapesRoot || !fs.existsSync(targetAbs)) {
         dangling.push({ line: idx + 1, target, targetAbs });
       }
     }
