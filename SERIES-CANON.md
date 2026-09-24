@@ -23,6 +23,7 @@ A Coal* room is a `published-code` repo (L1) carrying the 5 Standard Systems (L2
 | `.githooks/` | `pre-commit` + `pre-push` | `pre-push` | none shipped in the base skeleton |
 | Workflows | `ci.yml` · `codeql.yml` · `markdownlint.yml` · `scorecard.yml` · `coverage.yml` (report-only — never a gate, never a required check) · `dependabot-auto-merge.yml` · `link-check.yml` (MUST per SKILL-REPO-PATTERN, but each room ships its OWN engine and no canonical one exists, so the template carries no copy — a named divergence, not silence) | one `gate.yml` (single OS/Node — sized to a shared Free-plan Actions-minutes pool, never the 3-OS×2-Node published-code matrix) | `check.yml` + `watch-sources.yml` (monthly cron) |
 | `dependabot.yml` | Yes | Not shipped in the base skeleton | Not shipped in the base skeleton |
+| Repository rulesets | `main-guard` + `tag-immutable`, active, empty bypass list; the required-status-check gate is separate | N/A: rulesets answer 403 on a private repo on the Free plan | `main-guard` + `tag-immutable`, active, empty bypass list |
 | Release mechanics | Full [RELEASE-PATTERN.md](./RELEASE-PATTERN.md) chain | N/A — a private working repo does not cut public Releases | Full chain where the repo tags versions |
 | Publishing dialect | N/A unless the repo also publishes to GitBook | N/A | GitBook shared dialect where the repo is GitBook-synced |
 | Typography | Public-class prose (README, docs, SECURITY, and the like) uses an unspaced em dash — like this — for a parenthetical break, never a spaced dash or an ASCII double hyphen | N/A by declaration — a private repo's own prose is not held to a public presentation convention | Same as `published-code` — public-class prose uses the unspaced em dash |
@@ -108,6 +109,10 @@ Measuring the seven Coal* repos against each other (internal record) found three
 ## Tag protection
 
 A repo whose release mechanism publishes on a tag push to a public package registry or index — the shape `templates/overlay-llm-deploy/`'s PyPI publish workflow ships — needs a GitHub tag-protection ruleset restricting who may create or push a tag matching that release pattern (for example `v*`, or a project-specific prefix). Without one, anyone with push access can trigger a real publish by pushing an unintended tag, and a cancelled or duplicated publish to a package index is not always retryable. This canon states the requirement; applying the ruleset to a live repo's GitHub settings is a separate, per-repo action — no template file can carry a repository setting.
+
+## Repository rulesets
+
+Every PUBLIC repo carries two rulesets with an EMPTY bypass list (owner ruling 2026-09-24): `main-guard`, a branch ruleset on `~DEFAULT_BRANCH` with `deletion` + `non_fast_forward`, and `tag-immutable`, a tag ruleset on `refs/tags/**` with `update` + `deletion` + `non_fast_forward`. A published tag is therefore never moved or deleted, and the default branch is never deleted or force-pushed, by anyone holding a token. Creating a tag and pushing to the default branch stay free. This is stricter than the tag-protection requirement above, which restricts who may CREATE a release tag; that requirement still stands for a repo that publishes to a package registry on a tag push. The exact rules, the empty bypass list and the leftover deletion live in `templates/repo-settings.<kind>.json`, and `node scripts/skeleton-check.mjs --settings` diffs a live repo against them. A private repo is N/A on the Free plan.
 
 ## A declared absence has a home
 

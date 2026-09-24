@@ -18,6 +18,43 @@
     "enforcement": "active",
     "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
     "rules": [ { "type": "deletion" }, { "type": "non_fast_forward" } ],
+    "bypass_actors": [],
     "$noRequiredStatusChecksNote": "Same caveat as repo-settings.published-code.json's ruleset — no required_status_checks rule here either. check.yml's own step is hashFiles-gated on tools/check.mjs (the same da15148 red-fix); a future required check should name the 'check' job, never the step inside it, and watch-sources.yml's monthly-cron job is never a candidate for a push-time required check at all."
-  }
+  },
+  "tagRuleset": {
+    "name": "tag-immutable",
+    "target": "tag",
+    "enforcement": "active",
+    "conditions": {
+      "ref_name": {
+        "include": [
+          "refs/tags/**"
+        ],
+        "exclude": []
+      }
+    },
+    "rules": [
+      {
+        "type": "update"
+      },
+      {
+        "type": "deletion"
+      },
+      {
+        "type": "non_fast_forward"
+      }
+    ],
+    "bypass_actors": [],
+    "$note": "Rulesets canon, owner 2026-09-24: a published tag cannot be moved, deleted or force-pushed by anyone; CREATING a tag stays free (the release flow pushes new tags with --follow-tags). The ruleset half of the immutable-releases direction. Kolwen carried this ruleset first (2026-09-05)."
+  },
+  "leftoverRulesets": [
+    {
+      "name": "Code Quality Copilot review for default branch",
+      "enforcement": "disabled",
+      "rules": [
+        "copilot_code_review"
+      ],
+      "$note": "a GitHub-created, DISABLED ruleset with no rule of ours in it (a UI promo leftover, measured on four rooms 2026-09-24); the apply deletes it only when the name, the disabled state and the sole copilot_code_review rule all match."
+    }
+  ]
 }

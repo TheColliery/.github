@@ -23,6 +23,20 @@
     "enforcement": "active",
     "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
     "rules": [ { "type": "deletion" }, { "type": "non_fast_forward" } ],
+    "bypass_actors": [],
+    "$bypassNote": "Rulesets canon, owner 2026-09-24: the bypass list is EMPTY. Nobody deletes or force-pushes main with a token; a deliberate history rewrite means the owner disables this ruleset in the UI first, then re-enables it. The dependabot-auto-merge-gate ruleset (required_status_checks) is a DIFFERENT ruleset and keeps its admin always-bypass, because the belt's direct pushes to main depend on it.",
     "$noRequiredStatusChecksNote": "UMB-048 item 4's caveat, encoded here rather than only in prose: this ruleset deliberately carries NO required_status_checks rule. The red-fix (.github commit da15148) gates every skeleton CI step — and the whole CodeQL job — on hashFiles(<script>) != '', so a step can legitimately SKIP rather than run on a freshly scaffolded repo with no scripts/ yet. A required-status-check ruleset binds on the JOB's own name (e.g. 'gate', 'all-green'), which still reports success when every step inside it skips — so naming a job here would be SAFE by that same property. The caveat is real anyway: a required check must name a job that ALWAYS EXISTS in the workflow run (never a job gated out entirely by an `if:` at the job level, e.g. CodeQL's `analyze` job) or the ruleset blocks every push forever waiting for a check that never reports. Where a room DOES want required checks, name 'gate'/'all-green' (job-level `if:` is absent, only its STEPS are hashFiles-gated) — never 'analyze (javascript)' from codeql.yml until that room ships real JS/TS source."
-  }
+  },
+  "tagRuleset": {
+    "name": "tag-immutable",
+    "target": "tag",
+    "enforcement": "active",
+    "conditions": { "ref_name": { "include": ["refs/tags/**"], "exclude": [] } },
+    "rules": [ { "type": "update" }, { "type": "deletion" }, { "type": "non_fast_forward" } ],
+    "bypass_actors": [],
+    "$note": "Rulesets canon, owner 2026-09-24: a published tag cannot be moved, deleted or force-pushed by anyone; CREATING a tag stays free (the release flow pushes new tags with --follow-tags). The ruleset half of the immutable-releases direction. Kolwen carried this ruleset first (2026-09-05)."
+  },
+  "leftoverRulesets": [
+    { "name": "Code Quality Copilot review for default branch", "enforcement": "disabled", "rules": ["copilot_code_review"], "$note": "a GitHub-created, DISABLED ruleset with no rule of ours in it (a UI promo leftover, measured on four rooms 2026-09-24); the apply deletes it only when the name, the disabled state and the sole copilot_code_review rule all match." }
+  ]
 }

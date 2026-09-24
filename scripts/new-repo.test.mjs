@@ -449,7 +449,16 @@ globalThis.fetch = async (url, init = {}) => {
   if (method === 'GET' && p === '/repos/TheColliery/' + S.repo.name) return reply(200, S.repo);
   if (method === 'GET' && p === '/orgs/TheColliery/teams/coal') return reply(200, { description: S.description });
   if (method === 'GET' && p.startsWith('/orgs/TheColliery/teams/coal/repos')) return reply(200, S.teamRepos);
-  if (method === 'GET' && p.endsWith('/rulesets')) return reply(200, []);
+  // A stateful ruleset store (rulesets canon 2026-09-24): POST creates, PUT replaces, DELETE removes,
+  // and a GET of one id returns the stored detail -- so the apply's read-back is a real comparison.
+  S.rulesets = S.rulesets || [];
+  S.nextId = S.nextId || 900;
+  const rsBase = '/repos/TheColliery/' + S.repo.name + '/rulesets';
+  if (method === 'GET' && p === rsBase) return reply(200, S.rulesets.map(({ id, name, target, enforcement }) => ({ id, name, target, enforcement })));
+  if (method === 'GET' && p.startsWith(rsBase + '/')) { const rs = S.rulesets.find((r) => String(r.id) === p.slice(rsBase.length + 1)); return rs ? reply(200, rs) : reply(404, {}); }
+  if (method === 'POST' && p === rsBase) { const rs = { id: S.nextId++, ...JSON.parse(init.body) }; S.rulesets.push(rs); return reply(201, rs); }
+  if (method === 'PUT' && p.startsWith(rsBase + '/')) { const id = Number(p.slice(rsBase.length + 1)); S.rulesets = S.rulesets.map((r) => (r.id === id ? { id, ...JSON.parse(init.body) } : r)); return reply(200, S.rulesets.find((r) => r.id === id)); }
+  if (method === 'DELETE' && p.startsWith(rsBase + '/')) { const id = Number(p.slice(rsBase.length + 1)); S.rulesets = S.rulesets.filter((r) => r.id !== id); return reply(204); }
   if (method === 'PUT' && p === '/orgs/TheColliery/teams/coal/repos/TheColliery/' + S.repo.name) {
     S.teamRepos = [...S.teamRepos.filter((r) => r.name !== S.repo.name), { ...S.repo, role_name: 'read' }];
     return reply(204);
@@ -468,7 +477,7 @@ const STUB_TEAM = [
   ['CoalFace', 1286819933], ['CoalWash', 1294577372], ['CoalLedger', 1294577413],
 ].map(([name, id]) => ({ name, id, private: false, role_name: 'read' }));
 
-function runWithTeamStub(args, repo) {
+function runWithTeamStub(args, repo, extra = {}) {
   const dir = scratchDir();
   const stubFile = path.join(dir, 'stub.mjs');
   const logFile = path.join(dir, 'calls.jsonl');
@@ -481,7 +490,7 @@ function runWithTeamStub(args, repo) {
       GITHUB_TOKEN: 'stub-token',
       NODE_OPTIONS: `--import=${pathToFileURL(stubFile).href}`,
       STUB_LOG: logFile,
-      STUB_STATE: JSON.stringify({ repo, teamRepos: STUB_TEAM, description: STUB_DESC }),
+      STUB_STATE: JSON.stringify({ repo, teamRepos: STUB_TEAM, description: STUB_DESC, ...extra }),
     },
   });
   const calls = fs.readFileSync(logFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
@@ -526,4 +535,91 @@ test('new-repo.mjs --apply-settings published-code on a NON-Coal repo, and any o
   assert.equal(b.res.status, 0, b.res.stdout + b.res.stderr);
   assert.deepEqual(b.calls.filter((c) => c.path.includes('/teams/')), []);
   assert.doesNotMatch(b.res.stdout, /coalTeam/);
+});
+
+// ---------------------------------------------------------------------------------
+// Rulesets canon (owner 2026-09-24): --apply-settings --only rulesets CREATES main-guard and
+// tag-immutable (empty bypass), CONVERGES an admin-bypass main-guard, deletes the GitHub-created
+// disabled Copilot leftover, and never touches the required-status-check gate. Same fetch-stub
+// method as the coalTeam tests above: the assertion is on the HTTP calls the real script made.
+
+const CANON_BRANCH = { name: 'main-guard', target: 'branch', enforcement: 'active', conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: [] } }, rules: [{ type: 'deletion' }, { type: 'non_fast_forward' }], bypass_actors: [] };
+const CANON_TAG = { name: 'tag-immutable', target: 'tag', enforcement: 'active', conditions: { ref_name: { include: ['refs/tags/**'], exclude: [] } }, rules: [{ type: 'update' }, { type: 'deletion' }, { type: 'non_fast_forward' }], bypass_actors: [] };
+const ADMIN_BYPASS = [{ actor_id: 5, actor_type: 'RepositoryRole', bypass_mode: 'always' }];
+const GATE = { id: 111, name: 'dependabot-auto-merge-gate', target: 'branch', enforcement: 'active', conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: [] } }, rules: [{ type: 'required_status_checks' }], bypass_actors: ADMIN_BYPASS };
+const LEFTOVER = { id: 222, name: 'Code Quality Copilot review for default branch', target: 'branch', enforcement: 'disabled', conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: [] } }, rules: [{ type: 'copilot_code_review' }], bypass_actors: [] };
+const ROOM = { name: 'CoalNext', id: 1300000000, private: false, default_branch: 'main' };
+const writes = (calls) => calls.filter((c) => c.method !== 'GET').map((c) => `${c.method} ${c.path}`);
+
+test('--apply-settings --only rulesets (LIVE, a repo with no rulesets): POSTs main-guard and tag-immutable with an EMPTY bypass list, reads both back, touches nothing else (rulesets canon)', () => {
+  const { res, calls } = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalNext', '--only', 'rulesets'], ROOM);
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  assert.deepEqual(writes(calls), ['POST /repos/TheColliery/CoalNext/rulesets', 'POST /repos/TheColliery/CoalNext/rulesets'], 'no repo PATCH, no team call, no PUT: --only rulesets narrows the whole apply');
+  assert.match(res.stdout, /ruleset: ok \(HTTP 201, created "main-guard", read back identical\)/);
+  assert.match(res.stdout, /tagRuleset: ok \(HTTP 201, created "tag-immutable", read back identical\)/);
+  assert.match(res.stdout, /leftoverRulesets: IN-SYNC/);
+  assert.doesNotMatch(res.stdout, /repoPatch|coalTeam|secretScanning/);
+});
+
+test('--apply-settings --only rulesets (an admin-bypass main-guard + the gate + a disabled Copilot leftover): PUTs main-guard to an empty bypass, DELETEs the leftover, NEVER writes the gate (rulesets canon)', () => {
+  const adminGuard = { id: 333, ...CANON_BRANCH, bypass_actors: ADMIN_BYPASS };
+  const { res, calls } = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalNext', '--only', 'rulesets'], ROOM, { rulesets: [GATE, adminGuard, LEFTOVER] });
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  const w = writes(calls);
+  assert.ok(w.includes('PUT /repos/TheColliery/CoalNext/rulesets/333'), 'the admin-bypass main-guard is converged in place: ' + w);
+  assert.ok(w.includes('DELETE /repos/TheColliery/CoalNext/rulesets/222'), 'the disabled Copilot leftover is deleted: ' + w);
+  assert.ok(!w.some((x) => x.endsWith('/rulesets/111')), 'the required-status-check gate is never written: ' + w);
+  assert.match(res.stdout, /ruleset: ok \(HTTP 200, converged "main-guard", read back identical\)/);
+  assert.match(res.stdout, /tagRuleset: ok \(HTTP 201, created "tag-immutable"/);
+});
+
+test('--apply-settings --only rulesets (the canon already held, gate present): IN-SYNC on both, ZERO writes -- idempotent (rulesets canon)', () => {
+  const { res, calls } = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalNext', '--only', 'rulesets'], ROOM, { rulesets: [GATE, { id: 1, ...CANON_BRANCH }, { id: 2, ...CANON_TAG }] });
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  assert.deepEqual(writes(calls), []);
+  assert.match(res.stdout, /ruleset: IN-SYNC/);
+  assert.match(res.stdout, /tagRuleset: IN-SYNC/);
+});
+
+test('--apply-settings --only rulesets --dry-run: zero writes, every planned write named as DRY-RUN (rulesets canon)', () => {
+  const { res, calls } = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalNext', '--only', 'rulesets', '--dry-run'], ROOM, { rulesets: [{ id: 333, ...CANON_BRANCH, bypass_actors: ADMIN_BYPASS }, LEFTOVER] });
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  assert.deepEqual(writes(calls), []);
+  assert.match(res.stdout, /ruleset: DRY-RUN \(would PUT .*rulesets\/333/);
+  assert.match(res.stdout, /tagRuleset: DRY-RUN \(would POST/);
+  assert.match(res.stdout, /leftoverRulesets: DRY-RUN \(would DELETE .*rulesets\/222/);
+});
+
+test('--apply-settings --only rulesets (a same-named ruleset that carries a rule the canon does not name): PENDING, never overwritten (rulesets canon)', () => {
+  const heavy = { id: 444, ...CANON_BRANCH, rules: [{ type: 'deletion' }, { type: 'non_fast_forward' }, { type: 'required_status_checks' }], bypass_actors: ADMIN_BYPASS };
+  const { res, calls } = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalNext', '--only', 'rulesets'], ROOM, { rulesets: [heavy] });
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  assert.ok(!writes(calls).some((x) => x.endsWith('/rulesets/444')), 'the heavier ruleset is not PUT over');
+  assert.match(res.stdout, /ruleset: PENDING \(.*required_status_checks/);
+});
+
+test('--apply-settings --only <anything but rulesets> fails loud; a private-working repo reports both ruleset surfaces N/A with the reason and writes nothing (rulesets canon)', () => {
+  const bad = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalNext', '--only', 'team'], ROOM);
+  assert.notEqual(bad.res.status, 0);
+  assert.match(bad.res.stderr, /--only takes "rulesets"/);
+  const priv = runWithTeamStub(['--apply-settings', 'private-working', '--repo', 'TheColliery/Chotmeter', '--only', 'rulesets'], { name: 'Chotmeter', id: 7, private: true, default_branch: 'main' });
+  assert.equal(priv.res.status, 0, priv.res.stdout + priv.res.stderr);
+  assert.deepEqual(writes(priv.calls), []);
+  assert.match(priv.res.stdout, /ruleset: N\/A \(.*403/);
+  assert.match(priv.res.stdout, /tagRuleset: N\/A/);
+});
+
+test('the three settings specs encode the rulesets canon: an EMPTY bypass on main-guard, a tag-immutable spec on the public kinds, N/A on private-working (rulesets canon)', () => {
+  const dir = path.join(path.dirname(SCRIPT), '..', 'templates');
+  for (const kind of ['published-code', 'article']) {
+    const s = JSON.parse(fs.readFileSync(path.join(dir, `repo-settings.${kind}.json`), 'utf8'));
+    assert.deepEqual(s.ruleset.bypass_actors, [], kind + ': main-guard bypass');
+    assert.deepEqual(s.tagRuleset.conditions.ref_name.include, ['refs/tags/**']);
+    assert.deepEqual(s.tagRuleset.rules.map((r) => r.type).sort(), ['deletion', 'non_fast_forward', 'update']);
+    assert.deepEqual(s.tagRuleset.bypass_actors, []);
+    assert.equal(s.leftoverRulesets[0].name, 'Code Quality Copilot review for default branch');
+  }
+  const p = JSON.parse(fs.readFileSync(path.join(dir, 'repo-settings.private-working.json'), 'utf8'));
+  assert.equal(p.ruleset.status, 'n/a');
+  assert.equal(p.tagRuleset.status, 'n/a');
 });

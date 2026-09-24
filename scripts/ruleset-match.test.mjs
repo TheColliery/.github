@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rulesetCoversRules, anyRulesetCovers, GATE_RULESET_BYPASS, bypassActorsDiffer, gateBypassVerdicts } from './lib/ruleset-match.mjs';
+import { rulesetCoversRules, anyRulesetCovers, GATE_RULESET_BYPASS, bypassActorsDiffer, gateBypassVerdicts, rulesetMatchesSpec, planRulesetSpec, rulesetWriteBody, leftoverRulesets } from './lib/ruleset-match.mjs';
 
 const WANTED = ['deletion', 'non_fast_forward'];
 
@@ -230,4 +230,68 @@ test('gateBypassVerdicts: a gate that names the default branch explicitly is sti
   const v = gateBypassVerdicts([gate], GATE_RULESET_BYPASS, 'main');
   assert.equal(v.length, 1);
   assert.equal(v[0].ok, true, v[0].text);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Rulesets canon (owner 2026-09-24): a ruleset IS the spec only when its bypass list is the spec's
+// (empty), its rules and refs cover the spec, and it is active. Matching stays by rules, not name.
+
+const MAIN_GUARD = { name: 'main-guard', target: 'branch', enforcement: 'active', conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: [] } }, rules: [{ type: 'deletion' }, { type: 'non_fast_forward' }], bypass_actors: [] };
+const TAG_IMMUTABLE = { name: 'tag-immutable', target: 'tag', enforcement: 'active', conditions: { ref_name: { include: ['refs/tags/**'], exclude: [] } }, rules: [{ type: 'update' }, { type: 'deletion' }, { type: 'non_fast_forward' }], bypass_actors: [] };
+const ADMIN = [{ actor_id: 5, actor_type: 'RepositoryRole', bypass_mode: 'always' }];
+
+test('rulesetMatchesSpec: an ADMIN-bypass main-guard is NOT the canon, an empty-bypass one is -- the bypass list is judged, not only the rules (RED against a rules-only matcher)', () => {
+  assert.equal(rulesetMatchesSpec({ id: 1, ...MAIN_GUARD }, MAIN_GUARD, 'main'), true);
+  assert.equal(rulesetMatchesSpec({ id: 1, ...MAIN_GUARD, bypass_actors: ADMIN }, MAIN_GUARD, 'main'), false);
+  assert.equal(rulesetMatchesSpec({ id: 1, ...MAIN_GUARD, bypass_actors: undefined }, MAIN_GUARD, 'main'), true, 'a missing bypass_actors reads as empty');
+});
+
+test('rulesetMatchesSpec: a differently NAMED ruleset with the same rules and an empty bypass still is the canon (CWK-069 kept); a disabled one, or a branch ruleset asked for a tag spec, is not', () => {
+  assert.equal(rulesetMatchesSpec({ ...MAIN_GUARD, name: 'my-own-guard' }, MAIN_GUARD, 'main'), true);
+  assert.equal(rulesetMatchesSpec({ ...MAIN_GUARD, enforcement: 'disabled' }, MAIN_GUARD, 'main'), false);
+  assert.equal(rulesetMatchesSpec({ ...MAIN_GUARD }, TAG_IMMUTABLE, 'main'), false);
+  assert.equal(rulesetMatchesSpec({ ...MAIN_GUARD, rules: [{ type: 'deletion' }] }, MAIN_GUARD, 'main'), false, 'a missing rule type');
+});
+
+test('rulesetMatchesSpec (tag): refs/tags/** or ~ALL covers; an exclude, a narrower include, a missing rule, or a bypass does not', () => {
+  assert.equal(rulesetMatchesSpec(TAG_IMMUTABLE, TAG_IMMUTABLE), true);
+  assert.equal(rulesetMatchesSpec({ ...TAG_IMMUTABLE, conditions: { ref_name: { include: ['~ALL'], exclude: [] } } }, TAG_IMMUTABLE), true);
+  assert.equal(rulesetMatchesSpec({ ...TAG_IMMUTABLE, conditions: { ref_name: { include: ['refs/tags/**'], exclude: ['refs/tags/v0*'] } } }, TAG_IMMUTABLE), false, 'an exclude lets a tag slip past');
+  assert.equal(rulesetMatchesSpec({ ...TAG_IMMUTABLE, conditions: { ref_name: { include: ['refs/tags/v*'], exclude: [] } } }, TAG_IMMUTABLE), false, 'a narrower include');
+  assert.equal(rulesetMatchesSpec({ ...TAG_IMMUTABLE, rules: [{ type: 'deletion' }, { type: 'non_fast_forward' }] }, TAG_IMMUTABLE), false, 'update missing: a tag could still be moved');
+  assert.equal(rulesetMatchesSpec({ ...TAG_IMMUTABLE, bypass_actors: ADMIN }, TAG_IMMUTABLE), false);
+});
+
+test('planRulesetSpec: in-sync / update-by-name / create / conflict, and a DISABLED same-named ruleset is found (a POST would 422 on the name)', () => {
+  assert.deepEqual(planRulesetSpec([{ id: 1, ...MAIN_GUARD }], MAIN_GUARD, 'main'), { action: 'in-sync' });
+  const admin = { id: 7, ...MAIN_GUARD, bypass_actors: ADMIN };
+  const upd = planRulesetSpec([admin], MAIN_GUARD, 'main');
+  assert.equal(upd.action, 'update');
+  assert.equal(upd.id, 7);
+  const off = planRulesetSpec([{ id: 8, ...MAIN_GUARD, enforcement: 'disabled' }], MAIN_GUARD, 'main');
+  assert.equal(off.action, 'update', 'a disabled main-guard is converged, not duplicated');
+  assert.deepEqual(planRulesetSpec([], MAIN_GUARD, 'main'), { action: 'create' });
+  assert.deepEqual(planRulesetSpec([{ id: 9, ...TAG_IMMUTABLE }], MAIN_GUARD, 'main'), { action: 'create' }, 'a tag ruleset never satisfies a branch spec');
+  const heavy = planRulesetSpec([{ id: 5, ...MAIN_GUARD, rules: [...MAIN_GUARD.rules, { type: 'required_status_checks' }], bypass_actors: ADMIN }], MAIN_GUARD, 'main');
+  assert.equal(heavy.action, 'conflict');
+  assert.match(heavy.reason, /required_status_checks/);
+});
+
+test('planRulesetSpec: the dependabot gate (required_status_checks, admin bypass) never satisfies main-guard and is never the PUT target', () => {
+  const gate = { id: 3, name: 'dependabot-auto-merge-gate', target: 'branch', enforcement: 'active', conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: [] } }, rules: [{ type: 'deletion' }, { type: 'non_fast_forward' }, { type: 'required_status_checks' }], bypass_actors: ADMIN };
+  assert.deepEqual(planRulesetSpec([gate], MAIN_GUARD, 'main'), { action: 'create' });
+});
+
+test('rulesetWriteBody: exactly the canon fields, bypass_actors always an array', () => {
+  assert.deepEqual(rulesetWriteBody({ ...MAIN_GUARD, bypass_actors: undefined, $note: 'x' }), { name: 'main-guard', target: 'branch', enforcement: 'active', conditions: MAIN_GUARD.conditions, rules: MAIN_GUARD.rules, bypass_actors: [] });
+});
+
+test('leftoverRulesets: only a disabled, same-named ruleset carrying ONLY the listed rule types; a same-named ruleset that does real work stays', () => {
+  const spec = [{ name: 'Code Quality Copilot review for default branch', enforcement: 'disabled', rules: ['copilot_code_review'] }];
+  const left = { id: 1, name: spec[0].name, enforcement: 'disabled', rules: [{ type: 'copilot_code_review' }] };
+  assert.deepEqual(leftoverRulesets([left], spec).map((r) => r.id), [1]);
+  assert.deepEqual(leftoverRulesets([{ ...left, enforcement: 'active' }], spec), [], 'an ACTIVE one is not a leftover');
+  assert.deepEqual(leftoverRulesets([{ ...left, rules: [{ type: 'copilot_code_review' }, { type: 'deletion' }] }], spec), [], 'it does real work');
+  assert.deepEqual(leftoverRulesets([{ ...left, name: 'other' }], spec), []);
+  assert.deepEqual(leftoverRulesets([left], undefined), []);
 });

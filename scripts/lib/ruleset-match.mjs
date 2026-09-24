@@ -92,3 +92,83 @@ export function gateBypassVerdicts(details, expected = GATE_RULESET_BYPASS, defa
       : { ok: true, text: `ruleset "${rs.name}" bypass_actors: identical (RepositoryRole Admin, always)` };
   });
 }
+
+// ---------------------------------------------------------------------------------------------
+// The repository-rulesets CANON (owner 2026-09-24, "setup Repository policies"): the ruleset
+// specs in templates/repo-settings.<kind>.json (`ruleset` = main-guard, `tagRuleset` =
+// tag-immutable) carry an EMPTY bypass list, so a ruleset that covers the same rules but lets an
+// admin bypass it (the Coal* rooms' original main-guard) is NOT the canon. Matching stays by
+// RULES, never by NAME (CWK-069): a differently named ruleset with the same rules AND the same
+// bypass list still covers.
+
+/** A tag ruleset covers a spec's ref patterns when it names each one verbatim (or `~ALL`) and
+ * excludes nothing -- an exclude would let a tag slip past the immutability it exists to give. */
+function tagRefsCovered(ruleset, specInclude) {
+  const include = ruleset.conditions?.ref_name?.include || [];
+  const exclude = ruleset.conditions?.ref_name?.exclude || [];
+  if (exclude.length > 0) return false;
+  return include.includes('~ALL') || specInclude.every((p) => include.includes(p));
+}
+
+/**
+ * True when `ruleset` (a full detail object) IS the spec: active, the spec's target, covering the
+ * spec's refs, carrying every rule type the spec names, and its bypass list EXACTLY the spec's
+ * (empty when the spec names none). `defaultBranch` is the branch NAME, as in rulesetCoversRules.
+ */
+export function rulesetMatchesSpec(ruleset, spec, defaultBranch) {
+  if (!ruleset || !spec || ruleset.enforcement !== 'active' || ruleset.target !== spec.target) return false;
+  const wantedTypes = (spec.rules || []).map((r) => r.type);
+  if (bypassActorsDiffer(ruleset.bypass_actors, spec.bypass_actors ?? []) !== null) return false;
+  if (spec.target === 'branch') return rulesetCoversRules(ruleset, wantedTypes, defaultBranch);
+  if (spec.target === 'tag') {
+    if (!tagRefsCovered(ruleset, spec.conditions?.ref_name?.include || [])) return false;
+    const have = new Set((ruleset.rules || []).map((r) => r.type));
+    return wantedTypes.every((t) => have.has(t));
+  }
+  return false;
+}
+
+/**
+ * What an applier does about one spec, given every ruleset on the repo of the spec's target as a
+ * full detail object (any enforcement -- a DISABLED same-named ruleset must be found, or a POST
+ * would 422 on the duplicate name):
+ *   { action: 'in-sync' }                  a ruleset already IS the spec
+ *   { action: 'update', id, existing }     a ruleset with the spec's NAME exists but differs: PUT the
+ *                                          spec over it (bypass removed, enforcement set) -- only when
+ *                                          every rule it carries is one the spec names, so a PUT never
+ *                                          drops a rule the spec does not know about
+ *   { action: 'conflict', id, reason }     same name, but it carries a rule outside the spec: the
+ *                                          owner's decision, never overwritten
+ *   { action: 'create' }                   nothing by that name
+ */
+export function planRulesetSpec(details, spec, defaultBranch) {
+  const list = (details || []).filter((rs) => rs && rs.target === spec.target);
+  if (list.some((rs) => rulesetMatchesSpec(rs, spec, defaultBranch))) return { action: 'in-sync' };
+  const named = list.find((rs) => rs.name === spec.name);
+  if (!named) return { action: 'create' };
+  const specTypes = new Set((spec.rules || []).map((r) => r.type));
+  const extra = (named.rules || []).map((r) => r.type).filter((t) => !specTypes.has(t));
+  if (extra.length > 0) return { action: 'conflict', id: named.id, reason: `"${named.name}" carries rule(s) the canon does not name (${extra.join(', ')}); overwriting would drop them` };
+  return { action: 'update', id: named.id, existing: named };
+}
+
+/** The write body for a spec (POST, or the PUT over an existing ruleset): exactly the canon's fields. */
+export function rulesetWriteBody(spec) {
+  return {
+    name: spec.name,
+    target: spec.target,
+    enforcement: spec.enforcement,
+    conditions: spec.conditions,
+    rules: spec.rules,
+    bypass_actors: spec.bypass_actors ?? [],
+  };
+}
+
+/** Rulesets a spec lists as GitHub-created leftovers to delete: same name, same enforcement, and
+ * ONLY the listed rule types -- a ruleset that merely shares the name but does real work stays. */
+export function leftoverRulesets(details, leftovers) {
+  return (details || []).filter((rs) => (leftovers || []).some((l) =>
+    rs.name === l.name && rs.enforcement === l.enforcement
+    && (rs.rules || []).length === (l.rules || []).length
+    && (rs.rules || []).every((r) => (l.rules || []).includes(r.type))));
+}

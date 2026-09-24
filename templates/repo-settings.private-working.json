@@ -26,5 +26,9 @@
     "status": "n/a",
     "reason": "Repository rulesets / branch protection on a PRIVATE repo need a paid org plan. Measured live on template-private-working, 2026-09-03: POST /repos/{owner}/{repo}/rulesets returned 403 Forbidden. Not applied; do not retry until the org's plan changes.",
     "$ifItEverBecomesAvailableNote": "the caveat from repo-settings.published-code.json's ruleset.$noRequiredStatusChecksNote applies identically the day this becomes applicable — gate.yml's own steps are hashFiles-gated the same way ci.yml's are (the .github commit da15148 red-fix covers all three kinds), so a future required-status-check here should name the 'gate' job, never a step inside it."
+  },
+  "tagRuleset": {
+    "status": "n/a",
+    "reason": "Same as the branch ruleset above: rulesets on a PRIVATE repo answer 403 on the org's Free plan (measured 2026-09-24 on every private repo in the org), so the tag-immutable canon cannot be set here until the plan changes."
   }
 }

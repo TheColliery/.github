@@ -26,7 +26,11 @@
 //     --name <repo> --license <spdx-or-a-file-path> [--license-id <spdx-or-name>] \
 //     [--org TheColliery] [--holder "Name"] [--year 2026] <target-dir>
 //
-//   node scripts/new-repo.mjs --apply-settings <kind> --repo <owner>/<name> [--dry-run]
+//   node scripts/new-repo.mjs --apply-settings <kind> --repo <owner>/<name> [--dry-run] [--only rulesets]
+//
+// --only rulesets (rulesets canon, 2026-09-24) applies ONLY the ruleset surfaces (main-guard,
+// tag-immutable, the leftover deletion) to an EXISTING repo, leaving its repo settings, security
+// features, workflow-token permissions and team membership untouched.
 //
 // <kind> is one of: published-code | private-working | article
 //
@@ -54,7 +58,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
 import { isLicenseStub, identifyLicense, normalizeLicenseId } from './lib/license-check-lib.mjs';
-import { anyRulesetCovers } from './lib/ruleset-match.mjs';
+import { planRulesetSpec, rulesetWriteBody, rulesetMatchesSpec, leftoverRulesets } from './lib/ruleset-match.mjs';
 import { syncCoalTeam } from './lib/coal-team.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -153,7 +157,7 @@ async function ghRequest(token, method, urlPath, body) {
 // endpoint (private_vulnerability_reporting on a private repo, a ruleset without a paid
 // org plan) is an EXPECTED outcome for some kinds, per repo-settings.<kind>.json's own
 // "n/a" entries, and must read as a named skip, never as a script crash.
-async function applySettings(kind, ownerRepo, dry) {
+async function applySettings(kind, ownerRepo, dry, only) {
   const token = process.env.GITHUB_TOKEN;
   if (!token) {
     console.error('FAIL: GITHUB_TOKEN is not set in the environment.');
@@ -184,6 +188,8 @@ async function applySettings(kind, ownerRepo, dry) {
     ? Promise.resolve({ ok: true, status: 'DRY-RUN', json: null })
     : ghRequest(token, method, urlPath, body));
 
+  const rulesetsOnly = only === 'rulesets';
+  if (!rulesetsOnly) {
   if (settings.repoPatch) {
     const r = await req('PATCH', base, settings.repoPatch);
     results.push({ surface: 'repoPatch', ok: r.ok, status: r.status });
@@ -234,37 +240,20 @@ async function applySettings(kind, ownerRepo, dry) {
     results.push({ surface: 'actionsWorkflowToken', ok: r.ok, status: r.status });
   }
 
-  if (settings.ruleset && settings.ruleset.name) {
-    // CWK-069/UMB-072: matched by RULES, never by NAME (same reasoning as
-    // skeleton-check.mjs's own diff, cited not restated) -- AND, load-bearing here on
-    // the WRITE side specifically: an uncovered room is NEVER auto-created into. The
-    // shipped convention's own ruleset carries no `bypass_actors` -- creating it blind
-    // on a room whose maintainer pushes directly to the default branch could block the
-    // maintainer's own next push. That is the owner's press, not this script's; an
-    // uncovered room is reported PENDING, never applied.
-    const wantedTypes = (settings.ruleset.rules || []).map((rule) => rule.type);
-    const repoInfo = await req('GET', base);
-    const defaultBranch = repoInfo.ok ? repoInfo.json?.default_branch : undefined;
-    const list = await req('GET', `${base}/rulesets`);
-    const candidates = Array.isArray(list.json) ? list.json.filter((rs) => rs.enforcement === 'active' && rs.target === 'branch') : [];
-    const details = [];
-    for (const c of candidates) {
-      const d = await req('GET', `${base}/rulesets/${c.id}`);
-      if (d.json) details.push(d.json);
-    }
-    const covered = anyRulesetCovers(details, wantedTypes, defaultBranch);
-    if (covered) {
-      results.push({ surface: 'ruleset', ok: true, status: 'N/A', reason: `already covered by an existing active branch ruleset (matched by rules ${wantedTypes.join('+')}, not name "${settings.ruleset.name}") -- no new ruleset created` });
-    } else {
-      results.push({ surface: 'ruleset', ok: true, status: 'PENDING', reason: `no active branch ruleset on the default branch covers ${wantedTypes.join('+')} -- creating "${settings.ruleset.name}" is NOT applied here: the shipped convention carries no bypass_actors, and a ruleset that could block the maintainer's own direct pushes is the owner's press, never auto-applied` });
-    }
-  } else if (settings.ruleset) {
-    results.push({ surface: 'ruleset', ok: true, status: 'N/A', reason: settings.ruleset.reason });
   }
+
+  // Rulesets canon (owner 2026-09-24, "setup Repository policies"): main-guard and tag-immutable
+  // are APPLIED, not withheld. The earlier rule (UMB-072: an uncovered room is reported PENDING,
+  // never created into) guarded a ruleset that could block the maintainer's own direct pushes;
+  // the canon's two rulesets block only deletion, force-push and tag rewriting, so they cannot.
+  // The required-status-check gate (which CAN make a direct push wait) is NOT in the spec and
+  // this script never touches it. Matched by RULES, never by NAME (CWK-069), and now also by the
+  // BYPASS list: an admin-bypass main-guard is not the canon and is converged.
+  results.push(...await applyRulesetSurfaces(settings, req, base));
 
   // UMB-127: the GitHub `Coal*` team -- a new-sibling enumeration surface. Only a
   // published-code room can be on it; syncCoalTeam itself declines a private / non-Coal repo.
-  if (kind === 'published-code') {
+  if (kind === 'published-code' && !rulesetsOnly) {
     const t = await syncCoalTeam({ call: req, owner, repoName: repo, dry });
     results.push({ surface: 'coalTeam', ...t });
   }
@@ -286,6 +275,63 @@ async function applySettings(kind, ownerRepo, dry) {
   }
 }
 
+// One repo's ruleset surfaces: the branch spec (`ruleset`), the tag spec (`tagRuleset`), and the
+// GitHub-created leftovers to delete. Every write is read back and compared to the spec (UMB-050's
+// rule: the API's 2xx is not the artefact). Under --dry-run `req` sends no write, and the plan is
+// reported as DRY-RUN.
+async function applyRulesetSurfaces(settings, req, base) {
+  const out = [];
+  if (!settings.ruleset && !settings.tagRuleset && !settings.leftoverRulesets) return out;
+  const repoInfo = await req('GET', base);
+  const defaultBranch = repoInfo.ok ? repoInfo.json?.default_branch : undefined;
+  const list = await req('GET', `${base}/rulesets`);
+  const specs = [['ruleset', settings.ruleset], ['tagRuleset', settings.tagRuleset]];
+  for (const [surface, s] of specs) if (s?.status === 'n/a') out.push({ surface, ok: true, status: 'N/A', reason: s.reason });
+  const live = specs.filter(([, s]) => s?.name);
+  if (live.length === 0 && !settings.leftoverRulesets) return out;
+  if (!Array.isArray(list.json)) {
+    out.push({ surface: 'ruleset', ok: false, status: list.status, reason: 'could not list the repo rulesets' });
+    return out;
+  }
+  const details = [];
+  for (const c of list.json) {
+    const d = await req('GET', `${base}/rulesets/${c.id}`);
+    if (d.json) details.push(d.json);
+  }
+  for (const [surface, spec] of live) {
+    const plan = planRulesetSpec(details, spec, defaultBranch);
+    if (plan.action === 'in-sync') {
+      out.push({ surface, ok: true, status: 'IN-SYNC', reason: `"${spec.name}" canon already held (matched by rules ${spec.rules.map((r) => r.type).join('+')} and an empty bypass list)` });
+    } else if (plan.action === 'conflict') {
+      out.push({ surface, ok: true, status: 'PENDING', reason: `${plan.reason} -- the owner's decision, not overwritten` });
+    } else {
+      const method = plan.action === 'update' ? 'PUT' : 'POST';
+      const url = plan.action === 'update' ? `${base}/rulesets/${plan.id}` : `${base}/rulesets`;
+      const w = await req(method, url, rulesetWriteBody(spec));
+      if (w.status === 'DRY-RUN') {
+        out.push({ surface, ok: true, status: 'DRY-RUN', reason: `would ${method} ${url} (${plan.action} "${spec.name}", bypass list emptied)` });
+      } else if (!w.ok) {
+        out.push({ surface, ok: false, status: w.status, reason: `${method} ${url} refused: ${w.json?.message || 'no message'}` });
+      } else {
+        const rb = await req('GET', `${base}/rulesets/${w.json?.id ?? plan.id}`);
+        const held = rb.ok && rulesetMatchesSpec(rb.json, spec, defaultBranch);
+        out.push({ surface, ok: held, status: w.status, note: held ? `${plan.action === 'update' ? 'converged' : 'created'} "${spec.name}", read back identical` : `${plan.action} sent but the read-back does NOT match the spec` });
+      }
+    }
+  }
+  if (settings.leftoverRulesets) {
+    const gone = leftoverRulesets(details, settings.leftoverRulesets);
+    if (gone.length === 0) out.push({ surface: 'leftoverRulesets', ok: true, status: 'IN-SYNC', reason: 'none present' });
+    for (const rs of gone) {
+      const w = await req('DELETE', `${base}/rulesets/${rs.id}`);
+      out.push(w.status === 'DRY-RUN'
+        ? { surface: 'leftoverRulesets', ok: true, status: 'DRY-RUN', reason: `would DELETE ${base}/rulesets/${rs.id} ("${rs.name}", disabled, copilot_code_review only)` }
+        : { surface: 'leftoverRulesets', ok: w.ok, status: w.status, note: `deleted "${rs.name}" (id ${rs.id})` });
+    }
+  }
+  return out;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
@@ -304,7 +350,12 @@ async function main() {
       process.exitCode = 1;
       return;
     }
-    await applySettings(kind, args.repo, args['dry-run'] === true);
+    if (args.only !== undefined && args.only !== 'rulesets') {
+      console.error(`FAIL: --only takes "rulesets" (got ${JSON.stringify(args.only)})`);
+      process.exitCode = 1;
+      return;
+    }
+    await applySettings(kind, args.repo, args['dry-run'] === true, args.only);
     return;
   }
 

@@ -19,6 +19,9 @@
 //               fail, when it is absent — an unset token is an expected local condition). For a
 //               published-code repo it also judges the gate ruleset's bypass_actors against the
 //               canon value (lib/ruleset-match.mjs GATE_RULESET_BYPASS, from SWEEP-MARKS.md -- UMB-131).
+//               It also judges main-guard and tag-immutable against the spec's rules AND its EMPTY
+//               bypass list, and lists a disabled GitHub-created Copilot-review leftover (rulesets
+//               canon, 2026-09-24).
 //   --details:  its OWN mode (no local walk): one table of every repo in the org -- About description,
 //               website, topics, visibility -- diffed against DOC-PATTERN.md §Repo details, a FAIL line
 //               per gap, exit 1 on any FAIL (UMB-128). READ-ONLY at the API: it never writes a value --
@@ -39,7 +42,7 @@ import path from 'path';
 import { fileURLToPath } from 'node:url';
 import { findRepos as findReposLib, SKELETON_FILES, TEMPLATE_DIR_FOR_KIND, parseGithubOrigin, matchesWithPlaceholders, formatDetailsTable, liveFileVerdict } from './lib/skeleton-check-lib.mjs';
 import { isLicenseStub, licenseIdentityMismatches } from './lib/license-check-lib.mjs';
-import { anyRulesetCovers, gateBypassVerdicts } from './lib/ruleset-match.mjs';
+import { rulesetMatchesSpec, gateBypassVerdicts, leftoverRulesets } from './lib/ruleset-match.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const githubRepo = path.resolve(scriptDir, '..');
@@ -229,23 +232,36 @@ async function diffSettings(kind, ownerRepo, settingsPath) {
 
   if (settings.ruleset?.status === 'n/a') {
     console.log(`    ruleset: N/A (${settings.ruleset.reason})`);
+    if (settings.tagRuleset?.status === 'n/a') console.log(`    tagRuleset: N/A (${settings.tagRuleset.reason})`);
   } else if (settings.ruleset?.name) {
     // CWK-069 (the CoalWorks chief's own instrument ruling): matched by RULES, never by
     // NAME. A room commonly already carries an active branch ruleset enforcing the same
     // rules under a name of its own choosing (its own CI-required ruleset, say) -- a
     // name-only compare reported that room as "missing main-guard" when it was already
     // fully covered. The list endpoint returns no `rules` array; each active
-    // branch-targeting candidate is re-fetched for its own detail before comparing.
+    // ruleset is re-fetched for its own detail before comparing.
+    //
+    // Rulesets canon (owner 2026-09-24): the spec's bypass list is EMPTY and is judged too -- an
+    // active ruleset that covers the same rules but lets an admin bypass it (the Coal* rooms'
+    // original main-guard) reads as DIFFERS, never as covered.
     const wantedTypes = (settings.ruleset.rules || []).map((rule) => rule.type);
     const list = await ghGet(token, `${base}/rulesets`);
-    const candidates = Array.isArray(list.json) ? list.json.filter((rs) => rs.enforcement === 'active' && rs.target === 'branch') : [];
     const details = [];
-    for (const c of candidates) {
+    for (const c of Array.isArray(list.json) ? list.json : []) {
       const d = await ghGet(token, `${base}/rulesets/${c.id}`);
       if (d.json) details.push(d.json);
     }
-    const covered = anyRulesetCovers(details, wantedTypes, repoRes.json?.default_branch);
-    console.log(`    ruleset (rules: ${wantedTypes.join('+')}): ${covered ? 'identical (covered by an existing active ruleset, matched by rules -- not necessarily named "' + settings.ruleset.name + '")' : `DIFFERS (no active branch ruleset on the default branch covers ${wantedTypes.join('+')})`}`);
+    const defaultBranch = repoRes.json?.default_branch;
+    const covered = details.some((rs) => rulesetMatchesSpec(rs, settings.ruleset, defaultBranch));
+    const coveredButBypassed = !covered && details.some((rs) => rulesetMatchesSpec({ ...rs, bypass_actors: [] }, settings.ruleset, defaultBranch));
+    console.log(`    ruleset (rules: ${wantedTypes.join('+')}, empty bypass): ${covered ? 'identical (covered by an existing active ruleset, matched by rules and an empty bypass list -- not necessarily named "' + settings.ruleset.name + '")' : coveredButBypassed ? 'DIFFERS (an active ruleset covers ' + wantedTypes.join('+') + ' but its bypass list is not empty -- the canon removes every bypass)' : `DIFFERS (no active branch ruleset on the default branch covers ${wantedTypes.join('+')})`}`);
+    if (settings.tagRuleset?.status === 'n/a') console.log(`    tagRuleset: N/A (${settings.tagRuleset.reason})`);
+    else if (settings.tagRuleset?.name) {
+      const tagWanted = settings.tagRuleset.rules.map((rule) => rule.type).join('+');
+      const tagOk = details.some((rs) => rulesetMatchesSpec(rs, settings.tagRuleset));
+      console.log(`    tagRuleset (rules: ${tagWanted}, refs: ${settings.tagRuleset.conditions.ref_name.include.join(',')}, empty bypass): ${tagOk ? 'identical' : 'DIFFERS (no active tag ruleset covers it)'}`);
+    }
+    for (const rs of leftoverRulesets(details, settings.leftoverRulesets)) console.log(`    leftoverRuleset "${rs.name}" (id ${rs.id}): DIFFERS (a disabled GitHub-created leftover; new-repo.mjs --apply-settings --only rulesets deletes it)`);
     // UMB-131: the gate ruleset's bypass list -- a room can pass the coverage row above and still have
     // lost its admin bypass (CoalMine, 2026-09-17 org transfer); judged against the canon value.
     // Only published-code: the gate exists for dependabot-auto-merge.yml, which article repos do not ship
