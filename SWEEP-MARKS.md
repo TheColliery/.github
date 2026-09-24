@@ -102,6 +102,12 @@ nobody TOUCHES it.
 | 2 | Scan reports stay local | `skillspector-*.json` gitignored, never committed | skillspector deputy |
 | 3 | The scan record (dated, per-repo scores, FP verdicts) | machine-local registry/memory | skillspector deputy |
 
+**Trigger: automatic since the owner's order of 2026-09-20, never a manual switch.** E1: the
+weekly `skillspector-version-watch.yml` opens an issue when upstream moves past
+`.skillspector-version`, and main fires the skillspector deputy for the fleet re-scan; when the
+whole fleet has been scanned on one version, the `.github` deputy bumps `.skillspector-version`
+to it. E2: a room's version bump re-scans that room, gated by a per-room baseline diff.
+
 Rules: scan LAST—on the version a batch declared done, never a mid-batch snapshot.
 Verify every finding before writing a verdict; a sub's clean-scan claim is suspect input.
 
@@ -110,7 +116,9 @@ version-watch workflow diffs against is ONE number, but the fleet can straddle t
 versions—CoalWash + CoalLedger launched already scanned at v2.3.11 while the other 5 siblings
 (and the baseline file) still sit at v2.3.9. A single pin can't represent a split fleet; only a
 suite-wide re-scan that brings every repo to the SAME version, then bumps the baseline to match,
-closes it. **Owner:** the skillspector deputy tracks it.
+closes it. **Owner:** the skillspector deputy tracks it. **Closed 2026-09-24:** the E1 fleet re-scan
+brought all seven rooms to SkillSpector 2.12.0 and the baseline moved 2.3.9 → 2.12.0 with it; the
+per-room `SECURITY.md` pins follow as each room commits its own.
 
 ## Event 4—New skill/tool launch (a new sibling) · 10 marks
 
