@@ -128,6 +128,20 @@ test('private-working pre-push refuses (exit 1) and names scripts/gate.mjs when 
   }
 });
 
+// UMB-232 (P-4, the Bankfire head via the LLM chief): the hook passes the gate what git hands it -- the remote name
+// as $1 and the pushed refs on stdin -- so a gate can scan the added lines of the push and judge a new branch
+// against the right remote. Bankfire carried it as a named divergence; the template now carries it.
+test('private-working pre-push runs the gate with --pre-push and --remote=$1 (RED before UMB-232)', () => {
+  const hook = fs.readFileSync(PW_PREPUSH, 'utf8');
+  assert.match(hook, /^node "\$gate" --pre-push "--remote=\$1" \|\| \{$/m);
+});
+
+test('private-working template ships the canonical .gitattributes, byte-identical to published-code\'s (UMB-232)', () => {
+  const pw = path.join(TEMPLATES, 'private-working', '.gitattributes');
+  assert.ok(fs.existsSync(pw), 'templates/private-working/.gitattributes is missing');
+  assert.equal(fs.readFileSync(pw, 'utf8').replace(/\r\n/g, '\n'), fs.readFileSync(path.join(TEMPLATES, 'published-code', '.gitattributes'), 'utf8').replace(/\r\n/g, '\n'));
+});
+
 // (11) gate.yml's checkout persists the workflow token into .git/config by default, where every later
 // step -- including the third-party markdownlint action -- can read it. This workflow pushes nothing.
 test('private-working gate.yml checks out with persist-credentials: false (a non-pushing checkout)', () => {

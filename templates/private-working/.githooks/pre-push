@@ -28,8 +28,15 @@ if [ ! -f "$gate" ]; then
   exit 1
 fi
 
+# THE GATE CONTRACT (UMB-232, from Bankfire's LWK-212 divergence, now the template's shape): the gate
+# is run with --pre-push and --remote=<name>. git hands this hook the remote's NAME (or its URL for a
+# push to a bare URL) as $1 and, on stdin, one "<local ref> <local sha> <remote ref> <remote sha>"
+# line per ref being pushed; node INHERITS that stdin. A gate that reads them can scan the ADDED lines
+# of every pushed commit (a secret scan, on a private repo with no server-side one) and measure a new
+# branch against THAT remote's tracking refs instead of every remote's. scripts/gate.mjs therefore
+# accepts both flags (and gate.yml's --verbose); a gate that ignores them still runs, it only scans less.
 echo "pre-push: running scripts/gate.mjs"
-node "$gate" || {
+node "$gate" --pre-push "--remote=$1" || {
   echo "" >&2
   echo "pre-push: gate FAILED — push refused. Fix, or --no-verify if you mean it." >&2
   exit 1

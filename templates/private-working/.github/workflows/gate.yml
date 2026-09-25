@@ -44,6 +44,8 @@ jobs:
 
       # The SAME script the pre-push hook runs. Never re-implement a check in this YAML —
       # a check that lives in only one caller is a check that silently stops running.
+      # The gate's flag contract: --verbose here; --pre-push and --remote=<name> from the hook
+      # (UMB-232) — a gate accepts all three, and one that ignores them still runs.
       #
       # GATED ON scripts/gate.mjs EXISTING — this skeleton ships the workflow, never the
       # gate script itself (genuinely bespoke per repo, per this template's own README).
