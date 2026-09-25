@@ -93,6 +93,50 @@ export function gateBypassVerdicts(details, expected = GATE_RULESET_BYPASS, defa
   });
 }
 
+// UMB-216 (c), AR-75 (3) (owner 2026-09-25) -- every required check on the gate ruleset names its
+// SOURCE. Read live the same day: all nine gates carried `integration_id: null` ("any source"), so
+// any app installed on the repo -- five are, per the vendor register -- could post a passing
+// `all-green`. The one source is the GitHub Actions app (`GET /apps/github-actions` -> id 15368).
+export const GATE_CHECK_SOURCE = Object.freeze({ integration_id: 15368, app: 'GitHub Actions' });
+
+const requiredChecks = (rs) => (rs.rules || []).filter((r) => r.type === 'required_status_checks').flatMap((r) => r.parameters?.required_status_checks || []);
+
+/**
+ * One verdict per ACTIVE default-branch gate (same selection as gateBypassVerdicts): ok when every
+ * required check carries the canon integration_id; otherwise DIFFERS naming the checks at any source.
+ */
+export function gateCheckSourceVerdicts(details, defaultBranch, expected = GATE_CHECK_SOURCE) {
+  const gates = (details || []).filter((rs) => rulesetCoversRules(rs, ['required_status_checks'], defaultBranch));
+  if (gates.length === 0) {
+    return [{ ok: false, text: 'ruleset check source: DIFFERS (no active required_status_checks ruleset on the default branch -- SWEEP-MARKS expects the dependabot-auto-merge-gate)' }];
+  }
+  return gates.map((rs) => {
+    const unsourced = requiredChecks(rs).filter((c) => c.integration_id !== expected.integration_id).map((c) => c.context);
+    return unsourced.length
+      ? { ok: false, text: `ruleset "${rs.name}" check source: DIFFERS (${unsourced.length} required check(s) at any source: ${unsourced.join(', ')}; the canon names ${expected.app}, integration_id ${expected.integration_id})` }
+      : { ok: true, text: `ruleset "${rs.name}" check source: identical (every required check names ${expected.app}, integration_id ${expected.integration_id})` };
+  });
+}
+
+/** The full PUT body for a gate: the ruleset as read, with ONLY the integration_id set on each required
+ *  check -- never a partial PUT (the store lesson: PUT the whole body as read plus the one changed field). */
+export function gateCheckSourceBody(ruleset, expected = GATE_CHECK_SOURCE) {
+  const rules = (ruleset.rules || []).map((r) => {
+    if (r.type !== 'required_status_checks') return JSON.parse(JSON.stringify(r));
+    const parameters = JSON.parse(JSON.stringify(r.parameters || {}));
+    parameters.required_status_checks = (parameters.required_status_checks || []).map((c) => ({ ...c, integration_id: expected.integration_id }));
+    return { type: r.type, parameters };
+  });
+  return {
+    name: ruleset.name,
+    target: ruleset.target,
+    enforcement: ruleset.enforcement,
+    conditions: JSON.parse(JSON.stringify(ruleset.conditions ?? {})),
+    rules,
+    bypass_actors: JSON.parse(JSON.stringify(ruleset.bypass_actors ?? [])),
+  };
+}
+
 // ---------------------------------------------------------------------------------------------
 // The repository-rulesets CANON (owner 2026-09-24, "setup Repository policies"): the ruleset
 // specs in templates/repo-settings.<kind>.json (`ruleset` = main-guard, `tagRuleset` =

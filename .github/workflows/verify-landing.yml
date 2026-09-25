@@ -50,7 +50,7 @@ jobs:
                    scripts/doc-refs.test.mjs scripts/ruleset-match.test.mjs \
                    scripts/lcov-to-cobertura.test.mjs scripts/template-workflows.test.mjs scripts/coal-team.test.mjs \
                    scripts/test-roster.test.mjs templates/overlay-llm-deploy/scripts/post-deploy-check.test.mjs \
-                   scripts/gitbook-config.test.mjs scripts/community-files.test.mjs scripts/org-health-watch.test.mjs \
+                   scripts/gitbook-config.test.mjs scripts/community-files.test.mjs scripts/org-health-watch.test.mjs scripts/gate-check-source.test.mjs \
                    templates/overlay-coal-skill/scripts/lib/release-shape.test.mjs \
                    templates/overlay-coal-skill/scripts/lib/release-prune.test.mjs \
                    templates/overlay-coal-skill/scripts/lib/asset-upload-mode.test.mjs \
@@ -66,7 +66,7 @@ jobs:
                       scripts/doc-refs.test.mjs scripts/ruleset-match.test.mjs \
                       scripts/lcov-to-cobertura.test.mjs scripts/template-workflows.test.mjs scripts/coal-team.test.mjs \
                       scripts/test-roster.test.mjs templates/overlay-llm-deploy/scripts/post-deploy-check.test.mjs \
-                      scripts/gitbook-config.test.mjs scripts/community-files.test.mjs scripts/org-health-watch.test.mjs \
+                      scripts/gitbook-config.test.mjs scripts/community-files.test.mjs scripts/org-health-watch.test.mjs scripts/gate-check-source.test.mjs \
                       templates/overlay-coal-skill/scripts/lib/release-shape.test.mjs \
                       templates/overlay-coal-skill/scripts/lib/release-prune.test.mjs \
                       templates/overlay-coal-skill/scripts/lib/asset-upload-mode.test.mjs \

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rulesetCoversRules, anyRulesetCovers, GATE_RULESET_BYPASS, bypassActorsDiffer, gateBypassVerdicts, rulesetMatchesSpec, planRulesetSpec, rulesetWriteBody, leftoverRulesets } from './lib/ruleset-match.mjs';
+import { rulesetCoversRules, anyRulesetCovers, GATE_RULESET_BYPASS, bypassActorsDiffer, gateBypassVerdicts, rulesetMatchesSpec, planRulesetSpec, rulesetWriteBody, leftoverRulesets, GATE_CHECK_SOURCE, gateCheckSourceVerdicts, gateCheckSourceBody } from './lib/ruleset-match.mjs';
 
 const WANTED = ['deletion', 'non_fast_forward'];
 
@@ -294,4 +294,55 @@ test('leftoverRulesets: only a disabled, same-named ruleset carrying ONLY the li
   assert.deepEqual(leftoverRulesets([{ ...left, rules: [{ type: 'copilot_code_review' }, { type: 'deletion' }] }], spec), [], 'it does real work');
   assert.deepEqual(leftoverRulesets([{ ...left, name: 'other' }], spec), []);
   assert.deepEqual(leftoverRulesets([left], undefined), []);
+});
+
+// ---- UMB-216 (c), AR-75 (3): a required check names its SOURCE -----------------------------------
+// The live shape on all nine gates, read 2026-09-25: every required check carries integration_id null
+// ("any source"), so any app installed on the repo -- five are -- could post a passing `all-green`.
+// The canon: the GitHub Actions app (id 15368, GET /apps/github-actions) is the one source.
+const GATE = (checks) => ({
+  id: 18703484, name: 'dependabot-auto-merge-gate', enforcement: 'active', target: 'branch',
+  conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: [] } },
+  bypass_actors: [{ actor_id: 5, actor_type: 'RepositoryRole', bypass_mode: 'always' }],
+  rules: [{ type: 'required_status_checks', parameters: { strict_required_status_checks_policy: false, required_status_checks: checks } }],
+});
+const LIVE_CHECKS = [{ context: 'all-green', integration_id: null }, { context: 'analyze (javascript)', integration_id: null }];
+const CANON_CHECKS = [{ context: 'all-green', integration_id: 15368 }, { context: 'analyze (javascript)', integration_id: 15368 }];
+
+test('GATE_CHECK_SOURCE is the GitHub Actions app, id 15368', () => {
+  assert.deepEqual(GATE_CHECK_SOURCE, { integration_id: 15368, app: 'GitHub Actions' });
+});
+
+test('gateCheckSourceVerdicts: the live any-source shape DIFFERS naming every check; the canon shape is identical; main-guard is not judged; no gate is one not-ok (RED before the check existed)', () => {
+  const live = gateCheckSourceVerdicts([GATE(LIVE_CHECKS), ruleset({ name: 'main-guard' })], 'main');
+  assert.equal(live.length, 1);
+  assert.equal(live[0].ok, false);
+  assert.match(live[0].text, /any source/);
+  assert.match(live[0].text, /all-green/);
+  assert.match(live[0].text, /analyze \(javascript\)/);
+  const canon = gateCheckSourceVerdicts([GATE(CANON_CHECKS)], 'main');
+  assert.deepEqual(canon.map((v) => v.ok), [true]);
+  assert.match(canon[0].text, /GitHub Actions/);
+  const mixed = gateCheckSourceVerdicts([GATE([CANON_CHECKS[0], LIVE_CHECKS[1]])], 'main');
+  assert.equal(mixed[0].ok, false);
+  assert.doesNotMatch(mixed[0].text.split('any source')[1] ?? '', /all-green/, 'only the unsourced check is named');
+  assert.equal(gateCheckSourceVerdicts([ruleset({ name: 'main-guard' })], 'main').length, 1);
+  assert.equal(gateCheckSourceVerdicts([ruleset({ name: 'main-guard' })], 'main')[0].ok, false);
+});
+
+test('gateCheckSourceBody: the full PUT body is the ruleset as read with ONLY integration_id added on each required check; nothing else moves, the input is not mutated', () => {
+  const g = GATE(LIVE_CHECKS);
+  const before = JSON.stringify(g);
+  const body = gateCheckSourceBody(g);
+  assert.equal(JSON.stringify(g), before, 'input untouched');
+  assert.deepEqual(Object.keys(body).sort(), ['bypass_actors', 'conditions', 'enforcement', 'name', 'rules', 'target']);
+  assert.deepEqual(body.bypass_actors, g.bypass_actors);
+  assert.deepEqual(body.conditions, g.conditions);
+  assert.deepEqual(body.rules[0].parameters.required_status_checks, CANON_CHECKS);
+  assert.equal(body.rules[0].parameters.strict_required_status_checks_policy, false);
+  // a second rule type rides through verbatim
+  const g2 = { ...g, rules: [...g.rules, { type: 'non_fast_forward' }] };
+  assert.deepEqual(gateCheckSourceBody(g2).rules[1], { type: 'non_fast_forward' });
+  // a check already sourced keeps its source
+  assert.deepEqual(gateCheckSourceBody(GATE(CANON_CHECKS)).rules[0].parameters.required_status_checks, CANON_CHECKS);
 });

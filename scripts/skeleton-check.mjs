@@ -43,7 +43,7 @@ import path from 'path';
 import { fileURLToPath } from 'node:url';
 import { findRepos as findReposLib, SKELETON_FILES, TEMPLATE_DIR_FOR_KIND, parseGithubOrigin, matchesWithPlaceholders, formatDetailsTable, liveFileVerdict, gitRemoteState, noRemoteVerdict } from './lib/skeleton-check-lib.mjs';
 import { isLicenseStub, licenseIdentityMismatches } from './lib/license-check-lib.mjs';
-import { rulesetMatchesSpec, gateBypassVerdicts, leftoverRulesets } from './lib/ruleset-match.mjs';
+import { rulesetMatchesSpec, gateBypassVerdicts, gateCheckSourceVerdicts, leftoverRulesets } from './lib/ruleset-match.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const githubRepo = path.resolve(scriptDir, '..');
@@ -268,6 +268,8 @@ async function diffSettings(kind, ownerRepo, settingsPath) {
     // Only published-code: the gate exists for dependabot-auto-merge.yml, which article repos do not ship
     // (a "no gate" line there would be a false positive -- measured on SpriteDesignDatum).
     if (kind === 'published-code') for (const v of gateBypassVerdicts(details, undefined, repoRes.json?.default_branch)) console.log(`    ${v.text}`);
+    // UMB-216 (c): the gate's required checks name their source (GitHub Actions), never "any source".
+    if (kind === 'published-code') for (const v of gateCheckSourceVerdicts(details, repoRes.json?.default_branch)) console.log(`    ${v.text}`);
   }
 }
 
