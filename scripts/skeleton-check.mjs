@@ -3,7 +3,8 @@
 // talongate, a partner workspace outside the series), classifies each by KIND from its
 // own files, and reports each skeleton-owned file as identical / DIFFERS (line count) /
 // absent (an ORG-DEFAULT file -- CODE_OF_CONDUCT, the PR template -- reads "inherits the org
-// default" when absent and NAMED DIVERGENCE when it differs, UMB-177). A DERIVING instrument only — it reports drift, it never fixes it (a DIFFERS row
+// default" when absent and NAMED DIVERGENCE when it differs, UMB-177; a change-request article with no git
+// remote reads its two workflows N/A, since they could never run, UMB-226). A DERIVING instrument only — it reports drift, it never fixes it (a DIFFERS row
 // is a finding for that room's own belt, not this script's to resolve).
 //
 // ENUMERATION (UMB-054 item 1): a directory is walked when it carries a real `.git` OR at
@@ -40,7 +41,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
-import { findRepos as findReposLib, SKELETON_FILES, TEMPLATE_DIR_FOR_KIND, parseGithubOrigin, matchesWithPlaceholders, formatDetailsTable, liveFileVerdict } from './lib/skeleton-check-lib.mjs';
+import { findRepos as findReposLib, SKELETON_FILES, TEMPLATE_DIR_FOR_KIND, parseGithubOrigin, matchesWithPlaceholders, formatDetailsTable, liveFileVerdict, gitRemoteState, noRemoteVerdict } from './lib/skeleton-check-lib.mjs';
 import { isLicenseStub, licenseIdentityMismatches } from './lib/license-check-lib.mjs';
 import { rulesetMatchesSpec, gateBypassVerdicts, leftoverRulesets } from './lib/ruleset-match.mjs';
 
@@ -317,11 +318,18 @@ async function main() {
     }
     const files = SKELETON_FILES[kind];
     const templateDir = TEMPLATE_DIR_FOR_KIND[kind];
+    const remote = gitRemoteState(repo.dir);
     for (const rel of files) {
       const templatePath = path.join(templatesRoot, templateDir, rel);
       const livePath = path.join(repo.dir, rel);
       if (!fs.existsSync(templatePath)) {
         console.log(`  ${rel}: (not in this pass's skeleton — skip)`);
+        continue;
+      }
+      // UMB-226: a workflow that can never run is N/A, even if a copy is present.
+      const na = noRemoteVerdict(kind, rel, remote);
+      if (na) {
+        console.log(`  ${rel}: ${na}`);
         continue;
       }
       try {

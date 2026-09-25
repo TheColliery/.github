@@ -78,8 +78,9 @@ plain `.gitbook.yaml` signature since it is the more specific claim.
 [`scripts/skeleton-check.mjs`](./scripts/skeleton-check.mjs) reports this variant as
 `article (change-request)`.
 
-The declaration changes one cell, and only one — this variant is public and fully
-published, so nothing about visibility or release mechanics differs from the plain row:
+The declaration changes one cell on its own (the no-remote case below adds the
+workflow cells) — this variant is public and fully published, so nothing about
+visibility or release mechanics differs from the plain row:
 
 | L1 cell | `article` | `article (change-request)` |
 |---|---|---|
@@ -89,6 +90,15 @@ published, so nothing about visibility or release mechanics differs from the pla
 Workflows, LICENSE, and Release mechanics are unchanged from the public `article` row:
 a change-request room still needs the same staleness-watching shape, still owes the full
 LICENSE text, and still cuts Releases the same way a git-synced article does.
+
+One case changes the workflow cells too: a change-request room with no git remote of its
+own. That is a folder with no `.git`, or a `.git/config` with no `[remote]` section. A
+workflow runs only from the root of a repository on GitHub, so `check.yml` and
+`watch-sources.yml` placed there would never execute. The check reads those two cells
+N/A and prints the reason, rather than ABSENT, because the only way to clear an ABSENT
+would be a green cell for a workflow that never runs. No machine then runs the staleness
+watch; the room carries it by hand. A `.git` file (a worktree
+or submodule) is not treated as remote-less, so the plain verdict stays.
 
 ### No fourth or sixth kind exists for either of these
 

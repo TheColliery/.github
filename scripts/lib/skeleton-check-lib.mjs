@@ -160,6 +160,35 @@ export const TEMPLATE_DIR_FOR_KIND = {
   'article (change-request)': 'article',
 };
 
+// UMB-226: a workflow runs only from the root of a repo that has a remote. For a no-remote
+// change-request article (Articles/GachaRateDesignDatum: a folder inside the umbrella repo,
+// which has zero remotes by rule) these two cells would demand files that can never execute,
+// and placing them would turn an honest ABSENT into a green cell for a workflow that never runs.
+export const NO_REMOTE_NA_FILES = {
+  'article (change-request)': ['.github/workflows/check.yml', '.github/workflows/watch-sources.yml'],
+};
+
+// { state: 'none' | 'present' | 'unknown', reason } read from the folder's own files, offline.
+// No `.git` of its own = none: GitHub never runs a workflow from a subfolder, whatever the
+// enclosing repo's remotes. A `.git` FILE (worktree, submodule) points elsewhere; it is
+// 'unknown', never claimed remote-less, so the plain verdict stays.
+export function gitRemoteState(repoDir) {
+  const gitPath = path.join(repoDir, '.git');
+  if (!fs.existsSync(gitPath)) return { state: 'none', reason: 'no .git of its own, so a workflow here can never run' };
+  if (!fs.statSync(gitPath).isDirectory()) return { state: 'unknown', reason: '.git is a file (worktree or submodule)' };
+  const cfgPath = path.join(gitPath, 'config');
+  const cfg = fs.existsSync(cfgPath) ? fs.readFileSync(cfgPath, 'utf8') : '';
+  if (/^\s*\[remote\s+"/m.test(cfg)) return { state: 'present', reason: '' };
+  return { state: 'none', reason: 'no [remote] section in .git/config, so a workflow here can never run' };
+}
+
+/** The N/A cell for a no-remote repo's workflow, or null when the plain verdict applies. */
+export function noRemoteVerdict(kind, rel, remote) {
+  if (remote?.state !== 'none') return null;
+  if (!(NO_REMOTE_NA_FILES[kind] || []).includes(rel)) return null;
+  return `N/A (no git remote: ${remote.reason})`;
+}
+
 const ALL_SKELETON_FILE_NAMES = [...new Set(Object.values(SKELETON_FILES).flat())];
 
 // Classification signature per kind — the file whose presence is decisive. Checked in

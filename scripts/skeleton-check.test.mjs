@@ -10,7 +10,7 @@ import {
   detailsKind, detailsVerdict, formatDetailsTable,
   ARTICLE_PRIVATE_MARKER, ARTICLE_CHANGEREQUEST_MARKER, PRIVATE_WORKING_MARKER,
   TEMPLATE_DIR_FOR_KIND, parseGithubOrigin, matchesWithPlaceholders,
-  ORG_DEFAULT_FILES, liveFileVerdict,
+  ORG_DEFAULT_FILES, liveFileVerdict, gitRemoteState, noRemoteVerdict,
 } from './lib/skeleton-check-lib.mjs';
 
 // A scratch zones-root, one fixture per test to keep each hermetic. Every fixture is
@@ -668,4 +668,70 @@ test('skeleton-check.mjs --settings: a 200 repository GET still prints the per-f
   const res = runSettingsWithStubStatus(200);
   assert.doesNotMatch(res.stdout, /\[settings\]: FAIL/, res.stdout);
   assert.match(res.stdout, /repoPatch\.[A-Za-z_]+: DIFFERS/);
+});
+
+// --- UMB-226: a no-remote change-request article cannot run a workflow ---
+// Gacha (Articles/GachaRateDesignDatum) is a folder inside the umbrella repo, which has zero remotes by rule:
+// a check.yml placed there would never execute, so ABSENT was a demand the room could only meet with a
+// workflow that never runs. N/A, with the reason, is the honest cell; a real remote keeps the demand.
+
+test('gitRemoteState: no .git of its own is "none" (a workflow in a subfolder never runs, remote or not)', () => {
+  const dir = makeScratch();
+  assert.equal(gitRemoteState(dir).state, 'none');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('gitRemoteState: a .git/config with no [remote] section is "none"; with one it is "present"', () => {
+  const dir = makeScratch();
+  write(path.join(dir, '.git', 'config'), '[core]\n\tbare = false\n');
+  assert.equal(gitRemoteState(dir).state, 'none');
+  write(path.join(dir, '.git', 'config'), '[core]\n\tbare = false\n[remote "origin"]\n\turl = https://github.com/TheColliery/X.git\n');
+  assert.equal(gitRemoteState(dir).state, 'present');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('gitRemoteState: a .git FILE (worktree or submodule) is "unknown" -- never claimed remote-less', () => {
+  const dir = makeScratch();
+  write(path.join(dir, '.git'), 'gitdir: ../elsewhere/.git/worktrees/x\n');
+  assert.equal(gitRemoteState(dir).state, 'unknown');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('noRemoteVerdict: only the change-request kind, only its two workflows, only when the remote is proven absent', () => {
+  const none = { state: 'none', reason: 'no .git of its own' };
+  assert.match(noRemoteVerdict('article (change-request)', '.github/workflows/check.yml', none), /^N\/A \(no git remote: no \.git of its own/);
+  assert.match(noRemoteVerdict('article (change-request)', '.github/workflows/watch-sources.yml', none), /^N\/A/);
+  assert.equal(noRemoteVerdict('article (change-request)', 'CONTRIBUTING.md', none), null);
+  assert.equal(noRemoteVerdict('article', '.github/workflows/check.yml', none), null);
+  assert.equal(noRemoteVerdict('article (change-request)', '.github/workflows/check.yml', { state: 'present' }), null);
+  assert.equal(noRemoteVerdict('article (change-request)', '.github/workflows/check.yml', { state: 'unknown' }), null);
+});
+
+function runWalkOnChangeRequestRoom(gitConfig) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'skel-cr-'));
+  const SRC = path.dirname(SKELETON_SCRIPT);
+  const gh = path.join(root, '.github');
+  fs.mkdirSync(path.join(gh, 'scripts', 'lib'), { recursive: true });
+  fs.copyFileSync(SKELETON_SCRIPT, path.join(gh, 'scripts', 'skeleton-check.mjs'));
+  for (const f of fs.readdirSync(path.join(SRC, 'lib'))) fs.copyFileSync(path.join(SRC, 'lib', f), path.join(gh, 'scripts', 'lib', f));
+  fs.cpSync(path.join(SRC, '..', 'templates', 'article'), path.join(gh, 'templates', 'article'), { recursive: true });
+  const room = path.join(root, 'Articles', 'Demo');
+  write(path.join(room, ARTICLE_CHANGEREQUEST_MARKER), '');
+  if (gitConfig !== null) write(path.join(room, '.git', 'config'), gitConfig);
+  const res = spawnSync(process.execPath, ['--max-old-space-size=2048', path.join(gh, 'scripts', 'skeleton-check.mjs')], { encoding: 'utf8', timeout: 60000 });
+  fs.rmSync(root, { recursive: true, force: true });
+  return res;
+}
+
+test('skeleton-check.mjs: a no-remote change-request room reads check.yml + watch-sources.yml N/A with the reason -- RED before UMB-226 (both read ABSENT)', () => {
+  const res = runWalkOnChangeRequestRoom(null);
+  assert.match(res.stdout, /\.github\/workflows\/check\.yml: N\/A \(no git remote/, res.stdout);
+  assert.match(res.stdout, /\.github\/workflows\/watch-sources\.yml: N\/A \(no git remote/, res.stdout);
+  assert.match(res.stdout, /CONTRIBUTING\.md: ABSENT/, 'every other cell keeps its plain verdict');
+});
+
+test('skeleton-check.mjs: the same room WITH a remote still reads both workflows ABSENT (control)', () => {
+  const res = runWalkOnChangeRequestRoom('[remote "origin"]\n\turl = https://github.com/TheColliery/Demo.git\n');
+  assert.match(res.stdout, /\.github\/workflows\/check\.yml: ABSENT/, res.stdout);
+  assert.match(res.stdout, /\.github\/workflows\/watch-sources\.yml: ABSENT/, res.stdout);
 });
