@@ -46,6 +46,8 @@ jobs:
       contents: write # only this job creates the Release and uploads assets
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the heading-continuity check needs the previous stable tag (git describe)
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -100,6 +102,24 @@ jobs:
       # rule. scripts/release-notes.mjs fails loud (non-zero exit) on a missing/mismatched/
       # summary-less entry -- a malformed CHANGELOG must stop the release, never fall back to
       # a bare-titled one (UMB-162's own root cause).
+      # UMB-182: the previous stable tag feeds the CHANGELOG heading-continuity check (courier C-2);
+      # the current Latest decides make_latest, so a Release for an older tag never takes Latest.
+      # A 404 on releases/latest means the repo has no Latest yet; any other failure stops the run,
+      # never a guess that could move Latest.
+      - name: Read the previous stable tag and the current Latest release
+        if: steps.gate.outputs.is_stable == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          prev=$(git describe --tags --abbrev=0 --exclude='*-*' "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          if latest=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name 2>latest-err.txt); then :
+          elif grep -q 'HTTP 404' latest-err.txt; then latest=''
+          else cat latest-err.txt >&2; echo "::error::could not read the current Latest release"; exit 1; fi
+          echo "PREVIOUS_STABLE_TAG=${prev}" >> "$GITHUB_ENV"
+          echo "LATEST_TAG=${latest}" >> "$GITHUB_ENV"
+          echo "previous stable tag: ${prev:-none} · current Latest: ${latest:-none}"
+
       - name: Derive the canon Release title + body from CHANGELOG.md
         if: steps.gate.outputs.is_stable == 'true'
         run: node scripts/release-notes.mjs
@@ -118,8 +138,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" --title "$(cat release-title.txt)" --notes-file release-body.md || \
-            gh release edit "${GITHUB_REF_NAME}" --title "$(cat release-title.txt)" --notes-file release-body.md || \
+          gh release create "${GITHUB_REF_NAME}" --title "$(cat release-title.txt)" --notes-file release-body.md --latest="$(cat release-latest.txt)" || \
+            gh release edit "${GITHUB_REF_NAME}" --title "$(cat release-title.txt)" --notes-file release-body.md --latest="$(cat release-latest.txt)" || \
             { echo "::error::release create failed AND release edit failed -- this is not the expected already-exists race" >&2; exit 1; }
 
       # RELEASE-PATTERN.md "A Release body is re-read after every write", MUST -- a 200 on the
@@ -146,6 +166,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release download "${GITHUB_REF_NAME}" -p 'SHA256SUMS.txt' -O existing-SHA256SUMS.txt --clobber 2>/dev/null || true
 
+      # UMB-182 M1, measured: zip stores mtimes, so a re-run of a tag whose assets are already
+      # published ends RED here, and that red is the safe outcome (nothing is overwritten; a fully
+      # published tag has nothing left to do). A run that died before SHA256SUMS.txt was uploaded
+      # finds no prior file and uploads normally. scripts/lib/asset-upload-mode.mjs has the detail.
       - name: Decide whether to upload, skip, or fail (a published version must never silently change)
         id: decide
         if: steps.gate.outputs.is_stable == 'true'

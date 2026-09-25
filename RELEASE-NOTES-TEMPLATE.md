@@ -6,7 +6,10 @@
 > automatically. If a room is writing release notes at all, it fills THIS shape.
 > Who fills it: **that room's own doc-writer**—drafted deliberately by a doc-writer and not
 > by main, so the voice stays the room's own and does not collapse into main's. **Who presses:
-> main**—final check, tag, and the GitHub Release publish stay main's action.
+> the room's department head** signs the version bump after reading the result; **the tag-push
+> workflow posts** the Release (`claude-ai-zips.yml`, or `create-release.yml` for a room with no
+> ZIPs), deriving 1b from 1a. A head's hand-filled 1b is a named interim for a room that carries
+> neither workflow.
 > Companion to [RELEASE-PATTERN.md](./RELEASE-PATTERN.md) (the rules this skeleton implements —
 > read that file for the WHY; this file is the fill-in HOW), [DOC-PATTERN.md](./DOC-PATTERN.md)
 > (CHANGELOG's own format rules), and [scripts-quality.md](./scripts-quality.md) §3 (bump
@@ -23,8 +26,9 @@ CHANGELOG entry does not already make.
 ```markdown
 ## [X.Y.Z] - YYYY-MM-DD
 
-<Optional one-line bump-size + theme summary, bold or plain — only if the entry needs more
-than its own section headings to orient a reader. Many entries skip this line entirely.>
+<REQUIRED one-line summary, one plain sentence: what changed and why it matters. It becomes the
+Release title's summary and the body's lead, verbatim (RELEASE-PATTERN.md "Write once, derive
+everything"); the workflow refuses an entry without it.>
 
 ### Added
 - <a new backward-compatible capability>
@@ -49,6 +53,11 @@ Use only the section headings you need—most entries carry one or two, not all 
 choice is not decoration: it is what sizes the SemVer bump (§3).
 
 ### 1b. GitHub Release (title + body)
+
+Where the repo carries a tag-push workflow, this part is DERIVED from 1a, never hand-filled: the
+title is `vX.Y.Z - <summary line>`, and the body is the summary line followed by 1a's own sections
+unchanged. Parts 3–5 below ride through only if written into the entry itself. The skeleton below
+is the shape a head fills by hand in the named interim.
 
 ```text
 TITLE:
@@ -128,7 +137,8 @@ Filled from the actual shipped CHANGELOG entry
 Check it yourself: `github.com/TheColliery/CoalHearth/blob/main/CHANGELOG.md` and
 `github.com/TheColliery/CoalHearth/releases/tag/v2.1.1`. **This is the skeleton filled
 correctly**—see §5 for exactly how the Release actually published for this tag differs
-from what follows.
+from what follows. It predates the 2026-09-21 derive rule, so its Release was hand-condensed;
+under that rule the entry's first line below would become the title summary and the lead verbatim.
 
 ### CHANGELOG entry (real, condensed for space—full text is longer in the shipped file)
 

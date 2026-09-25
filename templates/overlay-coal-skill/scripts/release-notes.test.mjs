@@ -51,6 +51,43 @@ test('release-notes.mjs: CHANGELOG.md missing fails loud, exit 1, names the prob
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+// UMB-182: the workflow passes PREVIOUS_STABLE_TAG (git describe) and LATEST_TAG (the repo's current Latest).
+const TWO = '## [1.2.0] - 2026-09-22\n\nNew.\n\n### Added\n- x\n\n## [1.1.0] - 2026-09-01\n\nOld.\n';
+
+test('release-notes.mjs: release-latest.txt is "true" with no Latest yet and "false" for a tag older than Latest -- RED before UMB-182', () => {
+  const dir = scratchWithLib();
+  fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), TWO);
+  let res = run(dir, { GITHUB_REF_NAME: 'v1.2.0', PREVIOUS_STABLE_TAG: 'v1.1.0', LATEST_TAG: '' });
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(fs.readFileSync(path.join(dir, 'release-latest.txt'), 'utf8'), 'true');
+  res = run(dir, { GITHUB_REF_NAME: 'v1.2.0', PREVIOUS_STABLE_TAG: 'v1.1.0', LATEST_TAG: 'v2.0.0' });
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(fs.readFileSync(path.join(dir, 'release-latest.txt'), 'utf8'), 'false');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('release-notes.mjs: an entry not followed by the previous stable tag heading fails loud, no files written (C-2)', () => {
+  const dir = scratchWithLib();
+  fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), TWO);
+  const res = run(dir, { GITHUB_REF_NAME: 'v1.2.0', PREVIOUS_STABLE_TAG: 'v1.1.5', LATEST_TAG: '' });
+  assert.equal(res.status, 1);
+  assert.match(res.stderr, /v1\.1\.5/);
+  assert.equal(fs.existsSync(path.join(dir, 'release-title.txt')), false);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('release-notes.mjs: a PREVIOUS_STABLE_TAG or LATEST_TAG that is not a bare vX.Y.Z fails loud', () => {
+  const dir = scratchWithLib();
+  fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), TWO);
+  let res = run(dir, { GITHUB_REF_NAME: 'v1.2.0', PREVIOUS_STABLE_TAG: 'main', LATEST_TAG: '' });
+  assert.equal(res.status, 1);
+  assert.match(res.stderr, /PREVIOUS_STABLE_TAG/);
+  res = run(dir, { GITHUB_REF_NAME: 'v1.2.0', PREVIOUS_STABLE_TAG: 'v1.1.0', LATEST_TAG: 'latest' });
+  assert.equal(res.status, 1);
+  assert.match(res.stderr, /LATEST_TAG/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('release-notes.mjs: a tag/entry version mismatch fails loud rather than writing a wrong title', () => {
   const dir = scratchWithLib();
   fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), '## [1.0.1] - 2026-01-02\n\nx.\n');

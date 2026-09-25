@@ -175,3 +175,50 @@ test('.coderabbit.yaml: the signed shape -- assertive, inheritance, four traced 
   assert.ok(!bodyLines.some((l) => /\b(style|structure|tone|nits?)\b/i.test(l)), 'no taste in any block: ' + bodyLines.filter((l) => /\b(style|structure|tone|nits?)\b/i.test(l)).join(' | '));
   assert.ok(code.every((l) => (l.match(/^ */)[0].length % 2) === 0), 'indentation is a multiple of two');
 });
+
+// UMB-182: the five Coal* rooms that ship no claude.ai ZIPs get a bare tag-push create-release.yml beside the
+// overlay's claude-ai-zips.yml. Both are the SOLE Release creator in their room, so the derive / create / re-read
+// steps must stay the same lines in both files (one flock, one color), and neither may drop the UMB-182 parts.
+const OVERLAY_WF = path.join(TEMPLATES, 'overlay-coal-skill', '.github', 'workflows');
+const wfLines = (name) => fs.readFileSync(path.join(OVERLAY_WF, name), 'utf8').split(/\r?\n/);
+// One step, from its `- name:` line up to the next `- name:`/`- uses:` line or a comment at step indent.
+function stepBlock(lines, name) {
+  const start = lines.indexOf(`      - name: ${name}`);
+  if (start === -1) return null;
+  let end = start + 1;
+  while (end < lines.length && !/^ {6}(- |# )/.test(lines[end])) end++;
+  return lines.slice(start, end).join('\n').trimEnd();
+}
+const SHARED_STEPS = [
+  'Read the previous stable tag and the current Latest release',
+  'Derive the canon Release title + body from CHANGELOG.md',
+  'Ensure the GitHub Release exists, with the derived canon title + body',
+  'Verify the published Release matches the derived title + body (byte-exact re-read)',
+];
+
+test('create-release.yml exists in the overlay and carries every UMB-182 part -- RED before UMB-182', () => {
+  assert.ok(fs.existsSync(path.join(OVERLAY_WF, 'create-release.yml')), 'templates/overlay-coal-skill/.github/workflows/create-release.yml is missing');
+  const text = wfLines('create-release.yml').join('\n');
+  assert.match(text, /^ {6}- 'v\*'$/m, 'tag-push trigger');
+  assert.match(text, /^ {2}cancel-in-progress: false$/m, 'a job that writes a Release is never cancelled');
+  assert.match(text, /^ {10}fetch-depth: 0 /m, 'git describe needs the full history for the heading-continuity check (C-2)');
+  assert.match(text, /--exclude='\*-\*'/, 'the previous tag is the previous STABLE tag');
+  assert.match(text, /releases\/latest/, 'the current Latest is read before create (default-Latest)');
+  const code = wfLines('create-release.yml').filter((l) => !l.trim().startsWith('#')).join('\n');
+  assert.doesNotMatch(code, /\bzip\b|gh release upload|SHA256SUMS/, 'no packaging, no assets in the bare workflow');
+});
+
+test('both overlay workflows pass --latest on create AND edit, and share the derive / create / re-read steps line for line', () => {
+  for (const name of ['create-release.yml', 'claude-ai-zips.yml']) {
+    const lines = wfLines(name);
+    assert.equal(lines.filter((l) => l.includes('--latest="$(cat release-latest.txt)"')).length, 2, `${name}: --latest on both gh release create and gh release edit`);
+    assert.ok(lines.some((l) => /^ {10}fetch-depth: 0 /.test(l)), `${name}: fetch-depth 0`);
+  }
+  const a = wfLines('create-release.yml');
+  const b = wfLines('claude-ai-zips.yml');
+  for (const step of SHARED_STEPS) {
+    const sa = stepBlock(a, step);
+    assert.ok(sa, `create-release.yml has no step "${step}"`);
+    assert.equal(stepBlock(b, step), sa, `step "${step}" differs between create-release.yml and claude-ai-zips.yml`);
+  }
+});

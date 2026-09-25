@@ -1,0 +1,89 @@
+name: create-release
+
+# The sole Release creator for a Coal* room that ships NO claude.ai ZIPs (UMB-182). On a stable
+# version tag: derive the Release title + body from the top CHANGELOG entry, create the Release
+# (or converge an existing one back to the derived shape), and re-read it byte for byte. No
+# packaging, no assets. A room carries EXACTLY ONE of this file and claude-ai-zips.yml, never both
+# (two workflows creating the same Release is the race UMB-162 closed). The derive, create and
+# re-read steps are the same lines as claude-ai-zips.yml's; scripts/template-workflows.test.mjs
+# in the .github repo holds the two files to that.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {} # a re-run against a tag ref; runs this file as it exists AT that tag, so a tag cut before the file landed cannot use it
+
+permissions:
+  contents: read
+
+# cancel-in-progress: FALSE -- this job writes a Release; a run killed mid-write can leave a
+# Release whose title/body was never re-read. Keyed on the tag, because the collision is per-Release.
+concurrency:
+  group: create-release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # only this job creates or edits the Release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the heading-continuity check needs the previous stable tag (git describe)
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: "Check the ref is a STABLE tag, not a branch or a pre-release tag (Releases are stable-only; a workflow_dispatch against a branch would otherwise create a Release named after the branch)"
+        id: gate
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          if [[ "${REF_TYPE}" != "tag" ]]; then
+            echo "is_stable=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::ref_type is '${REF_TYPE}', not a tag -- no Release to create"
+          elif [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+            echo "is_stable=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::${GITHUB_REF_NAME} is a pre-release tag -- Releases are stable-only (a repo's one launch-form pre-release Release is cut by hand, RELEASE-PATTERN.md)"
+          else
+            echo "is_stable=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # UMB-182: the previous stable tag feeds the CHANGELOG heading-continuity check (courier C-2);
+      # the current Latest decides make_latest, so a Release for an older tag never takes Latest.
+      # A 404 on releases/latest means the repo has no Latest yet; any other failure stops the run,
+      # never a guess that could move Latest.
+      - name: Read the previous stable tag and the current Latest release
+        if: steps.gate.outputs.is_stable == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          prev=$(git describe --tags --abbrev=0 --exclude='*-*' "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          if latest=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name 2>latest-err.txt); then :
+          elif grep -q 'HTTP 404' latest-err.txt; then latest=''
+          else cat latest-err.txt >&2; echo "::error::could not read the current Latest release"; exit 1; fi
+          echo "PREVIOUS_STABLE_TAG=${prev}" >> "$GITHUB_ENV"
+          echo "LATEST_TAG=${latest}" >> "$GITHUB_ENV"
+          echo "previous stable tag: ${prev:-none} · current Latest: ${latest:-none}"
+
+      - name: Derive the canon Release title + body from CHANGELOG.md
+        if: steps.gate.outputs.is_stable == 'true'
+        run: node scripts/release-notes.mjs
+
+      - name: Ensure the GitHub Release exists, with the derived canon title + body
+        if: steps.gate.outputs.is_stable == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" --title "$(cat release-title.txt)" --notes-file release-body.md --latest="$(cat release-latest.txt)" || \
+            gh release edit "${GITHUB_REF_NAME}" --title "$(cat release-title.txt)" --notes-file release-body.md --latest="$(cat release-latest.txt)" || \
+            { echo "::error::release create failed AND release edit failed -- this is not the expected already-exists race" >&2; exit 1; }
+
+      - name: Verify the published Release matches the derived title + body (byte-exact re-read)
+        if: steps.gate.outputs.is_stable == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release view "${GITHUB_REF_NAME}" --json name,body | node scripts/verify-release-shape.mjs

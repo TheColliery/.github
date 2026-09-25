@@ -41,6 +41,14 @@ generated copies are built from, and what it holds):
   inline (double-quoted, so GitHub's YAML parser does not truncate it at the first
   unescaped `#` — the exact defect CoalFace's own board #119 found and fixed in this
   same file).
+- `.github/workflows/create-release.yml` — the bare tag-push Release creator for a room
+  that ships **no** claude.ai ZIPs (UMB-182). A room carries exactly one of this file and
+  `claude-ai-zips.yml`, never both. It runs the same derive, create and re-read steps from
+  the same three scripts (`scripts/release-notes.mjs`, `scripts/verify-release-shape.mjs`,
+  `scripts/lib/release-shape.mjs`), copied byte-identical with their tests; nothing else of
+  this overlay is required for it. Both workflows pass `--latest=false` for a tag older than
+  the current Latest, and the derive step checks that the released CHANGELOG entry is
+  followed by the previous stable tag's heading.
 - `build-claude-ai-zips.mjs` imports `./lib/desc-cap.mjs` and `./lib/claude-ai-trim.mjs`
   at run time — **those two library files are NOT copied here.** They are general
   cross-platform description-capping utilities (part of the config-schema tooling,
