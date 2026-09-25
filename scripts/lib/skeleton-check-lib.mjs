@@ -210,9 +210,13 @@ export function classify(repoDir) {
   // ALREADY adopted gate.yml does not need the marker at all (the structural check
   // still classifies it correctly on its own, unchanged).
   if (has(PRIVATE_WORKING_MARKER)) return 'private-working';
+  // The published-code signature is tested BEFORE the bare .gitbook.yaml one (2026-09-25): a code repo
+  // that is also GitBook-synced (every Coal* room since the UMB-169 contract) is still a code repo --
+  // SERIES-CANON's published-code row carries GitBook as its publishing dialect, not as its kind. With
+  // the old order seven rooms read `article` and were diffed against the wrong skeleton.
+  if (has('.github/workflows/ci.yml') && has('.github/workflows/codeql.yml')) return 'published-code';
   if (has('.gitbook.yaml')) return 'article';
   if (has('.github/workflows/gate.yml') && !has('.github/workflows/ci.yml')) return 'private-working';
-  if (has('.github/workflows/ci.yml') && has('.github/workflows/codeql.yml')) return 'published-code';
   return null;
 }
 

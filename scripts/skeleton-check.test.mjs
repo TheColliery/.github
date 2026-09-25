@@ -747,6 +747,20 @@ test('.coalboard/ is an ignore line in this repo\'s .gitignore and in every temp
   assert.deepEqual(missing, []);
 });
 
+// Measured 2026-09-25 on the live tree: seven Coal* rooms read `kind: article` because each gained a
+// `.gitbook.yaml` (the GitBook contract, UMB-169) and classify() tested that file before the
+// published-code signature. A code repo that is ALSO GitBook-synced is still a code repo
+// (SERIES-CANON: the published-code row's publishing dialect is "N/A unless the repo also publishes
+// to GitBook"); the signature order decides, and it was wrong.
+test('classify: ci.yml + codeql.yml + .gitbook.yaml is published-code, not article -- a synced code repo (RED against the .gitbook.yaml-first order)', () => {
+  const dir = makeScratch();
+  write(path.join(dir, '.github', 'workflows', 'ci.yml'), 'x');
+  write(path.join(dir, '.github', 'workflows', 'codeql.yml'), 'x');
+  write(path.join(dir, '.gitbook.yaml'), 'root: ./docs');
+  assert.equal(classify(dir), 'published-code');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('SKELETON_FILES: every kind, the three article variants included, owns a .gitignore (RED before UMB-216)', () => {
   for (const kind of Object.keys(SKELETON_FILES)) assert.ok(SKELETON_FILES[kind].includes('.gitignore'), `${kind} lists .gitignore`);
 });
