@@ -1,0 +1,17 @@
+# Local working rules, loaded by any Claude Code session here and never published.
+CLAUDE.local.md
+
+# Agent governance store: role memory, sweep logs, warm-resume journals. Internal working
+# material for whoever maintains this repo with an AI agent — never part of the published
+# standard, never meant for a reader of the doc. Untracked-but-not-ignored here would let a
+# routine `git add -A` publish it to this repo's public GitHub remote.
+.claude/
+.agents/
+
+# Scratch/working files from agent sessions (drafts, throwaway probes). Same reasoning as
+# .claude/ above: internal, never published, and this repo has a real remote to leak onto.
+scratchpad/
+
+# CoalBoard's own staging and reports (.coalboard/proposed/, .coalboard/reports/): a board's
+# output lands inside the scanned repo by rule and is read there, never shipped.
+.coalboard/

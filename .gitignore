@@ -7,3 +7,7 @@ MEMORY.md
 
 # CC platform-generated skill lockfile (machine-local, never ship)
 skills-lock.json
+
+# CoalBoard's own staging and reports (.coalboard/proposed/, .coalboard/reports/): a board's
+# output lands inside the scanned repo by rule and is read there, never shipped (UMB-216).
+.coalboard/

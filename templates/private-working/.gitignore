@@ -5,6 +5,10 @@ AGENTS.md
 .claude/
 .agents/
 
+# CoalBoard's own staging and reports (.coalboard/proposed/, .coalboard/reports/): a board's
+# output lands inside the scanned repo by rule and is read there, never shipped.
+.coalboard/
+
 # The gitignore FENCE — a private-working repo holds material that must never leave this
 # machine even though the repo itself is private (drafts, unpublished pricing, raw corpus
 # samples). Name the fenced paths here explicitly per repo; this line is the marker that a

@@ -736,3 +736,17 @@ test('skeleton-check.mjs: the same room WITH a remote still reads both workflows
   assert.match(res.stdout, /\.github\/workflows\/check\.yml: ABSENT/, res.stdout);
   assert.match(res.stdout, /\.github\/workflows\/watch-sources\.yml: ABSENT/, res.stdout);
 });
+
+// --- UMB-216: .coalboard/ is ignored in this repo and in every template ---
+// A board's output (.coalboard/proposed/, .coalboard/reports/) lands inside the scanned repo by rule;
+// `git check-ignore .coalboard/x` answered exit 1 on this public repo on 2026-09-25.
+test('.coalboard/ is an ignore line in this repo\'s .gitignore and in every template\'s (RED before UMB-216)', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const files = ['.gitignore', 'templates/published-code/.gitignore', 'templates/private-working/.gitignore', 'templates/article/.gitignore'];
+  const missing = files.filter((f) => !fs.existsSync(path.join(root, f)) || !fs.readFileSync(path.join(root, f), 'utf8').split(/\r?\n/).includes('.coalboard/'));
+  assert.deepEqual(missing, []);
+});
+
+test('SKELETON_FILES: every kind, the three article variants included, owns a .gitignore (RED before UMB-216)', () => {
+  for (const kind of Object.keys(SKELETON_FILES)) assert.ok(SKELETON_FILES[kind].includes('.gitignore'), `${kind} lists .gitignore`);
+});

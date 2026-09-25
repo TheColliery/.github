@@ -53,12 +53,12 @@ export const SKELETON_FILES = {
     '.github/PULL_REQUEST_TEMPLATE.md',
   ],
   'private-working': [
-    'LICENSE', '.gitignore',
+    'LICENSE', '.gitignore', '.gitattributes',
     '.githooks/pre-push',
     '.github/workflows/gate.yml',
   ],
   article: [
-    'LICENSE', 'CONTRIBUTING.md', 'CHANGELOG.md', '.gitbook.yaml',
+    'LICENSE', 'CONTRIBUTING.md', 'CHANGELOG.md', '.gitbook.yaml', '.gitignore',
     '.github/workflows/check.yml', '.github/workflows/watch-sources.yml',
     '.github/PULL_REQUEST_TEMPLATE.md',
   ],
@@ -72,7 +72,7 @@ export const SKELETON_FILES = {
   // watch-sources.yml-shaped staleness checking (SERIES-CANON.md states why), and the
   // LICENSE law binds regardless of visibility.
   'article (private)': [
-    'LICENSE', 'CHANGELOG.md',
+    'LICENSE', 'CHANGELOG.md', '.gitignore',
     '.github/workflows/check.yml', '.github/workflows/watch-sources.yml',
   ],
   // UMB-060 (Articles head's ARK-042 D-6 residue, main's ruling): a PUBLIC article that
@@ -91,7 +91,7 @@ export const SKELETON_FILES = {
   // staleness-watching, so their absence is a real, actionable gap for that room to
   // close, never an instrument artifact to silence.
   'article (change-request)': [
-    'LICENSE', 'CONTRIBUTING.md', 'CHANGELOG.md',
+    'LICENSE', 'CONTRIBUTING.md', 'CHANGELOG.md', '.gitignore',
     '.github/workflows/check.yml', '.github/workflows/watch-sources.yml',
     '.github/PULL_REQUEST_TEMPLATE.md',
   ],
