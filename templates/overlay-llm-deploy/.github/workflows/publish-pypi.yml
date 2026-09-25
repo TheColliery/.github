@@ -36,6 +36,7 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 20 # testing.md: every run has a finite clock; a room re-sizes this from its own measured suite time
     environment: pypi
     permissions:
       contents: read # a job-level permissions block REPLACES the workflow-level one; without this line checkout and the gate's API reads run with no read access (a private repo needs it; Kolwen, being public, does not)
@@ -93,6 +94,9 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # This job pushes nothing, so the workflow token has no business staying in .git/config for the
+          # rest of the job, readable by every later step (SKILL-REPO-PATTERN.md, Layer 5).
+          persist-credentials: false
           ref: ${{ steps.gate.outputs.commit }}
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0

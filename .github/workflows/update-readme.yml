@@ -5,21 +5,28 @@ on:
     - cron: '15 0 * * *' # Daily at 00:15 UTC (07:15 AM Thailand time)
   workflow_dispatch: # Allows manual trigger from the GitHub Actions UI
 
+# Nothing at the workflow level; the one job declares its own write (SKILL-REPO-PATTERN.md, Layer 5).
+permissions: {}
+
 jobs:
   update-stats:
     runs-on: ubuntu-latest
+    timeout-minutes: 10 # testing.md: every run has a finite clock; a room re-sizes this from its own measured suite time
     permissions:
       contents: write   # least-privilege: granted at the JOB, not the whole workflow
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Push with the same user PAT the traffic step already requires: the
-          # dependabot-auto-merge-gate ruleset (required status checks) rejects a
-          # github-actions[bot] direct push (GH013, no Integration bypass possible —
-          # no app installed on the org), while the PAT's owner carries the ruleset's
-          # admin RepositoryRole bypass. checkout persists this credential for the
-          # push step below.
+          # PAT_TOKEN is the owner's classic PAT (no expiry; scopes narrowed 2026-09-25, AR-75 (1)).
+          # It does two things here, both documented: the traffic API read below (a user PAT is
+          # required; GITHUB_TOKEN answers 403) and the PUSH of the regenerated badges to main.
+          # The push cannot use GITHUB_TOKEN: the dependabot-auto-merge-gate ruleset requires the
+          # `verify` check on main, and its only bypass is the admin RepositoryRole, which the PAT's
+          # owner holds. Five GitHub Apps are installed on the org (.claude/VENDOR-REGISTER.md in
+          # the umbrella); none of them is the identity that pushes here. checkout persists this
+          # credential on purpose, for the push step below; every other workflow in this repo sets
+          # persist-credentials: false.
           token: ${{ secrets.PAT_TOKEN }}
 
       - name: Set up Node.js

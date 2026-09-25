@@ -137,6 +137,74 @@ test('private-working gate.yml checks out with persist-credentials: false (a non
   assert.match(step[1], /persist-credentials: false/);
 });
 
+// ---- UMB-216 (b)(c)(d) + the timeout-minutes canon: every workflow this repo ships or runs ----------
+// The templates are the machine-checkable embodiment of SKILL-REPO-PATTERN.md's Layer 5; this repo's own
+// .github/workflows/ is held to the same shape (it is the org's face and ships nothing a room lacks).
+const OWN_WF = path.join(ROOT, '.github', 'workflows');
+const ALL_WORKFLOWS = () => [...workflowFiles(TEMPLATES), ...fs.readdirSync(OWN_WF).filter((f) => /\.ya?ml$/.test(f)).map((f) => path.join(OWN_WF, f))];
+const rel = (f) => path.relative(ROOT, f).replace(/\\/g, '/');
+const lines = (f) => fs.readFileSync(f, 'utf8').split(/\r?\n/);
+// The one workflow that pushes: it checks out with a PAT on purpose and keeps it for its push step.
+const PUSHING = new Set(['.github/workflows/update-readme.yml']);
+
+test('every job in every template workflow, and in this repo\'s own, declares timeout-minutes (testing.md: a finite clock; RED before UMB-216)', () => {
+  const missing = [];
+  for (const f of ALL_WORKFLOWS()) {
+    const ls = lines(f);
+    const jobsAt = ls.indexOf('jobs:');
+    assert.ok(jobsAt >= 0, `${rel(f)} has a jobs: block`);
+    for (let i = jobsAt + 1; i < ls.length; i++) {
+      if (!/^  [a-z][a-z0-9_-]*:$/.test(ls[i])) continue;
+      let j = i + 1;
+      let found = false;
+      while (j < ls.length && !/^  [a-z][a-z0-9_-]*:$/.test(ls[j])) { if (/^    timeout-minutes: \d+( #.*)?$/.test(ls[j])) found = true; j++; }
+      if (!found) missing.push(`${rel(f)}:${i + 1} ${ls[i].trim()}`);
+    }
+  }
+  assert.deepEqual(missing, [], 'a job with no timeout-minutes can hold a runner for 360 minutes');
+});
+
+test('every checkout in a workflow that pushes nothing sets persist-credentials: false; the pushing one keeps its token (RED before UMB-216 (d))', () => {
+  const bad = [];
+  for (const f of ALL_WORKFLOWS()) {
+    const ls = lines(f);
+    ls.forEach((l, i) => {
+      if (!/^\s*- (name: [^\n]*\n\s*)?uses: actions\/checkout@/.test(l) && !/^\s*uses: actions\/checkout@/.test(l)) return;
+      // The step's own keys sit two columns right of its "- "; a `uses:` under a `- name:` line shares that column.
+      const stepIndent = l.match(/^\s*/)[0].length - (l.trim().startsWith('- ') ? 0 : 2);
+      let j = i + 1;
+      let persist = null;
+      while (j < ls.length && (ls[j].trim() === '' || (ls[j].match(/^\s*/)[0].length > stepIndent && !/^\s*- /.test(ls[j])))) { const m = ls[j].match(/^\s*persist-credentials: (true|false)/); if (m) persist = m[1]; j++; }
+      const shouldPersist = PUSHING.has(rel(f));
+      if (!shouldPersist && persist !== 'false') bad.push(`${rel(f)}:${i + 1} pushes nothing but persists the token`);
+      if (shouldPersist && persist === 'false') bad.push(`${rel(f)}:${i + 1} pushes but dropped its credential`);
+    });
+  }
+  assert.deepEqual(bad, []);
+});
+
+test('dependabot-auto-merge (template and this repo\'s copy): the PR URL reaches gh through env PR_URL, never interpolated into run: (RED before UMB-216 (c))', () => {
+  for (const f of [path.join(TEMPLATES, 'published-code', '.github', 'workflows', 'dependabot-auto-merge.yml'), path.join(OWN_WF, 'dependabot-auto-merge.yml')]) {
+    const y = fs.readFileSync(f, 'utf8');
+    assert.doesNotMatch(y, /run:[^\n]*\$\{\{ github\.event\.pull_request\.html_url \}\}/, `${rel(f)}: a context inside run: is the script-injection shape`);
+    assert.match(y, /PR_URL: \$\{\{ github\.event\.pull_request\.html_url \}\}/, `${rel(f)}: PR_URL env`);
+    assert.match(y, /gh pr merge --squash --auto "\$PR_URL"/, `${rel(f)}: the merge reads the env var`);
+  }
+});
+
+test('this repo carries the template scorecard.yml byte for byte (RED before UMB-216 (b))', () => {
+  const own = path.join(OWN_WF, 'scorecard.yml');
+  assert.ok(fs.existsSync(own), '.github/workflows/scorecard.yml is missing');
+  assert.equal(fs.readFileSync(own, 'utf8').replace(/\r\n/g, '\n'), fs.readFileSync(path.join(TEMPLATES, 'published-code', '.github', 'workflows', 'scorecard.yml'), 'utf8').replace(/\r\n/g, '\n'));
+});
+
+test('update-readme.yml: an empty top-level permissions block, the write declared at the job only (RED before UMB-216 (b))', () => {
+  const ls = lines(path.join(OWN_WF, 'update-readme.yml'));
+  assert.ok(ls.includes('permissions: {}'), 'top-level permissions: {}');
+  assert.ok(ls.includes('      contents: write   # least-privilege: granted at the JOB, not the whole workflow'), 'the job-level write stays');
+  assert.doesNotMatch(ls.join('\n'), /no app installed on the org/, 'the false "no app installed" comment is gone');
+});
+
 // ---- AR-46: the canon .coderabbit.yaml (measured trial) --------------------------------------------
 // No YAML parser is available without an npm install (Phoenix #2), so the file is read with a dumb line
 // check, and the check says what it is: it proves the SHAPE the owner signed, not that the vendor's

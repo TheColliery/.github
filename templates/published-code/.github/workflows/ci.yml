@@ -40,9 +40,13 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         node: [22, 24]  # supported LTS only (24 Active, 22 Maintenance); 18/20 are EOL — bump as the Node LTS schedule moves
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20 # testing.md: every run has a finite clock; a room re-sizes this from its own measured suite time
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # This job pushes nothing, so the workflow token has no business staying in .git/config for the
+          # rest of the job, readable by every later step (SKILL-REPO-PATTERN.md, Layer 5).
+          persist-credentials: false
           # 0 = all history for ALL branches AND tags (action.yml @ this pinned tag: "0
           # indicates all history for all branches and tags") — without this, git's
           # shallow default leaves no tag reachable, so task #38's dist-changelog gate
@@ -93,6 +97,7 @@ jobs:
     needs: gate
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 20 # testing.md: every run has a finite clock; a room re-sizes this from its own measured suite time
     steps:
       - name: gate result
         run: |

@@ -18,8 +18,13 @@ permissions:
 jobs:
   watch:
     runs-on: ubuntu-latest
+    timeout-minutes: 10 # testing.md: every run has a finite clock; a room re-sizes this from its own measured suite time
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # This job pushes nothing, so the workflow token has no business staying in .git/config for the
+          # rest of the job, readable by every later step (SKILL-REPO-PATTERN.md, Layer 5).
+          persist-credentials: false
       - name: Compare SkillSpector version vs the version we scanned with
         env:
           GH_TOKEN: ${{ github.token }}
