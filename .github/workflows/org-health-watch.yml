@@ -1,0 +1,62 @@
+name: org-health-watch
+
+# UMB-216 (a): a read-only weekly watcher over the org's public repos for three failures that
+# otherwise stay silent: a workflow GitHub disabled for inactivity (a scheduled job stops after
+# 60 days without repository activity and looks like a quiet week), a run left queued for more
+# than a day, and a GitBook Git Sync stall read from the commit status GitBook posts on the
+# commits it imports. It opens ONE issue on this repo and never fixes anything; the mechanism is
+# scripts/org-health-watch.mjs (zero-dependency, tested in scripts/org-health-watch.test.mjs).
+
+on:
+  schedule:
+    - cron: '30 2 * * 1'   # Mondays 02:30 UTC, an hour after the SkillSpector watcher
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+# cancel-in-progress: TRUE -- a superseded run has nothing half-done to leave behind; the issue
+# create below is one call, and a run killed before it simply reports next week.
+concurrency:
+  group: org-health-watch
+  cancel-in-progress: true
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10 # testing.md: every run has a finite clock
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # This job pushes nothing, so the workflow token has no business staying in .git/config for the
+          # rest of the job, readable by every later step (SKILL-REPO-PATTERN.md, Layer 5).
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Read the org (workflow states, queued runs, GitBook statuses)
+        id: watch
+        env:
+          GH_TOKEN: ${{ github.token }} # public reads; the token only raises the rate limit
+        run: node scripts/org-health-watch.mjs
+
+      # ONE open issue at a time: a second week's findings go on the open issue as a comment, so the
+      # tracker never fans out. The report body is the script's own file; nothing external is
+      # interpolated into a shell string.
+      - name: Open or update the one tracking issue
+        if: steps.watch.outputs.has_findings == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          title="org-health-watch: findings (re-enable, re-run or unblock by hand; this issue is a report)"
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "in:title org-health-watch: findings" --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body-file org-health-report.md
+            echo "commented on #$open"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file org-health-report.md
+          fi
