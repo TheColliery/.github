@@ -12,7 +12,7 @@ claude.ai can run **custom skills**: a ZIP containing a `SKILL.md` (YAML frontma
 
 Two ways to get the ZIP—which one applies depends on the tool.
 
-**Fastest, where a Release ships one:** CoalMine and CoalFace attach pre-built ZIPs to every Release (one per CoalMine canary, one for CoalFace) plus a `SHA256SUMS.txt`. Open the Release's Assets, download the skill's `.zip`, verify it against `SHA256SUMS.txt` (`sha256sum -c SHA256SUMS.txt` or your OS's equivalent—the checksum file exists so you can check the ZIP wasn't corrupted or tampered with in transit, not as decoration), then upload it. No build step. CoalLedger's version of this is in progress and has not shipped on a stable Release yet; every other tool in the table below is either excluded from claude.ai entirely or has no ZIP workflow.
+**Fastest, where a Release ships one:** CoalMine and CoalFace attach pre-built ZIPs to every Release (one per CoalMine canary, one for CoalFace) plus a `SHA256SUMS.txt`. Open the Release's Assets, download the skill's `.zip`, verify it against `SHA256SUMS.txt` (`sha256sum -c SHA256SUMS.txt` or your OS's equivalent—the checksum file catches a download corrupted in transit; it sits beside the ZIP on the same host, so it cannot prove the Release itself was not tampered with. Where a Release carries a signed build attestation, `gh attestation verify <zip> -R TheColliery/<repo>` is the check that proves which workflow built it), then upload it. No build step. CoalLedger's version of this is in progress and has not shipped on a stable Release yet; every other tool in the table below is either excluded from claude.ai entirely or has no ZIP workflow.
 
 **Always works, any tool:** build it yourself—every skill folder in the repos already IS the package.
 

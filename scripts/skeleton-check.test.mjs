@@ -336,8 +336,9 @@ test('SKELETON_FILES: the PR template is skeleton-owned by published-code and th
 });
 
 test('liveFileVerdict: a live room WITHOUT an org-default file inherits it (not a gap); one WITH a different file is a NAMED divergence; every other file keeps its plain verdict', () => {
-  assert.deepEqual([...ORG_DEFAULT_FILES].sort(), ['.github/PULL_REQUEST_TEMPLATE.md', 'CODE_OF_CONDUCT.md']);
+  assert.deepEqual([...ORG_DEFAULT_FILES].sort(), ['.github/PULL_REQUEST_TEMPLATE.md', 'CODE_OF_CONDUCT.md', 'GOVERNANCE.md']);
   assert.match(liveFileVerdict('CODE_OF_CONDUCT.md', 'ABSENT'), /inherits the org default/);
+  assert.match(liveFileVerdict('GOVERNANCE.md', 'ABSENT'), /inherits the org default/); // UMB-216: the sixth org default
   assert.match(liveFileVerdict('.github/PULL_REQUEST_TEMPLATE.md', 'ABSENT'), /inherits the org default/);
   assert.match(liveFileVerdict('CODE_OF_CONDUCT.md', 'DIFFERS (template 5L vs live 9L)'), /NAMED DIVERGENCE/);
   assert.equal(liveFileVerdict('CODE_OF_CONDUCT.md', 'identical'), 'identical');

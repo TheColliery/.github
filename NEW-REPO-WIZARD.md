@@ -90,7 +90,7 @@
 
 ## Where the org has a rule but no mechanism—every instance found while writing this
 
-- Step 4 (`.gitattributes` shape)—verified today: **6 of 7 live rooms** (CoalBoard, CoalTipple, CoalHearth, CoalFace, CoalWash, CoalLedger) carry the pre-fix THIN shape that bit CoalGob; only CoalMine carries the full one. Nothing detects the drift or backports the fix—named here, not fixed here (out of this document's scope).
+- Step 4 (`.gitattributes` shape)—re-verified 2026-09-25: all 8 CoalWorks rooms and Kolwen carry the full shape (one md5, `md5sum */*/.gitattributes` from the umbrella); the "6 of 7 THIN" reading of 2026-07-31 is history. Still diverging, each named in its own file or owed a conform pass: Bankfire (fixture pins), Chotmeter and ChotUnitDatum (hooks-only line), GachaRateDesignDatum, and this repo. `scripts/skeleton-check.mjs` reports the file per kind since UMB-232; nothing backports a fix.
 - Step 7 (git hooks installed on clone)—no automatic check that `core.hooksPath` is set on a fresh repo.
 - Step 10 (local governance file shape)—no written pattern for the room `CLAUDE.md`'s `@import` shape; it exists only as convention across live rooms.
 - Step 13 (`fetch-depth: 0`)—no gate asserts every repo's `ci.yml` carries it; CoalMine's own fix landed reactively, after the SKIP had already been silently wrong.

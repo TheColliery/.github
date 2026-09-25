@@ -16,16 +16,22 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
 const exists = (rel) => fs.existsSync(path.join(ROOT, rel));
 
-const DEFAULTS = ['CODE_OF_CONDUCT.md', 'CONTRIBUTING.md', 'SECURITY.md', 'SUPPORT.md', 'PULL_REQUEST_TEMPLATE.md'];
+const DEFAULTS = ['CODE_OF_CONDUCT.md', 'CONTRIBUTING.md', 'SECURITY.md', 'SUPPORT.md', 'PULL_REQUEST_TEMPLATE.md', 'GOVERNANCE.md'];
 const LEAN = DEFAULTS.filter((f) => f !== 'CODE_OF_CONDUCT.md'); // the Covenant is a standard's text, never trimmed
 const LEAN_MAX_CHARS = 2500;
 
-test('the five org-default community files exist under .github/', () => {
+test('the six org-default community files exist under .github/ (GOVERNANCE.md since UMB-216, RED before it)', () => {
   const missing = DEFAULTS.filter((f) => !exists('.github/' + f));
   assert.deepEqual(missing, []);
 });
 
-test('the four small defaults stay lean, and none carries an e-mail address (the org domain takes no mail)', () => {
+test('GOVERNANCE.md: the org default and the published-code template copy are byte-identical, and it names the four things the canon asks for', () => {
+  const own = read('.github/GOVERNANCE.md');
+  assert.equal(own, read('templates/published-code/GOVERNANCE.md'));
+  for (const must of [/One maintainer decides/, /How a change is accepted/, /Who writes the changes/, /Co-Authored-By/, /Where to report/]) assert.match(own, must);
+});
+
+test('the five small defaults stay lean, and none carries an e-mail address (the org domain takes no mail)', () => {
   for (const f of LEAN) {
     const text = read('.github/' + f);
     assert.ok(text.length <= LEAN_MAX_CHARS, `${f} is ${text.length} chars; a long explanation is a link (cap ${LEAN_MAX_CHARS})`);

@@ -94,7 +94,7 @@ the last ACTUAL scan (Event 3 owns it). Bumping it without a scan fabricates cov
 **Owner:** the skillspector deputy owns the pin; the room reviewer's job is to make sure
 nobody TOUCHES it.
 
-## Event 3—SkillSpector re-scan (new scanner version, SATURATED builds only) · 3 marks
+## Event 3—SkillSpector re-scan (automatic since 2026-09-20: E1 a new scanner version, E2 a room's version bump) · 3 marks
 
 | # | Mark | Where | Owner |
 |---|---|---|---|

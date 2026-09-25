@@ -41,7 +41,7 @@ export function matchesWithPlaceholders(templateText, liveText) {
 // skeleton-owned and are out of this instrument's scope by design.
 export const SKELETON_FILES = {
   'published-code': [
-    'LICENSE', 'NOTICE', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'PRIVACY.md',
+    'LICENSE', 'NOTICE', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'PRIVACY.md', 'GOVERNANCE.md',
     '.gitattributes', '.gitignore', '.markdownlint.json',
     '.githooks/pre-commit', '.githooks/pre-push',
     '.github/dependabot.yml',
@@ -102,7 +102,7 @@ export const SKELETON_FILES = {
 // state (it inherits) and a differing file is a deliberate override: a NAMED divergence, never silence. Everything
 // else in a skeleton keeps its plain verdict, and a template-repo clone (--clone) is judged by the plain verdict
 // too, since a repo born from a template should carry the file.
-export const ORG_DEFAULT_FILES = new Set(['CODE_OF_CONDUCT.md', '.github/PULL_REQUEST_TEMPLATE.md']);
+export const ORG_DEFAULT_FILES = new Set(['CODE_OF_CONDUCT.md', '.github/PULL_REQUEST_TEMPLATE.md', 'GOVERNANCE.md']);
 
 /** The printed verdict for one skeleton file of a LIVE room: compareFile's verdict, restated for org-default files. */
 export function liveFileVerdict(rel, verdict) {
