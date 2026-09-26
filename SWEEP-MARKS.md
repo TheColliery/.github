@@ -102,17 +102,18 @@ nobody TOUCHES it.
 | 2 | Scan reports stay local | `skillspector-*.json` gitignored, never committed | skillspector deputy |
 | 3 | The scan record (dated, per-repo scores, FP verdicts) | machine-local registry/memory | skillspector deputy |
 
-**Trigger: automatic since the owner's order of 2026-09-20, never a manual switch.** E1: the
-weekly `skillspector-version-watch.yml` opens an issue when upstream moves past
-`.skillspector-version`, and main fires the skillspector deputy for the fleet re-scan; when the
-whole fleet has been scanned on one version, the `.github` deputy bumps `.skillspector-version`
-to it. E2: a room's version bump re-scans that room, gated by a per-room baseline diff.
+**Trigger: automatic since the owner's order of 2026-09-20, never a manual switch.** E2: a
+room's version bump re-scans that room, gated by a per-room baseline diff. When the whole fleet
+has been scanned on one version, the `.github` deputy bumps `.skillspector-version` to it.
+E1, the weekly `skillspector-version-watch.yml` that opened an issue when upstream moved past
+`.skillspector-version`, was retired on the owner's word on 2026-09-26; a new upstream version
+is no longer watched.
 
 Rules: scan LAST—on the version a batch declared done, never a mid-batch snapshot.
 Verify every finding before writing a verdict; a sub's clean-scan claim is suspect input.
 
-**Split-baseline hazard (found 2026-07-09):** the root `.skillspector-version` baseline the
-version-watch workflow diffs against is ONE number, but the fleet can straddle two scanner
+**Split-baseline hazard (found 2026-07-09):** the root `.skillspector-version` baseline (the
+retired version-watch workflow diffed against it) is ONE number, but the fleet can straddle two scanner
 versions—CoalWash + CoalLedger launched already scanned at v2.3.11 while the other 5 siblings
 (and the baseline file) still sit at v2.3.9. A single pin can't represent a split fleet; only a
 suite-wide re-scan that brings every repo to the SAME version, then bumps the baseline to match,
