@@ -147,5 +147,5 @@ TheColliery is a portfolio, not one licence. The Coal\* skill suite above ships 
 </p>
 
 <p align="center">
-  📮 Contact: <a href="mailto:contact@kolwen.com">contact@kolwen.com</a>
+  📮 Contact: <a href="mailto:info@thecolliery.org">info@thecolliery.org</a>
 </p>
