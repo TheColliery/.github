@@ -21,6 +21,17 @@
 import fs from 'node:fs';
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
+
+// UMB-257 F (CodeQL js/http-to-file-access, alert #21; the shape that closed alert #2, commit 4d9e434): text from the API
+// is parsed ONCE at the boundary into a name from a closed alphabet, a github.com address, or an ISO date, and anything
+// else becomes a fixed fallback, never an echo of the offending text. The report file, and the issue body built from it,
+// therefore carry no markup, newline, link or control character an API field could have supplied.
+const SAFE_NAME = /^[A-Za-z0-9._:/() #+-]{1,120}$/;
+const SAFE_URL = /^https:\/\/github\.com\/[A-Za-z0-9._/-]{1,200}$/;
+const SAFE_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
+export function safeName(v) { return typeof v === 'string' && SAFE_NAME.test(v) ? v : '(name outside the safe alphabet)'; }
+export function safeUrl(v) { return typeof v === 'string' && SAFE_URL.test(v) ? v : ''; }
+export function safeDate(v) { return typeof v === 'string' && SAFE_DATE.test(v) ? v : '(unreadable date)'; }
 const ORG = process.env.ORG_HEALTH_ORG || 'TheColliery';
 const API = 'https://api.github.com';
 
@@ -30,8 +41,8 @@ export function disabledWorkflows(workflowsByRepo) {
   for (const [repo, list] of Object.entries(workflowsByRepo)) {
     for (const w of list || []) {
       if (w.state !== 'disabled_inactivity') continue;
-      const workflow = String(w.path || '').replace('.github/workflows/', '');
-      out.push({ repo, kind: 'disabled', workflow, text: `${workflow} is disabled_inactivity (GitHub disabled its schedule after 60 days without repository activity; it looks like a quiet week until someone re-enables it)`, url: w.html_url || '' });
+      const workflow = safeName(String(w.path || '').replace('.github/workflows/', ''));
+      out.push({ repo: safeName(repo), kind: 'disabled', workflow, text: `${workflow} is disabled_inactivity (GitHub disabled its schedule after 60 days without repository activity; it looks like a quiet week until someone re-enables it)`, url: safeUrl(w.html_url) });
     }
   }
   return out;
@@ -45,7 +56,7 @@ export function staleQueuedRuns(runsByRepo, now = Date.now(), maxAgeMs = DAY_MS)
       if (r.status !== 'queued') continue;
       const age = now - Date.parse(r.created_at);
       if (!(age > maxAgeMs)) continue;
-      out.push({ repo, kind: 'queued', text: `${r.name} run queued for ${Math.floor(age / DAY_MS)} day(s) (since ${r.created_at}); a run that never starts blocks nothing and reports nothing`, url: r.html_url || '' });
+      out.push({ repo: safeName(repo), kind: 'queued', text: `${safeName(r.name)} run queued for ${Math.floor(age / DAY_MS)} day(s) (since ${safeDate(r.created_at)}); a run that never starts blocks nothing and reports nothing`, url: safeUrl(r.html_url) });
     }
   }
   return out;
@@ -58,11 +69,11 @@ export function gitbookSignal(signalByRepo, now = Date.now(), maxAgeMs = DAY_MS)
     const gb = (s.statuses || []).filter((x) => /^GitBook\b/.test(String(x.context || '')));
     const bad = gb.filter((x) => x.state !== 'success');
     if (bad.length) {
-      out.push({ repo, kind: 'gitbook', text: `GitBook status ${bad.map((x) => `"${x.context}" = ${x.state}`).join(', ')} on the default-branch head`, url: '' });
+      out.push({ repo: safeName(repo), kind: 'gitbook', text: `GitBook status ${bad.map((x) => `"${safeName(x.context)}" = ${safeName(x.state)}`).join(', ')} on the default-branch head`, url: '' });
       continue;
     }
     if (gb.length === 0 && s.headAge > maxAgeMs) {
-      out.push({ repo, kind: 'gitbook', text: `no GitBook status on the default-branch head, ${Math.floor(s.headAge / DAY_MS)} day(s) old, on a repo that carries a GitBook sync file (a stall, or a sync that was never wired)`, url: '' });
+      out.push({ repo: safeName(repo), kind: 'gitbook', text: `no GitBook status on the default-branch head, ${Math.floor(s.headAge / DAY_MS)} day(s) old, on a repo that carries a GitBook sync file (a stall, or a sync that was never wired)`, url: '' });
     }
   }
   return out;
@@ -87,7 +98,7 @@ async function get(p) {
 /** A read that did not answer 200 is a FINDING, never an empty list: an anonymous rate limit (403) on
  *  the runs endpoint would otherwise read as "nothing queued" (measured 2026-09-25, first live run). */
 export function unreadable(repo, what, status) {
-  return { repo, kind: 'unreadable', text: `could not read ${what} (HTTP ${status}); this run did NOT check it`, url: '' };
+  return { repo: safeName(repo), kind: 'unreadable', text: `could not read ${what} (HTTP ${status}); this run did NOT check it`, url: '' };
 }
 
 async function main() {

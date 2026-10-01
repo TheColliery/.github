@@ -124,3 +124,32 @@ test('org-health-watch.mjs: everything healthy -> has_findings=false and a clean
   assert.match(report, /1 public repo/);
   assert.match(report, /no finding/i);
 });
+
+// UMB-257 F (CodeQL js/http-to-file-access, alert #21; the shape that closed alert #2): text from the API reaches the
+// report file, and from there an issue body, only after it is parsed at the boundary into a name from a closed alphabet,
+// a github.com address, or an ISO date. Anything else becomes a fixed fallback, never an echo of the offending text.
+test('safeName / safeUrl / safeDate: the closed alphabet passes; markdown, newlines, backticks, control characters and over-long text become the fallback', async () => {
+  const m = await import('./org-health-watch.mjs');
+  assert.equal(m.safeName('scorecard.yml'), 'scorecard.yml');
+  assert.equal(m.safeName('CI (Node 22) #1'), 'CI (Node 22) #1');
+  for (const bad of ['x\ny', 'a`b', '[a](http://evil)', '<b>x</b>', 'a|b', '', 'x'.repeat(121), 'a\u202eb', '\u0000', 7, null, undefined, {}]) {
+    assert.equal(m.safeName(bad), '(name outside the safe alphabet)', JSON.stringify(bad));
+  }
+  assert.equal(m.safeUrl('https://github.com/TheColliery/CoalMine/actions/runs/1'), 'https://github.com/TheColliery/CoalMine/actions/runs/1');
+  for (const bad of ['http://github.com/x', 'https://evil.example/x', 'https://github.com/x y', 'javascript:alert(1)', 'u1', '', null]) assert.equal(m.safeUrl(bad), '', JSON.stringify(bad));
+  assert.equal(m.safeDate('2026-08-06T00:00:00Z'), '2026-08-06T00:00:00Z');
+  assert.equal(m.safeDate('2026-08-06T00:00:00.123Z'), '2026-08-06T00:00:00.123Z');
+  for (const bad of ['yesterday', '2026-08-06', '2026-08-06T00:00:00Z\nINJECT', null]) assert.equal(m.safeDate(bad), '(unreadable date)', JSON.stringify(bad));
+});
+
+test('a finding built from hostile API text carries only safe text: no newline, backtick, link or tag survives into the report', async () => {
+  const m = await import('./org-health-watch.mjs');
+  const hostile = 'evil\n## injected`[x](http://evil)<img src=x>';
+  const f1 = m.disabledWorkflows({ [hostile]: [{ path: '.github/workflows/' + hostile, state: 'disabled_inactivity', html_url: 'http://evil' }] });
+  const f2 = m.staleQueuedRuns({ [hostile]: [{ name: hostile, status: 'queued', created_at: '2026-08-06T00:00:00Z', html_url: 'https://evil.example' }] }, NOW);
+  const f3 = m.gitbookSignal({ [hostile]: { headAge: 0, statuses: [{ context: 'GitBook ' + hostile, state: 'failure' }] } }, NOW);
+  const report = m.buildReport([...f1, ...f2, ...f3], { repos: 1, workflows: 1, synced: 1 });
+  for (const bad of ['## injected', '`', '](', '<img', 'http://evil', 'evil.example', 'INJECT']) assert.ok(!report.includes(bad), 'the report must not carry ' + JSON.stringify(bad));
+  assert.equal(f1.length + f2.length + f3.length, 3, 'each hostile record is still a finding, named by the fallback');
+  assert.ok(report.split('\n').every((l) => !l.startsWith('#') || l.startsWith('# ') === false), 'no heading can be injected');
+});
