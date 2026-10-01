@@ -20,6 +20,10 @@
   📖 <a href="https://thecolliery.org/docs">Full documentation</a>
 </p>
 
+<p align="center">
+  <sub>The documentation is hosted on <a href="https://www.gitbook.com">GitBook</a>, under its Community plan for open-source projects.</sub>
+</p>
+
 ---
 
 ## 🏗️ What is TheColliery?
