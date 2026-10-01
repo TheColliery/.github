@@ -65,6 +65,30 @@ async function gatesOf(token, org, repo) {
   return { defaultBranch, details, gates: details.filter((rs) => rulesetCoversRules(rs, ['required_status_checks'], defaultBranch)) };
 }
 
+// UMB-257 F (CodeQL js/http-to-file-access, alert #20; the shape that closed alert #2, commit 4d9e434): the PUT body is ruleset
+// JSON from the API, written to a file for the owner to read. Every leaf is checked once, at the boundary: a string from a
+// closed alphabet, a safe integer, a boolean or null. A body with anything else is REFUSED for that repository, never trimmed
+// (a PUT replaces the whole ruleset, so a dropped field is a lost rule), and the offending text is never echoed: only its path.
+const SAFE_TEXT = /^[A-Za-z0-9._:/() #+*~@-]{0,200}$/;
+export function unsafeLeaf(value, at = 'body') {
+  if (value === null || typeof value === 'boolean') return null;
+  if (typeof value === 'number') return Number.isSafeInteger(value) ? null : at;
+  if (typeof value === 'string') return SAFE_TEXT.test(value) ? null : at;
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) { const bad = unsafeLeaf(value[i], `${at}[${i}]`); if (bad) return bad; }
+    return null;
+  }
+  if (typeof value === 'object') {
+    for (const [k, v] of Object.entries(value)) {
+      if (!SAFE_TEXT.test(k)) return `${at}.(a key outside the safe alphabet)`;
+      const bad = unsafeLeaf(v, `${at}.${k}`);
+      if (bad) return bad;
+    }
+    return null;
+  }
+  return at;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) { console.log(usage()); return; }
@@ -85,6 +109,8 @@ async function main() {
       const [verdict] = gateCheckSourceVerdicts([gate], g.defaultBranch);
       if (verdict.ok) { console.log(`${repo}: "${gate.name}" (id ${gate.id}) IN-SYNC -- every required check names ${GATE_CHECK_SOURCE.app}`); continue; }
       const body = gateCheckSourceBody(gate);
+      const unsafe = unsafeLeaf(body);
+      if (unsafe) { console.log(`${repo}: FAIL ruleset ${Number.isSafeInteger(gate.id) ? gate.id : '(id outside the safe alphabet)'} has text outside the safe alphabet at ${unsafe}; no body was prepared for it`); fails++; continue; }
       bodies[`${repo}/${gate.id}`] = { repo, rulesetId: gate.id, url: `PUT /repos/${args.org}/${repo}/rulesets/${gate.id}`, body };
       if (!args.apply) { console.log(`${repo}: "${gate.name}" (id ${gate.id}) DRY-RUN -- would PUT /repos/${args.org}/${repo}/rulesets/${gate.id}: ${verdict.text}`); continue; }
       const w = await req(process.env.GITHUB_TOKEN, 'PUT', `/repos/${args.org}/${repo}/rulesets/${gate.id}`, body);

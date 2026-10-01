@@ -35,13 +35,13 @@ const ROUTES = {
   '/repos/TheColliery/CoalMine': { default_branch: 'main' },
 };
 
-function run(args, env = {}) {
+function run(args, env = {}, state = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gcs-'));
   const stub = path.join(dir, 'stub.mjs');
   const log = path.join(dir, 'calls.jsonl');
   fs.writeFileSync(stub, STUB);
   fs.writeFileSync(log, '');
-  const e = { ...process.env, NODE_OPTIONS: `--import=${pathToFileURL(stub).href}`, STUB_LOG: log, STUB_STATE: JSON.stringify({ routes: ROUTES, gate: GATE }), GITHUB_READ_TOKEN: 'stub-read' };
+  const e = { ...process.env, NODE_OPTIONS: `--import=${pathToFileURL(stub).href}`, STUB_LOG: log, STUB_STATE: JSON.stringify({ routes: state.routes ?? ROUTES, gate: state.gate ?? GATE }), GITHUB_READ_TOKEN: 'stub-read' };
   delete e.GITHUB_TOKEN;
   Object.assign(e, env);
   const res = spawnSync(process.execPath, [SCRIPT, ...args], { cwd: dir, encoding: 'utf8', env: e, timeout: 60000 });
@@ -90,4 +90,26 @@ test('an unknown flag is an error with the usage line, exit 1', () => {
   assert.equal(res.status, 1);
   assert.match(res.stderr, /unknown flag --bogus/);
   assert.match(res.stderr, /usage:/);
+});
+
+// UMB-257 F (CodeQL js/http-to-file-access, alert #20): the PUT body is ruleset JSON read from the API and written to a
+// file the owner reads. Every leaf is checked at the boundary: a string from a closed alphabet, a safe integer, a boolean
+// or null. A body with anything else is REFUSED for that repository (fail closed: nothing is written for it, and the
+// offending text is never echoed), never trimmed, because a PUT replaces the whole ruleset and a dropped field is a lost rule.
+test('a ruleset whose body carries text outside the safe alphabet is refused for that repo: exit 1, named by its path, never echoed, no body written', () => {
+  const hostile = { ...GATE, rules: [{ type: 'required_status_checks', parameters: { strict_required_status_checks_policy: false, required_status_checks: [{ context: 'all-green\n## injected`x`', integration_id: null }] } }] };
+  const routes = { ...ROUTES, '/repos/TheColliery/CoalMine/rulesets/18703484': hostile };
+  const { res, bodies } = run([], {}, { routes, gate: hostile });
+  assert.equal(res.status, 1, res.stdout + res.stderr);
+  assert.match(res.stdout, /CoalMine: FAIL ruleset 18703484 .* outside the safe alphabet at body\.rules\[0\]\.parameters\.required_status_checks\[0\]\.context/);
+  assert.ok(!(res.stdout + res.stderr).includes('injected'), 'the offending text is never echoed');
+  assert.deepEqual(Object.keys(bodies.bodies), [], 'nothing is written for the refused repo');
+});
+
+test('the live-shaped bodies pass the boundary check untouched (the safe alphabet covers refs, tildes, contexts with spaces and parentheses)', () => {
+  const live = { ...GATE, conditions: { ref_name: { include: ['~DEFAULT_BRANCH', 'refs/heads/release/*'], exclude: [] } }, rules: [{ type: 'required_status_checks', parameters: { strict_required_status_checks_policy: false, required_status_checks: [{ context: 'Analyze (javascript-typescript)', integration_id: null }, { context: 'all-green', integration_id: null }] } }] };
+  const routes = { ...ROUTES, '/repos/TheColliery/CoalMine/rulesets/18703484': live };
+  const { res, bodies } = run([], {}, { routes, gate: live });
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  assert.deepEqual(bodies.bodies['CoalMine/18703484'].body.conditions.ref_name.include, ['~DEFAULT_BRANCH', 'refs/heads/release/*']);
 });
