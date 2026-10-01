@@ -25,49 +25,42 @@ site:
           title: CoalMine
           path: coalmine
           default: true
-          draft: true
           content:
             directory: null
         - type: space
           key: space-tools-coaltipple
           title: CoalTipple
           path: coaltipple
-          draft: true
           content:
             directory: null
         - type: space
           key: space-tools-coalboard
           title: CoalBoard
           path: coalboard
-          draft: true
           content:
             directory: null
         - type: space
           key: space-tools-coalhearth
           title: CoalHearth
           path: coalhearth
-          draft: true
           content:
             directory: null
         - type: space
           key: space-tools-coalface
           title: CoalFace
           path: coalface
-          draft: true
           content:
             directory: null
         - type: space
           key: space-tools-coalwash
           title: CoalWash
           path: coalwash
-          draft: true
           content:
             directory: null
         - type: space
           key: space-tools-coalledger
           title: CoalLedger
           path: coalledger
-          draft: true
           content:
             directory: null
         - type: space
