@@ -32,8 +32,10 @@
   * [Results](benchmarks/CoalWash/RESULTS.md)
 * [Governance—the always-loaded cost](benchmarks/Governance/README.md)
   * [Results](benchmarks/Governance/RESULTS.md)
+  * [Pre-registration](benchmarks/Governance/PREREGISTRATION.md)
 * [SkillDeterminism](benchmarks/SkillDeterminism/README.md)
   * [Results](benchmarks/SkillDeterminism/RESULTS.md)
+  * [Pre-registration](benchmarks/SkillDeterminism/PREREGISTRATION.md)
 
 ## Patterns
 
