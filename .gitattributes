@@ -17,3 +17,4 @@
 # and new-repo.mjs copies working-tree bytes. (published-code's hooks are pinned by that template's own
 # nested .gitattributes; the root pin above for the repo's own hooks does not reach templates/.)
 /templates/private-working/.githooks/** text eol=lf
+/templates/article/.githooks/** text eol=lf

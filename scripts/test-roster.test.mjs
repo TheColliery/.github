@@ -42,7 +42,8 @@ test('every *.test.mjs under scripts/ and templates/ is on all three rosters, tw
   for (const r of ROSTERS) {
     const text = fs.readFileSync(path.join(ROOT, r), 'utf8');
     for (const t of onDisk) {
-      const n = text.split(t).length - 1;
+      // whole path only: scripts/x.test.mjs must not also count inside templates/<kind>/scripts/x.test.mjs
+      const n = text.split(/[\s;"'()]+/).filter((w) => w === t).length;
       if (n !== 2) problems.push(`${r}: ${t} appears ${n} time(s), expected 2`);
     }
   }
