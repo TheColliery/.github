@@ -66,7 +66,7 @@ Rejected from the same two files, named so nobody re-derives it: their `200-500 
 | `scripts/install.mjs` | cross-agent installer (non-Claude platforms) | cross-agent tools only |
 | `scripts/configure.mjs` | config CLI over the schema SSoT | ALWAYS (owner-signed ใบ D 2026-08-30—a FLOCK STANDARD, not optional: the 5 standard systems require config to be CLI-settable, not merely documented. CM · CT · CL ship one; CB · CH · CF · CW owe one) |
 
-Green gate = `build-plugin` → `verify` → `test`, wired into pre-commit/pre-push where the repo keeps git hooks. Release chain (bump sizing, CHANGELOG, signed tag, Release-per-stable-tag, propagation) is owned by [scripts-quality.md](./scripts-quality.md), and the Release notes' own shape—and, for a repo shipping `claude-ai-zips.yml` or `create-release.yml`, WHO creates the Release at all—by [RELEASE-PATTERN.md](./RELEASE-PATTERN.md#write-once-derive-everything)—not restated here.
+Green gate = `build-plugin` → `verify` → `test`, wired into pre-commit/pre-push where the repo keeps git hooks, behind the house secret scan: the hook pair runs `scripts/secret-gate.mjs` first (SERIES-CANON.md, Secret scan row). Release chain (bump sizing, CHANGELOG, signed tag, Release-per-stable-tag, propagation) is owned by [scripts-quality.md](./scripts-quality.md), and the Release notes' own shape—and, for a repo shipping `claude-ai-zips.yml` or `create-release.yml`, WHO creates the Release at all—by [RELEASE-PATTERN.md](./RELEASE-PATTERN.md#write-once-derive-everything)—not restated here.
 
 ## Layer 5—`.github/` (CI + health)
 
