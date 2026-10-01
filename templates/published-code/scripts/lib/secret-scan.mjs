@@ -360,15 +360,17 @@ function tagChain(sha, git) {
 //
 // Per commit: the ADDED lines of its diff, with --text so a file git would call binary (a NUL
 // byte, a -diff attribute) is still read; and its full message (%B), fetched separately so a
-// message can never confuse the patch parser. Per pushed annotated tag: its own message.
+// message can never confuse the patch parser. Per pushed annotated tag: every tag message on its
+// chain, outer first (a tag may point at another tag; see tagChain).
 //
-// Returns { refs, commits, tags, hits }. EVERY hit names the pushed ref it was found under
-// (refSha = that ref's local sha), and a commit reached by two refs yields its hits once per ref:
-// the caller decides acknowledgments PER REF, from what that ref itself carries. kind is 'diff',
-// 'message' or 'tag'; file is null for the last two. Every error propagates: the caller turns it
-// into a FAIL, because a scan that could not run has not passed. A pushed ref that is not a commit
-// throws code 'ENONCOMMIT' with refs: [{ ref, sha, type }], so a caller that knows the code can
-// name each ref, and one that does not still fails.
+// Returns { refs, commits, tags, hits }. `tags` counts the tag objects read, per pushed ref, so a
+// tag object shared by two pushed chains is counted once for each. EVERY hit names the pushed ref
+// it was found under (refSha = that ref's local sha), and a commit reached by two refs yields its
+// hits once per ref: the caller decides acknowledgments PER REF, from what that ref itself carries.
+// kind is 'diff', 'message' or 'tag'; file is null for the last two. Every error propagates: the
+// caller turns it into a FAIL, because a scan that could not run has not passed. A pushed ref that
+// is not a commit throws code 'ENONCOMMIT' with refs: [{ ref, sha, type }], so a caller that knows
+// the code can name each ref, and one that does not still fails.
 export function scanPushed(stdinText, git, opts = {}) {
   const refs = parsePushRefs(stdinText);
   const remote = opts.remote === undefined || opts.remote === null || opts.remote === '' ? null : checkRemote(opts.remote);

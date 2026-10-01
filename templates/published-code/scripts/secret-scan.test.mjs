@@ -440,10 +440,15 @@ test('a three-deep tag chain is walked to the bottom, and a key in the OUTER mes
     const solo = scanPushed(refLine(run(d, ['rev-parse', 'solo']).trim(), ZERO40, 'refs/tags/solo'), gitAt(d));
     assert.strictEqual(solo.hits.length, 1);
     assert.strictEqual(solo.hits[0].fp, outerHit.hits.find((h) => h.commit === top).fp, 'the outer-tag fingerprint does not move');
+    // one label for every tag message: an INNER hit has the fingerprint an unchained tag gives for the same value
+    assert.strictEqual(deep.hits[0].fp, solo.hits[0].fp, 'an inner-tag hit and an unchained-tag hit share one fingerprint');
   });
 });
 
 test('a tag chain longer than the bound FAILS CLOSED instead of passing partly read', () => {
+  // Docs that state this bound say "a tag chain longer than 16 tag objects"; the number is pinned
+  // here so a change to the constant cannot leave that sentence false without a red test.
+  assert.strictEqual(scanLib.MAX_TAG_DEPTH, 16, 'docs that state this bound change with it');
   inTemp((root) => {
     const d = repoIn(root, 'w');
     const base = commitIn(d, { 'a.txt': 'hello\n' }, 'base');
@@ -456,17 +461,36 @@ test('a tag chain longer than the bound FAILS CLOSED instead of passing partly r
   });
 });
 
-test('a tag object that points back at one already read FAILS CLOSED (git cannot make one; a stub proves the guard)', () => {
-  const a = 'a'.repeat(40);
-  const fake = (args) => {
+// A stub git whose every tag object has the text `tagText`. `reads` counts the tag objects it was asked for.
+function tagStub(tagText) {
+  const stub = (args) => {
     if (args[0] === 'cat-file' && args[1] === '-t' && args[2].endsWith('^{}')) return 'commit\n';
     if (args[0] === 'cat-file' && args[1] === '-t') return 'tag\n';
     if (args[0] === 'cat-file' && args[1] === '-e') throw new Error('absent');
     if (args[0] === 'rev-list') return '';
-    if (args[0] === 'cat-file' && args[1] === 'tag') return `object ${a}\ntype tag\ntag loop\n\nclean\n`;
+    if (args[0] === 'cat-file' && args[1] === 'tag') { stub.reads++; return tagText; }
     throw new Error(`unexpected git call: ${args.join(' ')}`);
   };
-  assert.throws(() => scanPushed(refLine(a, ZERO40, 'refs/tags/loop'), fake), (e) => e.code === 'ETAGCHAIN');
-  const noHeader = (args) => (args[0] === 'cat-file' && args[1] === 'tag' ? 'garbage with no headers\n' : fake(args));
-  assert.throws(() => scanPushed(refLine(a, ZERO40, 'refs/tags/loop'), noHeader), (e) => e.code === 'ETAGCHAIN', 'unreadable headers fail closed too');
+  stub.reads = 0;
+  return stub;
+}
+const stubA = 'a'.repeat(40);
+
+test('a tag object that points back at one already read FAILS CLOSED on the repeat itself, not on the depth bound', () => {
+  // git cannot make a cycle, so a stub does. Without the repeat guard the depth bound would still
+  // stop it, after MAX_TAG_DEPTH reads: counting the reads is what tells the two apart.
+  const loop = tagStub(`object ${stubA}\ntype tag\ntag loop\n\nclean\n`);
+  assert.throws(() => scanPushed(refLine(stubA, ZERO40, 'refs/tags/loop'), loop), (e) => e.code === 'ETAGCHAIN');
+  assert.strictEqual(loop.reads, 1, 'the repeat is caught on the second sight of the object, after one read');
+});
+
+test('a tag object missing the object header, the type header, or both FAILS CLOSED with ETAGCHAIN', () => {
+  const cases = [
+    ['no headers at all', 'garbage with no headers\n'],
+    ['object line, no type line', `object ${stubA}\ntag half\n\nclean\n`],
+    ['type line, no object line', 'type commit\ntag half\n\nclean\n'],
+  ];
+  for (const [label, text] of cases) {
+    assert.throws(() => scanPushed(refLine(stubA, ZERO40, 'refs/tags/half'), tagStub(text)), (e) => e.code === 'ETAGCHAIN', label);
+  }
 });
