@@ -79,7 +79,10 @@ jobs:
             if ! [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
               echo "::error::the tag input is not a vX.Y.Z or vX.Y.Z-label tag"; exit 1
             fi
-            if ! gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" --silent 2>/dev/null; then
+            # GitHub's "get a reference" call for a tag name answers 200 with a LIST when no ref is exactly <name> but some
+            # START with it (v1.2.3 against v1.2.30), so this lists by prefix and compares the ref name exactly.
+            refs=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/${tag}" --jq '.[].ref' 2>/dev/null) || refs=''
+            if ! grep -Fxq -- "refs/tags/${tag}" <<< "${refs}"; then
               echo "::error::${tag} is not a tag of this repository -- this path posts a Release for a tag that already exists, it never creates a tag"; exit 1
             fi
             if [[ "${tag}" == *-* ]]; then
@@ -153,13 +156,17 @@ jobs:
         working-directory: tag-src
         run: node ../canon/scripts/release-notes.mjs
 
+      # A NEW Release is created as a DRAFT and published only after the byte re-read below (git-workflow.md: a release
+      # workflow drafts and publishes last; no asset here, so the re-read is the only thing the draft waits for). A re-run's
+      # edit leaves a published Release published. gh finds a draft by its tag name. `--latest` is NOT passed on the draft
+      # create (GitHub: a draft cannot be Latest); the publish step applies it.
       - name: Ensure the GitHub Release exists, with the derived canon title + body
         if: steps.gate.outputs.post == 'true'
         working-directory: tag-src
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${RELEASE_TAG}" --verify-tag --title "$(cat release-title.txt)" --notes-file release-body.md --latest="$(cat release-latest.txt)" --prerelease="$(cat release-prerelease.txt)" || \
+          gh release create "${RELEASE_TAG}" --verify-tag --draft --title "$(cat release-title.txt)" --notes-file release-body.md --prerelease="$(cat release-prerelease.txt)" || \
             gh release edit "${RELEASE_TAG}" --title "$(cat release-title.txt)" --notes-file release-body.md --latest="$(cat release-latest.txt)" --prerelease="$(cat release-prerelease.txt)" || \
             { echo "::error::release create failed AND release edit failed -- this is not the expected already-exists race" >&2; exit 1; }
 
@@ -169,3 +176,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release view "${RELEASE_TAG}" --json name,body | node ../canon/scripts/verify-release-shape.mjs
+
+      # Last: the Release goes public only now that its re-read matched (a draft that stays a draft is the loud failure;
+      # a published Release with a mangled body is the silent one). `--latest` and `--prerelease` are applied here, because a
+      # draft carries neither until it is published.
+      - name: Publish the Release last (after its re-read and any assets), and re-read that it is no longer a draft
+        if: steps.gate.outputs.post == 'true'
+        working-directory: tag-src
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit "${RELEASE_TAG}" --draft=false --latest="$(cat release-latest.txt)" --prerelease="$(cat release-prerelease.txt)"
+          state=$(gh release view "${RELEASE_TAG}" --json isDraft --jq .isDraft)
+          [[ "${state}" == "false" ]] || { echo "::error::${RELEASE_TAG} is still a draft after the publish step" >&2; exit 1; }

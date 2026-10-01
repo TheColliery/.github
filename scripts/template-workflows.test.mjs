@@ -272,6 +272,8 @@ function stepBlock(lines, name) {
   return lines.slice(start, end).join('\n').trimEnd();
 }
 const SHARED_STEPS = [
+  'Ensure the GitHub Release exists, with the derived canon title + body',
+  'Publish the Release last (after its re-read and any assets), and re-read that it is no longer a draft',
   'Read the previous stable tag and the current Latest release',
   'Derive the canon Release title + body from CHANGELOG.md',
   'Verify the published Release matches the derived title + body (byte-exact re-read)',
@@ -292,8 +294,8 @@ test('create-release.yml exists in the overlay and carries every UMB-182 part --
 test('both overlay workflows pass --latest and --prerelease where the Release is finalized, and share the read / derive / re-read steps line for line', () => {
   const a = wfLines('create-release.yml');
   const b = wfLines('claude-ai-zips.yml');
-  // create-release.yml: --latest on create AND edit. claude-ai-zips.yml: a draft create has no --latest; the edit fallback and the publish step do.
-  assert.equal(a.filter((l) => l.includes('--latest="$(cat release-latest.txt)"')).length, 2, 'create-release.yml: --latest on gh release create and gh release edit');
+  // both files: a draft create has no --latest; the edit fallback and the publish step do (UMB-182 D2: create-release.yml drafts too).
+  assert.equal(a.filter((l) => l.includes('--latest="$(cat release-latest.txt)"')).length, 2, 'create-release.yml: --latest on the edit fallback and the publish step');
   assert.equal(b.filter((l) => l.includes('--latest="$(cat release-latest.txt)"')).length, 2, 'claude-ai-zips.yml: --latest on the edit fallback and the publish step');
   for (const [name, lines] of [['create-release.yml', a], ['claude-ai-zips.yml', b]]) {
     assert.ok(lines.some((l) => /^ {10}fetch-depth: 0 /.test(l)), `${name}: fetch-depth 0`);
@@ -355,7 +357,8 @@ test('the posting-path gate step is the same lines in both workflows, runs only 
   const body = runBody(a);
   assert.match(body, /\[\[ "\$\{REF_TYPE\}" != "branch" \|\| "\$\{REF_NAME\}" != "\$\{DEFAULT_BRANCH\}" \]\]/, 'a dispatch off the default branch is refused');
   assert.ok(body.includes('^v[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$'), 'the strict tag pattern');
-  assert.ok(body.includes('git/ref/tags/${tag}'), 'the tag must exist in the repository');
+  assert.ok(body.includes('git/matching-refs/tags/${tag}') && body.includes('grep -Fxq -- "refs/tags/${tag}"'), 'the tag must exist in the repository, compared by exact ref name (a prefix match is not a tag)');
+  assert.ok(!body.includes('git/ref/tags/'), 'git/ref/tags answers 200 for a mere prefix, so it is never the existence check');
   assert.ok(body.includes('launch_form'), 'a pre-release tag needs the launch form flag');
   assert.ok(body.includes('select(.tag_name != \\"${tag}\\")'), 'the launch form is refused when another tag already has a Release');
 });
@@ -386,6 +389,21 @@ test('claude-ai-zips.yml publishes in the right order: draft create, re-read, as
   assert.ok(t.includes('isDraft') && t.includes('is still a draft after the publish step'), 'the run re-reads that the Release is no longer a draft');
 });
 
+// UMB-182 D2 (auditor F-2): common/git-workflow.md's MUST -- a release workflow creates the Release as a DRAFT and publishes last --
+// holds on the no-asset file too, so a body the API mangled is never public between the create and the failed re-read.
+test('create-release.yml publishes in the right order: draft create, byte re-read, THEN published and re-read as no longer a draft', () => {
+  const lines = wfLines('create-release.yml');
+  const idx = (re) => lines.findIndex((l) => re.test(l));
+  const create = idx(/gh release create .* --draft /);
+  const reread = idx(/gh release view .*--json name,body/);
+  const publish = idx(/gh release edit .* --draft=false /);
+  assert.ok(create > 0 && reread > create && publish > reread, `order: create ${create}, re-read ${reread}, publish ${publish}`);
+  assert.ok(lines.filter((l) => l.includes('gh release create')).every((l) => !l.includes('--latest')), 'a draft create never passes --latest (a draft cannot be Latest)');
+  assert.ok(lines[publish].includes('--latest="$(cat release-latest.txt)"') && lines[publish].includes('--prerelease="$(cat release-prerelease.txt)"'), 'the publish step applies Latest and prerelease');
+  const t = lines.join('\n');
+  assert.ok(t.includes('isDraft') && t.includes('is still a draft after the publish step'), 'the run re-reads that the Release is no longer a draft');
+});
+
 test('claude-ai-zips.yml: a back-filled tag older than the packaging scripts gets a Release WITHOUT ZIPs, said out loud; a pushed tag without them fails', () => {
   const lines = wfLines('claude-ai-zips.yml');
   const step = stepBySubstr(lines, 'Check the tag carries its own packaging scripts');
@@ -405,7 +423,8 @@ const HAS_BASH = bashProbe.status === 0 && bashProbe.stdout.trim() === 'ok';
 const GH_STUB = [
   'gh() {',
   '  case "$*" in',
-  '    *git/ref/tags/*) [[ "${FAKE_TAG_EXISTS:-yes}" == "yes" ]]; return $? ;;',
+  '    *git/ref/tags/*) a="$*"; name="${a##*git/ref/tags/}"; name="${name%% *}"; for t in ${FAKE_TAGS-v2.6.0 v1.0.0 v0.1.0-beta.1}; do [[ "$t" == "$name"* ]] && return 0; done; return 1 ;;', // GitHub: 200 on a prefix match
+  '    *git/matching-refs/tags/*) a="$*"; name="${a##*git/matching-refs/tags/}"; name="${name%% *}"; for t in ${FAKE_TAGS-v2.6.0 v1.0.0 v0.1.0-beta.1}; do [[ "$t" == "$name"* ]] && echo "refs/tags/$t"; done; return 0 ;;',
   '    *"releases?per_page=100"*) echo "${FAKE_OTHER_RELEASES:-0}"; return 0 ;;',
   '    *) echo "unexpected gh call: $*" >&2; return 99 ;;',
   '  esac',
@@ -448,8 +467,19 @@ test('gate behaviour: a dispatch is refused off the default branch, for a malfor
     r = runGate({ INPUT_TAG: bad });
     assert.equal(r.code, 1, JSON.stringify(bad)); assert.match(r.err, /not a vX\.Y\.Z/, JSON.stringify(bad)); assert.ok(!r.out.includes('post=true'));
   }
-  r = runGate({ INPUT_TAG: 'v9.9.9', FAKE_TAG_EXISTS: 'no' });
+  r = runGate({ INPUT_TAG: 'v9.9.9' });
   assert.equal(r.code, 1); assert.match(r.err, /not a tag of this repository/);
+});
+
+// UMB-182 D2 (auditor F-1): GitHub's "get a reference" answers 200 for a PREFIX of an existing ref, so v1.2.3 used to pass
+// the gate when only v1.2.30 and v1.2.3-beta.1 existed and the run died later, in checkout, with checkout's words.
+test('gate behaviour: a tag that only PREFIX-matches an existing ref is refused by the gate itself, and an exact tag beside a longer one still posts', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  let r = runGate({ INPUT_TAG: 'v1.2.3', FAKE_TAGS: 'v1.2.30 v1.2.3-beta.1' });
+  assert.equal(r.code, 1, r.err); assert.match(r.err, /not a tag of this repository/); assert.ok(!r.out.includes('post=true'));
+  r = runGate({ INPUT_TAG: 'v1.2.3', FAKE_TAGS: 'v1.2.30 v1.2.3 v1.2.3-beta.1' });
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /post=true\ntag=v1\.2\.3\nlaunch=false/);
+  r = runGate({ INPUT_TAG: 'v1.2.3', FAKE_TAGS: '' });
+  assert.equal(r.code, 1, r.err); assert.match(r.err, /not a tag of this repository/);
 });
 
 test('gate behaviour: the launch form posts ONE pre-release tag only with the flag, only while no other tag has a Release, never for a stable tag', { skip: !HAS_BASH && 'no bash on this machine' }, () => {

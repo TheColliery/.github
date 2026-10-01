@@ -38,7 +38,10 @@ export function matchesWithPlaceholders(templateText, liveText) {
 
 // Skeleton-owned files per kind, relative to templates/<kind>/. A room may carry more
 // files than this (its own README body, its own SOURCES.md, ...) — those are not
-// skeleton-owned and are out of this instrument's scope by design.
+// skeleton-owned and are out of this instrument's scope by design. The same holds for a GitHub template
+// repo: its `README.md` (blob 23018764906e on template-private-working at c24090c) describes the template
+// itself and has no counterpart under templates/<kind>/ on purpose, because a repo scaffolded from the
+// skeleton (new-repo.mjs) must not be born carrying a README that says it is a template (UMB-257 D).
 export const SKELETON_FILES = {
   'published-code': [
     'LICENSE', 'NOTICE', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'PRIVACY.md', 'GOVERNANCE.md',
