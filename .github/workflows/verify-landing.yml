@@ -75,6 +75,9 @@ jobs:
                       templates/overlay-coal-skill/scripts/decide-upload.test.mjs \
                       templates/overlay-coal-skill/scripts/prune-release-zips.test.mjs
 
+      - name: Secret scan (the tracked tree; the pushed range runs in the pre-push hook — UMB-282 (a))
+        run: node scripts/secret-gate.mjs
+
       - name: Doc references (every markdown link resolves — UMB-057)
         run: node scripts/doc-refs.mjs
 
