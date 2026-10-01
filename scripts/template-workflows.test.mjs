@@ -274,7 +274,6 @@ function stepBlock(lines, name) {
 const SHARED_STEPS = [
   'Read the previous stable tag and the current Latest release',
   'Derive the canon Release title + body from CHANGELOG.md',
-  'Ensure the GitHub Release exists, with the derived canon title + body',
   'Verify the published Release matches the derived title + body (byte-exact re-read)',
 ];
 
@@ -290,17 +289,176 @@ test('create-release.yml exists in the overlay and carries every UMB-182 part --
   assert.doesNotMatch(code, /\bzip\b|gh release upload|SHA256SUMS/, 'no packaging, no assets in the bare workflow');
 });
 
-test('both overlay workflows pass --latest on create AND edit, and share the derive / create / re-read steps line for line', () => {
-  for (const name of ['create-release.yml', 'claude-ai-zips.yml']) {
-    const lines = wfLines(name);
-    assert.equal(lines.filter((l) => l.includes('--latest="$(cat release-latest.txt)"')).length, 2, `${name}: --latest on both gh release create and gh release edit`);
-    assert.ok(lines.some((l) => /^ {10}fetch-depth: 0 /.test(l)), `${name}: fetch-depth 0`);
-  }
+test('both overlay workflows pass --latest and --prerelease where the Release is finalized, and share the read / derive / re-read steps line for line', () => {
   const a = wfLines('create-release.yml');
   const b = wfLines('claude-ai-zips.yml');
+  // create-release.yml: --latest on create AND edit. claude-ai-zips.yml: a draft create has no --latest; the edit fallback and the publish step do.
+  assert.equal(a.filter((l) => l.includes('--latest="$(cat release-latest.txt)"')).length, 2, 'create-release.yml: --latest on gh release create and gh release edit');
+  assert.equal(b.filter((l) => l.includes('--latest="$(cat release-latest.txt)"')).length, 2, 'claude-ai-zips.yml: --latest on the edit fallback and the publish step');
+  for (const [name, lines] of [['create-release.yml', a], ['claude-ai-zips.yml', b]]) {
+    assert.ok(lines.some((l) => /^ {10}fetch-depth: 0 /.test(l)), `${name}: fetch-depth 0`);
+    assert.ok(lines.filter((l) => /gh release (create|edit) /.test(l)).every((l) => l.includes('--prerelease="$(cat release-prerelease.txt)"')), `${name}: --prerelease on every create/edit`);
+  }
   for (const step of SHARED_STEPS) {
     const sa = stepBlock(a, step);
     assert.ok(sa, `create-release.yml has no step "${step}"`);
     assert.equal(stepBlock(b, step), sa, `step "${step}" differs between create-release.yml and claude-ai-zips.yml`);
   }
+  // the create step differs by exactly the draft flag and the --latest it cannot carry
+  const createLine = (lines) => lines.find((l) => l.includes('gh release create'));
+  const norm = (l) => l.replace(' --draft', '').replace(' --latest="$(cat release-latest.txt)"', '').trim();
+  assert.equal(norm(createLine(b)), norm(createLine(a)), 'the create command is the same apart from --draft and --latest');
+});
+
+// UMB-182 posting path for a tag that already exists (a workflow_dispatch run from the DEFAULT BRANCH with a `tag`
+// input and a `launch_form` flag), in BOTH canon workflows. The input is untrusted text; these tests hold the shape.
+const stepBySubstr = (lines, sub) => {
+  const start = lines.findIndex((l) => /^ {6}- name: /.test(l) && l.includes(sub));
+  if (start === -1) return null;
+  let end = start + 1;
+  while (end < lines.length && !/^ {6}(- |# )/.test(lines[end])) end++;
+  return lines.slice(start, end);
+};
+const runBody = (stepLines) => {
+  const i = stepLines.findIndex((l) => /^ {8}run: \|$/.test(l));
+  assert.ok(i >= 0, 'the step has a run: | block');
+  return stepLines.slice(i + 1).map((l) => l.replace(/^ {10}/, '')).join('\n');
+};
+const GATE_NAME = 'Resolve the tag this run posts';
+const BOTH = ['create-release.yml', 'claude-ai-zips.yml'];
+
+test('both canon workflows take a dispatch `tag` input (required string) and a `launch_form` boolean (default false) -- RED before the posting path', () => {
+  for (const name of BOTH) {
+    const t = wfLines(name).join('\n');
+    assert.match(t, /^ {2}workflow_dispatch:\n {4}inputs:\n {6}tag:\n(?: {8}.*\n)*? {8}required: true\n {8}type: string\n {6}launch_form:\n(?: {8}.*\n)*? {8}required: false\n {8}type: boolean\n {8}default: false\n/m, `${name}: dispatch inputs`);
+    assert.match(t, /^ {2}group: [a-z-]+-\$\{\{ inputs\.tag \|\| github\.ref_name \}\}$/m, `${name}: the concurrency group is keyed on the tag the run posts`);
+  }
+});
+
+test('the dispatch inputs reach the shell through env ONLY, never interpolated into a run: line (the input is untrusted text)', () => {
+  for (const name of BOTH) {
+    const lines = wfLines(name).filter((l) => !l.trim().startsWith('#'));
+    const using = lines.filter((l) => /\$\{\{\s*(github\.event\.)?inputs\./.test(l));
+    assert.ok(using.length >= 3, `${name}: found ${using.length} expression lines`);
+    for (const l of using) {
+      assert.ok(/^ {10}INPUT_(TAG|LAUNCH): \$\{\{ inputs\.(tag|launch_form) \}\}$/.test(l) || /^ {2}group: .*\$\{\{ inputs\.tag \|\| github\.ref_name \}\}$/.test(l), `${name}: an input is used outside env and the concurrency key: ${l.trim()}`);
+    }
+    assert.ok(!lines.some((l) => /github\.event\.inputs|github\.head_ref/.test(l)), `${name}: no other untrusted context`);
+  }
+});
+
+test('the posting-path gate step is the same lines in both workflows, runs only from the default branch, and refuses anything but a real tag', () => {
+  const a = stepBySubstr(wfLines('create-release.yml'), GATE_NAME);
+  const b = stepBySubstr(wfLines('claude-ai-zips.yml'), GATE_NAME);
+  assert.ok(a && b, 'the gate step exists in both');
+  assert.equal(a.join('\n'), b.join('\n'));
+  const body = runBody(a);
+  assert.match(body, /\[\[ "\$\{REF_TYPE\}" != "branch" \|\| "\$\{REF_NAME\}" != "\$\{DEFAULT_BRANCH\}" \]\]/, 'a dispatch off the default branch is refused');
+  assert.ok(body.includes('^v[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$'), 'the strict tag pattern');
+  assert.ok(body.includes('git/ref/tags/${tag}'), 'the tag must exist in the repository');
+  assert.ok(body.includes('launch_form'), 'a pre-release tag needs the launch form flag');
+  assert.ok(body.includes('select(.tag_name != \\"${tag}\\")'), 'the launch form is refused when another tag already has a Release');
+});
+
+test('both workflows check out the canon scripts and the tag separately, and derive from the TAG tree with the canon scripts (a back-filled tag may predate the scripts)', () => {
+  for (const name of BOTH) {
+    const t = wfLines(name).join('\n');
+    assert.match(t, /^ {10}path: canon$/m, `${name}: canon checkout`);
+    assert.match(t, /^ {10}ref: refs\/tags\/\$\{\{ steps\.gate\.outputs\.tag \}\}$/m, `${name}: the tag checkout`);
+    assert.match(t, /^ {10}path: tag-src$/m, `${name}: tag-src path`);
+    assert.ok(t.includes('run: node ../canon/scripts/release-notes.mjs'), `${name}: derive with the canon script`);
+    assert.ok(t.includes('node ../canon/scripts/verify-release-shape.mjs'), `${name}: re-read with the canon script`);
+  }
+});
+
+test('claude-ai-zips.yml publishes in the right order: draft create, re-read, assets attached, THEN published (CWK-119); zip/cd/sha256sum carry -- guards', () => {
+  const lines = wfLines('claude-ai-zips.yml');
+  const t = lines.join('\n');
+  const idx = (re) => lines.findIndex((l) => re.test(l));
+  const create = idx(/gh release create .* --draft /);
+  const reread = idx(/gh release view .*--json name,body/);
+  const upload = idx(/gh release upload /);
+  const publish = idx(/gh release edit .* --draft=false /);
+  assert.ok(create > 0 && reread > create && upload > reread && publish > upload, `order: create ${create}, re-read ${reread}, upload ${upload}, publish ${publish}`);
+  assert.ok(lines.filter((l) => l.includes('gh release create')).every((l) => !l.includes('--latest')), 'a draft create never passes --latest (a draft cannot be Latest)');
+  assert.ok(publish > 0 && lines[publish].includes('--latest="$(cat release-latest.txt)"') && lines[publish].includes('--prerelease="$(cat release-prerelease.txt)"'), 'the publish step applies Latest and prerelease');
+  assert.ok(t.includes('"cd -- dist-claude-ai"'.slice(1, -1)) && t.includes('zip -r -- "../${name}.zip"') && t.includes('sha256sum -- *.zip'), '-- guards on cd, zip and sha256sum');
+  assert.ok(t.includes('isDraft') && t.includes('is still a draft after the publish step'), 'the run re-reads that the Release is no longer a draft');
+});
+
+test('claude-ai-zips.yml: a back-filled tag older than the packaging scripts gets a Release WITHOUT ZIPs, said out loud; a pushed tag without them fails', () => {
+  const lines = wfLines('claude-ai-zips.yml');
+  const step = stepBySubstr(lines, 'Check the tag carries its own packaging scripts');
+  assert.ok(step, 'the packaging-scripts check exists');
+  const s = step.join('\n');
+  assert.ok(s.includes('predates the packaging scripts') && s.includes('WITHOUT ZIP assets'), 'the notice');
+  assert.ok(s.includes('EVENT') && s.includes('"push"') && s.includes('exit 1'), 'a push without the scripts is an error');
+  for (const n of ['Verify plugin/ dist is current', 'Stage trimmed-description', 'Zip each staged skill', 'Generate SHA256SUMS', 'Attach ZIPs']) {
+    const st = stepBySubstr(lines, n);
+    assert.ok(st && st.some((l) => l.includes("steps.pkg.outputs.package == 'true'")), `${n}: gated on the packaging check`);
+  }
+});
+
+// Behaviour, not text: the gate step's own bash, run against a stub `gh`, for every case the path must get right.
+const bashProbe = spawnSync('bash', ['-c', 'echo ok'], { encoding: 'utf8', timeout: 20000 });
+const HAS_BASH = bashProbe.status === 0 && bashProbe.stdout.trim() === 'ok';
+const GH_STUB = [
+  'gh() {',
+  '  case "$*" in',
+  '    *git/ref/tags/*) [[ "${FAKE_TAG_EXISTS:-yes}" == "yes" ]]; return $? ;;',
+  '    *"releases?per_page=100"*) echo "${FAKE_OTHER_RELEASES:-0}"; return 0 ;;',
+  '    *) echo "unexpected gh call: $*" >&2; return 99 ;;',
+  '  esac',
+  '}',
+].join('\n');
+function runGate(env) {
+  const body = runBody(stepBySubstr(wfLines('create-release.yml'), GATE_NAME));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-run-'));
+  const outFile = path.join(dir, 'output.txt');
+  fs.writeFileSync(outFile, '');
+  const r = spawnSync('bash', ['-c', `${GH_STUB}\n${body}`], {
+    encoding: 'utf8', timeout: 30000, cwd: dir,
+    env: { ...process.env, GITHUB_OUTPUT: outFile, GITHUB_REPOSITORY: 'TheColliery/Example', DEFAULT_BRANCH: 'main', EVENT: 'workflow_dispatch', REF_TYPE: 'branch', REF_NAME: 'main', INPUT_TAG: '', INPUT_LAUNCH: 'false', ...env },
+  });
+  const out = fs.readFileSync(outFile, 'utf8');
+  fs.rmSync(dir, { recursive: true, force: true });
+  return { code: r.status, out, err: r.stderr + r.stdout };
+}
+
+test('gate behaviour: a stable tag push posts; a pre-release tag push and a branch push do not; nothing is written to the repository', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  let r = runGate({ EVENT: 'push', REF_TYPE: 'tag', REF_NAME: 'v1.2.3' });
+  assert.equal(r.code, 0); assert.match(r.out, /post=true\ntag=v1\.2\.3\nlaunch=false/);
+  r = runGate({ EVENT: 'push', REF_TYPE: 'tag', REF_NAME: 'v1.2.3-beta.1' });
+  assert.equal(r.code, 0); assert.match(r.out, /post=false/); assert.ok(!r.out.includes('post=true'));
+  r = runGate({ EVENT: 'push', REF_TYPE: 'branch', REF_NAME: 'main' });
+  assert.equal(r.code, 0); assert.match(r.out, /post=false/);
+});
+
+test('gate behaviour: a dispatch for an existing stable tag from the default branch posts that tag', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  const r = runGate({ INPUT_TAG: 'v2.6.0' });
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /post=true\ntag=v2\.6\.0\nlaunch=false/);
+});
+
+test('gate behaviour: a dispatch is refused off the default branch, for a malformed or shell-shaped tag, and for a tag that does not exist', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  let r = runGate({ INPUT_TAG: 'v2.6.0', REF_TYPE: 'tag', REF_NAME: 'v2.6.0' });
+  assert.equal(r.code, 1); assert.match(r.err, /default branch/); assert.ok(!r.out.includes('post=true'));
+  r = runGate({ INPUT_TAG: 'dev-branch', REF_NAME: 'dev', REF_TYPE: 'branch' });
+  assert.equal(r.code, 1); assert.match(r.err, /default branch/);
+  for (const bad of ['v2.6.0; echo pwned', '$(id)', 'v2.6', 'main', 'v2.6.0-', 'v2.6.0 -beta', '']) {
+    r = runGate({ INPUT_TAG: bad });
+    assert.equal(r.code, 1, JSON.stringify(bad)); assert.match(r.err, /not a vX\.Y\.Z/, JSON.stringify(bad)); assert.ok(!r.out.includes('post=true'));
+  }
+  r = runGate({ INPUT_TAG: 'v9.9.9', FAKE_TAG_EXISTS: 'no' });
+  assert.equal(r.code, 1); assert.match(r.err, /not a tag of this repository/);
+});
+
+test('gate behaviour: the launch form posts ONE pre-release tag only with the flag, only while no other tag has a Release, never for a stable tag', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  let r = runGate({ INPUT_TAG: 'v0.1.0-beta.1' });
+  assert.equal(r.code, 1); assert.match(r.err, /launch_form/);
+  r = runGate({ INPUT_TAG: 'v0.1.0-beta.1', INPUT_LAUNCH: 'true', FAKE_OTHER_RELEASES: '3' });
+  assert.equal(r.code, 1); assert.match(r.err, /ONE pre-release Release/);
+  r = runGate({ INPUT_TAG: 'v0.1.0-beta.1', INPUT_LAUNCH: 'true', FAKE_OTHER_RELEASES: '0' });
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /post=true\ntag=v0\.1\.0-beta\.1\nlaunch=true/);
+  r = runGate({ INPUT_TAG: 'v1.0.0', INPUT_LAUNCH: 'true' });
+  assert.equal(r.code, 1); assert.match(r.err, /stable/);
 });

@@ -233,7 +233,7 @@ main, not a local variance in the release notes.
 
 - **Stable tags get a GitHub Release; beta/pre-release tags are history only—except the
   ONE launch-form Release** a repo whose first public version is a pre-release gets
-  (`prerelease: true`, same title and body rules as any Release). Tags = beta + stable,
+  (`prerelease: true`, same title and body rules as any Release; posted by the workflow's dispatch path with `launch_form`). Tags = beta + stable,
   Releases = stable-only plus that launch Release; an all-beta repo's Releases panel shows
   exactly one Release, never one per beta tag. (RELEASE-PATTERN.md "Which tags get a Release".)
 - **A change that does not reach the shipped `plugin/` dist gets NO version, NO tag, NO

@@ -97,3 +97,55 @@ test('release-notes.mjs: a tag/entry version mismatch fails loud rather than wri
   assert.equal(fs.existsSync(path.join(dir, 'release-title.txt')), false);
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+// UMB-182 posting path for a tag that already exists: a workflow_dispatch run sits on the DEFAULT BRANCH,
+// so GITHUB_REF_NAME is the branch name and the tag being posted arrives as RELEASE_TAG.
+test('release-notes.mjs: RELEASE_TAG wins over GITHUB_REF_NAME, so a dispatch run on main derives the named tag -- RED before the posting path', () => {
+  const dir = scratchWithLib();
+  fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), TWO);
+  const res = run(dir, { GITHUB_REF_NAME: 'main', RELEASE_TAG: 'v1.2.0', PREVIOUS_STABLE_TAG: 'v1.1.0', LATEST_TAG: 'v1.1.0' });
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(fs.readFileSync(path.join(dir, 'release-title.txt'), 'utf8'), 'v1.2.0 - new');
+  assert.equal(fs.readFileSync(path.join(dir, 'release-latest.txt'), 'utf8'), 'true');
+  assert.equal(fs.readFileSync(path.join(dir, 'release-prerelease.txt'), 'utf8'), 'false');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('release-notes.mjs: a RELEASE_TAG that is not a bare vX.Y.Z fails loud, even when it looks like shell (the input is untrusted text)', () => {
+  const dir = scratchWithLib();
+  fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), TWO);
+  for (const bad of ['v1.2.0; echo pwned', '$(id)', 'v1.2', 'main', 'v1.2.0-beta.1']) {
+    const res = run(dir, { GITHUB_REF_NAME: 'main', RELEASE_TAG: bad });
+    assert.equal(res.status, 1, bad);
+    assert.match(res.stderr, /not a bare vX\.Y\.Z tag/, bad);
+  }
+  assert.equal(fs.existsSync(path.join(dir, 'release-title.txt')), false);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+const LAUNCH = '## [0.1.0-beta.1] - 2026-09-21\n\nThe first public beta.\n\n### Added\n- engine\n';
+
+test('release-notes.mjs: LAUNCH_FORM=true derives the one pre-release launch Release: title with the label, never Latest, prerelease true', () => {
+  const dir = scratchWithLib();
+  fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), LAUNCH);
+  const res = run(dir, { GITHUB_REF_NAME: 'main', RELEASE_TAG: 'v0.1.0-beta.1', LAUNCH_FORM: 'true', PREVIOUS_STABLE_TAG: '', LATEST_TAG: '' });
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(fs.readFileSync(path.join(dir, 'release-title.txt'), 'utf8'), 'v0.1.0-beta.1 - the first public beta');
+  assert.equal(fs.readFileSync(path.join(dir, 'release-latest.txt'), 'utf8'), 'false', 'a pre-release is never Latest, even when the repo has no Latest yet');
+  assert.equal(fs.readFileSync(path.join(dir, 'release-prerelease.txt'), 'utf8'), 'true');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('release-notes.mjs: a hyphenated tag without LAUNCH_FORM, and LAUNCH_FORM on a stable tag, both fail loud (a launch form is one pre-release tag, said out loud)', () => {
+  const dir = scratchWithLib();
+  fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), LAUNCH);
+  let res = run(dir, { GITHUB_REF_NAME: 'main', RELEASE_TAG: 'v0.1.0-beta.1' });
+  assert.equal(res.status, 1);
+  assert.match(res.stderr, /pre-release tag/);
+  fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), TWO);
+  res = run(dir, { GITHUB_REF_NAME: 'main', RELEASE_TAG: 'v1.2.0', LAUNCH_FORM: 'true' });
+  assert.equal(res.status, 1);
+  assert.match(res.stderr, /launch form/);
+  assert.equal(fs.existsSync(path.join(dir, 'release-title.txt')), false);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

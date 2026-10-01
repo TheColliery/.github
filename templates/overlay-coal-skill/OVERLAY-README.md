@@ -46,7 +46,7 @@ generated copies are built from, and what it holds):
   `claude-ai-zips.yml`, never both. It runs the same derive, create and re-read steps from
   the same three scripts (`scripts/release-notes.mjs`, `scripts/verify-release-shape.mjs`,
   `scripts/lib/release-shape.mjs`), copied byte-identical with their tests; nothing else of
-  this overlay is required for it. Both workflows pass `--latest=false` for a tag older than
+  this overlay is required for it. Both workflows also run by `workflow_dispatch` from the default branch, with a `tag` input, to post the Release for a tag that already exists, and with `launch_form` for a repo's one launch-form Release (RELEASE-PATTERN.md, "The posting path for a tag that already exists"); `claude-ai-zips.yml` creates the Release as a draft and publishes it last. Both workflows pass `--latest=false` for a tag older than
   the current Latest, and the derive step checks that the released CHANGELOG entry is
   followed by the previous stable tag's heading.
 - `build-claude-ai-zips.mjs` imports `./lib/desc-cap.mjs` and `./lib/claude-ai-trim.mjs`
