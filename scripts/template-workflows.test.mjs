@@ -385,7 +385,7 @@ test('claude-ai-zips.yml publishes in the right order: draft create, re-read, as
   assert.ok(create > 0 && reread > create && upload > reread && publish > upload, `order: create ${create}, re-read ${reread}, upload ${upload}, publish ${publish}`);
   assert.ok(lines.filter((l) => l.includes('gh release create')).every((l) => !l.includes('--latest')), 'a draft create never passes --latest (a draft cannot be Latest)');
   assert.ok(publish > 0 && lines[publish].includes('--latest="$(cat release-latest.txt)"') && lines[publish].includes('--prerelease="$(cat release-prerelease.txt)"'), 'the publish step applies Latest and prerelease');
-  assert.ok(t.includes('"cd -- dist-claude-ai"'.slice(1, -1)) && t.includes('zip -r -- "../${name}.zip"') && t.includes('sha256sum -- *.zip'), '-- guards on cd, zip and sha256sum');
+  assert.ok(t.includes('"cd -- dist-claude-ai"'.slice(1, -1)) && t.includes('zip -r -- "${name}.zip" "${name}"') && t.includes('sha256sum -- *.zip'), '-- guards on cd, zip and sha256sum; the skill FOLDER is zipped from its parent (UMB-333)');
   assert.ok(t.includes('isDraft') && t.includes('is still a draft after the publish step'), 'the run re-reads that the Release is no longer a draft');
 });
 
@@ -411,7 +411,7 @@ test('claude-ai-zips.yml: a back-filled tag older than the packaging scripts get
   const s = step.join('\n');
   assert.ok(s.includes('predates the packaging scripts') && s.includes('WITHOUT ZIP assets'), 'the notice');
   assert.ok(s.includes('EVENT') && s.includes('"push"') && s.includes('exit 1'), 'a push without the scripts is an error');
-  for (const n of ['Verify plugin/ dist is current', 'Stage trimmed-description', 'Zip each staged skill', 'Generate SHA256SUMS', 'Attach ZIPs']) {
+  for (const n of ['Verify plugin/ dist is current', 'Stage trimmed-description', 'Zip each staged skill', 'Check each ZIP holds its skill folder', 'Generate SHA256SUMS', 'Attach ZIPs']) {
     const st = stepBySubstr(lines, n);
     assert.ok(st && st.some((l) => l.includes("steps.pkg.outputs.package == 'true'")), `${n}: gated on the packaging check`);
   }
@@ -491,4 +491,84 @@ test('gate behaviour: the launch form posts ONE pre-release tag only with the fl
   assert.equal(r.code, 0, r.err); assert.match(r.out, /post=true\ntag=v0\.1\.0-beta\.1\nlaunch=true/);
   r = runGate({ INPUT_TAG: 'v1.0.0', INPUT_LAUNCH: 'true' });
   assert.equal(r.code, 1); assert.match(r.err, /stable/);
+});
+
+// UMB-333: claude.ai's page says the ZIP must hold the skill FOLDER as its top level (<name>/SKILL.md); a SKILL.md at the
+// archive root "isn't recognized as a skill". The overlay used to zip the folder's CONTENTS ("cd name && zip -r ../name.zip .").
+// Archives here are built by a tiny stored-ZIP writer so the check step's own bash is exercised without the zip binary.
+function crc32(buf) {
+  let crc = 0xffffffff;
+  for (const b of buf) {
+    let c = (crc ^ b) & 0xff;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    crc = c ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+function makeZip(entries) {
+  const local = []; const central = []; let offset = 0;
+  for (const [name, text] of entries) {
+    const n = Buffer.from(name, 'utf8'); const data = Buffer.from(text, 'utf8'); const crc = crc32(data);
+    const lh = Buffer.alloc(30); lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(20, 4); lh.writeUInt16LE(0x21, 12); lh.writeUInt32LE(crc, 14); lh.writeUInt32LE(data.length, 18); lh.writeUInt32LE(data.length, 22); lh.writeUInt16LE(n.length, 26);
+    const ch = Buffer.alloc(46); ch.writeUInt32LE(0x02014b50, 0); ch.writeUInt16LE(20, 4); ch.writeUInt16LE(20, 6); ch.writeUInt16LE(0x21, 14); ch.writeUInt32LE(crc, 16); ch.writeUInt32LE(data.length, 20); ch.writeUInt32LE(data.length, 24); ch.writeUInt16LE(n.length, 28); ch.writeUInt32LE(offset, 42);
+    local.push(lh, n, data); central.push(ch, n); offset += 30 + n.length + data.length;
+  }
+  const cd = Buffer.concat(central);
+  const eocd = Buffer.alloc(22); eocd.writeUInt32LE(0x06054b50, 0); eocd.writeUInt16LE(entries.length, 8); eocd.writeUInt16LE(entries.length, 10); eocd.writeUInt32LE(cd.length, 12); eocd.writeUInt32LE(offset, 16);
+  return Buffer.concat([...local, cd, eocd]);
+}
+const haveTool = (cmd) => HAS_BASH && spawnSync('bash', ['-c', `command -v ${cmd}`], { encoding: 'utf8', timeout: 20000 }).status === 0;
+const HAS_UNZIP = haveTool('unzip');
+const HAS_ZIP = haveTool('zip');
+const stepRun = (name) => runBody(stepBySubstr(wfLines('claude-ai-zips.yml'), name));
+function inTemp(prefix, setup, body) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  try {
+    fs.mkdirSync(path.join(dir, 'dist-claude-ai'));
+    setup(path.join(dir, 'dist-claude-ai'));
+    return spawnSync('bash', ['-c', body], { encoding: 'utf8', timeout: 30000, cwd: dir });
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+
+test('claude-ai-zips.yml zips the skill FOLDER from its parent, never its contents (RED before UMB-333)', () => {
+  const body = stepRun('Zip each staged skill');
+  assert.ok(body.includes('zip -r -- "${name}.zip" "${name}"'), 'the folder name is the zip argument');
+  assert.ok(!/cd -- "\$name" &&/.test(body), 'no subshell that enters the skill folder before zipping');
+  assert.ok(!body.includes('"../${name}.zip" .'), 'never zip "." inside the folder');
+});
+
+test('the Zip step builds <name>/SKILL.md at the top level of a real archive', { skip: !(HAS_ZIP && HAS_UNZIP) && 'no zip and unzip on this machine (CI has both)' }, () => {
+  const r = inTemp('zip-build-', (dist) => {
+    fs.mkdirSync(path.join(dist, 'demo-skill', 'references'), { recursive: true });
+    fs.writeFileSync(path.join(dist, 'demo-skill', 'SKILL.md'), '---\nname: demo-skill\n---\n');
+    fs.writeFileSync(path.join(dist, 'demo-skill', 'references', 'a.md'), 'a');
+    fs.writeFileSync(path.join(dist, 'demo-skill', '.hidden'), 'x');
+  }, `${stepRun('Zip each staged skill')}\nunzip -Z1 dist-claude-ai/demo-skill.zip`);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const listed = r.stdout.split(/\r?\n/).filter((l) => l.startsWith('demo-skill/'));
+  assert.ok(listed.includes('demo-skill/SKILL.md') && listed.includes('demo-skill/references/a.md'), r.stdout);
+  assert.ok(!r.stdout.split(/\r?\n/).includes('SKILL.md'), 'no SKILL.md at the archive root');
+  assert.ok(!r.stdout.includes('.hidden'), 'a top-level dotfile stays out, as before');
+});
+
+test('the layout check passes a folder-rooted archive and fails one whose SKILL.md sits at the root or whose top level is another folder', { skip: !HAS_UNZIP && 'no unzip on this machine (CI has it)' }, () => {
+  const body = stepRun('Check each ZIP holds its skill folder');
+  const run = (entries, zipName = 'demo-skill.zip') => inTemp('zip-check-', (dist) => fs.writeFileSync(path.join(dist, zipName), makeZip(entries)), body);
+  let r = run([['demo-skill/', ''], ['demo-skill/SKILL.md', 'x'], ['demo-skill/references/', ''], ['demo-skill/references/a.md', 'a']]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  r = run([['SKILL.md', 'x'], ['references/', ''], ['references/a.md', 'a']]);
+  assert.equal(r.status, 1); assert.match(r.stdout + r.stderr, /demo-skill\.zip has an entry outside demo-skill\//);
+  r = run([['other-skill/SKILL.md', 'x']]);
+  assert.equal(r.status, 1); assert.match(r.stdout + r.stderr, /outside demo-skill\//);
+  r = run([['demo-skill/README.md', 'x']]);
+  assert.equal(r.status, 1); assert.match(r.stdout + r.stderr, /no demo-skill\/SKILL\.md/);
+  r = run([['demo-skill/SKILL.md', 'x'], ['SKILL.md', 'y']]);
+  assert.equal(r.status, 1, 'one stray root entry fails the whole archive');
+});
+
+test('the layout check runs after the zip step and before the Release is created or any asset is attached', () => {
+  const lines = wfLines('claude-ai-zips.yml');
+  const at = (sub) => lines.findIndex((l) => /^ {6}- name: /.test(l) && l.includes(sub));
+  const zip = at('Zip each staged skill'); const check = at('Check each ZIP holds its skill folder'); const sums = at('Generate SHA256SUMS'); const create = at('Ensure the GitHub Release exists'); const attach = at('Attach ZIPs');
+  assert.ok(zip > 0 && check > zip && sums > check && create > check && attach > create, `order: zip ${zip}, check ${check}, sums ${sums}, create ${create}, attach ${attach}`);
 });

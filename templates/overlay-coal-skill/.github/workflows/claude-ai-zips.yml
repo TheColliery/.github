@@ -213,9 +213,33 @@ jobs:
           cd -- dist-claude-ai
           for d in */; do
             name="${d%/}"
-            (cd -- "$name" && zip -r -- "../${name}.zip" . -x '.*')
+            zip -r -- "${name}.zip" "${name}" -x "${name}/.*"
           done
           ls -la -- *.zip
+
+      # claude.ai's own page (read 2026-10-02): the ZIP must contain the skill FOLDER as its top level, because Claude
+      # looks for <skill-name>/SKILL.md inside the archive, and a SKILL.md at the root "isn't recognized as a skill".
+      # This is the vendor's own check (unzip -l: SKILL.md must carry the <name>/ prefix), run on every archive
+      # before the Release is created or any asset is attached.
+      - name: Check each ZIP holds its skill folder as the top level (the vendor's own unzip -l check)
+        if: steps.pkg.outputs.package == 'true'
+        working-directory: tag-src
+        run: |
+          set -euo pipefail
+          cd -- dist-claude-ai
+          shopt -s nullglob
+          zips=(*.zip)
+          [[ ${#zips[@]} -gt 0 ]] || { echo "::error::no ZIP was built"; exit 1; }
+          for z in "${zips[@]}"; do
+            name="${z%.zip}"
+            entries=$(unzip -Z1 -- "$z")
+            outside=$(printf '%s\n' "$entries" | awk -v p="${name}/" 'index($0, p) != 1' | head -n 1)
+            if [[ -n "$outside" ]]; then
+              echo "::error::$z has an entry outside ${name}/ ('$outside'): the ZIP must hold the skill folder itself as its top level (zip the folder, not its contents)"; exit 1
+            fi
+            printf '%s\n' "$entries" | grep -Fxq -- "${name}/SKILL.md" || { echo "::error::$z has no ${name}/SKILL.md"; exit 1; }
+          done
+          echo "every ZIP holds <name>/SKILL.md as its top level"
 
       - name: Generate SHA256SUMS.txt for the ZIPs
         if: steps.pkg.outputs.package == 'true'

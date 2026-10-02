@@ -41,6 +41,10 @@ generated copies are built from, and what it holds):
   inline (double-quoted, so GitHub's YAML parser does not truncate it at the first
   unescaped `#` — the exact defect CoalFace's own board #119 found and fixed in this
   same file).
+  UMB-333 (2026-10-02): the Zip step zips each staged skill FOLDER from its parent (the archive holds
+  `<name>/SKILL.md`; claude.ai does not recognize a `SKILL.md` at the archive root), and a following step
+  lists every archive with `unzip -Z1` and fails the run when one does not, before any Release or asset is
+  written. The description trim to 200 stays until one real upload at the vendor's stated 1,024 is on record.
 - `.github/workflows/create-release.yml` — the bare tag-push Release creator for a room
   that ships **no** claude.ai ZIPs (UMB-182). A room carries exactly one of this file and
   `claude-ai-zips.yml`, never both. It runs the same derive, create and re-read steps from

@@ -1,25 +1,25 @@
 # Installing Coal* skills on claude.ai (web / desktop app)
 
-claude.ai can run **custom skills**: a ZIP containing a `SKILL.md` (YAML frontmatter with `name` + `description`), uploaded through the app's skill settings. Two limits to know up front:
+claude.ai can run **custom skills**: a ZIP containing a `SKILL.md` (YAML frontmatter with `name` + `description`), uploaded in the app under **Customize > Skills** (the vendor's page, read 2026-10-02). Two limits to know up front:
 
 - **Per-user**—an uploaded skill is yours alone (an Enterprise owner can provision org-wide; nobody else can).
 - **No sync**—claude.ai skills are separate from Claude Code and the API. The same skill = separate installs per surface.
 
 > [!IMPORTANT]
-> **The install mechanics below are pending re-verification.** The plan requirements, the exact settings path, and the upload flow were last checked 2026-07-16 and are version-sensitive—claude.ai moves. A pass was said to be in flight as of 2026-07-25; no evidence since then shows it landed, so that claim is retracted rather than carried forward unconfirmed. Treat the *menu path* and the *plan list* as unconfirmed and follow whatever the app currently shows. The capability table and the packaging rules below do not depend on it.
+> **The install mechanics below are pending re-verification, and no Coal* ZIP has been uploaded end-to-end on claude.ai yet.** The vendor's skills page, fetched as raw markdown on 2026-10-02, states three things this file now follows: the upload place is **Customize > Skills**; the ZIP must contain the skill folder itself as its top level (`<skill-name>/SKILL.md`), and a `SKILL.md` at the root of the ZIP "isn't recognized as a skill"; and the description limit is **1,024 characters**. The plan requirements and the rest of the upload flow were last checked 2026-07-16 and are version-sensitive—claude.ai moves—so follow whatever the app currently shows. The tier of every row below is therefore **not yet run end-to-end on claude.ai**: "Works" in the capability table means the skill's own text is built to work in that sandbox, not that an upload has been verified. The tier changes when one real upload is on record, not before.
 
 ## Install
 
 Two ways to get the ZIP—which one applies depends on the tool.
 
-**Fastest, where a Release ships one:** CoalMine and CoalFace attach pre-built ZIPs to every Release (one per CoalMine canary, one for CoalFace) plus a `SHA256SUMS.txt`. Open the Release's Assets, download the skill's `.zip`, verify it against `SHA256SUMS.txt` (`sha256sum -c SHA256SUMS.txt` or your OS's equivalent—the checksum file catches a download corrupted in transit; it sits beside the ZIP on the same host, so it cannot prove the Release itself was not tampered with. Where a Release carries a signed build attestation, `gh attestation verify <zip> -R TheColliery/<repo>` is the check that proves which workflow built it), then upload it. No build step. CoalLedger's version of this is in progress and has not shipped on a stable Release yet; every other tool in the table below is either excluded from claude.ai entirely or has no ZIP workflow.
+**Fastest, where a Release ships one (read the caveat at the end of this paragraph first):** CoalMine and CoalFace attach pre-built ZIPs to every Release (one per CoalMine canary, one for CoalFace) plus a `SHA256SUMS.txt`. Open the Release's Assets, download the skill's `.zip`, verify it against `SHA256SUMS.txt` (`sha256sum -c SHA256SUMS.txt` or your OS's equivalent—the checksum file catches a download corrupted in transit; it sits beside the ZIP on the same host, so it cannot prove the Release itself was not tampered with. Where a Release carries a signed build attestation, `gh attestation verify <zip> -R TheColliery/<repo>` is the check that proves which workflow built it), then upload it. No build step. CoalLedger's version of this is in progress and has not shipped on a stable Release yet; every other tool in the table below is either excluded from claude.ai entirely or has no ZIP workflow. **Caveat (2026-10-02):** the ZIPs on the Releases published so far were built by a step that zipped each skill folder's contents, so their `SKILL.md` sits at the archive root, which the vendor says is not recognized as a skill. The canon workflow now zips the folder itself and fails the run when an archive does not hold `<name>/SKILL.md`; the corrected ZIPs arrive with each room's next Release. Until then, check any ZIP before uploading it (`unzip -l <file>.zip`: `SKILL.md` must carry the `<skill-name>/` prefix) or use the build-it-yourself way below.
 
 **Always works, any tool:** build it yourself—every skill folder in the repos already IS the package.
 
 1. Get the repo (green **Code** button → *Download ZIP*, or `git clone`).
 2. Take one skill folder from `plugin/skills/`—e.g. `plugin/skills/rot-canary/`. Keep its `references/` subfolder inside.
 3. Zip **that folder**, so the archive contains `rot-canary/SKILL.md` and not a bare `SKILL.md`.
-4. In claude.ai, go to skill settings and create a skill from that ZIP. Repeat per skill (per-user, remember).
+4. In claude.ai, go to **Customize > Skills** and upload that ZIP. Repeat per skill (per-user, remember).
 
 Use `plugin/skills/`, not `skills/`—the top-level source tree still holds unexpanded template markers, so a ZIP built from it ships broken text.
 
