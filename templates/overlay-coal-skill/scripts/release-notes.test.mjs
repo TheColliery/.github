@@ -20,7 +20,7 @@ function scratchWithLib() {
 }
 
 function run(cwd, env) {
-  return spawnSync(process.execPath, [SCRIPT], { cwd, encoding: 'utf8', env: { ...process.env, ...env } });
+  return spawnSync(process.execPath, [SCRIPT], { cwd, encoding: 'utf8', timeout: 30000, env: { ...process.env, ...env } });
 }
 
 test('release-notes.mjs: writes release-title.txt + release-body.md derived from CHANGELOG.md, exit 0', () => {

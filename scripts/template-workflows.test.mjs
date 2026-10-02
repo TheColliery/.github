@@ -426,7 +426,7 @@ const GH_STUB = [
   'gh() {',
   '  case "$*" in',
   '    *git/ref/tags/*) a="$*"; name="${a##*git/ref/tags/}"; name="${name%% *}"; for t in ${FAKE_TAGS-v2.6.0 v1.0.0 v0.1.0-beta.1}; do [[ "$t" == "$name"* ]] && return 0; done; return 1 ;;', // GitHub: 200 on a prefix match
-  '    *git/matching-refs/tags/*) a="$*"; name="${a##*git/matching-refs/tags/}"; name="${name%% *}"; for t in ${FAKE_TAGS-v2.6.0 v1.0.0 v0.1.0-beta.1}; do [[ "$t" == "$name"* ]] && echo "refs/tags/$t"; done; return 0 ;;',
+  '    *git/matching-refs/tags/*) [[ "${FAKE_API_FAIL:-no}" == "yes" ]] && return 1; a="$*"; name="${a##*git/matching-refs/tags/}"; name="${name%% *}"; for t in ${FAKE_TAGS-v2.6.0 v1.0.0 v0.1.0-beta.1}; do [[ "$t" == "$name"* ]] && echo "refs/tags/$t"; done; return 0 ;;',
   '    *"releases?per_page=100"*) echo "${FAKE_OTHER_RELEASES:-0}"; return 0 ;;',
   '    *) echo "unexpected gh call: $*" >&2; return 99 ;;',
   '  esac',
@@ -568,9 +568,40 @@ test('the layout check passes a folder-rooted archive and fails one whose SKILL.
   assert.equal(r.status, 1, 'one stray root entry fails the whole archive');
 });
 
+// UMB-334 (2): testing.md, every test run has a finite clock. A spawn with no timeout can hold a runner for the job's
+// whole 360 minutes and report nothing. This reads every spawn call in a template's test files (a skeleton or overlay a
+// room copies), through to the closing parenthesis of its arguments, and fails on one that names no timeout.
+test('every spawn in a template test passes a timeout (testing.md: every test run has a finite clock; RED before UMB-334)', () => {
+  const found = [];
+  const walk = (d) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.name.endsWith('.test.mjs')) {
+        const t = fs.readFileSync(p, 'utf8');
+        for (const m of t.matchAll(/\b(spawnSync|execFileSync|execSync|spawn)\(/g)) {
+          let depth = 1; let i = m.index + m[0].length;
+          for (; i < t.length && depth > 0; i++) { if (t[i] === '(') depth++; else if (t[i] === ')') depth--; }
+          if (!/timeout/.test(t.slice(m.index, i))) found.push(`${path.relative(ROOT, p).replace(/\\/g, '/')}:${t.slice(0, m.index).split('\n').length}`);
+        }
+      }
+    }
+  };
+  walk(path.join(ROOT, 'templates'));
+  assert.deepEqual(found, [], 'spawn calls with no timeout: ' + found.join(', '));
+});
+
 test('the layout check runs after the zip step and before the Release is created or any asset is attached', () => {
   const lines = wfLines('claude-ai-zips.yml');
   const at = (sub) => lines.findIndex((l) => /^ {6}- name: /.test(l) && l.includes(sub));
   const zip = at('Zip each staged skill'); const check = at('Check each ZIP holds its skill folder'); const sums = at('Generate SHA256SUMS'); const create = at('Ensure the GitHub Release exists'); const attach = at('Attach ZIPs');
   assert.ok(zip > 0 && check > zip && sums > check && create > check && attach > create, `order: zip ${zip}, check ${check}, sums ${sums}, create ${create}, attach ${attach}`);
+});
+
+// UMB-324: when the API read itself fails (a 5xx, a rate limit) the gate says so; it must not claim the tag does not exist.
+test('gate behaviour: a failed tag-list read is reported as a failed read, not as "not a tag of this repository"; both still refuse', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  let r = runGate({ INPUT_TAG: 'v2.6.0', FAKE_API_FAIL: 'yes' });
+  assert.equal(r.code, 1, r.err); assert.match(r.err, /could not read this repository's tags/); assert.ok(!/not a tag of this repository/.test(r.err)); assert.ok(!r.out.includes('post=true'));
+  r = runGate({ INPUT_TAG: 'v9.9.9' });
+  assert.equal(r.code, 1); assert.match(r.err, /not a tag of this repository/); assert.ok(!/could not read/.test(r.err));
 });

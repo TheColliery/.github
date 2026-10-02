@@ -86,6 +86,7 @@ test('post-deploy-check.mjs: the pause between retry rounds never exceeds the re
     ].join('\n'));
     const res = spawnSync(process.execPath, [filled, '--wait', '1'], {
       encoding: 'utf8',
+      timeout: 60000,
       env: { ...process.env, NODE_OPTIONS: '--import=' + pathToFileURL(stub).href, STUB_LOG: log },
     });
     assert.equal(res.status, 1, 'a page that never matches must fail loud, exit 1: ' + res.stderr + res.stdout);

@@ -95,7 +95,9 @@ jobs:
             fi
             # GitHub's "get a reference" call for a tag name answers 200 with a LIST when no ref is exactly <name> but some
             # START with it (v1.2.3 against v1.2.30), so this lists by prefix and compares the ref name exactly.
-            refs=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/${tag}" --jq '.[].ref' 2>/dev/null) || refs=''
+            if ! refs=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/${tag}" --jq '.[].ref' 2>/dev/null); then
+              echo "::error::could not read this repository's tags from the GitHub API, so whether ${tag} exists is unknown; nothing was posted -- run it again"; exit 1
+            fi
             if ! grep -Fxq -- "refs/tags/${tag}" <<< "${refs}"; then
               echo "::error::${tag} is not a tag of this repository -- this path posts a Release for a tag that already exists, it never creates a tag"; exit 1
             fi
