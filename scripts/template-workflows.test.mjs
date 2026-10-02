@@ -545,7 +545,7 @@ test('the Zip step builds <name>/SKILL.md at the top level of a real archive', {
     fs.writeFileSync(path.join(dist, 'demo-skill', 'SKILL.md'), '---\nname: demo-skill\n---\n');
     fs.writeFileSync(path.join(dist, 'demo-skill', 'references', 'a.md'), 'a');
     fs.writeFileSync(path.join(dist, 'demo-skill', '.hidden'), 'x');
-  }, `${stepRun('Zip each staged skill')}\nunzip -Z1 dist-claude-ai/demo-skill.zip`);
+  }, `${stepRun('Zip each staged skill')}\nunzip -Z1 demo-skill.zip`);
   assert.equal(r.status, 0, r.stdout + r.stderr);
   const listed = r.stdout.split(/\r?\n/).filter((l) => l.startsWith('demo-skill/'));
   assert.ok(listed.includes('demo-skill/SKILL.md') && listed.includes('demo-skill/references/a.md'), r.stdout);
