@@ -213,7 +213,9 @@ jobs:
           cd -- dist-claude-ai
           for d in */; do
             name="${d%/}"
-            zip -r -- "${name}.zip" "${name}" -x "${name}/.*"
+            # zip refuses "--" before the archive name, so a name that could read as an option is refused here instead.
+            [[ "${name}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "::error::skill directory name '${name}' is not a plain name"; exit 1; }
+            zip -r "${name}.zip" "${name}" -x "${name}/.*"
           done
           ls -la -- *.zip
 
