@@ -20,13 +20,13 @@ const ZERO = '0'.repeat(40);
 const made = [];
 // A hook runs with GIT_DIR, GIT_INDEX_FILE and friends set; a fixture that inherited them would write into the repository
 // the hook runs for. Every fixture git call, and the gate under test, gets an environment without them.
-const cleanEnv = () => Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/i.test(k)));
+const gitEnv = () => Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/i.test(k)));
 
 function git(dir, ...args) {
   return gitWith({}, dir, ...args);
 }
 function gitWith(extra, dir, ...args) {
-  return execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'], env: { ...cleanEnv(), ...extra } }).trim();
+  return execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'], env: { ...gitEnv(), ...extra } }).trim();
 }
 
 // A throwaway repository holding the gate and its scanner, with one commit per entry of `commits` ({ file: text } maps;
@@ -56,7 +56,7 @@ function repo(commits, { withLib = true } = {}) {
 function run(dir, args = [], input = '', extraEnv = {}) {
   const r = spawnSync(process.execPath, [path.join(dir, 'scripts', 'secret-gate.mjs'), ...args], {
     cwd: dir, input, encoding: 'utf8', timeout: 60000,
-    env: { ...cleanEnv(), HOME: dir, USERPROFILE: dir, ...extraEnv },
+    env: { ...gitEnv(), HOME: dir, USERPROFILE: dir, ...extraEnv },
   });
   return { code: r.status, out: r.stdout || '', err: r.stderr || '' };
 }
@@ -183,7 +183,7 @@ test('the commit\'s own index is the one read: a GIT_INDEX_FILE a hook sets (git
   const dir = repo([{ 'a.txt': 'clean\n' }]);
   const idx = path.join(dir, '.git', 'commit-index');
   fs.copyFileSync(path.join(dir, '.git', 'index'), idx);
-  const withKey = execFileSync('git', ['-C', dir, 'hash-object', '-w', '--stdin'], { input: `${KEY}\n`, encoding: 'utf8', timeout: 60000, env: cleanEnv() }).trim();
+  const withKey = execFileSync('git', ['-C', dir, 'hash-object', '-w', '--stdin'], { input: `${KEY}\n`, encoding: 'utf8', timeout: 60000, env: gitEnv() }).trim();
   gitWith({ GIT_INDEX_FILE: idx }, dir, 'update-index', '--add', '--cacheinfo', `100644,${withKey},k.txt`);
   const r = run(dir, [], '', { GIT_INDEX_FILE: idx });
   assert.strictEqual(r.code, 1, r.out + r.err);
@@ -208,7 +208,7 @@ test('an unreadable pushed range fails: a ref line naming a commit git does not 
 
 test('a staged blob that is damaged on disk fails the scan by count: exit 1, named, never a clean pass', () => {
   const dir = repo([{ 'a.txt': 'clean\n' }]);
-  const sha = execFileSync('git', ['-C', dir, 'hash-object', '-w', '--stdin'], { input: 'a blob that will be damaged\n', encoding: 'utf8', timeout: 60000, env: cleanEnv() }).trim();
+  const sha = execFileSync('git', ['-C', dir, 'hash-object', '-w', '--stdin'], { input: 'a blob that will be damaged\n', encoding: 'utf8', timeout: 60000, env: gitEnv() }).trim();
   const loose = path.join(dir, '.git', 'objects', sha.slice(0, 2), sha.slice(2));
   fs.chmodSync(loose, 0o644);
   fs.writeFileSync(loose, 'not a zlib stream');
