@@ -32,7 +32,7 @@ for t in scripts/verify-landing.test.mjs scripts/update-readme.test.mjs \
          scripts/doc-refs.test.mjs scripts/ruleset-match.test.mjs \
          scripts/lcov-to-cobertura.test.mjs scripts/template-workflows.test.mjs scripts/coal-team.test.mjs \
          scripts/test-roster.test.mjs templates/overlay-llm-deploy/scripts/post-deploy-check.test.mjs \
-         scripts/gitbook-config.test.mjs scripts/community-files.test.mjs scripts/org-health-watch.test.mjs scripts/gate-check-source.test.mjs scripts/materialize-fixtures.test.mjs scripts/overlay-set.test.mjs scripts/announce-release.test.mjs scripts/pin-normalize.test.mjs scripts/workflow-duplicate-keys.test.mjs scripts/secret-scan.test.mjs scripts/secret-gate.test.mjs scripts/secret-scan-copies.test.mjs templates/published-code/scripts/secret-scan.test.mjs templates/published-code/scripts/secret-gate.test.mjs templates/article/scripts/secret-scan.test.mjs templates/article/scripts/secret-gate.test.mjs \
+         scripts/gitbook-config.test.mjs scripts/community-files.test.mjs scripts/org-health-watch.test.mjs scripts/gate-check-source.test.mjs scripts/materialize-fixtures.test.mjs scripts/overlay-set.test.mjs scripts/announce-release.test.mjs scripts/pin-normalize.test.mjs scripts/gate-test-run.test.mjs scripts/workflow-duplicate-keys.test.mjs scripts/secret-scan.test.mjs scripts/secret-gate.test.mjs scripts/secret-scan-copies.test.mjs templates/published-code/scripts/secret-scan.test.mjs templates/published-code/scripts/secret-gate.test.mjs templates/article/scripts/secret-scan.test.mjs templates/article/scripts/secret-gate.test.mjs \
          templates/overlay-coal-skill/scripts/lib/release-shape.test.mjs \
          templates/overlay-coal-skill/scripts/lib/release-prune.test.mjs \
          templates/overlay-coal-skill/scripts/lib/asset-upload-mode.test.mjs \
@@ -42,13 +42,15 @@ for t in scripts/verify-landing.test.mjs scripts/update-readme.test.mjs \
          templates/overlay-coal-skill/scripts/prune-release-zips.test.mjs; do
   [ -f "$t" ] || { echo "gate: missing $t" >&2; exit 1; }
 done
-node --test scripts/verify-landing.test.mjs scripts/update-readme.test.mjs \
+# The suite runs through scripts/gate-test-run.mjs: the same `node --test`, streamed as before, plus a log of a FAILING run under the git directory
+# (hook-test-last.log, never tracked; a green run deletes it), so a failure that scrolls away or is retried away still explains itself.
+node scripts/gate-test-run.mjs scripts/verify-landing.test.mjs scripts/update-readme.test.mjs \
             scripts/release-conform.test.mjs scripts/skeleton-check.test.mjs \
             scripts/license-check.test.mjs scripts/new-repo.test.mjs \
             scripts/doc-refs.test.mjs scripts/ruleset-match.test.mjs \
             scripts/lcov-to-cobertura.test.mjs scripts/template-workflows.test.mjs scripts/coal-team.test.mjs \
             scripts/test-roster.test.mjs templates/overlay-llm-deploy/scripts/post-deploy-check.test.mjs \
-            scripts/gitbook-config.test.mjs scripts/community-files.test.mjs scripts/org-health-watch.test.mjs scripts/gate-check-source.test.mjs scripts/materialize-fixtures.test.mjs scripts/overlay-set.test.mjs scripts/announce-release.test.mjs scripts/pin-normalize.test.mjs scripts/workflow-duplicate-keys.test.mjs scripts/secret-scan.test.mjs scripts/secret-gate.test.mjs scripts/secret-scan-copies.test.mjs templates/published-code/scripts/secret-scan.test.mjs templates/published-code/scripts/secret-gate.test.mjs templates/article/scripts/secret-scan.test.mjs templates/article/scripts/secret-gate.test.mjs \
+            scripts/gitbook-config.test.mjs scripts/community-files.test.mjs scripts/org-health-watch.test.mjs scripts/gate-check-source.test.mjs scripts/materialize-fixtures.test.mjs scripts/overlay-set.test.mjs scripts/announce-release.test.mjs scripts/pin-normalize.test.mjs scripts/gate-test-run.test.mjs scripts/workflow-duplicate-keys.test.mjs scripts/secret-scan.test.mjs scripts/secret-gate.test.mjs scripts/secret-scan-copies.test.mjs templates/published-code/scripts/secret-scan.test.mjs templates/published-code/scripts/secret-gate.test.mjs templates/article/scripts/secret-scan.test.mjs templates/article/scripts/secret-gate.test.mjs \
             templates/overlay-coal-skill/scripts/lib/release-shape.test.mjs \
             templates/overlay-coal-skill/scripts/lib/release-prune.test.mjs \
             templates/overlay-coal-skill/scripts/lib/asset-upload-mode.test.mjs \
