@@ -821,7 +821,7 @@ test('derive check behaviour: all four files present passes; any one missing or 
   for (const f of FOUR) {
     for (const r of [probe(f, null), probe(null, f)]) {
       assert.equal(r.code, 1, f);
-      assert.match(r.err, new RegExp(f.replace('.', '\.')), `${f}: the message names the file`);
+      assert.ok(r.err.includes(f), `${f}: the message names the file`);
       assert.match(r.err, /release-notes\.mjs/, `${f}: the message names the stale script`);
     }
   }
