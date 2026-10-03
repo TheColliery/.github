@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { disabledWorkflows, staleQueuedRuns, gitbookSignal, buildReport, DAY_MS } from './org-health-watch.mjs';
+import { disabledWorkflows, staleQueuedRuns, gitbookSignal, gitbookSyncedFiles, touchesSynced, buildReport, DAY_MS, GITBOOK_OPERATION_TIMEOUT_MS } from './org-health-watch.mjs';
 
 const NOW = Date.parse('2026-09-25T12:00:00Z');
 
@@ -32,17 +32,59 @@ test('staleQueuedRuns: a run queued for more than a day is a finding; a fresh on
   assert.match(found[0].text, /49 day/);
 });
 
-test('gitbookSignal: a synced repo whose default-branch head carries a success GitBook status is clean; a failure, or no status on a head older than a day, is a finding', () => {
-  const clean = gitbookSignal({ '.github': { headAge: 3 * DAY_MS, statuses: [{ context: 'GitBook (./profile)', state: 'success' }] } }, NOW);
+test('gitbookSignal: a success status is clean; a failure or error is a finding; a head that touched a synced file and has no status past GitBook\'s operation timeout is a finding', () => {
+  const clean = gitbookSignal({ '.github': { headAge: 3 * DAY_MS, touches: true, statuses: [{ context: 'GitBook (./profile)', state: 'success' }] } }, NOW);
   assert.deepEqual(clean, []);
-  const failed = gitbookSignal({ CoalMine: { headAge: 3 * DAY_MS, statuses: [{ context: 'GitBook (./docs)', state: 'failure' }] } }, NOW);
+  const failed = gitbookSignal({ CoalMine: { headAge: 3 * DAY_MS, touches: false, statuses: [{ context: 'GitBook (./docs)', state: 'failure' }] } }, NOW);
   assert.equal(failed.length, 1);
   assert.match(failed[0].text, /failure/);
-  const missing = gitbookSignal({ CoalMine: { headAge: 3 * DAY_MS, statuses: [] } }, NOW);
+  const errored = gitbookSignal({ CoalMine: { headAge: DAY_MS, touches: false, statuses: [{ context: 'GitBook (./docs)', state: 'error' }] } }, NOW);
+  assert.equal(errored.length, 1, 'an error status is reported like a failure');
+  const missing = gitbookSignal({ CoalMine: { headAge: 3 * DAY_MS, touches: true, statuses: [] } }, NOW);
   assert.equal(missing.length, 1);
-  assert.match(missing[0].text, /no GitBook status/);
-  const fresh = gitbookSignal({ CoalMine: { headAge: 2 * 60 * 60 * 1000, statuses: [] } }, NOW);
-  assert.deepEqual(fresh, [], 'a head younger than a day may simply not have synced yet');
+  assert.match(missing[0].text, /touched a file the GitBook space syncs/);
+  const fresh = gitbookSignal({ CoalMine: { headAge: 5 * 60 * 1000, touches: true, statuses: [] } }, NOW);
+  assert.deepEqual(fresh, [], 'a head younger than the operation timeout may simply not have synced yet');
+});
+
+// UMB-367 / issue #20: GitBook imports, and posts a status, only when a push touches the space's content (measured at GitBook's
+// own record for the eight tool spaces, 2026-10-03: six heads whose last push touched only scripts, tests or workflows had no import
+// and no status; the two whose push touched README.md were imported within minutes). So "no status" is the NORMAL state after a
+// code-only push, and the issue's nine such findings were a false alarm. The one real stall is a status left `pending` past
+// GitBook's operation timeout (CoalLedger aa0796d: pending since 2026-10-02T09:51Z while GitBook's record says the import succeeded).
+test('gitbookSignal: a code-only head with no GitBook status is NEVER a finding, however old (RED against the age-only check that produced issue #20)', () => {
+  assert.equal(GITBOOK_OPERATION_TIMEOUT_MS, 1200000, 'GitBook operationTimeout on every space');
+  const f = gitbookSignal({ CoalFace: { headAge: 9 * DAY_MS, touches: false, statuses: [] }, CoalTipple: { headAge: 30 * DAY_MS, touches: false, statuses: [] } }, NOW);
+  assert.deepEqual(f, []);
+});
+
+test('gitbookSignal: a status still pending past the operation timeout is a finding (CoalLedger aa0796d); a pending one inside it is not', () => {
+  const old = '2026-09-24T09:51:00Z'; // NOW is 2026-09-25T12:00Z: more than a day pending
+  const stuck = gitbookSignal({ CoalLedger: { headAge: DAY_MS, touches: true, statuses: [{ context: 'GitBook (./)', state: 'pending', updated_at: old }, { context: 'GitBook - Docs', state: 'pending', updated_at: old }] } }, NOW);
+  assert.equal(stuck.length, 1, 'one finding per repository');
+  assert.match(stuck[0].text, /still pending/);
+  assert.match(stuck[0].text, /2026-09-24T09:51:00Z/);
+  const inside = gitbookSignal({ CoalLedger: { headAge: 60000, touches: true, statuses: [{ context: 'GitBook (./)', state: 'pending', updated_at: '2026-09-25T11:55:00Z' }] } }, NOW);
+  assert.deepEqual(inside, []);
+  const nodate = gitbookSignal({ X: { headAge: 0, touches: false, statuses: [{ context: 'GitBook (./)', state: 'pending' }] } }, NOW);
+  assert.equal(nodate.length, 1, 'a pending status with no readable date cannot be shown fresh, so it is reported');
+});
+
+test('gitbookSyncedFiles + touchesSynced: the readme, the summary and the pages the summary lists (per .gitbook.yaml) are synced; a script, test or workflow is not; a directory mapping syncs everything under it', () => {
+  const cfg = 'root: ./\nstructure:\n  readme: README.md\n  summary: SUMMARY.md\n';
+  const summary = '# Table of contents\n\n* [CoalLedger](README.md)\n* [Changelog](CHANGELOG.md)\n\n## Canaries\n\n* [doc-rot](skills/doc-rot/SKILL.md)\n* [site](https://example.invalid/x.md)\n';
+  const synced = gitbookSyncedFiles(cfg, summary);
+  for (const f of ['README.md', 'SUMMARY.md', 'CHANGELOG.md', 'skills/doc-rot/SKILL.md']) assert.equal(touchesSynced([f], synced), true, f);
+  for (const f of ['scripts/verify.mjs', '.github/workflows/ci.yml', 'plugin/hooks/hooks.json', 'scripts/lib/x.test.mjs']) assert.equal(touchesSynced([f], synced), false, f);
+  assert.equal(touchesSynced(['scripts/a.mjs', 'README.md'], synced), true, 'one synced file among others is enough');
+  const docs = gitbookSyncedFiles('site:\n  structure:\n    - type: space\n      content:\n        directory: ./profile\n    - type: space\n      content:\n        directory: ./benchmarks/CoalMine\n', '');
+  assert.equal(touchesSynced(['profile/README.md'], docs), true);
+  assert.equal(touchesSynced(['benchmarks/CoalMine/RESULTS.md'], docs), true);
+  assert.equal(touchesSynced(['scripts/x.mjs', 'templates/a/b.md'], docs), false);
+  assert.equal(gitbookSyncedFiles('nothing: here\n', ''), null, 'a config it cannot read yields unknown, not an empty set');
+  assert.equal(touchesSynced(['README.md'], null), null, 'unknown stays unknown');
+  assert.equal(touchesSynced(Array.from({ length: 300 }, (_, i) => 'src/f' + i + '.js'), synced), true, 'a commit listing 300 files may be truncated: assume it touched');
+  assert.equal(touchesSynced(undefined, synced), null);
 });
 
 test('buildReport: no findings is a stated clean line naming what was checked, never an empty string; findings list each with its link', () => {
@@ -88,6 +130,33 @@ function runCli(state) {
   fs.rmSync(dir, { recursive: true, force: true });
   return { res, calls, report, output };
 }
+
+// realistic GitBook shapes for the CLI: a repo whose head is a README push, and one whose head is a code-only push (issue #20)
+const b64 = (t) => Buffer.from(t, 'utf8').toString('base64');
+const CFG = { content: b64('root: ./\nstructure:\n  readme: README.md\n  summary: SUMMARY.md\n'), encoding: 'base64' };
+const SUM = { content: b64('# Table of contents\n\n* [CoalLedger](README.md)\n* [Changelog](CHANGELOG.md)\n'), encoding: 'base64' };
+const synced = (files, statuses, date = '2026-09-01T00:00:00Z') => ({
+  '/orgs/TheColliery/repos': [{ name: 'CoalLedger', default_branch: 'main' }],
+  '/repos/TheColliery/CoalLedger/actions/workflows': { workflows: [] },
+  '/repos/TheColliery/CoalLedger/actions/runs': { workflow_runs: [] },
+  '/repos/TheColliery/CoalLedger/contents/.gitbook.yaml': CFG,
+  '/repos/TheColliery/CoalLedger/contents/SUMMARY.md': SUM,
+  '/repos/TheColliery/CoalLedger/commits/main': { commit: { committer: { date } }, files: files.map((filename) => ({ filename })) },
+  '/repos/TheColliery/CoalLedger/commits/main/status': { statuses },
+});
+
+test('org-health-watch.mjs: a code-only head with no GitBook status is clean; a README head with none is a finding; a pending status is a finding (the three shapes of issue #20)', () => {
+  let r = runCli(synced(['scripts/verify.mjs', 'scripts/verify.test.mjs'], []));
+  assert.equal(r.res.status, 0, r.res.stdout + r.res.stderr);
+  assert.match(r.output, /has_findings=false/); assert.match(r.report, /no finding/i);
+  r = runCli(synced(['README.md', 'scripts/verify.mjs'], []));
+  assert.match(r.output, /has_findings=true/); assert.match(r.report, /\[CoalLedger\] .*touched a file the GitBook space syncs/);
+  r = runCli(synced(['scripts/verify.mjs'], [{ context: 'GitBook (./)', state: 'pending', updated_at: '2026-10-02T09:51:00Z' }]));
+  assert.match(r.output, /has_findings=true/); assert.match(r.report, /still pending/);
+  r = runCli(synced(['README.md'], [{ context: 'GitBook (./)', state: 'success', updated_at: '2026-09-01T00:00:00Z' }]));
+  assert.match(r.output, /has_findings=false/);
+  assert.ok(r.calls.some((c) => c.endsWith('/contents/SUMMARY.md')), 'the summary is read to learn which pages the space syncs');
+});
 
 const LIVE_SHAPE = {
   '/orgs/TheColliery/repos': [{ name: 'CoalLedger', default_branch: 'main' }],
