@@ -13,3 +13,7 @@ AGENTS.md
 # machine even though the repo itself is private (drafts, unpublished pricing, raw corpus
 # samples). Name the fenced paths here explicitly per repo; this line is the marker that a
 # fence exists, not the fence itself.
+
+# Scratch/working files from agent sessions (drafts, throwaway probes): internal, never published.
+# Untracked-but-not-ignored, they are one broad `git add` from this repository's remote.
+scratchpad/

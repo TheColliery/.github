@@ -14,3 +14,7 @@ skills-lock.json
 # CoalBoard's own staging and reports (.coalboard/proposed/, .coalboard/reports/): a board's
 # output lands inside the scanned repo by rule and is read there, never shipped.
 .coalboard/
+
+# Scratch/working files from agent sessions (drafts, throwaway probes): internal, never published.
+# Untracked-but-not-ignored, they are one broad `git add` from this repository's remote.
+scratchpad/

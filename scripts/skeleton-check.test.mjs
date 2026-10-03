@@ -765,3 +765,13 @@ test('classify: ci.yml + codeql.yml + .gitbook.yaml is published-code, not artic
 test('SKELETON_FILES: every kind, the three article variants included, owns a .gitignore (RED before UMB-216)', () => {
   for (const kind of Object.keys(SKELETON_FILES)) assert.ok(SKELETON_FILES[kind].includes('.gitignore'), `${kind} lists .gitignore`);
 });
+
+// UMB-380: a room whose .gitignore lacks scratchpad/ shows its agent scratch as untracked, and one broad `git add` publishes it
+// (measured 2026-10-03: two public rooms held 341 and 272 untracked scratch files). The article template already carried the line;
+// the published-code and private-working templates did not.
+test('scratchpad/ is an ignore line in every kind of template .gitignore (RED before UMB-380)', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const files = ['templates/published-code/.gitignore', 'templates/private-working/.gitignore', 'templates/article/.gitignore'];
+  const missing = files.filter((f) => !fs.readFileSync(path.join(root, f), 'utf8').split(/\r?\n/).includes('scratchpad/'));
+  assert.deepEqual(missing, []);
+});
