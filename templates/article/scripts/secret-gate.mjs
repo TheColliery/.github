@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 // secret-gate — the secret scan a repository runs before a commit and before a push.
 //
-// WHY: GitHub scans a public repository for PROVIDER tokens, but a private key, a connection string or an HTTP
-// authentication header is a "generic" pattern that its free scanning does not cover. This gate is the repository's own
-// check for those: it runs the portable scanner (scripts/lib/secret-scan.mjs, kept byte-identical in every repository
-// that carries it) before a commit and before a push.
+// WHY: GitHub scans a public repository for PROVIDER tokens. This gate is the repository's own check: it runs the
+// portable scanner (scripts/lib/secret-scan.mjs, kept byte-identical in every repository that carries it) before a
+// commit and before a push. The scanner catches a provider-shaped token, a private-key header and a high-entropy value
+// assigned to a name like secret, token, password or key. It does NOT catch a credential inside a URL or connection
+// string (scheme://user:pass@host), an HTTP authentication header whose value is not on such a named assignment, or a
+// key split across lines.
 //
 // TWO SCANS. (1) The STAGED tree, always: every blob in the index, which is what a commit records and what a CI checkout
 // holds (a staged edit is scanned even when the working file was changed back; an unstaged edit cannot be committed or

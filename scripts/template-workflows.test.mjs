@@ -591,6 +591,23 @@ test('every spawn in a template test passes a timeout (testing.md: every test ru
   assert.deepEqual(found, [], 'spawn calls with no timeout: ' + found.join(', '));
 });
 
+// UMB-334 / CoalGob H2: a hook or gate comment never claims the scan catches a form it misses. The scanner has no rule for a
+// credential inside a URL (scheme://user:pass@host) and none for an HTTP authentication header as such, so no template hook or
+// gate may name a connection string or an authentication header as something it catches; each says what the scan catches and
+// that those forms are not covered.
+test('no template hook or secret gate claims the scan catches a connection string or an HTTP authentication header (RED before the H2 batch)', () => {
+  const files = [
+    'templates/published-code/.githooks/pre-commit', 'templates/published-code/.githooks/pre-push',
+    'templates/article/.githooks/pre-commit', 'templates/article/.githooks/pre-push',
+    'templates/published-code/scripts/secret-gate.mjs', 'templates/article/scripts/secret-gate.mjs', 'scripts/secret-gate.mjs',
+  ];
+  for (const f of files) {
+    const t = fs.readFileSync(path.join(ROOT, f), 'utf8').replace(/\r?\n# ?|\r?\n\/\/ ?/g, ' ');
+    assert.ok(/does NOT catch a credential inside a URL/.test(t), f + ': it must say what the scan does not catch');
+    assert.ok(!/but not the generic kinds|a connection string or an HTTP\s+authentication header is a "generic" pattern/.test(t), f + ': the old coverage claim is still there');
+  }
+});
+
 test('the layout check runs after the zip step and before the Release is created or any asset is attached', () => {
   const lines = wfLines('claude-ai-zips.yml');
   const at = (sub) => lines.findIndex((l) => /^ {6}- name: /.test(l) && l.includes(sub));
