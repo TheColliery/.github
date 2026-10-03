@@ -78,7 +78,7 @@ function runCli(state) {
   fs.writeFileSync(stub, STUB);
   fs.writeFileSync(log, '');
   fs.writeFileSync(out, '');
-  const res = spawnSync(process.execPath, [SCRIPT], {
+  const res = spawnSync(process.execPath, ['--max-old-space-size=512', SCRIPT], {
     cwd: dir, encoding: 'utf8', timeout: 60000,
     env: { ...process.env, NODE_OPTIONS: `--import=${pathToFileURL(stub).href}`, STUB_STATE: JSON.stringify(state), STUB_LOG: log, GITHUB_OUTPUT: out, GH_TOKEN: '' },
   });

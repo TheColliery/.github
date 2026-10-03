@@ -277,8 +277,9 @@ function runCli(releasesByRepo) {
     const log = path.join(dir, 'calls.log');
     const stub = path.join(dir, 'stub.mjs');
     fs.writeFileSync(stub, STUB_SRC);
-    const res = spawnSync(process.execPath, [fileURLToPath(new URL('./release-conform.mjs', import.meta.url))], {
+    const res = spawnSync(process.execPath, ['--max-old-space-size=512', fileURLToPath(new URL('./release-conform.mjs', import.meta.url))], {
       encoding: 'utf8',
+      timeout: 60000,
       env: { ...process.env, GITHUB_TOKEN: '', NODE_OPTIONS: '--import=' + pathToFileURL(stub).href, STUB_LOG: log, STUB_RELEASES: JSON.stringify(releasesByRepo) },
     });
     return { ...res, calls: fs.existsSync(log) ? fs.readFileSync(log, 'utf8').split('\n').filter(Boolean) : [] };

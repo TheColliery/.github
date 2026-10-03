@@ -13,7 +13,7 @@ const F01 = path.join(here, 'fixtures', 'f01-dup-heavy');
 const F03 = path.join(here, 'fixtures', 'f03-lean');
 
 function run(...args) {
-  const r = spawnSync(process.execPath, [path.join(here, 'score.mjs'), ...args, '--json'], { encoding: 'utf8' });
+  const r = spawnSync(process.execPath, ['--max-old-space-size=512', path.join(here, 'score.mjs'), ...args, '--json'], { encoding: 'utf8', timeout: 60000 });
   assert.strictEqual(r.status, 0, r.stderr);
   return JSON.parse(r.stdout);
 }

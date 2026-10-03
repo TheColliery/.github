@@ -90,7 +90,7 @@ test('toCobertura: sources point at the repo root and the document is well-forme
 });
 
 function runCli(args) {
-  return spawnSync(process.execPath, [CONVERTER, ...args], { encoding: 'utf8' });
+  return spawnSync(process.execPath, ['--max-old-space-size=512', CONVERTER, ...args], { encoding: 'utf8', timeout: 60000 });
 }
 
 test('CLI: a real lcov file in -> Cobertura file out, exit 0, one summary line', () => {

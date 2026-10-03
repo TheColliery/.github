@@ -585,7 +585,7 @@ function runDetails(pages, { token = 'stub-token', status } = {}) {
   fs.writeFileSync(logFile, '');
   const env = { ...process.env, NODE_OPTIONS: `--import=${pathToFileURL(stubFile).href}`, STUB_LOG: logFile, STUB_STATE: JSON.stringify({ pages, status }) };
   if (token === null) delete env.GITHUB_TOKEN; else env.GITHUB_TOKEN = token;
-  const res = spawnSync(process.execPath, [SKELETON_SCRIPT, '--details'], { encoding: 'utf8', env });
+  const res = spawnSync(process.execPath, ['--max-old-space-size=512', SKELETON_SCRIPT, '--details'], { encoding: 'utf8', timeout: 60000, env });
   const calls = fs.readFileSync(logFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
   fs.rmSync(dir, { recursive: true, force: true });
   return { res, calls };
@@ -650,8 +650,9 @@ function runSettingsWithStubStatus(status) {
   const root = scratchUmbrellaWithRoom();
   const stub = path.join(root, 'stub.mjs');
   fs.writeFileSync(stub, "globalThis.fetch = async () => new Response('{}', { status: " + status + " });\n");
-  const res = spawnSync(process.execPath, [path.join(root, '.github', 'scripts', 'skeleton-check.mjs'), '--settings'], {
+  const res = spawnSync(process.execPath, ['--max-old-space-size=512', path.join(root, '.github', 'scripts', 'skeleton-check.mjs'), '--settings'], {
     encoding: 'utf8',
+    timeout: 60000,
     env: { ...process.env, GITHUB_TOKEN: 'stub-token', NODE_OPTIONS: '--import=' + pathToFileURL(stub).href },
   });
   fs.rmSync(root, { recursive: true, force: true });

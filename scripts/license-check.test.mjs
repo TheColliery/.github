@@ -314,7 +314,7 @@ test('every templates/*/LICENSE has platform-independent bytes (text unset, or e
   assert.ok(licenses.length >= 3, 'templates with a LICENSE found: ' + licenses.join(','));
   const bad = [];
   for (const p of licenses) {
-    const r = spawnSync('git', ['check-attr', 'text', 'eol', '--', p], { cwd: repo, encoding: 'utf8' });
+    const r = spawnSync('git', ['check-attr', 'text', 'eol', '--', p], { cwd: repo, encoding: 'utf8', timeout: 30000 });
     assert.equal(r.status, 0, 'git check-attr failed for ' + p + ': ' + r.stderr);
     const text = (r.stdout.match(/: text: (\S+)/) || [])[1];
     const eol = (r.stdout.match(/: eol: (\S+)/) || [])[1];

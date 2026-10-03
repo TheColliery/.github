@@ -44,7 +44,7 @@ function run(args, env = {}, state = {}) {
   const e = { ...process.env, NODE_OPTIONS: `--import=${pathToFileURL(stub).href}`, STUB_LOG: log, STUB_STATE: JSON.stringify({ routes: state.routes ?? ROUTES, gate: state.gate ?? GATE }), GITHUB_READ_TOKEN: 'stub-read' };
   delete e.GITHUB_TOKEN;
   Object.assign(e, env);
-  const res = spawnSync(process.execPath, [SCRIPT, ...args], { cwd: dir, encoding: 'utf8', env: e, timeout: 60000 });
+  const res = spawnSync(process.execPath, ['--max-old-space-size=512', SCRIPT, ...args], { cwd: dir, encoding: 'utf8', env: e, timeout: 60000 });
   const calls = fs.readFileSync(log, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
   const bodies = fs.existsSync(path.join(dir, 'gate-check-source-bodies.json')) ? JSON.parse(fs.readFileSync(path.join(dir, 'gate-check-source-bodies.json'), 'utf8')) : null;
   fs.rmSync(dir, { recursive: true, force: true });

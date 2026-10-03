@@ -184,9 +184,10 @@ test('update-readme CLI: fetches CoalGob, adds it to the combined sums, and rewr
     const log = path.join(dir, 'calls.log');
     const stub = path.join(dir, 'stub.mjs');
     writeFileSync(stub, STUB_SRC);
-    const res = spawnSync(process.execPath, [fileURLToPath(new URL('./update-readme.mjs', import.meta.url))], {
+    const res = spawnSync(process.execPath, ['--max-old-space-size=512', fileURLToPath(new URL('./update-readme.mjs', import.meta.url))], {
       cwd: dir,
       encoding: 'utf8',
+      timeout: 60000,
       env: { ...process.env, PAT_TOKEN: 'test-token', NODE_OPTIONS: '--import=' + pathToFileURL(stub).href, STUB_LOG: log, STUB_TRAFFIC: JSON.stringify(TRAFFIC) },
     });
     const calls = readFileSync(log, 'utf8').split('\n').filter(Boolean);

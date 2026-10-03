@@ -38,7 +38,7 @@ test('ground truth has 13 planted defects across 12 fixtures (f01 plants 2)', ()
 
 test('printed report uses the real planted total (13/13), not the dir count (12/12)', () => {
   assert.ok(existsSync(BASELINE), 'committed baseline run is missing');
-  const out = execFileSync(process.execPath, [SCORE, BASELINE], { encoding: 'utf8' });
+  const out = execFileSync(process.execPath, ['--max-old-space-size=512', SCORE, BASELINE], { encoding: 'utf8', timeout: 60000 });
   assert.match(out, /\(13\/13\)/, 'recall denominator should be 13 (all planted defects)');
   assert.doesNotMatch(out, /\(12\/12\)/, 'must not undercount planted defects as 12');
 });
@@ -51,7 +51,7 @@ test('--write methodology string names "13 planted", not "12 with planted"', () 
     cpSync(here, sandbox, { recursive: true });
     const sScore = path.join(sandbox, 'score.mjs');
     const sBaseline = path.join(sandbox, 'results', '2026-06-12-claude-fable-5.json');
-    execFileSync(process.execPath, [sScore, sBaseline, '--write'], { encoding: 'utf8' });
+    execFileSync(process.execPath, ['--max-old-space-size=512', sScore, sBaseline, '--write'], { encoding: 'utf8', timeout: 60000 });
     const results = readFileSync(path.join(sandbox, 'RESULTS.md'), 'utf8');
     assert.match(results, /12 with 13 planted/, 'methodology must state 13 planted defects');
     assert.doesNotMatch(results, /12 with planted, line-labeled/, 'must not keep the old undercounting phrasing');

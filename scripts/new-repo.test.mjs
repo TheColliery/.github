@@ -14,7 +14,7 @@ import { createHash } from 'node:crypto';
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'new-repo.mjs');
 
 function run(args) {
-  return spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8' });
+  return spawnSync(process.execPath, ['--max-old-space-size=512', SCRIPT, ...args], { encoding: 'utf8', timeout: 60000 });
 }
 
 function scratchDir() {
@@ -483,8 +483,9 @@ function runWithTeamStub(args, repo, extra = {}) {
   const logFile = path.join(dir, 'calls.jsonl');
   fs.writeFileSync(stubFile, TEAM_STUB);
   fs.writeFileSync(logFile, '');
-  const res = spawnSync(process.execPath, [SCRIPT, ...args], {
+  const res = spawnSync(process.execPath, ['--max-old-space-size=512', SCRIPT, ...args], {
     encoding: 'utf8',
+    timeout: 60000,
     env: {
       ...process.env,
       GITHUB_TOKEN: 'stub-token',

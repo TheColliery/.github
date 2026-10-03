@@ -87,18 +87,18 @@ test('overlay-llm-deploy publish-pypi.yml carries the signed-annotated-tag gate 
 // is no fence (hooks-safety.md 1.0: a git pre-* hook MUST be able to abort).
 
 const ROOT = path.join(here, '..');
-const hasTool = (cmd, args) => { const r = spawnSync(cmd, args, { encoding: 'utf8' }); return !r.error && r.status === 0; };
+const hasTool = (cmd, args) => { const r = spawnSync(cmd, args, { encoding: 'utf8', timeout: 30000 }); return !r.error && r.status === 0; };
 const PW_PREPUSH = path.join(TEMPLATES, 'private-working', '.githooks', 'pre-push');
 
 test('every template git hook is committed executable (100755) and pinned eol=lf', () => {
-  const ls = spawnSync('git', ['ls-files', '-s', '--', 'templates/*/.githooks/*'], { cwd: ROOT, encoding: 'utf8' });
+  const ls = spawnSync('git', ['ls-files', '-s', '--', 'templates/*/.githooks/*'], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
   assert.equal(ls.status, 0, ls.stderr);
   const rows = ls.stdout.split('\n').filter(Boolean).map((l) => ({ mode: l.split(/\s+/)[0], file: l.split('\t')[1] }));
   assert.ok(rows.length >= 3, 'template hooks found: ' + rows.map((r) => r.file).join(', '));
   const notExec = rows.filter((r) => r.mode !== '100755').map((r) => r.file + ' (' + r.mode + ')');
   assert.deepEqual(notExec, [], 'git skips a non-executable hook on POSIX: the fence would be silently absent');
   const notLf = rows.filter((r) => {
-    const a = spawnSync('git', ['check-attr', 'eol', '--', r.file], { cwd: ROOT, encoding: 'utf8' });
+    const a = spawnSync('git', ['check-attr', 'eol', '--', r.file], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
     return !/: eol: lf\s*$/.test(a.stdout.trim());
   }).map((r) => r.file);
   assert.deepEqual(notLf, [], 'a CRLF working copy of a /bin/sh hook is "bad interpreter" on POSIX');
@@ -108,7 +108,7 @@ test('private-working pre-push fails CLOSED when node is missing (exit 1, says s
   if (!hasTool('sh', ['-c', 'exit 0'])) { t.skip('no sh on PATH'); return; }
   // A PATH that holds no node, set INSIDE the shell (so the shell itself is found the normal way and no
   // shell-specific trick is needed: dash on a Linux runner and bash on Windows both honour it).
-  const r = spawnSync('sh', ['-c', 'PATH=/nonexistent-dir; . "$1"', 'sh', PW_PREPUSH], { encoding: 'utf8' });
+  const r = spawnSync('sh', ['-c', 'PATH=/nonexistent-dir; . "$1"', 'sh', PW_PREPUSH], { encoding: 'utf8', timeout: 30000 });
   assert.equal(r.status, 1, 'exit ' + r.status + ' stderr=' + r.stderr);
   assert.match(r.stderr, /node not found/);
   assert.doesNotMatch(r.stderr, /SKIPPED/);
@@ -118,8 +118,8 @@ test('private-working pre-push refuses (exit 1) and names scripts/gate.mjs when 
   if (!hasTool('sh', ['-c', 'exit 0']) || !hasTool('git', ['--version'])) { t.skip('no sh or git on PATH'); return; }
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'pw-prepush-'));
   try {
-    assert.equal(spawnSync('git', ['init', '-q'], { cwd: repo }).status, 0);
-    const r = spawnSync('sh', [PW_PREPUSH], { cwd: repo, encoding: 'utf8' });
+    assert.equal(spawnSync('git', ['init', '-q'], { cwd: repo, timeout: 30000 }).status, 0);
+    const r = spawnSync('sh', [PW_PREPUSH], { cwd: repo, encoding: 'utf8', timeout: 30000 });
     assert.equal(r.status, 1, 'exit ' + r.status + ' stderr=' + r.stderr);
     assert.match(r.stderr, /scripts\/gate\.mjs/);
     assert.doesNotMatch(r.stderr, /MODULE_NOT_FOUND|Cannot find module/, 'a human message, not a node stack trace');
@@ -571,24 +571,29 @@ test('the layout check passes a folder-rooted archive and fails one whose SKILL.
 // UMB-334 (2): testing.md, every test run has a finite clock. A spawn with no timeout can hold a runner for the job's
 // whole 360 minutes and report nothing. This reads every spawn call in a template's test files (a skeleton or overlay a
 // room copies), through to the closing parenthesis of its arguments, and fails on one that names no timeout.
-test('every spawn in a template test passes a timeout (testing.md: every test run has a finite clock; RED before UMB-334)', () => {
-  const found = [];
+test('every spawn in a test file passes a timeout, and a node child in this repository itself also runs under a heap cap (testing.md: every test run has a finite clock; RED before UMB-334 and UMB-365 J)', () => {
+  const missingTimeout = []; const missingHeap = [];
   const walk = (d) => {
     for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      if (e.name === 'node_modules' || e.name === '.git' || e.name === '.claude') continue;
       const p = path.join(d, e.name);
-      if (e.isDirectory()) walk(p);
-      else if (e.name.endsWith('.test.mjs')) {
-        const t = fs.readFileSync(p, 'utf8');
-        for (const m of t.matchAll(/\b(spawnSync|execFileSync|execSync|spawn)\(/g)) {
-          let depth = 1; let i = m.index + m[0].length;
-          for (; i < t.length && depth > 0; i++) { if (t[i] === '(') depth++; else if (t[i] === ')') depth--; }
-          if (!/timeout/.test(t.slice(m.index, i))) found.push(`${path.relative(ROOT, p).replace(/\\/g, '/')}:${t.slice(0, m.index).split('\n').length}`);
-        }
+      if (e.isDirectory()) { walk(p); continue; }
+      if (!e.name.endsWith('.test.mjs')) continue;
+      const t = fs.readFileSync(p, 'utf8');
+      const rel = path.relative(ROOT, p).replace(/\\/g, '/');
+      for (const m of t.matchAll(/\b(spawnSync|execFileSync|execSync|spawn)\(/g)) {
+        let depth = 1; let i = m.index + m[0].length;
+        for (; i < t.length && depth > 0; i++) { if (t[i] === '(') depth++; else if (t[i] === ')') depth--; }
+        const call = t.slice(m.index, i); const at = rel + ':' + t.slice(0, m.index).split('\n').length;
+        if (!/timeout/.test(call)) missingTimeout.push(at);
+        // templates are copied into rooms and blob-pinned by them, and scripts/secret-gate.test.mjs is byte-equal to the templates copy: a heap cap there is a named decision, not part of this walk
+        if (!rel.startsWith('templates/') && rel !== 'scripts/secret-gate.test.mjs' && /process\.execPath/.test(call) && !/max-old-space-size/.test(call)) missingHeap.push(at);
       }
     }
   };
-  walk(path.join(ROOT, 'templates'));
-  assert.deepEqual(found, [], 'spawn calls with no timeout: ' + found.join(', '));
+  for (const top of ['templates', 'scripts', 'benchmarks']) walk(path.join(ROOT, top));
+  assert.deepEqual(missingTimeout, [], 'spawn calls with no timeout: ' + missingTimeout.join(', '));
+  assert.deepEqual(missingHeap, [], 'node children with no heap cap: ' + missingHeap.join(', '));
 });
 
 // AX-3 (owner-signed 2026-10-03): the article template's CI fails a push to the default branch that carries a commit made by

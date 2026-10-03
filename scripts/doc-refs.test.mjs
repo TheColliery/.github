@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'doc-refs.mjs');
 
 function run(rootDir) {
-  return spawnSync(process.execPath, [SCRIPT, rootDir], { encoding: 'utf8' });
+  return spawnSync(process.execPath, ['--max-old-space-size=512', SCRIPT, rootDir], { encoding: 'utf8', timeout: 60000 });
 }
 
 function scratchRoot() {
