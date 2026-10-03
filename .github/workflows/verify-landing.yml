@@ -16,6 +16,12 @@ on:
 permissions:
   contents: read
 
+# cancel-in-progress: TRUE -- the gate reads, tests and compares; it publishes nothing and touches no
+# external state, so a superseded run has nothing to leave half-done (a newer push carries its own run).
+concurrency:
+  group: verify-landing-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: ubuntu-latest

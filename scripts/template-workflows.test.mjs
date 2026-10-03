@@ -748,3 +748,43 @@ test('gate behaviour: a failed tag-list read is reported as a failed read, not a
   r = runGate({ INPUT_TAG: 'v9.9.9' });
   assert.equal(r.code, 1); assert.match(r.err, /not a tag of this repository/); assert.ok(!/could not read/.test(r.err));
 });
+
+// UMB-379 (12): the monthly source sweep writes REVALIDATION.md and the upload step keeps it. A sweep step that fails (a source
+// moved, the very thing the sweep exists to report) skipped the upload under the default success() condition, so the report of the
+// failure was lost with it. The upload takes !cancelled(): it runs after a failed sweep, not after a cancelled run, and still
+// waits for the room's own sweeper to exist.
+test("the article template's watch-sources upload step runs after a failed sweep (!cancelled()) and still waits for the sweeper -- RED before UMB-379", () => {
+  const wf = fs.readFileSync(path.join(TEMPLATES, 'article', '.github', 'workflows', 'watch-sources.yml'), 'utf8').split(/\r?\n/);
+  const at = wf.findIndex((l) => /uses:\s*actions\/upload-artifact@/.test(l));
+  assert.ok(at > 0, 'the upload step exists');
+  const cond = wf.slice(at, at + 3).find((l) => /^\s+if:/.test(l));
+  assert.ok(cond, 'the upload step has an if: line');
+  assert.match(cond, /!cancelled\(\)/);
+  assert.match(cond, /hashFiles\('tools\/watch-sources\.mjs'\) != ''/);
+});
+
+// UMB-347: the canon makes a concurrency: group a MUST for every workflow (SKILL-REPO-PATTERN.md, the concurrency bullet; the test is
+// ATOMICITY). Four of this repo's own workflows carried none. The sizing, by what a killed run leaves behind: a read-only run
+// (markdownlint, verify-landing) cancels; enabling auto-merge is idempotent inside one PR's own group, so it cancels per PR number;
+// update-readme pushes a commit to main and is a schedule-driven publish whose overlap costs nothing to queue, so it never cancels.
+test("this repo's own workflows each carry a top-level concurrency group, sized by atomicity (RED before UMB-347)", () => {
+  const want = {
+    'dependabot-auto-merge.yml': { group: /^dependabot-auto-merge-\$\{\{ github\.event\.pull_request\.number \}\}$/, cancel: 'true' },
+    'markdownlint.yml': { group: /^markdownlint-\$\{\{ github\.ref \}\}$/, cancel: 'true' },
+    'verify-landing.yml': { group: /^verify-landing-\$\{\{ github\.ref \}\}$/, cancel: 'true' },
+    'update-readme.yml': { group: /^update-readme$/, cancel: 'false' },
+  };
+  for (const [name, w] of Object.entries(want)) {
+    const ls = lines(path.join(OWN_WF, name));
+    const at = ls.indexOf('concurrency:');
+    assert.ok(at >= 0, `${name}: a top-level concurrency: block`);
+    const group = ls[at + 1].match(/^ {2}group: (.+)$/);
+    const cancel = ls[at + 2].match(/^ {2}cancel-in-progress: (.+)$/);
+    assert.ok(group && w.group.test(group[1]), `${name}: group ${group && group[1]}`);
+    assert.equal(cancel && cancel[1], w.cancel, `${name}: cancel-in-progress`);
+    assert.ok(at < ls.indexOf('jobs:'), `${name}: the block sits before jobs:`);
+  }
+  // every workflow this repo runs has a block (a fifth added later cannot skip the canon)
+  const bare = fs.readdirSync(OWN_WF).filter((f) => /\.ya?ml$/.test(f)).filter((f) => !lines(path.join(OWN_WF, f)).includes('concurrency:'));
+  assert.deepEqual(bare, []);
+});
