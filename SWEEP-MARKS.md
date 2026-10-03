@@ -94,7 +94,7 @@ the last ACTUAL scan (Event 3 owns it). Bumping it without a scan fabricates cov
 **Owner:** the skillspector deputy owns the pin; the room reviewer's job is to make sure
 nobody TOUCHES it.
 
-## Event 3—SkillSpector re-scan (automatic since 2026-09-20 on E2, a room's version bump; E1, a new scanner version, retired 2026-09-26) · 3 marks
+## Event 3—SkillSpector re-scan (planned on E2, a room's version bump, wired in no room yet, so run by hand today; E1, a new scanner version, retired 2026-09-26) · 3 marks
 
 | # | Mark | Where | Owner |
 |---|---|---|---|
@@ -102,8 +102,7 @@ nobody TOUCHES it.
 | 2 | Scan reports stay local | `skillspector-*.json` gitignored, never committed | skillspector deputy |
 | 3 | The scan record (dated, per-repo scores, FP verdicts) | machine-local registry/memory | skillspector deputy |
 
-**Trigger: automatic since the owner's order of 2026-09-20, never a manual switch.** E2: a
-room's version bump re-scans that room, gated by a per-room baseline diff. When the whole fleet
+**Trigger: the owner's order of 2026-09-20 is that a room's version bump re-scans that room (E2), gated by a per-room baseline diff, and that this is never a manual switch. Status today: planned, wired in no room yet (UMB-136 to UMB-140), so a re-scan is run by the skillspector deputy by hand until the machinery lands, and this section says "automatic" only from the day a room's pre-publish step and post-release workflow exist.** When the whole fleet
 has been scanned on one version, the `.github` deputy bumps `.skillspector-version` to it.
 E1, the weekly `skillspector-version-watch.yml` that opened an issue when upstream moved past
 `.skillspector-version`, was retired on the owner's word on 2026-09-26; a new upstream version

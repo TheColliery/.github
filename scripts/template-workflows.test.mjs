@@ -707,6 +707,16 @@ test('published-code SECURITY.md: the SkillSpector pin names a commit and its re
   assert.match(t, /wired in no room yet|not yet wired/i, 'the comment says what is true today');
 });
 
+// UMB-367 ruling 4: a doc claims only shipped behaviour. The SkillSpector re-scan on a room's version bump (E2) is wired in no room
+// yet, so SWEEP-MARKS.md Event 3 says planned, not automatic, until the machinery lands.
+test('SWEEP-MARKS.md Event 3 says the E2 re-scan is planned and wired in no room yet, never "automatic since" (RED before UMB-367)', () => {
+  const t = fs.readFileSync(path.join(ROOT, 'SWEEP-MARKS.md'), 'utf8');
+  const ev3 = t.slice(t.indexOf('## Event 3'), t.indexOf('## Event 4'));
+  assert.ok(ev3.length > 200, 'the Event 3 section was found');
+  assert.doesNotMatch(ev3, /automatic since/i);
+  assert.match(ev3, /wired in no room yet/);
+});
+
 // UMB-334 / CoalGob H2: a hook or gate comment never claims the scan catches a form it misses. The scanner has no rule for a
 // credential inside a URL (scheme://user:pass@host) and none for an HTTP authentication header as such, so no template hook or
 // gate may name a connection string or an authentication header as something it catches; each says what the scan catches and
