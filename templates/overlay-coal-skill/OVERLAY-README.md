@@ -27,6 +27,18 @@ generated copies are built from, and what it holds):
 * **Synchronize `plugin/`:** rebuild the distribution after modifying source, hooks, or the manifest.
 * **Keep hooks Phoenix-pure:** zero dependencies, fail-silent (wrap in try/catch, never exit non-zero), 100% local — hooks ship a hermetic spawn test.
 
+## Adopt it as one set (UMB-348)
+
+A room carries exactly one release workflow, `claude-ai-zips.yml` or `create-release.yml`, and adopts it as ONE set: the workflow, every script it runs, every file those import, and the test beside each, all byte-equal by blob id. Two blobs alone broke a room's tag-push run: the workflow ran a `release-notes.mjs` the room had not updated.
+
+```bash
+node scripts/overlay-set.mjs claude-ai-zips.yml   # the set for that workflow, one "<blob id>  <path>" line per file
+git hash-object scripts/release-notes.mjs         # a room's copy, to compare with the blob id above
+node scripts/skeleton-check.mjs                   # every live room, file by file: identical, DIFFERS (both blob ids) or ABSENT
+```
+
+The set is derived from the workflow, so the list cannot rot. The files it names as `room-owned` (`scripts/verify.mjs`, `scripts/lib/desc-cap.mjs`, `scripts/lib/claude-ai-trim.mjs`) are written by the room and checked for presence only. Both workflows also check, right after the derive step, that `release-title.txt`, `release-body.md`, `release-prerelease.txt` and `release-latest.txt` exist, and stop with a message that names the stale `release-notes.mjs` before any `gh release` call.
+
 ## Included this pass
 
 - `.github/workflows/claude-ai-zips.yml` + `scripts/build-claude-ai-zips.mjs` — the

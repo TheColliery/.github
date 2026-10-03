@@ -43,6 +43,7 @@ import path from 'path';
 import { fileURLToPath } from 'node:url';
 import { findRepos as findReposLib, SKELETON_FILES, TEMPLATE_DIR_FOR_KIND, parseGithubOrigin, matchesWithPlaceholders, formatDetailsTable, liveFileVerdict, gitRemoteState, noRemoteVerdict } from './lib/skeleton-check-lib.mjs';
 import { isLicenseStub, licenseIdentityMismatches } from './lib/license-check-lib.mjs';
+import { compareOverlaySet } from './lib/overlay-set.mjs';
 import { rulesetMatchesSpec, gateBypassVerdicts, gateCheckSourceVerdicts, leftoverRulesets } from './lib/ruleset-match.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -359,6 +360,26 @@ async function main() {
         }
       } catch (e) {
         console.log(`  ${rel}: FAIL comparing (${e.message})`);
+        failed++;
+      }
+    }
+    // UMB-348: an overlay is adopted as ONE set. A room carrying a canon release workflow is judged on every file the workflow runs
+    // (derived from the workflow, scripts/lib/overlay-set.mjs), by blob id; a stale or missing script is a named row, not a failed tag run.
+    if (kind === 'published-code') {
+      try {
+        const ov = compareOverlaySet(repo.dir, path.join(templatesRoot, 'overlay-coal-skill'));
+        if (ov.problem) console.log(`  [overlay]: ${ov.problem}`);
+        else if (ov.carried.length === 1) {
+          const bad = ov.rows.filter((r) => r.status !== 'identical' && r.status !== 'present (room-owned)');
+          const own = ov.rows.filter((r) => r.status.endsWith('(room-owned)')).length;
+          const n = (pred) => ov.rows.filter(pred).length;
+          const head = `  [overlay ${ov.carried[0]}] ${ov.rows.length - own} files + ${own} room-owned: `;
+          const ownAbsent = n((r) => r.status === 'ABSENT (room-owned)');
+          console.log(bad.length ? `${head}${n((r) => r.status.startsWith('DIFFERS'))} DIFFERS, ${n((r) => r.status === 'ABSENT')} ABSENT${ownAbsent ? `, ${ownAbsent} room-owned ABSENT` : ''}` : `${head}all identical`);
+          for (const r of bad) console.log(`    ${r.file}: ${r.status}`);
+        }
+      } catch (e) {
+        console.log(`  [overlay]: FAIL comparing (${e.message})`);
         failed++;
       }
     }

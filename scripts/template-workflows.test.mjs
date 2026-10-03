@@ -788,3 +788,41 @@ test("this repo's own workflows each carry a top-level concurrency group, sized 
   const bare = fs.readdirSync(OWN_WF).filter((f) => /\.ya?ml$/.test(f)).filter((f) => !lines(path.join(OWN_WF, f)).includes('concurrency:'));
   assert.deepEqual(bare, []);
 });
+
+// UMB-348 (b): CoalFace adopted claude-ai-zips.yml without the release-notes.mjs it runs (its own copy was an older blob), the derive step
+// wrote no release files, and the run died at the Release step with a gh usage dump. A check right after the derive step stops the run
+// with a message that names the stale script, before any gh release call. Both canon workflows carry it, line for line.
+const DERIVE_NAME = 'Derive the canon Release title + body from CHANGELOG.md';
+const DERIVE_CHECK = 'Check the derive step wrote its four release files';
+const FOUR = ['release-title.txt', 'release-body.md', 'release-prerelease.txt', 'release-latest.txt'];
+test('both canon workflows check the four derived release files in the step right after the derive step, before any gh release call -- RED before UMB-348', () => {
+  for (const name of BOTH) {
+    const ls = wfLines(name);
+    const derive = ls.findIndex((l) => /^ {6}- name: /.test(l) && l.includes(DERIVE_NAME));
+    const chk = ls.findIndex((l) => /^ {6}- name: /.test(l) && l.includes(DERIVE_CHECK));
+    assert.ok(derive >= 0 && chk > derive, `${name}: the check step follows the derive step`);
+    assert.equal(ls.slice(derive + 1, chk).filter((l) => /^ {6}- name: /.test(l)).length, 0, `${name}: no other step between them`);
+    const firstGh = ls.findIndex((l) => !l.trim().startsWith('#') && /\bgh release\b/.test(l));
+    assert.ok(chk < firstGh, `${name}: the check comes before the first gh release call`);
+    assert.equal(stepBlock(ls, stepBySubstr(ls, DERIVE_CHECK)[0].replace(/^ {6}- name: /, '')), stepBlock(wfLines('create-release.yml'), stepBySubstr(wfLines('create-release.yml'), DERIVE_CHECK)[0].replace(/^ {6}- name: /, '')), `${name}: same lines in both workflows`);
+  }
+});
+
+test('derive check behaviour: all four files present passes; any one missing or empty stops with a message naming the file and release-notes.mjs', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  const body = runBody(stepBySubstr(wfLines('claude-ai-zips.yml'), DERIVE_CHECK));
+  const probe = (omit, emptyOne) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'derive-check-'));
+    for (const f of FOUR) if (f !== omit) fs.writeFileSync(path.join(dir, f), f === emptyOne ? '' : 'x\n');
+    const r = spawnSync('bash', ['-c', body], { encoding: 'utf8', timeout: 30000, cwd: dir });
+    fs.rmSync(dir, { recursive: true, force: true });
+    return { code: r.status, err: r.stderr + r.stdout };
+  };
+  assert.equal(probe(null, null).code, 0);
+  for (const f of FOUR) {
+    for (const r of [probe(f, null), probe(null, f)]) {
+      assert.equal(r.code, 1, f);
+      assert.match(r.err, new RegExp(f.replace('.', '\.')), `${f}: the message names the file`);
+      assert.match(r.err, /release-notes\.mjs/, `${f}: the message names the stale script`);
+    }
+  }
+});
