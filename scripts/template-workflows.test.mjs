@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // GitHub's own context-availability table (docs: contexts.md, "jobs.<job_id>.if") allows only
 // always/cancelled/success/failure at JOB level -- hashFiles is available at STEP level only.
@@ -645,6 +645,50 @@ test("the article template's .gitignore names PUBLISHING.md (the maintainer's ru
   const g = fs.readFileSync(path.join(TEMPLATES, 'article', '.gitignore'), 'utf8').split(/\r?\n/);
   assert.ok(g.includes('PUBLISHING.md'), 'PUBLISHING.md must be an ignore line of its own');
   assert.ok(!g.some((l) => /Push-ToGitBook/.test(l)), 'a retired one-repository script is not a canon line');
+});
+
+// UMB-365 (5): an overlay is adopted as the WHOLE set, never a pair (two blobs alone broke a room's tag-push run at its derive
+// step). The set is closed: every script a workflow of the overlay runs, and every file those scripts import, is a file of the
+// overlay itself or a room-owned file OVERLAY-README.md names (desc-cap, claude-ai-trim, the room's own verify.mjs), so a room that
+// copies the files the overlay lists, and writes the ones the README names, has everything the workflow needs. The adoption line
+// says so.
+test('the overlay is a closed set: every script its workflows run, and every file those import, is in the overlay or a room-owned file OVERLAY-README names; SKILL-REPO-PATTERN says it is adopted whole by blob id (RED before UMB-365)', () => {
+  const OV = path.join(TEMPLATES, 'overlay-coal-skill');
+  const readme = fs.readFileSync(path.join(OV, 'OVERLAY-README.md'), 'utf8');
+  const roomOwned = (rel) => ['scripts/verify.mjs', 'scripts/lib/desc-cap.mjs', 'scripts/lib/claude-ai-trim.mjs'].includes(rel) && readme.includes(path.posix.basename(rel));
+  const have = (rel) => fs.existsSync(path.join(OV, rel)) || roomOwned(rel);
+  const seen = new Set(); const missing = [];
+  const visit = (rel) => {
+    if (seen.has(rel)) return; seen.add(rel);
+    if (!have(rel)) { missing.push(rel); return; }
+    if (!fs.existsSync(path.join(OV, rel))) return; // a room-owned file: named by the README, written by the room
+    const t = fs.readFileSync(path.join(OV, rel), 'utf8');
+    for (const m of t.matchAll(/from\s+['"](\.{1,2}\/[^'"]+\.mjs)['"]|import\(\s*['"](\.{1,2}\/[^'"]+\.mjs)['"]/g)) visit(path.posix.normalize(path.posix.join(path.posix.dirname(rel), m[1] || m[2])));
+  };
+  for (const wf of ['claude-ai-zips.yml', 'create-release.yml']) {
+    const y = fs.readFileSync(path.join(OV, '.github', 'workflows', wf), 'utf8').split(/\r?\n/).filter((l) => !/^\s*#/.test(l)).join('\n');
+    for (const m of y.matchAll(/scripts\/([A-Za-z0-9._\/-]+\.mjs)/g)) visit('scripts/' + m[1]);
+  }
+  assert.deepEqual(missing, [], 'the workflows need files the overlay does not carry: ' + missing.join(', '));
+  assert.ok(seen.size >= 6, 'the walk found the closure (not vacuous): ' + [...seen].join(', '));
+  const t = fs.readFileSync(path.join(ROOT, 'SKILL-REPO-PATTERN.md'), 'utf8');
+  assert.match(t, /adopted as the WHOLE set, by blob id, never a pair/, 'the adoption line');
+});
+
+// UMB-365 (4) / CoalHearth: RELEASE-PATTERN.md said "Condensing is allowed" for Part 2 while the derivation posts the entry's
+// sections UNCHANGED, and it listed Parts 3-5 after Part 2 without saying where the CHANGELOG entry carries them. The derivation
+// drops everything between the summary line and the first "### " heading, so a Part 3-5 block placed there never reaches the body.
+test('RELEASE-PATTERN.md: condensing happens in the CHANGELOG entry, never at release time; Parts 3-5 go AFTER the last "### " section (a block before the first one is dropped) (RED before UMB-365)', async () => {
+  const t = fs.readFileSync(path.join(ROOT, 'RELEASE-PATTERN.md'), 'utf8');
+  assert.doesNotMatch(t, /Condensing is allowed;/, 'the unqualified permission contradicts the unchanged derivation');
+  assert.match(t, /condensed when the CHANGELOG entry is written, never when the Release is posted/, 'where condensing happens');
+  assert.match(t, /after the last `### ` section of the entry/, 'where Parts 3-5 go');
+  const lib = await import(pathToFileURL(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', 'release-shape.mjs')).href);
+  const entry = (block) => `## [1.2.3] - 2026-10-03\n\nA lead sentence.\n\n${block.before}### Fixed\n- a fix\n\n${block.after}\n## [1.2.2] - 2026-09-01\n\nOld.\n\n### Fixed\n- old\n`;
+  const before = lib.extractChangelogEntry(entry({ before: '**What you need to do:** run the update.\n\n', after: '' }), '1.2.3');
+  assert.ok(!before.sectionsBody.includes('run the update'), 'a Part 3 block before the first ### heading is dropped by the derivation');
+  const after = lib.extractChangelogEntry(entry({ before: '', after: '**What you need to do:** run the update.\n' }), '1.2.3');
+  assert.ok(after.sectionsBody.includes('run the update'), 'a Part 3 block after the last section rides into the body');
 });
 
 // UMB-334 / CoalGob H2: a hook or gate comment never claims the scan catches a form it misses. The scanner has no rule for a
