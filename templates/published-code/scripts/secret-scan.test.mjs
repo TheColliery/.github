@@ -237,7 +237,12 @@ test('a provider key right after a literal backslash-n/r/t or a %XX escape is st
 const GITCFG = ['-c', 'user.name=scan-test', '-c', 'user.email=scan-test@example.invalid', '-c', 'commit.gpgsign=false',
   '-c', 'tag.gpgsign=false', '-c', 'core.autocrlf=false'];
 const ZERO40 = '0'.repeat(40);
-const gitAt = (cwd) => (args) => execFileSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 64 << 20, timeout: 30000, stdio: ['ignore', 'pipe', 'pipe'] });
+// A git step whose working directory has vanished dies with git's own 'fatal: Unable to read current working directory' (measured once in four
+// runs in a sibling room), which names no cause. Assert the directory is still there before every step so the failure names it.
+const gitAt = (cwd) => (args) => {
+  assert.ok(fs.existsSync(cwd), `git step '${args[0]}': its working directory ${cwd} no longer exists (the temp root was removed under the test)`);
+  return execFileSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 64 << 20, timeout: 30000, stdio: ['ignore', 'pipe', 'pipe'] });
+};
 function inTemp(fn) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'secret-scan-test-'));
   try { return fn(root); } finally {
@@ -246,6 +251,11 @@ function inTemp(fn) {
     fs.rmSync(root, { recursive: true, force: true });
   }
 }
+test('a git step in a directory that no longer exists fails with a named cause, never the bare git cwd error', () => {
+  const gone = path.join(os.tmpdir(), 'secret-scan-test-gone-' + process.pid + '-' + Date.now());
+  assert.throws(() => gitAt(gone)(['status']), /no longer exists/);
+});
+
 function repoIn(root, name, { bare = false } = {}) {
   const d = path.join(root, name);
   fs.mkdirSync(d);
