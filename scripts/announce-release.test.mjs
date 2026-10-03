@@ -146,19 +146,42 @@ test('CLI: -h exits 0 with the usage; an argument is exit 64; a missing token an
   r = cli([], { INPUT_REPO: '../etc', INPUT_TAG: 'v1.0.0', GH_TOKEN: 'x' }); assert.equal(r.status, 1); assert.match(r.stderr, /not a repository name/);
 });
 
-test('the workflow is DARK: a manual trigger only (no schedule, push or release), the write permission at the job only, a never-cancel group, a dry run by default', () => {
+test('the workflow runs on a six-hourly schedule and by hand: only those two triggers, a scheduled run posts a 12-hour window, a manual run is a dry run unless post is true, the write permission at the job only, a never-cancel group', () => {
   const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'announce-release.yml'), 'utf8').replace(/\r\n/g, '\n');
   const code = y.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
   const on = code.match(/^on:\n((?: {2}.*\n|\n)+)/m)[1];
-  assert.deepEqual([...on.matchAll(/^ {2}([a-z_]+):/gm)].map((m) => m[1]), ['workflow_dispatch'], 'the only trigger');
-  assert.doesNotMatch(code, /\bschedule:|\bcron:/);
+  assert.deepEqual([...on.matchAll(/^ {2}([a-z_]+):/gm)].map((m) => m[1]), ['schedule', 'workflow_dispatch'], 'the only triggers: no push, release or pull_request');
+  const crons = [...code.matchAll(/^ {4}- cron: '([^']+)'$/gm)].map((m) => m[1]);
+  assert.equal(crons.length, 1, 'one cron');
+  assert.match(crons[0], /^\d{1,2} \*\/6 \* \* \*$/, 'six-hourly, at a fixed minute');
+  assert.notEqual(crons[0].split(' ')[0], '0', 'not on the hour');
   assert.match(code, /^permissions: \{\}$/m);
   assert.match(code, /^ {4}permissions:\n {6}contents: read\n {6}discussions: write$/m);
   assert.match(code, /^concurrency:\n {2}group: announce-release\n {2}cancel-in-progress: false$/m);
-  assert.match(code, /post:\n(?: {8}.*\n)*? {8}default: false/, 'post defaults to false');
+  assert.match(code, /post:\n(?: {8}.*\n)*? {8}default: false/, 'a manual run still defaults to a dry run');
+  assert.match(code, /^ {10}INPUT_POST: \$\{\{ github\.event_name == 'schedule' && 'true' \|\| inputs\.post \}\}$/m, 'a scheduled run posts; a manual run follows its input');
+  assert.match(code, /^ {10}INPUT_WINDOW_HOURS: \$\{\{ github\.event_name == 'schedule' && '12' \|\| inputs\.window_hours \}\}$/m, 'twice the period: one skipped run is covered, a backlog is never announced');
   assert.match(code, /GH_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}/, 'the workflow token, no new credential');
   assert.match(code, /INPUT_REPO: \$\{\{ inputs\.repo \}\}/, 'inputs reach the script through env, never interpolated into run:');
   assert.doesNotMatch(code, /run:[^\n]*\$\{\{/, 'no expression inside a run: line');
+});
+
+test('sweep: a pre-release (a launch-form Release) is not announced by the sweep; a stable one is. A named repo and tag still posts a pre-release by hand', async () => {
+  const rel = (tag, extra = {}) => ({ tag_name: tag, name: tag + ' - s', body: 'b', html_url: 'https://x/' + tag, draft: false, published_at: hoursAgo(2), ...extra });
+  const repos = { A: { name: 'A', private: false, html_url: 'https://x/A', releases: [rel('v1.0.0'), rel('v1.1.0-beta.1', { prerelease: true })] } };
+  const gh = fakeGithub({ repos });
+  const r = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, windowHours: 12, post: true, repo: '', tag: '' });
+  assert.deepEqual(r, { posted: 1, 'would-post': 0, already: 0, failed: 0 });
+  assert.deepEqual(gh.st.discussions.map((d) => d.title), ['A v1.0.0 - s']);
+  const by = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, windowHours: 12, post: true, repo: 'A', tag: 'v1.1.0-beta.1' });
+  assert.deepEqual(by, { posted: 1 });
+});
+
+test('a scheduled run with nothing new posts nothing and says so', async () => {
+  const gh = fakeGithub({ repos: { A: { name: 'A', private: false, html_url: 'https://x/A', releases: [{ tag_name: 'v1.0.0', name: 'v1.0.0 - s', body: 'b', html_url: 'https://x/v1', draft: false, published_at: hoursAgo(100) }] } } });
+  const logs = []; const r = await run({ token: TOKEN, fetchImpl: gh.f, log: (l) => logs.push(l), windowHours: 12, post: true, repo: '', tag: '' });
+  assert.deepEqual(r, { posted: 0, 'would-post': 0, already: 0, failed: 0 }); assert.equal(gh.st.creates, 0);
+  assert.match(logs.join('\n'), /sweep: 0 Release\(s\) published in the last 12 hours/);
 });
 
 // BA-14 / the first live post (discussion 23, CoalBoard v2.7.0): a 211-character title was cut at the 200 cap and GitHub stored it as 199,

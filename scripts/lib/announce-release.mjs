@@ -136,7 +136,8 @@ export async function sweep(api, target, { post, log, windowHours, now = Date.no
   const due = [];
   for (const r of repos.filter((x) => !x.archived && !x.fork && !x.is_template && !x.private).sort((a, b) => (a.name < b.name ? -1 : 1))) {
     const list = await api.rest(`/repos/${ORG}/${r.name}/releases?per_page=10`);
-    for (const rel of list) if (!rel.draft && rel.published_at && Date.parse(rel.published_at) >= since && TAG_RE.test(rel.tag_name)) due.push({ repo: r.name, tag: rel.tag_name, at: Date.parse(rel.published_at) });
+    // A stable Release only: a pre-release (the launch form) is a repo's own announcement and goes by hand, with a repo and a tag.
+    for (const rel of list) if (!rel.draft && !rel.prerelease && rel.published_at && Date.parse(rel.published_at) >= since && TAG_RE.test(rel.tag_name)) due.push({ repo: r.name, tag: rel.tag_name, at: Date.parse(rel.published_at) });
   }
   due.sort((a, b) => a.at - b.at);
   log(`sweep: ${due.length} Release(s) published in the last ${windowHours} hours`);
