@@ -12,6 +12,6 @@ AI agents author most of the code, tests and documentation. They work inside the
 
 ## Where to report
 
-Defects and questions go to the repository's issue tracker ([SUPPORT.md](SUPPORT.md)), security reports to the channel in [SECURITY.md](SECURITY.md), conduct concerns to [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+Defects and questions go to the repository's issue tracker ([how to get help](https://github.com/TheColliery/.github/blob/main/.github/SUPPORT.md)), security reports to the channel in [SECURITY.md](SECURITY.md), conduct concerns to [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 The maintainer's internal working rules are private. This file is the public summary of who decides and how, not a copy of them.

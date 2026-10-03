@@ -31,6 +31,15 @@ test('GOVERNANCE.md: the org default and the published-code template copy are by
   for (const must of [/One maintainer decides/, /How a change is accepted/, /Who writes the changes/, /Co-Authored-By/, /Where to report/]) assert.match(own, must);
 });
 
+// UMB-376 LOW: the template's Where-to-report line linked SUPPORT.md, which the template does not ship (SUPPORT is an org default a room
+// inherits), so every new repository started with a dead link. A relative link in the shipped template must resolve inside the template.
+test('GOVERNANCE.md in the published-code template: every relative link resolves to a file the template ships (RED before UMB-376)', () => {
+  const text = read('templates/published-code/GOVERNANCE.md');
+  const rels = [...text.matchAll(/\]\(([^)#\s]+)\)/g)].map((m) => m[1]).filter((l) => !/^[a-z][a-z0-9+.-]*:/i.test(l));
+  assert.ok(rels.length >= 2, 'the file links at least SECURITY.md and CODE_OF_CONDUCT.md (not vacuous)');
+  assert.deepEqual(rels.filter((l) => !exists('templates/published-code/' + l)), []);
+});
+
 test('the five small defaults stay lean, and none carries an e-mail address (the org domain takes no mail)', () => {
   for (const f of LEAN) {
     const text = read('.github/' + f);
