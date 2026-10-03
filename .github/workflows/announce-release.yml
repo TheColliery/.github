@@ -1,0 +1,76 @@
+name: announce-release
+
+# The Discussions release-announcement PILOT (UMB-344), built DARK: a manual trigger only, so nothing posts until the owner's
+# switch. It mirrors a Release that is ALREADY published into the organisation's Announcements discussions (the org page's source
+# repository is this one), using the workflow's own token with discussions: write and no other credential. Why this shape, and why
+# the Releases API's discussion_category_name cannot do it (it opens the discussion in the Release's own repository):
+# scripts/lib/announce-release.mjs.
+#
+# A run with post left false only prints what it would open. post: true opens one discussion per Release, once (a marker in the body
+# makes a second run a no-op), and reads it back.
+#
+# TO SWITCH IT ON (the owner's call, then a head's one-line commit): add a `schedule:` trigger beside workflow_dispatch and set
+# INPUT_POST to the string true for scheduled runs. With no repo input the script sweeps every Release published in the last
+# window_hours (default 48), so a six-hourly schedule announces each new Release once.
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: 'A TheColliery repository name. Leave empty to sweep every Release published in the last window_hours.'
+        required: false
+        type: string
+        default: ''
+      tag:
+        description: 'The vX.Y.Z tag of a published Release (needed with repo).'
+        required: false
+        type: string
+        default: ''
+      post:
+        description: 'Post the discussion. False (the default) only prints what would be posted.'
+        required: false
+        type: boolean
+        default: false
+      window_hours:
+        description: 'Sweep only: how far back a Release counts as new (1 to 744).'
+        required: false
+        type: string
+        default: '48'
+
+# Nothing at the workflow level; the one job declares its own scopes (SKILL-REPO-PATTERN.md, Layer 5).
+permissions: {}
+
+# cancel-in-progress: FALSE -- the job opens a public discussion, a publish; a run killed after the create but before the read-back
+# would leave a post nobody verified, so a second run waits for the first (SKILL-REPO-PATTERN.md's concurrency bullet).
+concurrency:
+  group: announce-release
+  cancel-in-progress: false
+
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10 # testing.md: every run has a finite clock; a room re-sizes this from its own measured suite time
+    permissions:
+      contents: read
+      discussions: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # This job pushes nothing, so the workflow token has no business staying in .git/config for the
+          # rest of the job, readable by every later step (SKILL-REPO-PATTERN.md, Layer 5).
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Announce the Release (a dry run unless post is true)
+        env:
+          # Inputs reach the script through env, never interpolated into the run: line (GitHub's hardening guide: script injection).
+          INPUT_REPO: ${{ inputs.repo }}
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_POST: ${{ inputs.post }}
+          INPUT_WINDOW_HOURS: ${{ inputs.window_hours }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/announce-release.mjs

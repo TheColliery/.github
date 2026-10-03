@@ -1,0 +1,162 @@
+// UMB-344: the Discussions release-announcement pilot. A machine mirror of an already-published Release into the organisation's
+// Announcements discussions, built DARK (the workflow has a manual trigger only, so nothing posts until the owner's switch). These
+// tests run the real code against an in-memory GitHub: dry runs post nothing, a post is idempotent and read back, a private repository,
+// a draft and a missing category are refused, and the token is never printed.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { run, neutralizeMentions, buildAnnouncement, checkRepo, checkTag, marker, BODY_CAP } from './lib/announce-release.mjs';
+
+const SCRIPTS = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(SCRIPTS, '..');
+const TOKEN = 'fake-token-' + 'z'.repeat(12); // a fake, built at run time so it matches no secret shape
+const NOW = Date.parse('2026-10-03T12:00:00Z');
+const hoursAgo = (h) => new Date(NOW - h * 3600 * 1000).toISOString();
+
+function fakeGithub(over = {}) {
+  const st = { discussions: [], creates: 0, calls: [], readback: null };
+  const repos = over.repos || {
+    CoalMine: { name: 'CoalMine', html_url: 'https://github.com/TheColliery/CoalMine', private: false, releases: [{ tag_name: 'v3.17.3', name: 'v3.17.3 - the summary', body: 'Fixed `x`.\nThanks @someone for the report.', html_url: 'https://github.com/TheColliery/CoalMine/releases/tag/v3.17.3', draft: false, published_at: hoursAgo(3) }] },
+  };
+  const category = over.category === undefined ? { id: 'CAT1', name: 'Announcements', slug: 'announcements' } : over.category;
+  const ok = (j) => ({ ok: true, status: 200, json: async () => j });
+  const f = async (url, init = {}) => {
+    const u = new URL(url);
+    st.calls.push(`${init.method || 'GET'} ${u.pathname}${u.search}`);
+    assert.equal(init.headers.Authorization, `Bearer ${TOKEN}`);
+    assert.ok(init.signal, 'every call carries a timeout signal');
+    if (u.pathname === '/graphql') {
+      const { query, variables } = JSON.parse(init.body);
+      if (over.graphqlError) return ok({ errors: [{ message: over.graphqlError }] });
+      if (query.includes('discussionCategories')) return ok({ data: { repository: { id: 'REPO1', hasDiscussionsEnabled: over.discussionsOff ? false : true, discussionCategories: { nodes: category ? [category] : [{ id: 'C2', name: 'General', slug: 'general' }] } } } });
+      if (query.includes('discussions(first')) { const nodes = st.discussions.map((d) => ({ url: d.url, body: d.body })); return ok({ data: { repository: { discussions: { nodes, pageInfo: { hasNextPage: false, endCursor: null } } } } }); }
+      if (query.includes('createDiscussion')) { st.creates++; const d = { id: 'D' + st.creates, url: `https://github.com/orgs/TheColliery/discussions/${st.creates}`, title: variables.t, body: variables.b, category: variables.c }; st.discussions.push(d); return ok({ data: { createDiscussion: { discussion: { id: d.id, url: d.url } } } }); }
+      if (query.includes('node(id')) { const d = st.discussions.find((x) => x.id === variables.i); return ok({ data: { node: over.readbackDiffers ? { ...d, body: d.body + ' changed' } : d } }); }
+      throw new Error('unexpected graphql ' + query);
+    }
+    if (u.pathname === '/orgs/TheColliery/repos') return ok(Object.values(repos).map((r) => ({ name: r.name, archived: !!r.archived, fork: !!r.fork, is_template: !!r.is_template, private: !!r.private })));
+    let m = u.pathname.match(/^\/repos\/TheColliery\/([^/]+)\/releases\/tags\/(.+)$/);
+    if (m) { const rel = repos[m[1]] && repos[m[1]].releases.find((r) => r.tag_name === m[2]); return rel ? ok(rel) : { ok: false, status: 404, json: async () => ({}) }; }
+    m = u.pathname.match(/^\/repos\/TheColliery\/([^/]+)\/releases$/);
+    if (m) return ok(repos[m[1]].releases);
+    m = u.pathname.match(/^\/repos\/TheColliery\/([^/]+)$/);
+    if (m && repos[m[1]]) return ok(repos[m[1]]);
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+  return { f, st };
+}
+const go = (gh, args) => { const logs = []; return run({ token: TOKEN, fetchImpl: gh.f, log: (l) => logs.push(l), windowHours: 48, ...args }).then((r) => ({ r, logs })); };
+
+test('checkRepo and checkTag accept real names and refuse anything shell- or path-shaped', () => {
+  assert.equal(checkRepo('CoalMine'), 'CoalMine'); assert.equal(checkTag('v3.17.3'), 'v3.17.3'); assert.equal(checkTag('v0.1.0-beta.1'), 'v0.1.0-beta.1');
+  for (const bad of ['', '../x', 'a/b', 'a b', '-x', 'a;b', '$(id)', '.', 'a'.repeat(101), null]) assert.throws(() => checkRepo(bad), /not a repository name/, String(bad));
+  for (const bad of ['', 'v1', 'v1.2', '1.2.3', 'v1.2.3; echo', 'main', 'v1.2.3 ', null]) assert.throws(() => checkTag(bad), /not a vX\.Y\.Z tag/, String(bad));
+});
+
+test('neutralizeMentions wraps a mention outside code in backticks, leaves code spans, e-mail addresses and an already-wrapped mention alone', () => {
+  assert.equal(neutralizeMentions('Thanks @someone and @TheColliery/team.'), 'Thanks `@someone` and `@TheColliery/team`.');
+  assert.equal(neutralizeMentions('run `@coderabbitai autofix` now'), 'run `@coderabbitai autofix` now');
+  assert.equal(neutralizeMentions('mail a@b.example and @x'), 'mail a@b.example and `@x`');
+  assert.equal(neutralizeMentions('already `@x` and @y'), 'already `@x` and `@y`');
+});
+
+test('buildAnnouncement: the title names the repository, the body keeps the notes with mentions defused, links the Release and ends with the marker', () => {
+  const rel = { tag_name: 'v3.17.3', name: 'v3.17.3 - the summary', body: 'Fixed.\r\nThanks @someone', html_url: 'https://github.com/TheColliery/CoalMine/releases/tag/v3.17.3' };
+  const a = buildAnnouncement('CoalMine', rel, 'https://github.com/TheColliery/CoalMine');
+  assert.equal(a.title, 'CoalMine v3.17.3 - the summary');
+  assert.ok(a.body.startsWith('Fixed.\nThanks `@someone`'));
+  assert.ok(a.body.includes('[Release page](https://github.com/TheColliery/CoalMine/releases/tag/v3.17.3)'));
+  assert.ok(a.body.endsWith(marker('CoalMine', 'v3.17.3')));
+  assert.equal(buildAnnouncement('R', { ...rel, name: 'Odd name' }, 'u').title, 'R v3.17.3 - Odd name');
+  assert.equal(buildAnnouncement('R', { ...rel, name: '' }, 'u').title, 'R v3.17.3');
+  const big = buildAnnouncement('R', { ...rel, body: 'line\n'.repeat(30000) }, 'u');
+  assert.ok(big.body.length < BODY_CAP + 600 && /Truncated here/.test(big.body) && big.body.endsWith(marker('R', 'v3.17.3')));
+});
+
+test('a dry run (the default) reads, prints what it would post and creates nothing', async () => {
+  const gh = fakeGithub();
+  const { r, logs } = await go(gh, { repo: 'CoalMine', tag: 'v3.17.3', post: false });
+  assert.deepEqual(r, { 'would-post': 1 });
+  assert.equal(gh.st.creates, 0);
+  assert.match(logs.join('\n'), /DRY RUN, nothing posted\. Would open in Announcements: "CoalMine v3\.17\.3 - the summary"/);
+});
+
+test('a post opens exactly one discussion in the Announcements category, reads it back, and a second run does not post again', async () => {
+  const gh = fakeGithub();
+  let { r, logs } = await go(gh, { repo: 'CoalMine', tag: 'v3.17.3', post: true });
+  assert.deepEqual(r, { posted: 1 }); assert.equal(gh.st.creates, 1);
+  assert.equal(gh.st.discussions[0].category, 'CAT1');
+  assert.match(logs.join('\n'), /posted: CoalMine v3\.17\.3 -> https:\/\/github\.com\/orgs\/TheColliery\/discussions\/1/);
+  ({ r, logs } = await go(gh, { repo: 'CoalMine', tag: 'v3.17.3', post: true }));
+  assert.deepEqual(r, { already: 1 }); assert.equal(gh.st.creates, 1, 'idempotent: the marker is found');
+});
+
+test('refusals: a private repository, a draft or unknown Release, a missing Announcements category, Discussions off, a GraphQL error, a read-back that differs', async () => {
+  const priv = fakeGithub({ repos: { Secret: { name: 'Secret', private: true, html_url: 'u', releases: [{ tag_name: 'v1.0.0', name: 'v1.0.0', body: 'b', html_url: 'u', draft: false, published_at: hoursAgo(1) }] } } });
+  await assert.rejects(go(priv, { repo: 'Secret', tag: 'v1.0.0', post: true }), /private repository is never announced/); assert.equal(priv.st.creates, 0);
+  const draft = fakeGithub({ repos: { D: { name: 'D', private: false, html_url: 'u', releases: [{ tag_name: 'v1.0.0', name: 'v1.0.0', body: 'b', html_url: 'u', draft: true }] } } });
+  await assert.rejects(go(draft, { repo: 'D', tag: 'v1.0.0', post: true }), /draft/); assert.equal(draft.st.creates, 0);
+  await assert.rejects(go(fakeGithub(), { repo: 'CoalMine', tag: 'v9.9.9', post: true }), /answered 404/);
+  await assert.rejects(go(fakeGithub({ category: null }), { repo: 'CoalMine', tag: 'v3.17.3', post: true }), /no Announcements category/);
+  await assert.rejects(go(fakeGithub({ discussionsOff: true }), { repo: 'CoalMine', tag: 'v3.17.3', post: true }), /Discussions switched off/);
+  await assert.rejects(go(fakeGithub({ graphqlError: 'Resource not accessible by integration' }), { repo: 'CoalMine', tag: 'v3.17.3', post: true }), /Resource not accessible/);
+  await assert.rejects(go(fakeGithub({ readbackDiffers: true }), { repo: 'CoalMine', tag: 'v3.17.3', post: true }), /read-back differs/);
+  await assert.rejects(go(fakeGithub(), { repo: '../x', tag: 'v1.0.0', post: true }), /not a repository name/);
+  await assert.rejects(go(fakeGithub(), { tag: 'v1.0.0', post: true }), /a tag needs a repo/);
+  await assert.rejects(run({ token: '', repo: 'CoalMine', tag: 'v3.17.3' }), /GH_TOKEN is not set/);
+});
+
+test('the token is never printed: no log line and no error message carries it', async () => {
+  const gh = fakeGithub();
+  const { logs } = await go(gh, { repo: 'CoalMine', tag: 'v3.17.3', post: true });
+  assert.ok(!logs.join('\n').includes(TOKEN));
+  const err = await go(fakeGithub({ graphqlError: 'boom' }), { repo: 'CoalMine', tag: 'v3.17.3', post: true }).catch((e) => e);
+  assert.ok(!String(err.message).includes(TOKEN));
+});
+
+test('sweep: only published Releases inside the window, of public non-archived non-fork repositories, oldest first; drafts, old ones and private repositories are skipped', async () => {
+  const rel = (tag, h, extra = {}) => ({ tag_name: tag, name: tag + ' - s', body: 'b', html_url: 'https://x/' + tag, draft: false, published_at: hoursAgo(h), ...extra });
+  const gh = fakeGithub({ repos: {
+    A: { name: 'A', private: false, html_url: 'https://x/A', releases: [rel('v1.1.0', 5), rel('v1.0.0', 100), rel('v1.2.0', 2, { draft: true })] },
+    B: { name: 'B', private: false, html_url: 'https://x/B', releases: [rel('v2.0.0', 10)] },
+    Old: { name: 'Old', private: false, archived: true, html_url: 'https://x/O', releases: [rel('v0.9.0', 1)] },
+    Fork: { name: 'Fork', private: false, fork: true, html_url: 'https://x/F', releases: [rel('v0.8.0', 1)] },
+    Priv: { name: 'Priv', private: true, html_url: 'https://x/P', releases: [rel('v0.7.0', 1)] },
+  } });
+  const { r, logs } = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, windowHours: 48, post: true, repo: '', tag: '' }).then((x) => ({ r: x }));
+  assert.deepEqual(r, { posted: 2, 'would-post': 0, already: 0, failed: 0 });
+  assert.deepEqual(gh.st.discussions.map((d) => d.title), ['B v2.0.0 - s', 'A v1.1.0 - s'], 'oldest first');
+  const again = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, windowHours: 48, post: true, repo: '', tag: '' });
+  assert.deepEqual(again, { posted: 0, 'would-post': 0, already: 2, failed: 0 });
+  assert.equal(gh.st.creates, 2);
+  void logs;
+});
+
+const CLI = path.join(SCRIPTS, 'announce-release.mjs');
+const cli = (args, env) => spawnSync(process.execPath, ['--max-old-space-size=512', CLI, ...args], { encoding: 'utf8', timeout: 60000, env: { PATH: process.env.PATH, ...env } });
+
+test('CLI: -h exits 0 with the usage; an argument is exit 64; a missing token and a bad window exit 1 with a named message and no network call', () => {
+  let r = cli(['-h'], {}); assert.equal(r.status, 0); assert.match(r.stdout, /usage:/);
+  r = cli(['--bogus'], {}); assert.equal(r.status, 64); assert.match(r.stderr, /usage:/);
+  r = cli([], { INPUT_REPO: 'CoalMine', INPUT_TAG: 'v3.17.3' }); assert.equal(r.status, 1); assert.match(r.stderr, /GH_TOKEN is not set/);
+  r = cli([], { INPUT_WINDOW_HOURS: '0', GH_TOKEN: 'x' }); assert.equal(r.status, 1); assert.match(r.stderr, /INPUT_WINDOW_HOURS/);
+  r = cli([], { INPUT_REPO: '../etc', INPUT_TAG: 'v1.0.0', GH_TOKEN: 'x' }); assert.equal(r.status, 1); assert.match(r.stderr, /not a repository name/);
+});
+
+test('the workflow is DARK: a manual trigger only (no schedule, push or release), the write permission at the job only, a never-cancel group, a dry run by default', () => {
+  const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'announce-release.yml'), 'utf8').replace(/\r\n/g, '\n');
+  const code = y.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+  const on = code.match(/^on:\n((?: {2}.*\n|\n)+)/m)[1];
+  assert.deepEqual([...on.matchAll(/^ {2}([a-z_]+):/gm)].map((m) => m[1]), ['workflow_dispatch'], 'the only trigger');
+  assert.doesNotMatch(code, /\bschedule:|\bcron:/);
+  assert.match(code, /^permissions: \{\}$/m);
+  assert.match(code, /^ {4}permissions:\n {6}contents: read\n {6}discussions: write$/m);
+  assert.match(code, /^concurrency:\n {2}group: announce-release\n {2}cancel-in-progress: false$/m);
+  assert.match(code, /post:\n(?: {8}.*\n)*? {8}default: false/, 'post defaults to false');
+  assert.match(code, /GH_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}/, 'the workflow token, no new credential');
+  assert.match(code, /INPUT_REPO: \$\{\{ inputs\.repo \}\}/, 'inputs reach the script through env, never interpolated into run:');
+  assert.doesNotMatch(code, /run:[^\n]*\$\{\{/, 'no expression inside a run: line');
+});
