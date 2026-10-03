@@ -33,6 +33,11 @@ benchmarks/CoalMine/
 3. Score it: `node score.mjs` (newest run by default)—prints the report.
    Add `--write` to (re)generate `RESULTS.md`: `node score.mjs --write`.
 
+The ten supply-chain-audit manifests are stored as `src/package.fixture.json` (so GitHub's dependency graph does not read the planted
+vulnerable pins as this repository's dependencies); `node scripts/materialize-fixtures.mjs supply-chain-audit <scratch-dir>` copies the
+`src/` trees with each manifest named back to `package.json` before a scan. Ground truth is unchanged: `expected.json` and the dated
+result records still name `src/package.json`.
+
 A match = same fixture + file + category, line within ±3. Severity is scored
 separately. Findings on decoys are false positives.
 

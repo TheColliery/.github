@@ -86,6 +86,21 @@ per-suite slug lists + the same blind protocol; result files named
 `<date>-<suite>-antigravity-r<REP>.json` and carrying `"suite"` +
 `"rep"` fields so `score.mjs` resolves the right ground truth).
 
+## Materialize the supply-chain-audit fixtures first (AW-30)
+
+The ten supply-chain-audit manifests are stored as `src/package.fixture.json`, so GitHub's dependency graph does not read their
+planted, vulnerable pins as this repository's dependencies. A scan worker needs them under their real name, so before a
+supply-chain-audit scan the human (or the run script) materializes the suite into a scratch directory and points the paste block's
+fixture path at the copy:
+
+```text
+node scripts/materialize-fixtures.mjs supply-chain-audit <scratch-dir>
+```
+
+The copy holds each fixture's `src/` only (never `expected.json`: the blind protocol), with `package.fixture.json` named back to
+`package.json`, byte for byte. Findings are still located as `src/package.json`, the path every `expected.json` and result record
+names, so ground truth and the scorer are unchanged. The other six suites need no materialize step.
+
 ## Provenance rules
 
 - The AG arm is **blind** (fixtures + ground truth authored on the CC side;

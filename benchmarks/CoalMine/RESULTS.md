@@ -62,7 +62,7 @@ locked methodology—paired design + stochastic repeat, arXiv 2411.00640).
 K=3 stochastic repeats per arm, same prompt verbatim per arm, each rep a FRESH
 agent (no shared context); any item flipping within K=3 extends that arm to K=5
 (fired for both sonnet arms—f01:5—and haiku—f02). Blind protocol: workers
-read ONLY `fixtures/*/src/*`; `expected.json`/results/scorer off-limits. One run
+read ONLY `fixtures/*/src/*` (for supply-chain-audit, the materialized copy of it: its manifests are stored as `package.fixture.json` since 2026-10-03 and named back to `package.json` byte for byte before a scan, so ground truth and every dated result above are unchanged); `expected.json`/results/scorer off-limits. One run
 was invalidated live (a cross-tree grep leaked expected.json into a sonnet
 worker's context) and re-run clean with an added no-cross-tree-grep clause —
 contamination QC works. Scoring is mechanical (`score.mjs`: fixture + file +
