@@ -13,11 +13,13 @@
 //
 // Zero dependencies: node builtins and the global fetch. Every call carries a timeout; the create is never retried (a timeout does not
 // prove the post did not land, and a second create would double-post).
+import { SUMMARY_BAND } from '../../templates/overlay-coal-skill/scripts/lib/release-shape.mjs';
+
 export const ORG = 'TheColliery';
 export const SOURCE_REPO = '.github';
 export const API = 'https://api.github.com';
 export const BODY_CAP = 60000; // GitHub's discussion body limit is 65,536; leave room for the footer
-export const TITLE_CAP = 200;
+export const TITLE_CAP = 200; // GitHub's ceiling is a hard one: it stored a 211-character title as 199 (n = 1), so a title is never cut to fit
 export const SCAN_PAGES = 5; // 250 discussions back when looking for an existing marker
 
 const REPO_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -45,7 +47,12 @@ export function neutralizeMentions(text) {
 export function buildAnnouncement(repo, release, repoUrl) {
   const tag = checkTag(release.tag_name);
   const name = (release.name || '').trim();
-  const title = (name ? (name.startsWith(tag) ? `${repo} ${name}` : `${repo} ${tag} - ${name}`) : `${repo} ${tag}`).slice(0, TITLE_CAP);
+  const full = name ? (name.startsWith(tag) ? `${repo} ${name}` : `${repo} ${tag} - ${name}`) : `${repo} ${tag}`;
+  // The title is never cut mid-sentence. The Release title's summary is bounded at its source (RELEASE-PATTERN.md, the band's top); a title
+  // longer than the band allows is an older Release, and it posts as "<Repo> vX.Y.Z" with the summary as the body's first line.
+  const longest = Array.from(`${repo} ${tag} - `).length + SUMMARY_BAND[1];
+  const title = Array.from(full).length <= Math.min(longest, TITLE_CAP) ? full : `${repo} ${tag}`;
+  if (Array.from(title).length > TITLE_CAP) throw new Error(`the title for ${repo} ${tag} would exceed ${TITLE_CAP} characters`);
   let notes = neutralizeMentions((release.body || '').replace(/\r\n/g, '\n').trim());
   if (notes.length > BODY_CAP) notes = notes.slice(0, notes.lastIndexOf('\n', BODY_CAP) > 0 ? notes.lastIndexOf('\n', BODY_CAP) : BODY_CAP).trimEnd() + '\n\n(Truncated here; the full notes are on the Release page below.)';
   if (!notes) notes = `${repo} ${tag} is published.`;

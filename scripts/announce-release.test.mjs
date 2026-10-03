@@ -160,3 +160,31 @@ test('the workflow is DARK: a manual trigger only (no schedule, push or release)
   assert.match(code, /INPUT_REPO: \$\{\{ inputs\.repo \}\}/, 'inputs reach the script through env, never interpolated into run:');
   assert.doesNotMatch(code, /run:[^\n]*\$\{\{/, 'no expression inside a run: line');
 });
+
+// BA-14 / the first live post (discussion 23, CoalBoard v2.7.0): a 211-character title was cut at the 200 cap and GitHub stored it as 199,
+// so the read-back failed. The title is never cut mid-sentence: when "<Repo> <Release title>" is longer than the source band allows
+// (an older Release, from before the summary band), the title is "<Repo> vX.Y.Z" and the summary stays the body's first line.
+const longRelease = (summaryLen) => ({ tag_name: 'v2.7.0', name: 'v2.7.0 - ' + 'word '.repeat(Math.ceil(summaryLen / 5)).slice(0, summaryLen).trimEnd(), body: 'The summary line.\n\n### Added\n- x', html_url: 'https://github.com/TheColliery/CoalBoard/releases/tag/v2.7.0' });
+
+test('buildAnnouncement: an older Release whose name is 201 characters posts as "<Repo> vX.Y.Z" and keeps the summary as the body\'s first line', () => {
+  const rel = longRelease(192); assert.equal(rel.name.length, 201);
+  const a = buildAnnouncement('CoalBoard', rel, 'https://github.com/TheColliery/CoalBoard');
+  assert.equal(a.title, 'CoalBoard v2.7.0');
+  assert.ok(a.body.startsWith('The summary line.\n\n### Added'));
+  assert.ok(Array.from(a.title).length <= 200, 'the 200 ceiling holds');
+});
+
+test('buildAnnouncement: the title stays "<Repo> <Release title>" up to the source band (75 characters of summary) and falls back past it, never cut', () => {
+  const at = (n) => buildAnnouncement('CoalBoard', longRelease(n), 'u').title;
+  const clean = at(75); assert.equal(clean, 'CoalBoard ' + longRelease(75).name, 'a summary at the band top posts whole');
+  assert.equal(at(76), 'CoalBoard v2.7.0', 'one character past the band falls back');
+  assert.equal(at(60), 'CoalBoard ' + longRelease(60).name);
+  for (const n of [76, 150, 211, 400]) assert.ok(!at(n).includes(' - '), 'a fallback title carries no cut summary: ' + n);
+});
+
+test('a post of an older long-titled Release reads back equal (the title GitHub stores is the title sent)', async () => {
+  const gh = fakeGithub({ repos: { CoalBoard: { name: 'CoalBoard', private: false, html_url: 'https://github.com/TheColliery/CoalBoard', releases: [{ ...longRelease(192), draft: false, published_at: hoursAgo(3) }] } } });
+  const { r } = await go(gh, { repo: 'CoalBoard', tag: 'v2.7.0', post: true });
+  assert.deepEqual(r, { posted: 1 });
+  assert.equal(gh.st.discussions[0].title, 'CoalBoard v2.7.0');
+});
