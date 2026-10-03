@@ -35,6 +35,12 @@ on:
 permissions:
   contents: read
 
+# cancel-in-progress: TRUE -- the prober reads the served page and compares it, and publishes nothing, so a superseded run has nothing
+# to leave half-done; a newer push supersedes the page this run was probing (SKILL-REPO-PATTERN.md's concurrency bullet, the ci.yml class).
+concurrency:
+  group: deploy-check-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   live:
     name: live page matches main

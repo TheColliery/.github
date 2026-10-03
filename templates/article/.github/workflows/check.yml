@@ -45,8 +45,11 @@ jobs:
         if: hashFiles('tools/check.mjs') != ''
         run: node tools/check.mjs
 
-  # AX-3: the platform's sync can carry an edit made in the GitBook editor back into this repository as a commit whose
-  # subject starts with GITBOOK-. The site is not a write surface (state it in this repository's governance statement), so such a commit on the default branch
+  # This job refuses a commit made by GitBook on the default branch. The platform's sync can carry an edit made in the GitBook editor back
+  # into this repository as a commit whose subject starts with GITBOOK-.
+  # The GITBOOK- subject prefix is the format measured on 2026-10-03 (n = 1: one such commit read), so if GitBook changes it, the guard
+  # would pass what it was meant to refuse: a format change is a fact to re-measure.
+  # The site is not a write surface (state it in this repository's governance statement), so such a commit on the default branch
   # means that rule failed: this job fails the push it arrives on. It reads the pushed range (the whole range, so a
   # superseded run elsewhere cannot hide a commit: the workflow above never cancels a run on the default branch), and for a
   # first push only the tip. The inputs reach bash through env, never a run: line.

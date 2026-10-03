@@ -832,3 +832,24 @@ test('derive check behaviour: all four files present passes; any one missing or 
     }
   }
 });
+
+// UMB-392 E-1 and UMB-395 3(a): the GITBOOK- subject prefix is a format measured once (2026-10-03, n = 1), so the guard says so beside
+// itself and a format change reads as a fact to re-measure; and a public template file carries no internal ticket id (AX-3 was a sheet
+// id, no reader's key), so the comment states in plain words what the guard protects.
+test("the article template's check.yml dates the GITBOOK- prefix as measured (2026-10-03, n = 1) and names no internal ticket id -- RED before UMB-392/395", () => {
+  const text = fs.readFileSync(path.join(TEMPLATES, 'article', '.github', 'workflows', 'check.yml'), 'utf8');
+  const comments = text.split(/\r?\n/).filter((l) => l.trim().startsWith('#')).join('\n');
+  assert.match(comments, /GITBOOK- subject prefix is the format measured on 2026-10-03 \(n = 1[:)]/);
+  assert.match(comments, /re-measure/);
+  assert.doesNotMatch(text, /\b(AX|AW|AR|UMB|CWK|LWK|BA|BB)-\d+\b/, 'an internal ticket or sheet id is no reader\'s key on a public file');
+});
+
+// UMB-393: the deploy-check overlay is a post-deploy prober (it reads the served page and compares), publishes nothing, and a newer push
+// supersedes the page it was probing, so a superseded run is cancelled (SKILL-REPO-PATTERN.md's concurrency bullet, the ci.yml class).
+test("the overlay-llm-deploy deploy-check.yml carries a concurrency group, cancel-in-progress true (a prober reads and compares) -- RED before UMB-393", () => {
+  const ls = fs.readFileSync(path.join(TEMPLATES, 'overlay-llm-deploy', '.github', 'workflows', 'deploy-check.yml'), 'utf8').split(/\r?\n/);
+  const at = ls.indexOf('concurrency:');
+  assert.ok(at >= 0 && at < ls.indexOf('jobs:'), 'a top-level concurrency: block before jobs:');
+  assert.match(ls[at + 1], /^ {2}group: deploy-check-\$\{\{ github\.ref \}\}$/);
+  assert.equal(ls[at + 2], '  cancel-in-progress: true');
+});
