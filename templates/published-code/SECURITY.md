@@ -20,12 +20,12 @@ git tag -v "$(git describe --tags --abbrev=0)"
 
 `plugin/` is generated, never hand-edited. `node scripts/build-plugin.mjs` reproduces it from source; `node scripts/verify.mjs` byte-checks dist-sync in BOTH directions (stale file and source-less orphan both fail) plus manifests, factory-config-vs-schema, and version pins; `node scripts/test.mjs` runs the zero-dependency suite with an explicit file list. Zero dependencies — no lockfile, nothing to `npm audit`.
 
-<!-- version-transition: SkillSpector scan — the re-scan is automatic on one event (E2: this repo's own version bump, gated by a per-repo baseline diff); a genuinely new attack surface is a second, by hand. (E1, a weekly new-SkillSpector-version watcher, was retired on the owner's word on 2026-09-26.) Record the version/score/date/commit here only after a real scan. -->
+<!-- version-transition: SkillSpector scan — the re-scan is meant to fire on one event (E2: this repo's own version bump, gated by a per-repo baseline diff), but that machinery is wired in no room yet, so today a re-scan is run by hand; a genuinely new attack surface is a second trigger, also by hand. (E1, a weekly new-SkillSpector-version watcher, was retired on the owner's word on 2026-09-26.) Fill {{SCANNER_TAG_RELATION}} with one of: upstream's tag `vX.Y.Z` (the commit is that tag's) · N commits after upstream's tag `vX.Y.Z` · N commits before upstream's first tag, `v2.5.0`. Record the version/score/date/commit here only after a real scan. -->
 ## Independent Scanning — NVIDIA SkillSpector
 
-Last scan: {{REPO_NAME}} **{{SCANNED_VERSION}}** dist (`plugin/`), on **{{SCAN_DATE}}**, with [NVIDIA SkillSpector](https://github.com/NVIDIA/skillspector) **{{SCANNER_VERSION}}** (self-reported — the tool ships no tagged releases), static stage (`--no-llm`, the documented FP-prone baseline). {{SCAN_RESULT_SUMMARY}}
+Last scan: {{REPO_NAME}} **{{SCANNED_VERSION}}** dist (`plugin/`), on **{{SCAN_DATE}}**, with [NVIDIA SkillSpector](https://github.com/NVIDIA/skillspector) **{{SCANNER_VERSION}}** (self-reported version string; scan pinned to commit `{{SCANNER_COMMIT}}`, {{SCANNER_TAG_RELATION}}), static stage (`--no-llm`, the documented FP-prone baseline). {{SCAN_RESULT_SUMMARY}}
 
-Re-scan stays event-driven (this repo's own version bump, gated by a baseline diff, or a genuinely new attack surface), not on every release — this pins the last version actually verified.
+A re-scan is run when this repo's own version bump calls for it (the automatic baseline-diff trigger is planned and not yet wired) or on a genuinely new attack surface, not on every release — this pins the last version actually verified.
 
 ## Structural Safety
 

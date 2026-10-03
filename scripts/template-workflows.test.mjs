@@ -691,6 +691,17 @@ test('RELEASE-PATTERN.md: condensing happens in the CHANGELOG entry, never at re
   assert.ok(after.sectionsBody.includes('run the update'), 'a Part 3 block after the last section rides into the body');
 });
 
+// CWK-186 (UMB-365 H): "the tool ships no tagged releases" is false (NVIDIA/skillspector tags and releases; a scan pins a COMMIT and
+// names its relation to the tags). UMB-365 I (CoalFace M1): the SkillSpector comment called the re-scan "automatic" while the
+// E2 machinery is wired in no room, so the template says what is true today.
+test('published-code SECURITY.md: the SkillSpector pin names a commit and its relation to the tags, and the re-scan is not called automatic (RED before UMB-365 H/I)', () => {
+  const t = fs.readFileSync(path.join(TEMPLATES, 'published-code', 'SECURITY.md'), 'utf8');
+  assert.ok(!t.includes('ships no tagged releases'), 'upstream does tag and release');
+  assert.ok(t.includes('{{SCANNER_COMMIT}}') && t.includes('{{SCANNER_TAG_RELATION}}'), 'the pin names a commit and its relation to the tags');
+  assert.doesNotMatch(t, /re-scan is automatic|automatic on one event/i, 'no room has the automatic re-scan wired');
+  assert.match(t, /wired in no room yet|not yet wired/i, 'the comment says what is true today');
+});
+
 // UMB-334 / CoalGob H2: a hook or gate comment never claims the scan catches a form it misses. The scanner has no rule for a
 // credential inside a URL (scheme://user:pass@host) and none for an HTTP authentication header as such, so no template hook or
 // gate may name a connection string or an authentication header as something it catches; each says what the scan catches and
