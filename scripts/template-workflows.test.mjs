@@ -853,3 +853,16 @@ test("the overlay-llm-deploy deploy-check.yml carries a concurrency group, cance
   assert.match(ls[at + 1], /^ {2}group: deploy-check-\$\{\{ github\.ref \}\}$/);
   assert.equal(ls[at + 2], '  cancel-in-progress: true');
 });
+
+// UMB-392 / BA-14: the canon says where the title bound lives (the CHANGELOG summary line), what the band is, and where a longer
+// explanation goes; the numbers in the text are the ones the script uses.
+test('RELEASE-PATTERN.md states the summary band from release-shape.mjs (aim 60, 45 to 75), the named warning and the lead paragraph -- RED before UMB-392', async () => {
+  const { SUMMARY_AIM, SUMMARY_BAND } = await import(pathToFileURL(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', 'release-shape.mjs')).href);
+  const t = fs.readFileSync(path.join(ROOT, 'RELEASE-PATTERN.md'), 'utf8').replace(/\r\n/g, '\n');
+  assert.ok(t.includes(`aim for ${SUMMARY_AIM} characters, ${SUMMARY_BAND[0]} to ${SUMMARY_BAND[1]} passes clean`), 'the CHANGELOG-summary bullet states the band');
+  assert.ok(t.includes(`The summary aims at ${SUMMARY_AIM} characters; ${SUMMARY_BAND[0]} to ${SUMMARY_BAND[1]} passes clean.`), 'the title table states the band');
+  assert.match(t, /release-title-band/);
+  assert.match(t, /lead paragraph directly under the summary line/);
+  assert.doesNotMatch(t, /drops what sits between the summary line/, 'the old statement that the lead text is dropped is gone');
+  assert.match(fs.readFileSync(path.join(ROOT, 'RELEASE-NOTES-TEMPLATE.md'), 'utf8'), /OPTIONAL lead paragraph/);
+});

@@ -26,9 +26,13 @@ CHANGELOG entry does not already make.
 ```markdown
 ## [X.Y.Z] - YYYY-MM-DD
 
-<REQUIRED one-line summary, one plain sentence: what changed and why it matters. It becomes the
-Release title's summary and the body's lead, verbatim (RELEASE-PATTERN.md "Write once, derive
-everything"); the workflow refuses an entry without it.>
+<REQUIRED one-line summary, one plain sentence: what changed and why it matters. Aim for 60
+characters (45 to 75 passes clean). It becomes the Release title's summary and the body's lead,
+verbatim (RELEASE-PATTERN.md "Write once, derive everything"); the workflow refuses an entry
+without it.>
+
+<OPTIONAL lead paragraph: a longer explanation goes here, directly under the summary line and
+before the first ### heading. It is carried into the Release body right after the lead.>
 
 ### Added
 - <a new backward-compatible capability>
@@ -55,8 +59,8 @@ choice is not decoration: it is what sizes the SemVer bump (§3).
 ### 1b. GitHub Release (title + body)
 
 Where the repo carries a tag-push workflow, this part is DERIVED from 1a, never hand-filled: the
-title is `vX.Y.Z - <summary line>`, and the body is the summary line followed by 1a's own sections
-unchanged. Parts 3–5 below ride through only if written into the entry itself. The skeleton below
+title is `vX.Y.Z - <summary line>`, and the body is the summary line, then the lead paragraph if
+the entry has one, then 1a's own sections unchanged. Parts 3–5 below ride through only if written into the entry itself. The skeleton below
 is the shape a head fills by hand in the named interim.
 
 ```text
