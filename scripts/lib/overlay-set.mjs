@@ -10,6 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { pinOnlyDifference, pinLine } from './pin-normalize.mjs';
 
 export const WORKFLOWS = ['claude-ai-zips.yml', 'create-release.yml'];
 // Files the overlay does not carry because they are the room's own (OVERLAY-README.md names each).
@@ -48,7 +49,7 @@ export function overlaySet(overlayDir, workflow) {
 }
 
 // A room's copy of the set: which canon workflow it carries, and each file's verdict against the canon's blob id.
-// rows: { file, status } with status 'identical' | 'DIFFERS (room <8> vs canon <8>)' | 'ABSENT' | 'present (room-owned)' | 'ABSENT (room-owned)'.
+// rows: { file, status } with status 'identical' | 'PINS ONLY: ...' (only action pins differ) | 'DIFFERS (room <8> vs canon <8>)' | 'ABSENT' | 'present (room-owned)' | 'ABSENT (room-owned)'.
 export function compareOverlaySet(roomDir, overlayDir) {
   const carried = WORKFLOWS.filter((w) => fs.existsSync(path.join(roomDir, '.github', 'workflows', w)));
   if (carried.length !== 1) return { carried, rows: [], problem: carried.length ? 'carries both overlay workflows (a room carries exactly one)' : null };
@@ -59,7 +60,9 @@ export function compareOverlaySet(roomDir, overlayDir) {
     if (!fs.existsSync(live)) { rows.push({ file, status: 'ABSENT' }); continue; }
     const want = blobId(fs.readFileSync(path.join(overlayDir, file)));
     const got = blobId(fs.readFileSync(live));
-    rows.push({ file, status: got === want ? 'identical' : `DIFFERS (room ${got.slice(0, 8)} vs canon ${want.slice(0, 8)})` });
+    // A workflow whose only difference is an action pin is the room's own Dependabot at work, not drift (UMB-256): its own row.
+    const pins = got !== want && file.endsWith('.yml') ? pinOnlyDifference(fs.readFileSync(path.join(overlayDir, file), 'utf8'), fs.readFileSync(live, 'utf8')) : null;
+    rows.push({ file, status: got === want || (pins && pins.same) ? 'identical' : pins ? pinLine(pins.diffs) : `DIFFERS (room ${got.slice(0, 8)} vs canon ${want.slice(0, 8)})` });
   }
   for (const file of set.roomOwned) rows.push({ file, status: fs.existsSync(path.join(roomDir, file)) ? 'present (room-owned)' : 'ABSENT (room-owned)' });
   return { carried, rows, problem: null };

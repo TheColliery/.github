@@ -44,6 +44,7 @@ import { fileURLToPath } from 'node:url';
 import { findRepos as findReposLib, SKELETON_FILES, TEMPLATE_DIR_FOR_KIND, parseGithubOrigin, matchesWithPlaceholders, formatDetailsTable, liveFileVerdict, gitRemoteState, noRemoteVerdict } from './lib/skeleton-check-lib.mjs';
 import { isLicenseStub, licenseIdentityMismatches } from './lib/license-check-lib.mjs';
 import { compareOverlaySet } from './lib/overlay-set.mjs';
+import { pinOnlyDifference, pinLine } from './lib/pin-normalize.mjs';
 import { rulesetMatchesSpec, gateBypassVerdicts, gateCheckSourceVerdicts, leftoverRulesets } from './lib/ruleset-match.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -80,6 +81,10 @@ function compareFile(templatePath, livePath) {
   const tn = normalizeLineEndings(t);
   const ln = normalizeLineEndings(l);
   if (tn === ln) return 'identical (EOL-only)';
+  // A bumped action pin is the room's own Dependabot, not drift (UMB-256): the structure is judged without pins, and a pin-only difference
+  // is its own line (pins behind or ahead of the canon), never DIFFERS.
+  const pins = pinOnlyDifference(tn, ln);
+  if (pins) return pins.same ? 'identical (EOL and pin comments only)' : pinLine(pins.diffs);
   const tLines = tn.split('\n').length;
   const lLines = ln.split('\n').length;
   return `DIFFERS (template ${tLines}L vs live ${lLines}L)`;
@@ -375,7 +380,7 @@ async function main() {
           const n = (pred) => ov.rows.filter(pred).length;
           const head = `  [overlay ${ov.carried[0]}] ${ov.rows.length - own} files + ${own} room-owned: `;
           const ownAbsent = n((r) => r.status === 'ABSENT (room-owned)');
-          console.log(bad.length ? `${head}${n((r) => r.status.startsWith('DIFFERS'))} DIFFERS, ${n((r) => r.status === 'ABSENT')} ABSENT${ownAbsent ? `, ${ownAbsent} room-owned ABSENT` : ''}` : `${head}all identical`);
+          console.log(bad.length ? `${head}${n((r) => r.status.startsWith('DIFFERS'))} DIFFERS, ${n((r) => r.status === 'ABSENT')} ABSENT${n((r) => r.status.startsWith('PINS ONLY')) ? `, ${n((r) => r.status.startsWith('PINS ONLY'))} PINS ONLY` : ''}${ownAbsent ? `, ${ownAbsent} room-owned ABSENT` : ''}` : `${head}all identical`);
           for (const r of bad) console.log(`    ${r.file}: ${r.status}`);
         }
       } catch (e) {

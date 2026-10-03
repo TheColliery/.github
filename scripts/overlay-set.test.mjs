@@ -122,3 +122,46 @@ test('the adoption text names the set tooling: SKILL-REPO-PATTERN and OVERLAY-RE
     assert.match(t, /skeleton-check/, path.basename(f) + ' names skeleton-check');
   }
 });
+
+// UMB-256 (the same class): a room whose own Dependabot bumped an action pin in an adopted workflow is not drift. The overlay compare and
+// skeleton-check's file compare read a pin-only difference as its own line, never DIFFERS; any other difference still is.
+test('compareOverlaySet: a bumped action pin in the adopted workflow reads as a pin-only row, not DIFFERS; a pin bump plus a real edit is DIFFERS', () => {
+  const room = scratch('ovpin-');
+  adopt(room, 'create-release.yml');
+  const wfp = path.join(room, '.github/workflows/create-release.yml');
+  const canon = fs.readFileSync(wfp, 'utf8');
+  fs.writeFileSync(wfp, canon.replace(/(uses: actions\/checkout@)[0-9a-f]{40}( # )\S+/, '$1' + 'c'.repeat(40) + '$2v99.0.0'));
+  let r = compareOverlaySet(room, OVERLAY);
+  let by = Object.fromEntries(r.rows.map((x) => [x.file, x.status]));
+  assert.match(by['.github/workflows/create-release.yml'], /^PINS ONLY: 1 action pin differs from the canon, structure identical \(actions\/checkout v99\.0\.0 vs canon v[\d.]+: room ahead\)$/);
+  fs.writeFileSync(wfp, fs.readFileSync(wfp, 'utf8') + '# a real edit\n');
+  r = compareOverlaySet(room, OVERLAY);
+  by = Object.fromEntries(r.rows.map((x) => [x.file, x.status]));
+  assert.match(by['.github/workflows/create-release.yml'], /^DIFFERS \(/);
+});
+
+test('skeleton-check: a room\'s workflow with only a bumped pin reads PINS ONLY (its own line), one with a real edit reads DIFFERS, and the overlay summary counts the pin-only row apart', () => {
+  const umb = scratch('ovskelpin-');
+  const gh = path.join(umb, '.github');
+  put(gh, 'scripts/skeleton-check.mjs', fs.readFileSync(path.join(SCRIPTS, 'skeleton-check.mjs'), 'utf8'));
+  for (const f of fs.readdirSync(path.join(SCRIPTS, 'lib'))) fs.copyFileSync(path.join(SCRIPTS, 'lib', f), (fs.mkdirSync(path.join(gh, 'scripts', 'lib'), { recursive: true }), path.join(gh, 'scripts', 'lib', f)));
+  fs.cpSync(path.join(ROOT, 'templates', 'overlay-coal-skill'), path.join(gh, 'templates', 'overlay-coal-skill'), { recursive: true });
+  fs.cpSync(path.join(ROOT, 'templates', 'published-code'), path.join(gh, 'templates', 'published-code'), { recursive: true });
+  const room = path.join(umb, 'CoalWorks', 'Demo');
+  put(room, '.git/config', '[core]\n');
+  const tpl = (rel) => fs.readFileSync(path.join(ROOT, 'templates', 'published-code', rel), 'utf8');
+  const bump = (t) => t.replace(/(uses: [\w./-]+@)[0-9a-f]{40}( # )\S+/, '$1' + 'd'.repeat(40) + '$2v99.0.0');
+  put(room, '.github/workflows/ci.yml', tpl('.github/workflows/ci.yml'));
+  put(room, '.github/workflows/codeql.yml', bump(tpl('.github/workflows/codeql.yml')));
+  put(room, '.github/workflows/scorecard.yml', tpl('.github/workflows/scorecard.yml') + '# a real edit\n');
+  adopt(room, 'create-release.yml');
+  const wfp = path.join(room, '.github/workflows/create-release.yml');
+  fs.writeFileSync(wfp, bump(fs.readFileSync(wfp, 'utf8')));
+  const out = node([path.join(gh, 'scripts', 'skeleton-check.mjs')], { cwd: umb }).stdout;
+  const sec = out.split('## ').find((s) => s.startsWith('CoalWorks/Demo')) || '';
+  assert.match(sec, /\.github\/workflows\/codeql\.yml: PINS ONLY: 1 action pin differs from the canon, structure identical \(/, sec);
+  assert.match(sec, /\.github\/workflows\/scorecard\.yml: DIFFERS \(/, sec);
+  assert.match(sec, /\.github\/workflows\/ci\.yml: identical/, sec);
+  assert.match(sec, /\[overlay create-release\.yml\] .*1 PINS ONLY/, sec);
+  assert.ok(!/codeql\.yml: DIFFERS/.test(sec) && !/create-release\.yml: DIFFERS/.test(sec), 'a pin-only difference is never DIFFERS');
+});

@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { normalizePins, pinsOf } from './lib/pin-normalize.mjs';
 
 // GitHub's own context-availability table (docs: contexts.md, "jobs.<job_id>.if") allows only
 // always/cancelled/success/failure at JOB level -- hashFiles is available at STEP level only.
@@ -206,10 +207,15 @@ test('dependabot-auto-merge (template and this repo\'s copy): the PR URL reaches
   }
 });
 
-test('this repo carries the template scorecard.yml byte for byte (RED before UMB-216 (b))', () => {
+// UMB-256: the structure is byte-identical; each copy's action pins stay its own Dependabot's (dependabot.yml scans / only, so a bump
+// reaches the live file and never the template, and the byte-for-byte form turned `verify` red on every bump). The pin normaliser is
+// shared with skeleton-check and the overlay compare (scripts/lib/pin-normalize.mjs, held by pin-normalize.test.mjs).
+test('this repo carries the template scorecard.yml with every action pin normalised: same structure, each copy keeps its own pins (RED before UMB-216 (b), pin-normalised since UMB-256)', () => {
   const own = path.join(OWN_WF, 'scorecard.yml');
   assert.ok(fs.existsSync(own), '.github/workflows/scorecard.yml is missing');
-  assert.equal(fs.readFileSync(own, 'utf8').replace(/\r\n/g, '\n'), fs.readFileSync(path.join(TEMPLATES, 'published-code', '.github', 'workflows', 'scorecard.yml'), 'utf8').replace(/\r\n/g, '\n'));
+  const template = fs.readFileSync(path.join(TEMPLATES, 'published-code', '.github', 'workflows', 'scorecard.yml'), 'utf8');
+  assert.equal(normalizePins(fs.readFileSync(own, 'utf8')), normalizePins(template));
+  assert.ok(pinsOf(template).length >= 2, 'the normaliser sees the template pins (not vacuous)');
 });
 
 test('update-readme.yml: an empty top-level permissions block, the write declared at the job only (RED before UMB-216 (b))', () => {
