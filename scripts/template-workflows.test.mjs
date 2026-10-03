@@ -591,6 +591,62 @@ test('every spawn in a template test passes a timeout (testing.md: every test ru
   assert.deepEqual(found, [], 'spawn calls with no timeout: ' + found.join(', '));
 });
 
+// AX-3 (owner-signed 2026-10-03): the article template's CI fails a push to the default branch that carries a commit made by
+// GitBook (a subject starting GITBOOK-), so the rule GOVERNANCE.md states in prose is a check. Behaviour, not text: the guard
+// step's own bash runs against a throwaway repository for every case.
+const ART_CHECK = path.join(TEMPLATES, 'article', '.github', 'workflows', 'check.yml');
+const artLines = () => fs.readFileSync(ART_CHECK, 'utf8').replace(/\r\n/g, '\n').split('\n');
+const GUARD_NAME = 'Refuse a commit made by GitBook on the default branch';
+
+test('article check.yml carries the GitBook-commit guard: a default-branch push job, env-only inputs, full history, no token left behind, a clock, and no cancelling of a default-branch run (RED before AX-3)', () => {
+  const t = artLines().join('\n');
+  assert.match(t, /^ {2}gitbook-commit-guard:$/m, 'the job exists');
+  assert.match(t, /if: github\.event_name == 'push' && github\.ref == format\('refs\/heads\/\{0\}', github\.event\.repository\.default_branch\)/, 'only a push to the default branch');
+  const step = stepBySubstr(artLines(), GUARD_NAME);
+  assert.ok(step, 'the guard step exists');
+  const body = runBody(step);
+  assert.ok(!/\$\{\{/.test(body), 'no expression inside the run: block (env only)');
+  const job = t.slice(t.indexOf('  gitbook-commit-guard:'));
+  assert.match(job, /timeout-minutes: \d+/, 'a finite clock');
+  assert.match(job, /persist-credentials: false/, 'no token left in .git/config');
+  assert.match(job, /fetch-depth: 0/, 'the whole pushed range is present');
+  assert.match(t, /cancel-in-progress: \$\{\{ github\.ref != format\('refs\/heads\/\{0\}', github\.event\.repository\.default_branch\) \}\}/, 'a superseded run on the default branch must not be cancelled, or its commits escape the guard');
+});
+
+const gitIn = (dir, ...a) => spawnSync('git', ['-C', dir, ...a], { encoding: 'utf8', timeout: 30000, env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.invalid', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.invalid' } });
+function guardRun(subjects, mode) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gitbook-guard-'));
+  try {
+    gitIn(dir, 'init', '-q', '-b', 'main'); gitIn(dir, 'config', 'commit.gpgsign', 'false');
+    const shas = subjects.map((s, i) => { fs.writeFileSync(path.join(dir, 'f.txt'), String(i)); gitIn(dir, 'add', '-A'); gitIn(dir, 'commit', '-q', '-m', s); return gitIn(dir, 'rev-parse', 'HEAD').stdout.trim(); });
+    const before = mode === 'first' ? '0'.repeat(40) : shas[0];
+    const body = runBody(stepBySubstr(artLines(), GUARD_NAME));
+    return spawnSync('bash', ['-c', body], { cwd: dir, encoding: 'utf8', timeout: 30000, env: { ...process.env, BEFORE: before, AFTER: shas[shas.length - 1] } });
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+
+test('the GitBook-commit guard: a pushed range holding a GITBOOK- subject fails (hash only in the message); a clean range passes; a first push reads the tip only', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  let r = guardRun(['base', 'GITBOOK-12: edit a page', 'fix: a normal commit']);
+  assert.equal(r.status, 1, r.stdout + r.stderr); assert.match(r.stdout + r.stderr, /commit made by GitBook is on the default branch/); assert.ok(!/edit a page/.test(r.stdout + r.stderr), 'the subject is never echoed');
+  r = guardRun(['base', 'docs: one', 'fix: two']);
+  assert.equal(r.status, 0, r.stdout + r.stderr); assert.match(r.stdout, /no commit in this push was made by GitBook/);
+  r = guardRun(['base', 'a subject that merely mentions GITBOOK-1 in the middle']);
+  assert.equal(r.status, 0, 'only a subject that STARTS with GITBOOK- counts');
+  r = guardRun(['GITBOOK-1: old history', 'fix: tip'], 'first');
+  assert.equal(r.status, 0, 'a first push reads the tip only, never the whole history');
+  r = guardRun(['fix: old', 'GITBOOK-2: tip'], 'first');
+  assert.equal(r.status, 1, 'a first push whose tip is a GitBook commit fails');
+});
+
+// UMB-364: the maintainer's publishing runbook (PUBLISHING.md) is kept out of a published article repository. An untracked file
+// that is not ignored is one `git add -A` from public, and a clone-local exclude is lost with the clone, so the template's own
+// .gitignore names it.
+test("the article template's .gitignore names PUBLISHING.md (the maintainer's runbook, never published) -- RED before UMB-364", () => {
+  const g = fs.readFileSync(path.join(TEMPLATES, 'article', '.gitignore'), 'utf8').split(/\r?\n/);
+  assert.ok(g.includes('PUBLISHING.md'), 'PUBLISHING.md must be an ignore line of its own');
+  assert.ok(!g.some((l) => /Push-ToGitBook/.test(l)), 'a retired one-repository script is not a canon line');
+});
+
 // UMB-334 / CoalGob H2: a hook or gate comment never claims the scan catches a form it misses. The scanner has no rule for a
 // credential inside a URL (scheme://user:pass@host) and none for an HTTP authentication header as such, so no template hook or
 // gate may name a connection string or an authentication header as something it catches; each says what the scan catches and

@@ -8,12 +8,13 @@ on:
 permissions:
   contents: read
 
-# cancel-in-progress: TRUE -- the corpus checker reads and reports; it publishes nothing
-# and touches no external state, so a superseded run has nothing to leave half-done
-# (SKILL-REPO-PATTERN.md's concurrency MUST, cited not restated).
+# cancel-in-progress: TRUE off the default branch -- the corpus checker reads and reports; it publishes nothing
+# and touches no external state, so a superseded run has nothing to leave half-done (SKILL-REPO-PATTERN.md's
+# concurrency MUST, cited not restated). On the default branch a run is NEVER cancelled: the GitBook-commit guard below
+# reads each push's range, and a cancelled run would let a commit in its range escape.
 concurrency:
   group: check-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
 
 jobs:
   check:
@@ -43,3 +44,35 @@ jobs:
       - name: Run the corpus checker
         if: hashFiles('tools/check.mjs') != ''
         run: node tools/check.mjs
+
+  # AX-3: the platform's sync can carry an edit made in the GitBook editor back into this repository as a commit whose
+  # subject starts with GITBOOK-. The site is not a write surface (state it in this repository's governance statement), so such a commit on the default branch
+  # means that rule failed: this job fails the push it arrives on. It reads the pushed range (the whole range, so a
+  # superseded run elsewhere cannot hide a commit: the workflow above never cancels a run on the default branch), and for a
+  # first push only the tip. The inputs reach bash through env, never a run: line.
+  gitbook-commit-guard:
+    if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Nothing is pushed from here, so the workflow token has no business staying in .git/config.
+          persist-credentials: false
+          fetch-depth: 0 # the pushed range needs the commits before it
+
+      - name: Refuse a commit made by GitBook on the default branch
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          set -uo pipefail
+          if [[ "${BEFORE}" =~ ^0+$ ]]; then range=(-1 "${AFTER}"); else range=("${BEFORE}..${AFTER}"); fi
+          if ! subjects=$(git log --format='%h %s' "${range[@]}"); then
+            echo "::error::could not list the pushed commits, so the check for a GitBook-made commit did not run; run it again"; exit 1
+          fi
+          bad=$(grep -E '^[0-9a-f]+ GITBOOK-' <<< "${subjects}" | cut -d' ' -f1 || true)
+          if [[ -n "${bad}" ]]; then
+            echo "::error::a commit made by GitBook is on the default branch (short hash: $(tr '\n' ' ' <<< "${bad}")). The site is not a write surface: report it and roll it back, never merge it as an edit"; exit 1
+          fi
+          echo "no commit in this push was made by GitBook"

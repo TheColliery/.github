@@ -15,3 +15,9 @@ scratchpad/
 # CoalBoard's own staging and reports (.coalboard/proposed/, .coalboard/reports/): a board's
 # output lands inside the scanned repo by rule and is read there, never shipped.
 .coalboard/
+
+# The maintainer's publishing runbook (how this repository is published to its reading site: accounts, spaces,
+# sync settings). It is working material for whoever maintains the repository, never part of the published standard.
+# An untracked file that is not ignored is one `git add -A` from this repository's public remote, and an exclude that
+# lives only in one clone is lost with the clone, so the line is here.
+PUBLISHING.md
