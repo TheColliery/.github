@@ -100,7 +100,7 @@ test('fetchSource names TheColliery and the forge in the User-Agent and sends th
   const s = { id: 'a', url: 'https://example.invalid/a.atom', kind: 'atom' };
   await fetchSource(s, { etag: '"abc"', lastModified: 'Mon, 01 Oct 2026 00:00:00 GMT', key: 'k' }, fakeFetch({ [s.url]: { status: 304 } }, seen));
   assert.match(seen[0].headers['user-agent'], /TheColliery/);
-  assert.ok(seen[0].headers['user-agent'].includes('https://thecolliery.org'));
+  assert.strictEqual(seen[0].headers['user-agent'], 'TheColliery-change-watcher/1 (+https://thecolliery.org)');
   assert.strictEqual(USER_AGENT, seen[0].headers['user-agent']);
   assert.strictEqual(seen[0].headers['if-none-match'], '"abc"');
   assert.strictEqual(seen[0].headers['if-modified-since'], 'Mon, 01 Oct 2026 00:00:00 GMT');
