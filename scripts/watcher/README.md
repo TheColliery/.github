@@ -28,12 +28,25 @@ No credential rides this Worker. A source that needs one is a gap to report, nev
 
 ## Deploy an instance
 
-The deployed Worker has three modules: `worker.mjs`, `watcher.mjs`, and `sources.mjs`, which is the chosen `sources/<instance>.mjs` under that name. Bindings: `STATE` (KV namespace), `EMAIL` (`send_email`), `DIGEST_TO` (secret text, the account's verified destination address), `DIGEST_FROM` (plain text, a sender on the account's zone). Cron: one trigger, hourly.
+One command prints the whole deploy as the body of a Cloudflare MCP `execute` call. The MCP sandbox cannot fetch from GitHub, so the modules travel inside the payload, and the payload checks each module's git blob id before it writes anything.
+
+```text
+node scripts/watcher/deploy-payload.mjs <instance> --from <sender address> [--name <worker>] [--cron "<5 fields>"] [--kv-id <32 hex>] [--out <file>]
+```
+
+The payload finds or creates the KV namespace `<name>-state`, uploads `worker.mjs`, `watcher.mjs` and `sources/<instance>.mjs` (as `sources.mjs`), sets the schedule (default hourly, `17 * * * *`), switches the workers.dev route off, and reads the bindings and the schedule back. It reads no credential: the MCP session holds the grant, and the account's verified destination address is read inside the sandbox and never returned.
+
+| Instance | Command | Account |
+| --- | --- | --- |
+| `thecolliery` | `node scripts/watcher/deploy-payload.mjs thecolliery --from watcher@thecolliery.org` | TheColliery |
+| `kolwen` | `node scripts/watcher/deploy-payload.mjs kolwen --from <a sender on the Kolwen zone>` | Kolwen |
+
+Bindings of the deployed Worker: `STATE` (KV namespace), `EMAIL` (`send_email`, restricted to the verified destination address), `DIGEST_TO` (secret text, that address), `DIGEST_FROM` (plain text, the sender).
 
 Free-plan budget, from Cloudflare's docs read 2026-10-04: 10 ms CPU per Cron run, 50 external subrequests per run, KV 1,000 writes a day, 5 Cron Triggers per account. `validateConfig` keeps `maxPerRun` at 45 or less, and a test holds that no hour of the week asks for more.
 
 ## Tests
 
 ```text
-node --test scripts/watcher/watcher.test.mjs
+node --test scripts/watcher/watcher.test.mjs scripts/watcher/deploy-payload.test.mjs
 ```
