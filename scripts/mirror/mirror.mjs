@@ -15,7 +15,6 @@ const FETCH_TIMEOUT_MS = 15000;
 const SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/;
 const REPO = /^[A-Za-z0-9._-]{1,100}$/;
 const ORG = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/;
-const SHA256 = /^sha256:([0-9a-f]{64})$/;
 const MARKER_DIR = '.mirror';
 const LAST_RUN = `${MARKER_DIR}/last-run.json`;
 

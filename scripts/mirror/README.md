@@ -6,7 +6,7 @@ A Cloudflare Worker that copies the org repositories' newest Releases from GitHu
 
 1. For each repository in `config.mjs`, reads `https://github.com/<org>/<repo>/releases.atom` and takes the newest `keep` (2) tags.
 2. For a tag with no marker `.mirror/<repo>/<tag>.json`, reads the release page's asset list once (`https://github.com/<org>/<repo>/releases/expanded_assets/<tag>`, public HTML; the REST API answers a Workers address 403 from its shared unauthenticated limit, measured 2026-10-04) and copies each asset through the `BUCKET` binding to `<repo>/<tag>/<file>`. The SHA-256 the page shows is enforced by R2 on write and recorded on the object, which is how a later run knows to skip it; a file with no published checksum is stored only when the stored length equals the length the server announced, or the object is deleted and the failure reported.
-3. Writes the marker LAST. A half-copied release has no marker, is finished next run, and an asset already stored at the right size is not downloaded again.
+3. Writes the marker LAST. A half-copied release has no marker, is finished next run, and an asset the bucket already holds with the same recorded checksum is not downloaded again.
 4. Deletes, by name, every key of that repository whose tag is no longer among the newest `keep`, and its markers. A repository whose feed failed or came back empty is never pruned.
 5. Writes `.mirror/last-run.json` (counts, the first few problems, no address).
 
