@@ -49,7 +49,8 @@ export function buildAnnouncement(repo, release, repoUrl) {
   const name = (release.name || '').trim();
   const full = name ? (name.startsWith(tag) ? `${repo} ${name}` : `${repo} ${tag} - ${name}`) : `${repo} ${tag}`;
   // The title is never cut mid-sentence. The Release title's summary is bounded at its source (RELEASE-PATTERN.md, the band's top); a title
-  // longer than the band allows is an older Release, and it posts as "<Repo> vX.Y.Z" with the summary as the body's first line.
+  // longer than the band allows is an older Release, and it posts as "<Repo> vX.Y.Z"; the Release body is posted as published (its first line is
+  // the summary when the Release followed the canon, and nothing here re-derives it).
   const longest = Array.from(`${repo} ${tag} - `).length + SUMMARY_BAND[1];
   const title = Array.from(full).length <= Math.min(longest, TITLE_CAP) ? full : `${repo} ${tag}`;
   if (Array.from(title).length > TITLE_CAP) throw new Error(`the title for ${repo} ${tag} would exceed ${TITLE_CAP} characters`);

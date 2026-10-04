@@ -146,7 +146,7 @@ test('CLI: -h exits 0 with the usage; an argument is exit 64; a missing token an
   r = cli([], { INPUT_REPO: '../etc', INPUT_TAG: 'v1.0.0', GH_TOKEN: 'x' }); assert.equal(r.status, 1); assert.match(r.stderr, /not a repository name/);
 });
 
-test('the workflow runs on a six-hourly schedule and by hand: only those two triggers, a scheduled run posts a 12-hour window, a manual run is a dry run unless post is true, the write permission at the job only, a never-cancel group', () => {
+test('the workflow runs on a six-hourly schedule and by hand: only those two triggers, a scheduled run posts a 24-hour window, a manual run is a dry run unless post is true, the write permission at the job only, a never-cancel group', () => {
   const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'announce-release.yml'), 'utf8').replace(/\r\n/g, '\n');
   const code = y.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
   const on = code.match(/^on:\n((?: {2}.*\n|\n)+)/m)[1];
@@ -160,7 +160,7 @@ test('the workflow runs on a six-hourly schedule and by hand: only those two tri
   assert.match(code, /^concurrency:\n {2}group: announce-release\n {2}cancel-in-progress: false$/m);
   assert.match(code, /post:\n(?: {8}.*\n)*? {8}default: false/, 'a manual run still defaults to a dry run');
   assert.match(code, /^ {10}INPUT_POST: \$\{\{ github\.event_name == 'schedule' && 'true' \|\| inputs\.post \}\}$/m, 'a scheduled run posts; a manual run follows its input');
-  assert.match(code, /^ {10}INPUT_WINDOW_HOURS: \$\{\{ github\.event_name == 'schedule' && '12' \|\| inputs\.window_hours \}\}$/m, 'twice the period: one skipped run is covered, a backlog is never announced');
+  assert.match(code, /^ {10}INPUT_WINDOW_HOURS: \$\{\{ github\.event_name == 'schedule' && '24' \|\| inputs\.window_hours \}\}$/m, 'the scheduled window: see the arithmetic test');
   assert.match(code, /GH_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}/, 'the workflow token, no new credential');
   assert.match(code, /INPUT_REPO: \$\{\{ inputs\.repo \}\}/, 'inputs reach the script through env, never interpolated into run:');
   assert.doesNotMatch(code, /run:[^\n]*\$\{\{/, 'no expression inside a run: line');
@@ -210,4 +210,41 @@ test('a post of an older long-titled Release reads back equal (the title GitHub 
   const { r } = await go(gh, { repo: 'CoalBoard', tag: 'v2.7.0', post: true });
   assert.deepEqual(r, { posted: 1 });
   assert.equal(gh.st.discussions[0].title, 'CoalBoard v2.7.0');
+});
+
+// A-7 (pass 14): GitHub dropped no run yet but ran the first one three hours late, and drops scheduled runs under load. The marker only
+// prevents a DOUBLE post; it cannot rescue a Release the window never reached. So the scheduled window covers two dropped slots plus the
+// measured delay: with a six-hour period, a Release published just after a slot waits for the slot after the next two are dropped (18 hours)
+// and then the delay (3 hours measured, the first scheduled run) = 21 hours; 24 is that with a margin.
+const WORKFLOW = () => fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'announce-release.yml'), 'utf8').replace(/\r\n/g, '\n');
+const PERIOD_HOURS = 6, DROPPED_SLOTS = 2, MEASURED_DELAY_HOURS = 3;
+
+test('the scheduled window covers two dropped slots plus the measured delay (the period from the cron, never a guess) -- RED while it was 12', () => {
+  const code = WORKFLOW().split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+  const step = Number(code.match(/- cron: '\d+ \*\/(\d+) \* \* \*'/)[1]);
+  assert.equal(step, PERIOD_HOURS, 'the cron period is the one the window is sized for');
+  const window = Number(code.match(/INPUT_WINDOW_HOURS: \$\{\{ github\.event_name == 'schedule' && '(\d+)' \|\|/)[1]);
+  const need = (DROPPED_SLOTS + 1) * step + MEASURED_DELAY_HOURS;
+  assert.ok(window >= need, 'the window ' + window + ' h must cover ' + need + ' h (two dropped slots, then the delayed third run)');
+  assert.ok(window <= need + 6, 'and stay a window, not a backlog: ' + window + ' h');
+});
+
+test('a Release older than the old 12-hour window but inside the 24-hour one is announced once by the scheduled path; a second run posts nothing', async () => {
+  const rel = (tag, h) => ({ tag_name: tag, name: tag + ' - s', body: 'b', html_url: 'https://x/' + tag, draft: false, published_at: hoursAgo(h) });
+  const gh = fakeGithub({ repos: { A: { name: 'A', private: false, html_url: 'https://x/A', releases: [rel('v1.0.0', 20), rel('v1.1.0', 30)] } } });
+  const old = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, now: NOW, windowHours: 12, post: true, repo: '', tag: '' });
+  assert.deepEqual(old, { posted: 0, 'would-post': 0, already: 0, failed: 0 }, 'the old window never reaches a Release 20 hours old');
+  const first = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, now: NOW, windowHours: 24, post: true, repo: '', tag: '' });
+  assert.deepEqual(first, { posted: 1, 'would-post': 0, already: 0, failed: 0 }, 'inside 24 hours it is announced; the 30-hour one is past the window');
+  const second = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, now: NOW, windowHours: 24, post: true, repo: '', tag: '' });
+  assert.deepEqual(second, { posted: 0, 'would-post': 0, already: 1, failed: 0 }, 'the marker keeps it to one post');
+  assert.equal(gh.st.creates, 1);
+});
+
+// A-3 (pass 14): the comment said the fallback title posts "with the summary as the body's first line"; the code posts the Release body
+// exactly as published (its first line is the summary only when the Release followed the canon, and nothing re-derives it).
+test('the fallback-title comment says what the code does: the Release body is posted as published -- RED while it promised a first line', () => {
+  const src = fs.readFileSync(path.join(SCRIPTS, 'lib', 'announce-release.mjs'), 'utf8');
+  assert.doesNotMatch(src, /with the summary as the body's first line/);
+  assert.match(src, /the Release body is posted as published/);
 });

@@ -6,8 +6,10 @@ name: announce-release
 # scripts/lib/announce-release.mjs.
 #
 # Two ways to run it. On the SIX-HOURLY SCHEDULE (opened by the owner on 2026-10-04, after the first post was read) it sweeps the
-# stable Releases published in the last 12 hours, twice the period so one skipped run is covered and a backlog is never announced, and
-# posts each one once: a hidden marker in the body is the key, so a Release already announced is found and never posted twice, and a run
+# stable Releases published in the last 24 hours and
+# posts each one once. The window covers two dropped slots plus the measured delay: a Release published just after a slot waits for the
+# third slot after it (18 hours) and then GitHub's delay (the first scheduled run came 3 hours late), 21 hours, with a margin. The marker
+# only prevents a DOUBLE post; it cannot rescue a Release the window never reached. Posting: a hidden marker in the body is the key, so a Release already announced is found and never posted twice, and a run
 # that finds nothing new posts nothing and says so. A pre-release (a launch-form Release) is left to a manual run. By hand
 # (workflow_dispatch) a run with post left false only prints what it would open; post: true opens one discussion per Release, once,
 # and reads it back. The schedule runs on the default branch only.
@@ -74,6 +76,6 @@ jobs:
           INPUT_TAG: ${{ inputs.tag }}
           # A scheduled run posts (the schedule IS the switch); a manual run follows its post input, a dry run by default.
           INPUT_POST: ${{ github.event_name == 'schedule' && 'true' || inputs.post }}
-          INPUT_WINDOW_HOURS: ${{ github.event_name == 'schedule' && '12' || inputs.window_hours }}
+          INPUT_WINDOW_HOURS: ${{ github.event_name == 'schedule' && '24' || inputs.window_hours }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/announce-release.mjs
