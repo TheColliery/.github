@@ -43,6 +43,16 @@ export function buildPayload({ files, name, from, org, cron = '41 * * * *', rota
   const addrs = await cloudflare.request({ method: 'GET', path: acct + '/email/routing/addresses' });
   const dest = (addrs.result || []).find(a => a.verified);
   if (!dest) return { stage: 'no verified destination address, nothing written', blobs };
+  let hadSecret = false;
+  try {
+    const cur = await cloudflare.request({ method: 'GET', path: acct + '/workers/scripts/' + NAME + '/settings' });
+    hadSecret = ((cur.result || {}).bindings || []).some(x => x.name === 'WEBHOOK_SECRET');
+  } catch (e) {
+    // only "no such Worker" means a first deploy; any other failure must not look like one, or a blip would rotate a secret GitHub already holds
+    const msg = String(e && e.message || e);
+    if (!/10007|not found|does not exist/i.test(msg)) return { stage: 'settings read failed, nothing written', error: msg.slice(0, 160), blobs };
+    hadSecret = false;
+  }
   let kvId; let reused = true;
   const list = await cloudflare.request({ method: 'GET', path: acct + '/storage/kv/namespaces', query: { per_page: 100 } });
   const found = (list.result || []).find(n => n.title === NAME + '-state');
@@ -52,11 +62,6 @@ export function buildPayload({ files, name, from, org, cron = '41 * * * *', rota
     if (!made.success) return { stage: 'kv namespace not created', errors: made.errors, blobs };
     kvId = made.result.id; reused = false;
   }
-  let hadSecret = false;
-  try {
-    const cur = await cloudflare.request({ method: 'GET', path: acct + '/workers/scripts/' + NAME + '/settings' });
-    hadSecret = ((cur.result || {}).bindings || []).some(x => x.name === 'WEBHOOK_SECRET');
-  } catch (e) { hadSecret = false; }
   let secret = null;
   let secretBinding;
   if (hadSecret && !ROTATE) secretBinding = { type: 'inherit', name: 'WEBHOOK_SECRET' };

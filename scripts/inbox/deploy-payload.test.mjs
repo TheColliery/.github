@@ -74,6 +74,15 @@ test('a redeploy keeps the existing secret with an inherit binding and writes no
   assert.strictEqual(out.secret.mode, 'kept');
 });
 
+test('a settings read that fails for any reason but "no such Worker" writes nothing, so a blip never rotates the secret', async () => {
+  const fake = fakeCloudflare({ existing: ['STATE', 'WEBHOOK_SECRET'] });
+  const real = fake.cloudflare.request;
+  fake.cloudflare.request = async (o) => { if (o.method === 'GET' && o.path.endsWith('/settings')) throw new Error('Cloudflare API error: 10000: temporarily unavailable'); return real(o); };
+  const out = await runPayload(buildPayload({ files: FILES, ...ARGS }), fake);
+  assert.match(out.stage, /settings read failed, nothing written/);
+  assert.ok(!fake.calls.some((c) => c.method === 'PUT' || c.method === 'POST'));
+});
+
 test('--rotate draws a new secret even when one exists', async () => {
   const fake = fakeCloudflare({ existing: ['STATE', 'WEBHOOK_SECRET'] });
   const out = await runPayload(buildPayload({ files: FILES, ...ARGS, rotate: true }), fake);
