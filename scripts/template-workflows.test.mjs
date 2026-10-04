@@ -919,3 +919,23 @@ test('RELEASE-PATTERN.md says an article repository that cuts version tags carri
   assert.match(t, /An article repository that cuts version tags carries the same bare `create-release\.yml`/);
   assert.match(t, /templates\/article\//);
 });
+
+// UMB-427 ruling 1, second half: Phoenix #10 (hooks-safety.md, amended 2026-10-04, umbrella 75660c42) lets a tool write its OWN project-scoped state
+// folder through a realpath-containment helper. The canon .coderabbit.yaml restates the rule for the hooks block, so a patrol stops crying on the
+// sanctioned write while it still cries on every other project write. The line carries the conditions, not only the permission.
+test('.coderabbit.yaml hooks block: the Sandboxed line names the own project-scoped state folder, the realpath-containment conditions and the shipped-text naming; any other project write stays a finding -- RED before UMB-427', () => {
+  const lines = crLines(CR_TEMPLATE);
+  const at = lines.findIndex((l) => /^ {8}- Sandboxed:/.test(l));
+  assert.ok(at > 0, 'the Sandboxed line exists');
+  const line = lines[at];
+  assert.match(line, /<project root>\/\.<agent-dir>\/<tool>\//, 'the folder, anchored at the project root');
+  assert.match(line, /fs\.realpathSync\.native/, 'resolves both sides the platform way');
+  assert.match(line, /both the project root and the candidate/);
+  assert.match(line, /not inside that folder itself/, 'containment in the folder, never merely the project root');
+  assert.match(line, /fails closed/);
+  assert.match(line, /SECURITY\.md or the README/, 'named in the room\'s shipped text');
+  assert.match(line, /Any other write to the project is a finding/);
+  assert.match(line, /except reading the project's own config file from the project root/, 'the older exception is kept');
+  assert.ok(!/[\\"]/.test(line), 'no double quote or backslash: the settings editor mangles both');
+  assert.equal(lines[at - 1].trim().startsWith('- Deterministic'), true, 'the neighbouring lines did not move');
+});
