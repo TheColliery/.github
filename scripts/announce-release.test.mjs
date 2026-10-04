@@ -126,10 +126,10 @@ test('sweep: only published Releases inside the window, of public non-archived n
     Fork: { name: 'Fork', private: false, fork: true, html_url: 'https://x/F', releases: [rel('v0.8.0', 1)] },
     Priv: { name: 'Priv', private: true, html_url: 'https://x/P', releases: [rel('v0.7.0', 1)] },
   } });
-  const { r, logs } = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, windowHours: 48, post: true, repo: '', tag: '' }).then((x) => ({ r: x }));
+  const { r, logs } = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, now: NOW, windowHours: 48, post: true, repo: '', tag: '' }).then((x) => ({ r: x }));
   assert.deepEqual(r, { posted: 2, 'would-post': 0, already: 0, failed: 0 });
   assert.deepEqual(gh.st.discussions.map((d) => d.title), ['B v2.0.0 - s', 'A v1.1.0 - s'], 'oldest first');
-  const again = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, windowHours: 48, post: true, repo: '', tag: '' });
+  const again = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, now: NOW, windowHours: 48, post: true, repo: '', tag: '' });
   assert.deepEqual(again, { posted: 0, 'would-post': 0, already: 2, failed: 0 });
   assert.equal(gh.st.creates, 2);
   void logs;
@@ -170,16 +170,16 @@ test('sweep: a pre-release (a launch-form Release) is not announced by the sweep
   const rel = (tag, extra = {}) => ({ tag_name: tag, name: tag + ' - s', body: 'b', html_url: 'https://x/' + tag, draft: false, published_at: hoursAgo(2), ...extra });
   const repos = { A: { name: 'A', private: false, html_url: 'https://x/A', releases: [rel('v1.0.0'), rel('v1.1.0-beta.1', { prerelease: true })] } };
   const gh = fakeGithub({ repos });
-  const r = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, windowHours: 12, post: true, repo: '', tag: '' });
+  const r = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, now: NOW, windowHours: 12, post: true, repo: '', tag: '' });
   assert.deepEqual(r, { posted: 1, 'would-post': 0, already: 0, failed: 0 });
   assert.deepEqual(gh.st.discussions.map((d) => d.title), ['A v1.0.0 - s']);
-  const by = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, windowHours: 12, post: true, repo: 'A', tag: 'v1.1.0-beta.1' });
+  const by = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, now: NOW, windowHours: 12, post: true, repo: 'A', tag: 'v1.1.0-beta.1' });
   assert.deepEqual(by, { posted: 1 });
 });
 
 test('a scheduled run with nothing new posts nothing and says so', async () => {
   const gh = fakeGithub({ repos: { A: { name: 'A', private: false, html_url: 'https://x/A', releases: [{ tag_name: 'v1.0.0', name: 'v1.0.0 - s', body: 'b', html_url: 'https://x/v1', draft: false, published_at: hoursAgo(100) }] } } });
-  const logs = []; const r = await run({ token: TOKEN, fetchImpl: gh.f, log: (l) => logs.push(l), windowHours: 12, post: true, repo: '', tag: '' });
+  const logs = []; const r = await run({ token: TOKEN, fetchImpl: gh.f, log: (l) => logs.push(l), now: NOW, windowHours: 12, post: true, repo: '', tag: '' });
   assert.deepEqual(r, { posted: 0, 'would-post': 0, already: 0, failed: 0 }); assert.equal(gh.st.creates, 0);
   assert.match(logs.join('\n'), /sweep: 0 Release\(s\) published in the last 12 hours/);
 });

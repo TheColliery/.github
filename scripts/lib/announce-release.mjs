@@ -148,12 +148,12 @@ export async function sweep(api, target, { post, log, windowHours, now = Date.no
   return counts;
 }
 
-export async function run({ repo, tag, post, windowHours, token, fetchImpl, log = console.log }) {
+export async function run({ repo, tag, post, windowHours, token, fetchImpl, log = console.log, now }) {
   if (!token) throw new Error('GH_TOKEN is not set');
   if (repo) { checkRepo(repo); checkTag(tag); } // before any network call
   const api = client({ token, fetchImpl });
   const target = await findTarget(api);
   if (repo) return { [await announceOne(api, target, repo, tag, { post, log })]: 1 };
   if (tag) throw new Error('a tag needs a repo');
-  return sweep(api, target, { post, log, windowHours });
+  return sweep(api, target, { post, log, windowHours, now });
 }
