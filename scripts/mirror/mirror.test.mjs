@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { parseTags, assetKey, validateConfig, runOnce, BUDGET, USER_AGENT } from './mirror.mjs';
+import { parseTags, parseAssets, assetKey, validateConfig, runOnce, BUDGET, USER_AGENT } from './mirror.mjs';
 import worker from './worker.mjs';
 
 const OWNER = 'DemoOrg';
@@ -15,7 +15,7 @@ function fakeBucket(initial = {}) {
   const calls = { put: [], delete: [] };
   return {
     objects, calls,
-    async head(key) { const o = objects.get(key); return o ? { key, size: o.body.length } : null; },
+    async head(key) { const o = objects.get(key); return o ? { key, size: o.body.length, customMetadata: o.meta.customMetadata } : null; },
     async get(key) { const o = objects.get(key); return o ? { text: async () => o.body.toString('utf8') } : null; },
     async put(key, value, opts = {}) {
       const body = Buffer.from(typeof value === 'string' ? value : await new Response(value).arrayBuffer());
@@ -34,22 +34,26 @@ function fakeBucket(initial = {}) {
   };
 }
 
-// GitHub fake: atom feeds, release JSON, asset bytes. `seen` records every URL fetched with its headers.
-function fakeGitHub({ releases = {}, atoms = {}, failApi = false, failAtom = [], seen = [] } = {}) {
+// GitHub fake: atom feeds, the release page's asset list as HTML, asset bytes. `seen` records every URL fetched with its headers.
+// The page also carries a source-archive link and a link to another release, which must never be copied.
+function fakeGitHub({ releases = {}, atoms = {}, failAssets = false, failAtom = [], seen = [] } = {}) {
   const fetchFn = async (url, init = {}) => {
     seen.push({ url, headers: init.headers });
     const a = /^https:\/\/github\.com\/DemoOrg\/([^/]+)\/releases\.atom$/.exec(url);
     if (a) return failAtom.includes(a[1]) ? new Response('no', { status: 500 }) : new Response(atoms[a[1]] ?? atom(), { status: 200 });
-    const r = /^https:\/\/api\.github\.com\/repos\/DemoOrg\/([^/]+)\/releases\/tags\/(.+)$/.exec(url);
+    const r = /^https:\/\/github\.com\/DemoOrg\/([^/]+)\/releases\/expanded_assets\/(.+)$/.exec(url);
     if (r) {
-      if (failApi) return new Response('rate limited', { status: 403 });
+      if (failAssets) return new Response('blocked', { status: 403 });
       const rel = releases[`${r[1]}/${decodeURIComponent(r[2])}`];
-      return rel ? new Response(JSON.stringify({ assets: rel.map((f) => ({ name: f.name, size: Buffer.byteLength(f.body), content_type: 'application/zip', browser_download_url: `https://github.com/DemoOrg/${r[1]}/releases/download/${r[2]}/${f.name}`, digest: f.noDigest ? null : 'sha256:' + (f.digest ?? sha(f.body)) })) }), { status: 200 }) : new Response('{}', { status: 404 });
+      if (!rel) return new Response('', { status: 404 });
+      const li = (f) => `<li class="Box-row"><a href="/DemoOrg/${r[1]}/releases/download/${r[2]}/${encodeURIComponent(f.name)}" rel="nofollow"><span>${f.name}</span></a>${f.noDigest ? '' : `<span class="Truncate-text">sha256:${f.digest ?? sha(f.body)}</span>`}</li>`;
+      return new Response(`<ul>${rel.map(li).join('')}<li><a href="/DemoOrg/${r[1]}/archive/refs/tags/${r[2]}.zip">Source code (zip)</a></li><li><a href="/DemoOrg/${r[1]}/releases/download/other/x.zip">x</a></li></ul>`, { status: 200 });
     }
     const d = /^https:\/\/github\.com\/DemoOrg\/([^/]+)\/releases\/download\/([^/]+)\/(.+)$/.exec(url);
     if (d) {
-      const f = (releases[`${d[1]}/${decodeURIComponent(d[2])}`] ?? []).find((x) => x.name === d[3]);
-      return f ? new Response(f.served ?? f.body, { status: f.missing ? 404 : 200, headers: { 'content-length': String(Buffer.byteLength(f.served ?? f.body)) } }) : new Response('x', { status: 404 });
+      const f = (releases[`${d[1]}/${decodeURIComponent(d[2])}`] ?? []).find((x) => x.name === decodeURIComponent(d[3]));
+      const body = f?.served ?? f?.body;
+      return f ? new Response(body, { status: f.missing ? 404 : 200, headers: { 'content-length': String(f.claimed ?? Buffer.byteLength(body)) } }) : new Response('x', { status: 404 });
     }
     return new Response('?', { status: 404 });
   };
@@ -66,6 +70,18 @@ test('parseTags returns the tags of a releases feed in feed order, once each', (
 
 test('parseTags drops a tag that could not be one safe object-key segment', () => {
   assert.deepEqual(parseTags(atom('v1', 'a/b', '..', 'x y', 'v1..2', 'v2')), ['v1', 'v2']);
+});
+
+test('parseAssets reads the file names and published checksums of a release page, and nothing that is not a download of this very release', () => {
+  const li = (path, text, digest) => `<li><a href="${path}"><span>${text}</span></a>${digest ? `<span>sha256:${digest}</span>` : ''}</li>`;
+  const d1 = 'a'.repeat(64); const d2 = 'b'.repeat(64);
+  const html = '<ul>' + li('/O/r/releases/download/v1/one.zip', 'one.zip', d1) + li('/O/r/releases/download/v1/two%20x.zip', 'two', d2) + li('/O/r/releases/download/v1/no-digest.txt', 'n') + li('/O/r/archive/refs/tags/v1.zip', 'Source code') + li('/O/r/releases/download/v0/old.zip', 'old', d1) + li('/O/other/releases/download/v1/o.zip', 'o', d1) + li('/O/r/releases/download/v1/sub/dir.zip', 'd', d1) + li('/O/r/releases/download/v1/one.zip', 'dup', d1) + '</ul>';
+  assert.deepEqual(parseAssets(html, { org: 'O', repo: 'r', tag: 'v1' }), [
+    { name: 'one.zip', url: 'https://github.com/O/r/releases/download/v1/one.zip', digest: d1 },
+    { name: 'two x.zip', url: 'https://github.com/O/r/releases/download/v1/two%20x.zip', digest: d2 },
+    { name: 'no-digest.txt', url: 'https://github.com/O/r/releases/download/v1/no-digest.txt', digest: null },
+  ]);
+  assert.deepEqual(parseAssets('not html', { org: 'O', repo: 'r', tag: 'v1' }), []);
 });
 
 test('assetKey is <repo>/<tag>/<file> and refuses any segment that could climb or split the path', () => {
@@ -85,6 +101,8 @@ test('a new release is copied under <repo>/<tag>/<file>, its checksum enforced, 
   assert.equal(bucket.objects.get('alpha/v1.0.0/a.zip').body.toString(), 'AAA');
   assert.equal(bucket.objects.get('alpha/v1.0.0/a.zip').meta.sha256, sha('AAA'));
   assert.equal(bucket.objects.get('alpha/v1.0.0/a.zip').meta.httpMetadata.contentType, 'application/zip');
+  assert.equal(bucket.objects.get('alpha/v1.0.0/SHA256SUMS.txt').meta.httpMetadata.contentType, 'text/plain; charset=utf-8');
+  assert.equal(bucket.objects.get('alpha/v1.0.0/a.zip').meta.customMetadata.sha256, sha('AAA'));
   assert.deepEqual(bucket.calls.put.filter((k) => k.startsWith('.mirror/alpha')), ['.mirror/alpha/v1.0.0.json']);
   assert.ok(bucket.calls.put.indexOf('.mirror/alpha/v1.0.0.json') > bucket.calls.put.indexOf('alpha/v1.0.0/SHA256SUMS.txt'));
   assert.deepEqual(JSON.parse(bucket.objects.get('.mirror/alpha/v1.0.0.json').body.toString()).files.map((f) => f.name), ['a.zip', 'SHA256SUMS.txt']);
@@ -130,7 +148,7 @@ test('a third tag in the feed is neither copied nor kept when keep is 2', async 
   assert.ok(!gh.seen.some((s) => s.url.includes('tags/v1')));
 });
 
-test('an object of the wrong size already at the key is replaced, not trusted', async () => {
+test('an object with no recorded checksum, or another one, already at the key is replaced, not trusted', async () => {
   const gh = fakeGitHub({ atoms: { alpha: atom('v1') }, releases: { 'alpha/v1': [{ name: 'a.zip', body: 'AAA' }] } });
   const bucket = fakeBucket({ 'alpha/v1/a.zip': 'torn' });
   await run({ bucket, fetchFn: gh.fetchFn });
@@ -167,10 +185,10 @@ test('an empty feed prunes nothing either', async () => {
   assert.ok(bucket.objects.has('alpha/v1/a.zip'));
 });
 
-test('a rate-limited release lookup writes no marker and is retried next run', async () => {
+test('a refused release page writes no marker and is retried next run', async () => {
   const releases = { 'alpha/v1': [{ name: 'a.zip', body: 'A' }] };
   const bucket = fakeBucket();
-  const out = await run({ bucket, fetchFn: fakeGitHub({ atoms: { alpha: atom('v1') }, releases, failApi: true }).fetchFn });
+  const out = await run({ bucket, fetchFn: fakeGitHub({ atoms: { alpha: atom('v1') }, releases, failAssets: true }).fetchFn });
   assert.ok(!bucket.objects.has('.mirror/alpha/v1.json')); assert.equal(out.errors, 1);
   const again = await run({ bucket, fetchFn: fakeGitHub({ atoms: { alpha: atom('v1') }, releases }).fetchFn });
   assert.ok(bucket.objects.has('.mirror/alpha/v1.json')); assert.equal(again.errors, 0);
@@ -184,8 +202,8 @@ test('bytes that do not match the checksum GitHub published are refused and no m
   assert.equal(out.errors, 1);
 });
 
-test('a download whose length differs from the listed size is removed and not marked, even with no digest to check', async () => {
-  const gh = fakeGitHub({ atoms: { alpha: atom('v1') }, releases: { 'alpha/v1': [{ name: 'a.zip', body: 'AAA', noDigest: true, served: 'AAAA' }] } });
+test('a download whose body is not the length the server announced is removed and not marked, even with no digest to check', async () => {
+  const gh = fakeGitHub({ atoms: { alpha: atom('v1') }, releases: { 'alpha/v1': [{ name: 'a.zip', body: 'AAA', noDigest: true, claimed: 4 }] } });
   const bucket = fakeBucket();
   const out = await run({ bucket, fetchFn: gh.fetchFn });
   assert.ok(!bucket.objects.has('alpha/v1/a.zip')); assert.ok(!bucket.objects.has('.mirror/alpha/v1.json'));
@@ -199,9 +217,10 @@ test('a failed asset download is reported and the other assets of the release st
   assert.ok(bucket.objects.has('alpha/v1/b.zip')); assert.ok(!bucket.objects.has('alpha/v1/a.zip')); assert.ok(!bucket.objects.has('.mirror/alpha/v1.json'));
 });
 
-test('an asset already in the bucket at the right size is not downloaded again', async () => {
+test('an asset already in the bucket with the published checksum recorded is not downloaded again', async () => {
   const gh = fakeGitHub({ atoms: { alpha: atom('v1') }, releases: { 'alpha/v1': [{ name: 'a.zip', body: 'AAA' }, { name: 'b.zip', body: 'B' }] } });
-  const bucket = fakeBucket({ 'alpha/v1/a.zip': 'AAA' });
+  const bucket = fakeBucket();
+  await bucket.put('alpha/v1/a.zip', 'AAA', { customMetadata: { sha256: sha('AAA') } });
   await run({ bucket, fetchFn: gh.fetchFn });
   assert.ok(!gh.seen.some((s) => s.url.endsWith('/v1/a.zip')));
   assert.ok(gh.seen.some((s) => s.url.endsWith('/v1/b.zip')));

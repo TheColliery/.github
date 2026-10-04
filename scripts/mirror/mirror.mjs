@@ -3,7 +3,7 @@
 // (the binding is the grant) and no GitHub credential (public reads only).
 //
 // Per run (worker.mjs calls runOnce once per Cron tick): read each repository's releases.atom for its newest tags; for a tag with no marker
-// (.mirror/<repo>/<tag>.json) read the release's asset list once, copy each asset through the binding with the checksum GitHub published enforced by R2,
+// (.mirror/<repo>/<tag>.json) read the release page's asset list once (HTML, not the REST API: GitHub's API answers a Workers address 403 from its shared unauthenticated limit, measured 2026-10-04), copy each asset through the binding with the checksum GitHub published enforced by R2,
 // and write the marker LAST, so a half-copied release is finished next run and never looks done. Then delete, by name, every key of that repository whose tag
 // is no longer among the newest `keep`. Free-plan budget (Cloudflare docs read 2026-10-05): 50 external subrequests per invocation, so BUDGET stops the run
 // early and the remainder waits for the next tick; R2 binding calls are not external subrequests.
@@ -40,6 +40,29 @@ export function parseTags(text) {
   return tags;
 }
 
+// the downloads listed on a release page (releases/expanded_assets/<tag>): one <li> per file, a download link of THIS release and, when GitHub shows it, the
+// file's sha256. A source-archive link, another release's file, a nested path and a repeat are not assets.
+export function parseAssets(html, { org, repo, tag }) {
+  const base = `/${org}/${repo}/releases/download/${tag}/`;
+  const out = []; const seen = new Set();
+  for (const block of String(html).split(/<li[\s>]/i).slice(1)) {
+    const href = /href="([^"]+)"/i.exec(block);
+    if (!href) continue;
+    let path;
+    try { path = decodeURIComponent(href[1]); } catch { continue; }
+    if (!path.startsWith(base)) continue;
+    const name = path.slice(base.length);
+    if (!name || name.includes('/') || seen.has(name)) continue;
+    seen.add(name);
+    const digest = /sha256:([0-9a-f]{64})/.exec(block);
+    out.push({ name, url: `https://github.com/${org}/${repo}/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(name)}`, digest: digest ? digest[1] : null });
+  }
+  return out;
+}
+
+const TYPES = { zip: 'application/zip', txt: 'text/plain; charset=utf-8', md: 'text/markdown; charset=utf-8', json: 'application/json', gz: 'application/gzip', tgz: 'application/gzip' };
+const typeOf = (name) => TYPES[name.split('.').pop().toLowerCase()] ?? 'application/octet-stream';
+
 // null when sound, else the first fault in words.
 export function validateConfig(config) {
   if (!config || typeof config.org !== 'string' || !ORG.test(config.org)) return 'org must be a GitHub organization name';
@@ -74,20 +97,23 @@ async function pruneRepo(bucket, repo, keep) {
   return doomed.length;
 }
 
-// one asset: skip when already there at the right size, else stream it in with the published checksum enforced; the stored size must equal the listed one.
-async function copyAsset({ bucket, fetchFn, key, asset, log }) {
-  const have = await bucket.head(key);
-  if (have && have.size === asset.size) return { ok: true, copied: false };
-  const res = await get(fetchFn, asset.browser_download_url);
+// one asset: skip when the bucket already holds it with the same published checksum recorded, else stream it in with that checksum enforced by R2 (without a
+// published checksum the stored length must equal the length the server announced); the checksum is recorded on the object for the next run's skip.
+async function copyAsset({ bucket, fetchFn, key, asset }) {
+  if (asset.digest) {
+    const have = await bucket.head(key);
+    if (have?.customMetadata?.sha256 === asset.digest) return { ok: true, copied: false, size: have.size };
+  }
+  const res = await get(fetchFn, asset.url);
   if (!res.ok) return { ok: false, error: `download HTTP ${res.status}`, cost: DOWNLOAD_COST };
-  const opts = { httpMetadata: { contentType: asset.content_type || 'application/octet-stream' } };
-  const m = SHA256.exec(asset.digest ?? '');
-  if (m) opts.sha256 = m[1];
-  const body = res.headers.get('content-length') === String(asset.size) ? res.body : await res.arrayBuffer();
+  const opts = { httpMetadata: { contentType: typeOf(asset.name) } };
+  if (asset.digest) { opts.sha256 = asset.digest; opts.customMetadata = { sha256: asset.digest }; }
+  const announced = Number(res.headers.get('content-length'));
+  const body = Number.isInteger(announced) && announced > 0 ? res.body : await res.arrayBuffer();
   let stored;
-  try { stored = await bucket.put(key, body, opts); } catch (e) { log.push(`put refused: ${String(e?.message ?? e).slice(0, 100)}`); return { ok: false, error: 'put refused (checksum or length)', cost: DOWNLOAD_COST }; }
-  if (stored.size !== asset.size) { await bucket.delete(key); return { ok: false, error: 'stored size differs from the listed size', cost: DOWNLOAD_COST }; }
-  return { ok: true, copied: true, cost: DOWNLOAD_COST };
+  try { stored = await bucket.put(key, body, opts); } catch { return { ok: false, error: 'put refused (checksum or length)', cost: DOWNLOAD_COST }; }
+  if (Number.isInteger(announced) && announced > 0 && stored.size !== announced) { await bucket.delete(key); return { ok: false, error: 'stored length differs from the announced length', cost: DOWNLOAD_COST }; }
+  return { ok: true, copied: true, size: stored.size, cost: DOWNLOAD_COST };
 }
 
 export async function runOnce({ config, bucket, fetchFn, now }) {
@@ -112,22 +138,21 @@ export async function runOnce({ config, bucket, fetchFn, now }) {
       left--;
       let assets;
       try {
-        const res = await get(fetchFn, `https://api.github.com/repos/${config.org}/${repo}/releases/tags/${encodeURIComponent(tag)}`, 'application/vnd.github+json');
-        if (!res.ok) { note(repo, tag, `release lookup HTTP ${res.status}`); continue; }
-        assets = (await res.json()).assets ?? [];
-      } catch (e) { note(repo, tag, 'lookup ' + String(e?.message ?? e).slice(0, 80)); continue; }
+        const res = await get(fetchFn, `https://github.com/${config.org}/${repo}/releases/expanded_assets/${encodeURIComponent(tag)}`, 'text/html');
+        if (!res.ok) { note(repo, tag, `release page HTTP ${res.status}`); continue; }
+        assets = parseAssets(await res.text(), { org: config.org, repo, tag });
+      } catch (e) { note(repo, tag, 'release page ' + String(e?.message ?? e).slice(0, 80)); continue; }
       let complete = true; const files = [];
       for (const asset of assets) {
         let key;
         try { key = assetKey(repo, tag, asset.name); } catch { note(repo, tag, 'unsafe asset name'); complete = false; continue; }
         if (left < DOWNLOAD_COST) { complete = false; out.deferred++; break; }
-        const log = [];
         let r;
-        try { r = await copyAsset({ bucket, fetchFn, key, asset, log }); } catch (e) { r = { ok: false, error: String(e?.message ?? e).slice(0, 80), cost: DOWNLOAD_COST }; }
+        try { r = await copyAsset({ bucket, fetchFn, key, asset }); } catch (e) { r = { ok: false, error: String(e?.message ?? e).slice(0, 80), cost: DOWNLOAD_COST }; }
         left -= r.cost ?? 0;
         if (!r.ok) { complete = false; note(repo, tag, `${asset.name}: ${r.error}`); continue; }
         if (r.copied) out.copied++;
-        files.push({ name: asset.name, size: asset.size });
+        files.push({ name: asset.name, size: r.size });
       }
       if (complete) { await bucket.put(`${MARKER_DIR}/${repo}/${tag}.json`, JSON.stringify({ repo, tag, files, at: out.at })); out.releasesDone++; }
     }
