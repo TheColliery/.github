@@ -866,3 +866,17 @@ test('RELEASE-PATTERN.md states the summary band from release-shape.mjs (aim 60,
   assert.doesNotMatch(t, /drops what sits between the summary line/, 'the old statement that the lead text is dropped is gone');
   assert.match(fs.readFileSync(path.join(ROOT, 'RELEASE-NOTES-TEMPLATE.md'), 'utf8'), /OPTIONAL lead paragraph/);
 });
+
+// UMB-433 / pass 15 A-2, A-3: the canon names the opener ceiling and the announcement title ceiling, and the builder's comment is not stale.
+test('RELEASE-PATTERN.md names the opener ceiling (a one-capital proper noun lowers) and the 200-character announcement ceiling with the pre-tag --check; the builder carries no stale paragraph -- RED before pass 15', () => {
+  const t = fs.readFileSync(path.join(ROOT, 'RELEASE-PATTERN.md'), 'utf8').replace(/\r\n/g, '\n');
+  assert.match(t, /a summary that opens with a proper noun of ONE leading capital \("Windows", "Linux", "Cloudflare"\) is lowered/, 'A-2: the ceiling');
+  assert.match(t, /verb first/);
+  assert.match(t, /release-title-cap/);
+  assert.match(t, /node scripts\/release-notes\.mjs --check/);
+  assert.match(t, /200-character/);
+  const src = fs.readFileSync(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', 'release-shape.mjs'), 'utf8');
+  assert.doesNotMatch(src, /an ordinary word has at most one leading capital/, 'A-3: the df60cba paragraph is gone');
+  assert.doesNotMatch(src, /whose first\s+\/\/ TWO characters are both capitals/);
+  assert.match(src, /THE CEILING, named/);
+});
