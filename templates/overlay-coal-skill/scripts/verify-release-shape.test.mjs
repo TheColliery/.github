@@ -8,11 +8,21 @@ import { fileURLToPath } from 'node:url';
 
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'verify-release-shape.mjs');
 
-// F-R19-2 (UMB-427): a spawned child gets an EXPLICIT environment, never the parent's. RELEASE_TAG, PREVIOUS_STABLE_TAG, LATEST_TAG,
-// LAUNCH_FORM, GITHUB_REF_NAME and the rest of an Actions run's variables change what these scripts do, so a developer's exported
-// RELEASE_TAG (or a CI run's own) must not reach the child. Only what a node child needs to start is passed through, plus the test's own.
-const BASE_ENV_KEYS = ['PATH', 'Path', 'SystemRoot', 'SYSTEMROOT', 'TEMP', 'TMP', 'TMPDIR', 'HOME', 'USERPROFILE'];
-const cleanEnv = (extra = {}) => ({ ...Object.fromEntries(BASE_ENV_KEYS.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]])), ...extra });
+// F-R19-2 and UMB-443 ruling 2: a spawned child gets an EXPLICIT environment, never the parent's, and its HOME, USERPROFILE, TEMP, TMP and
+// TMPDIR are the test's OWN scratch folder, so nothing it reads or writes can reach the developer's profile or temp folder, and
+// GIT_CEILING_DIRECTORIES stops git climbing out of the scratch folder into a repository above it. RELEASE_TAG, PREVIOUS_STABLE_TAG,
+// LATEST_TAG, LAUNCH_FORM, GITHUB_REF_NAME and the rest of an Actions run's variables change what these scripts do, so none of the
+// parent's reaches the child. Only what a node child needs to start (the program path and, on Windows, SystemRoot) is passed through.
+const BASE_ENV_KEYS = ['PATH', 'Path', 'SystemRoot', 'SYSTEMROOT'];
+const sandboxEnv = (dir, extra = {}) => ({
+  ...Object.fromEntries(BASE_ENV_KEYS.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]])),
+  HOME: dir, USERPROFILE: dir, TEMP: dir, TMP: dir, TMPDIR: dir, GIT_CEILING_DIRECTORIES: path.dirname(dir),
+  // Windows puts HOMEDRIVE and HOMEPATH (the real profile) into every process it starts; they are overridden too, so no path variable points out.
+  ...(process.platform === 'win32' ? { HOMEDRIVE: path.parse(dir).root.replace(/[\\/]+$/, ''), HOMEPATH: dir.slice(path.parse(dir).root.length - 1) } : {}),
+  ...extra,
+});
+// The one place every spawn of these tests goes through, so the sandbox is applied by construction.
+const spawnIn = (cwd, script, args = [], { env, input } = {}) => spawnSync(process.execPath, [script, ...args], { cwd, encoding: 'utf8', timeout: 30000, input, env: sandboxEnv(cwd, env) });
 const made = [];
 test.after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
 
@@ -23,7 +33,7 @@ function scratch() {
 }
 
 function run(cwd, stdin) {
-  return spawnSync(process.execPath, [SCRIPT], { cwd, encoding: 'utf8', timeout: 30000, input: stdin, env: cleanEnv() });
+  return spawnIn(cwd, SCRIPT, [], { input: stdin });
 }
 
 test('verify-release-shape.mjs: matching title + body -> exit 0', () => {
@@ -132,4 +142,14 @@ test('verify-release-shape.mjs: the parent\'s GITHUB_ACTIONS never reaches the c
     assert.doesNotMatch(res.stdout, /^::warning/m);
     assert.match(res.stdout, /^verify-release-shape: WARNING release-title-band/m);
   } finally { if (saved === undefined) delete process.env.GITHUB_ACTIONS; else process.env.GITHUB_ACTIONS = saved; }
+});
+
+// UMB-443 ruling 2: the sandbox is real for this CLI too.
+test('verify-release-shape.mjs tests: the shared spawn gives the child the scratch folder as HOME, USERPROFILE, TEMP, TMP and TMPDIR and a git ceiling above it -- RED before UMB-443', () => {
+  const dir = scratch();
+  const probe = path.join(dir, 'probe.mjs');
+  fs.writeFileSync(probe, "const e = process.env; console.log(JSON.stringify([e.HOME, e.USERPROFILE, e.TEMP, e.TMP, e.TMPDIR, e.GIT_CEILING_DIRECTORIES]));\n");
+  const r = spawnIn(dir, probe);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout), [dir, dir, dir, dir, dir, path.dirname(dir)]);
 });

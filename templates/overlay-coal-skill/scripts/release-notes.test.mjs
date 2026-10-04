@@ -12,11 +12,21 @@ import { fileURLToPath } from 'node:url';
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'release-notes.mjs');
 const LIB_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'lib');
 
-// F-R19-2 (UMB-427): a spawned child gets an EXPLICIT environment, never the parent's. RELEASE_TAG, PREVIOUS_STABLE_TAG, LATEST_TAG,
-// LAUNCH_FORM, GITHUB_REF_NAME and the rest of an Actions run's variables change what these scripts do, so a developer's exported
-// RELEASE_TAG (or a CI run's own) must not reach the child. Only what a node child needs to start is passed through, plus the test's own.
-const BASE_ENV_KEYS = ['PATH', 'Path', 'SystemRoot', 'SYSTEMROOT', 'TEMP', 'TMP', 'TMPDIR', 'HOME', 'USERPROFILE'];
-const cleanEnv = (extra = {}) => ({ ...Object.fromEntries(BASE_ENV_KEYS.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]])), ...extra });
+// F-R19-2 and UMB-443 ruling 2: a spawned child gets an EXPLICIT environment, never the parent's, and its HOME, USERPROFILE, TEMP, TMP and
+// TMPDIR are the test's OWN scratch folder, so nothing it reads or writes can reach the developer's profile or temp folder, and
+// GIT_CEILING_DIRECTORIES stops git climbing out of the scratch folder into a repository above it. RELEASE_TAG, PREVIOUS_STABLE_TAG,
+// LATEST_TAG, LAUNCH_FORM, GITHUB_REF_NAME and the rest of an Actions run's variables change what these scripts do, so none of the
+// parent's reaches the child. Only what a node child needs to start (the program path and, on Windows, SystemRoot) is passed through.
+const BASE_ENV_KEYS = ['PATH', 'Path', 'SystemRoot', 'SYSTEMROOT'];
+const sandboxEnv = (dir, extra = {}) => ({
+  ...Object.fromEntries(BASE_ENV_KEYS.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]])),
+  HOME: dir, USERPROFILE: dir, TEMP: dir, TMP: dir, TMPDIR: dir, GIT_CEILING_DIRECTORIES: path.dirname(dir),
+  // Windows puts HOMEDRIVE and HOMEPATH (the real profile) into every process it starts; they are overridden too, so no path variable points out.
+  ...(process.platform === 'win32' ? { HOMEDRIVE: path.parse(dir).root.replace(/[\\/]+$/, ''), HOMEPATH: dir.slice(path.parse(dir).root.length - 1) } : {}),
+  ...extra,
+});
+// The one place every spawn of these tests goes through, so the sandbox is applied by construction.
+const spawnIn = (cwd, script, args = [], { env, input } = {}) => spawnSync(process.execPath, [script, ...args], { cwd, encoding: 'utf8', timeout: 30000, input, env: sandboxEnv(cwd, env) });
 const made = [];
 test.after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
 
@@ -29,7 +39,7 @@ function scratchWithLib() {
 }
 
 function run(cwd, env, args = []) {
-  return spawnSync(process.execPath, [SCRIPT, ...args], { cwd, encoding: 'utf8', timeout: 30000, env: cleanEnv(env) });
+  return spawnIn(cwd, SCRIPT, args, { env });
 }
 
 test('release-notes.mjs: writes release-title.txt + release-body.md derived from CHANGELOG.md, exit 0', () => {
@@ -219,4 +229,37 @@ test('release-notes.mjs (the derive step after the tag): an announcement overflo
   assert.equal(res.status, 0, res.stderr);
   assert.match(res.stdout, /WARNING release-title-cap: the announcement title/);
   assert.ok(fs.existsSync(path.join(dir, 'release-title.txt')), 'the Release is still derived');
+});
+
+// UMB-443 ruling 2: the sandbox is real. A probe run through the same spawn function every test uses prints what the child sees.
+test('the spawn the tests share gives the child the scratch folder as HOME, USERPROFILE, TEMP, TMP and TMPDIR, a git ceiling above it, and nothing of the parent\'s -- RED before UMB-443', () => {
+  const dir = scratchWithLib();
+  const probe = path.join(dir, 'probe.mjs');
+  fs.writeFileSync(probe, "const e = process.env; console.log(JSON.stringify({ HOME: e.HOME, USERPROFILE: e.USERPROFILE, TEMP: e.TEMP, TMP: e.TMP, TMPDIR: e.TMPDIR, CEIL: e.GIT_CEILING_DIRECTORIES, HOMEDRIVE: e.HOMEDRIVE, HOMEPATH: e.HOMEPATH, KEYS: Object.keys(e).sort() }));\n");
+  const saved = { HOME: process.env.HOME, GITHUB_TOKEN: process.env.GITHUB_TOKEN, GH_TOKEN: process.env.GH_TOKEN };
+  process.env.GITHUB_TOKEN = 'a-parent-value'; process.env.GH_TOKEN = 'a-parent-value';
+  try {
+    const r = spawnIn(dir, probe);
+    assert.equal(r.status, 0, r.stderr);
+    const seen = JSON.parse(r.stdout);
+    for (const k of ['HOME', 'USERPROFILE', 'TEMP', 'TMP', 'TMPDIR']) assert.equal(seen[k], dir, k + ' is the scratch folder');
+    assert.equal(seen.CEIL, path.dirname(dir));
+    if (process.platform === 'win32') assert.equal(seen.HOMEDRIVE + seen.HOMEPATH, dir, 'HOMEDRIVE and HOMEPATH point into the scratch folder too');
+    assert.ok(!seen.KEYS.includes('GITHUB_TOKEN') && !seen.KEYS.includes('GH_TOKEN'), 'no credential of the parent reaches the child');
+    assert.deepEqual(seen.KEYS.filter((k) => !/^(path|systemroot|home|userprofile|temp|tmp|tmpdir|git_ceiling_directories|systemdrive|comspec|pathext|windir|homedrive|homepath|username|userdomain|logonserver)$/i.test(k)), [], 'nothing else but what node needs to start');
+  } finally { for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } }
+});
+
+// UMB-443 ruling 2: the git spawn inside --check gets an explicit env too. A GIT_DIR a hook (or a patrol) leaves in the environment would aim it
+// at ANOTHER repository's origin; the check must read the repository it runs in.
+test('release-notes.mjs --check reads the origin of the repository it runs in, never the one a GIT_DIR names -- RED before UMB-443', () => {
+  const dir = scratchWithLib();
+  const decoy = scratchWithLib();
+  const git = (cwd, ...a) => spawnSync('git', a, { cwd, encoding: 'utf8', timeout: 30000, env: sandboxEnv(cwd) });
+  for (const [d, name] of [[dir, 'Realrepo'], [decoy, 'Decoyrepo']]) { git(d, 'init', '-q'); git(d, 'remote', 'add', 'origin', 'https://github.com/TheColliery/' + name + '.git'); }
+  fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), checkEntry(60));
+  const res = run(dir, { GIT_DIR: path.join(decoy, '.git'), GIT_WORK_TREE: decoy }, ['--check']);
+  assert.equal(res.status, 0, res.stderr);
+  assert.match(res.stdout, /announcement title "Realrepo v1\.2\.0 - /, res.stdout);
+  assert.doesNotMatch(res.stdout, /Decoyrepo/);
 });

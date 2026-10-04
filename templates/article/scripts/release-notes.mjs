@@ -28,7 +28,11 @@ function repoName(args) {
   const at = args.indexOf('--repo');
   if (at !== -1) return args[at + 1] || '';
   if (process.env.GITHUB_REPOSITORY) return process.env.GITHUB_REPOSITORY.split('/').pop();
-  const r = spawnSync('git', ['config', '--get', 'remote.origin.url'], { encoding: 'utf8', timeout: 30000 });
+  // An EXPLICIT environment (UMB-443 ruling 2): only what git needs to start. A GIT_DIR or GIT_WORK_TREE a hook or a patrol leaves in the
+  // environment would aim this at ANOTHER repository's origin, and --local reads this repository's own config only, never the user's.
+  const keep = ['PATH', 'Path', 'SystemRoot', 'SYSTEMROOT', 'TEMP', 'TMP', 'TMPDIR', 'HOME', 'USERPROFILE'];
+  const env = { ...Object.fromEntries(keep.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]])), GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0' };
+  const r = spawnSync('git', ['config', '--local', '--get', 'remote.origin.url'], { encoding: 'utf8', timeout: 30000, env });
   const m = r.status === 0 ? /([^/:]+?)(?:\.git)?\s*$/.exec(r.stdout.trim()) : null;
   return m ? m[1] : '';
 }
