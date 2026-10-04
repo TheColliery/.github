@@ -253,10 +253,13 @@ test('runOnce: a source failing three runs in a row is reported ONCE, at the thi
   await runWith({ kv, routes: bad, send });
   assert.strictEqual(sent.length, 1);
   assert.match(sent[0].text, /S1 .*HTTP 500.*3 runs/);
-  const writesAtThree = kv.writes.length;
+  // CHANGED in its own step (B-1): the failure window (the last 8 runs) now grows with each failure, so a dead source writes until the window is full and then stops
+  for (let i = 0; i < 5; i++) await runWith({ kv, routes: bad, send });
+  assert.strictEqual(sent.length, 1);
+  const writesWhenFull = kv.writes.length;
   await runWith({ kv, routes: bad, send });
   assert.strictEqual(sent.length, 1);
-  assert.strictEqual(kv.writes.length, writesAtThree, 'past the threshold nothing is written');
+  assert.strictEqual(kv.writes.length, writesWhenFull, 'once the window is full nothing is written');
   await runWith({ kv, routes: good, send });
   assert.strictEqual(JSON.parse(kv.store.state).sources.s1.fails, 0);
 });
@@ -277,6 +280,144 @@ test('runOnce reports what it deferred when more sources are due than maxPerRun'
   const routes = Object.fromEntries(config.sources.map((s) => [s.url, { body: atom('v1') }]));
   const r = await runOnce({ config, kv, fetchFn: fakeFetch(routes), send: async () => ({}), now: Date.UTC(2026, 9, 4, 12), to: 't', from: 'f' });
   assert.deepStrictEqual([r.checked, r.deferred], [3, 2]);
+});
+
+// ---- the auditor's five LOWs (pass 17, B-1 to B-5), each in the probe shape the auditor named ----
+const U0 = 'https://example.invalid/s0'; const U1 = 'https://example.invalid/s1';
+const entryFeed = (id, title, link, hrefRaw) => `<feed><entry><id>${id}</id><title>${title}</title><link rel="alternate" href="${hrefRaw ?? link}"/></entry></feed>`;
+const runAt = (kv, routes, send, n, config = cfg(2)) => runOnce({ config, kv, fetchFn: fakeFetch(routes), send, now: Date.UTC(2026, 9, 4, 12) + n * 3600000, to: 't', from: 'f' });
+
+test('B-1: a source that fails every other run is reported once, as flapping, not left silently half-dead', async () => {
+  const kv = fakeKv(); const sent = [];
+  const send = async (m) => { sent.push(m); };
+  const good = { [U0]: { body: atom('a1') }, [U1]: { body: atom('b1') } };
+  const bad = { ...good, [U1]: { status: 503 } };
+  await runAt(kv, good, send, 0);
+  sent.length = 0;
+  for (let i = 1; i <= 8; i++) await runAt(kv, i % 2 ? bad : good, send, i); // 503, 200, 503, 200, 503, 200, 503, 200
+  assert.strictEqual(sent.length, 1, 'reported exactly once over 8 alternating runs');
+  assert.match(sent[0].text, /S1 .*HTTP 503.*4 of the last 7 runs/);
+  assert.doesNotMatch(sent[0].text, /in a row/);
+});
+
+test('B-1: a long healthy streak after a report re-arms it, so a later outage is reported again', async () => {
+  const kv = fakeKv(); const sent = [];
+  const send = async (m) => { sent.push(m); };
+  const good = { [U0]: { body: atom('a1') }, [U1]: { body: atom('b1') } };
+  const bad = { ...good, [U1]: { status: 500 } };
+  await runAt(kv, good, send, 0);
+  for (let i = 1; i <= 3; i++) await runAt(kv, bad, send, i);
+  assert.strictEqual(sent.length, 2); // hello + the third failure
+  for (let i = 4; i <= 6; i++) await runAt(kv, good, send, i);
+  for (let i = 7; i <= 9; i++) await runAt(kv, bad, send, i);
+  assert.strictEqual(sent.length, 3);
+  assert.strictEqual(JSON.parse(kv.store.state).sources.s1.fails, 3);
+});
+
+test('B-1: a failure spell is reported once: one answered run in the middle does not start a second report', async () => {
+  const kv = fakeKv(); const sent = [];
+  const send = async (m) => { sent.push(m); };
+  const good = { [U0]: { body: atom('a1') }, [U1]: { body: atom('b1') } };
+  const bad = { ...good, [U1]: { status: 500 } };
+  await runAt(kv, good, send, 0);
+  for (const [i, routes] of [bad, bad, bad, good, bad, bad, bad].entries()) await runAt(kv, routes, send, i + 1);
+  assert.strictEqual(sent.length, 2); // hello + one report
+});
+
+test('B-4: control characters other than whitespace are stripped from a link and from an error text', async () => {
+  const bell = String.fromCharCode(7); const del = String.fromCharCode(127);
+  const kv = fakeKv();
+  const r = await fetchSource({ id: 'a', url: U0, kind: 'atom' }, undefined, fakeFetch({ [U0]: new Error('x' + bell + 'y' + del + 'z') }));
+  assert.strictEqual(r.error, 'x y z');
+  const f = await fetchSource({ id: 'a', url: U0, kind: 'atom' }, undefined, fakeFetch({ [U0]: { body: entryFeed('i', 't', 'x', 'https://example.invalid/a' + bell + 'b' + del) } }));
+  assert.strictEqual(f.link, 'https://example.invalid/ab');
+  assert.ok(kv);
+});
+
+test('B-1: an outage that goes on past the report keeps the window full and then writes nothing more', async () => {
+  const kv = fakeKv(); const send = async () => {};
+  const good = { [U0]: { body: atom('a1') }, [U1]: { body: atom('b1') } };
+  const bad = { ...good, [U1]: { status: 500 } };
+  await runAt(kv, good, send, 0);
+  for (let i = 1; i <= 8; i++) await runAt(kv, bad, send, i);
+  kv.writes.length = 0;
+  await runAt(kv, bad, send, 9); await runAt(kv, bad, send, 10);
+  assert.deepStrictEqual(kv.writes, [], 'once the window is full of failures a dead source costs no write');
+});
+
+test('B-2: a feed whose entry ids change on every render but whose title and link stay is quiet', async () => {
+  const kv = fakeKv(); const sent = [];
+  const send = async (m) => { sent.push(m); };
+  const feed = (n) => ({ [U0]: { body: entryFeed('urn:render:' + n, 'Release 5', 'https://example.invalid/r/5') }, [U1]: { body: atom('b1') } });
+  await runAt(kv, feed(1), send, 0);
+  sent.length = 0;
+  const r2 = await runAt(kv, feed(2), send, 1); const r3 = await runAt(kv, feed(3), send, 2);
+  assert.deepStrictEqual([r2.changed, r3.changed, sent.length], [0, 0, 0]);
+});
+
+test('B-2: a new id WITH a new title, or with a new link, is still a change', async () => {
+  const kv = fakeKv(); const sent = [];
+  const send = async (m) => { sent.push(m); };
+  const at = (id, title, link) => ({ [U0]: { body: entryFeed(id, title, link) }, [U1]: { body: atom('b1') } });
+  await runAt(kv, at('i1', 'Release 5', 'https://example.invalid/r/5'), send, 0);
+  assert.strictEqual((await runAt(kv, at('i2', 'Release 6', 'https://example.invalid/r/5'), send, 1)).changed, 1);
+  assert.strictEqual((await runAt(kv, at('i3', 'Release 6', 'https://example.invalid/r/6'), send, 2)).changed, 1);
+});
+
+test('B-2: a raw file whose title stays but whose content changes is still a change (the id rule is for feeds only)', async () => {
+  const kv = fakeKv(); const send = async () => {};
+  const config = { ...cfg(1), sources: [{ id: 's0', name: 'S0', url: U0, kind: 'raw', everyHours: 1 }] };
+  await runAt(kv, { [U0]: { body: '# Changelog\n- one\n' } }, send, 0, config);
+  assert.strictEqual((await runAt(kv, { [U0]: { body: '# Changelog\n- one\n- two\n' } }, send, 1, config)).changed, 1);
+});
+
+test('B-3: a first run that fails everywhere does not forfeit the hello digest; the next answering run sends it', async () => {
+  const kv = fakeKv(); const sent = [];
+  const send = async (m) => { sent.push(m); };
+  const r1 = await runAt(kv, { [U0]: { status: 500 }, [U1]: { status: 500 } }, send, 0);
+  assert.deepStrictEqual([r1.errors, r1.emailed], [2, false]);
+  const r2 = await runAt(kv, { [U0]: { body: atom('a1') }, [U1]: { body: atom('b1') } }, send, 1);
+  assert.deepStrictEqual([r2.baselined, r2.emailed], [2, true]);
+  assert.match(sent[0].text, /Baselined 2 source/);
+  const r3 = await runAt(kv, { [U0]: { body: atom('a1') }, [U1]: { body: atom('b1') } }, send, 2);
+  assert.strictEqual(r3.emailed, false);
+});
+
+test('B-4: a newline inside a link href never becomes a line break in the mail; an error text and a huge title are cleaned and capped', async () => {
+  const kv = fakeKv(); const sent = [];
+  const send = async (m) => { sent.push(m); };
+  const big = 'T'.repeat(30000);
+  await runAt(kv, { [U0]: { body: entryFeed('i1', 'one', 'x') }, [U1]: { body: atom('b1') } }, send, 0);
+  sent.length = 0;
+  await runAt(kv, { [U0]: { body: entryFeed('i2', big, 'x', 'https://example.invalid/a?q=1&#10;2\nFORGED: line') }, [U1]: { body: atom('b1') } }, send, 1);
+  assert.strictEqual(sent.length, 1);
+  assert.doesNotMatch(sent[0].text, /\nFORGED/);
+  assert.ok(sent[0].text.length < 1500, 'a 30 KB title is capped, got ' + sent[0].text.length);
+  assert.ok(JSON.parse(kv.store.state).sources.s0.title.length <= 200);
+  const r = await fetchSource({ id: 'a', url: U0, kind: 'atom' }, undefined, fakeFetch({ [U0]: new Error('reset\nSubject: forged') }));
+  assert.ok(!/[\r\n]/.test(r.error));
+});
+
+test('B-5: a validator the server rotates while the newest entry stays is persisted, so the next run asks with the new one', async () => {
+  const kv = fakeKv(); const seen = [];
+  const send = async () => {};
+  const body = { [U0]: { body: atom('a1'), headers: { etag: '"e1"' } }, [U1]: { body: atom('b1') } };
+  await runAt(kv, body, send, 0);
+  kv.writes.length = 0;
+  await runAt(kv, { ...body, [U0]: { body: atom('a1'), headers: { etag: '"e2"', 'last-modified': 'LM2' } } }, send, 1);
+  assert.deepStrictEqual(kv.writes, ['state']);
+  assert.strictEqual(JSON.parse(kv.store.state).sources.s0.etag, '"e2"');
+  await runOnce({ config: cfg(2), kv, fetchFn: fakeFetch({ ...body, [U0]: { status: 304 } }, seen), send, now: Date.UTC(2026, 9, 4, 14), to: 't', from: 'f' });
+  assert.strictEqual(seen.find((s) => s.url === U0).headers['if-none-match'], '"e2"');
+});
+
+test('B-5: an unchanged validator costs no write', async () => {
+  const kv = fakeKv(); const send = async () => {};
+  const body = { [U0]: { body: atom('a1'), headers: { etag: '"e1"' } }, [U1]: { body: atom('b1') } };
+  await runAt(kv, body, send, 0);
+  kv.writes.length = 0;
+  await runAt(kv, body, send, 1);
+  assert.deepStrictEqual(kv.writes, []);
 });
 
 test('validateConfig accepts a sound list and names the first fault of a bad one', () => {

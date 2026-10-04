@@ -13,6 +13,12 @@ const ENTRY_LOOKAHEAD = 10;
 const FETCH_TIMEOUT_MS = 8000;
 const POOL = 6; // simultaneous outgoing connections per request on every plan (Cloudflare limits page)
 const FAIL_REPORT_AT = 3; // consecutive failed runs before a source is reported, once
+const HIST_LEN = 8; // a source's last runs kept as 'f' (failed) and '.' (answered), so a flapping source shows
+const FLAP_AT = 4; // failures within that window that report a source even when no three came in a row
+const TITLE_CAP = 200; // a title in the mail and in state; a feed entry can carry far more
+// whitespace, C0/C1 controls and the Unicode line separators: none may reach a link or an error text that goes into a mail body
+const UNSAFE = new RegExp('[\\x00-\\x20\\x7f-\\x9f' + String.fromCharCode(0x2028, 0x2029) + ']', 'g');
+const oneLine = (s) => String(s).replace(UNSAFE, ' ').replace(/ +/g, ' ').trim();
 const KINDS = ['atom', 'rss', 'headings', 'raw'];
 const SOURCE_FIELDS = ['id', 'name', 'url', 'kind', 'everyHours', 'ignoreTitle'];
 
@@ -36,7 +42,7 @@ export function parseFeed(text, { ignoreTitle } = {}) {
     const title = tag(block, 'title');
     if (skip && skip.test(title)) continue;
     const href = /<link\b[^>]*\bhref="([^"]+)"/i.exec(block);
-    const link = href ? decode(href[1]) : tag(block, 'link');
+    const link = (href ? decode(href[1]) : tag(block, 'link')).replace(UNSAFE, '');
     const key = tag(block, 'id') || tag(block, 'guid') || link || title;
     if (!key) continue;
     return { key, title, link, updated: tag(block, 'updated') || tag(block, 'pubDate') || tag(block, 'published') };
@@ -108,11 +114,14 @@ export async function fetchSource(source, prev, fetchFn) {
     const found = await keyFor(source, body);
     // a feed of nothing but ignored entries (an alpha-only run of tags) has no news: quiet, not broken
     if (!found) return (source.kind === 'atom' || source.kind === 'rss') && /<(entry|item)[\s>]/i.test(body) ? { source, status: 'same' } : { source, status: 'error', error: 'no entry found' };
-    const base = { source, key: found.key, to: found.title, link: found.link, etag: r.headers.get('etag') || '', lastModified: r.headers.get('last-modified') || '' };
+    const base = { source, key: found.key, to: found.title.slice(0, TITLE_CAP), link: found.link, etag: r.headers.get('etag') || '', lastModified: r.headers.get('last-modified') || '' };
     if (!prev?.key) return { ...base, status: 'new' };
-    return prev.key === found.key ? { ...base, status: 'same' } : { ...base, status: 'changed', from: prev.title || '' };
+    if (prev.key === found.key) return { ...base, status: 'same' };
+    // a feed that mints a new id on every render but shows the same title at the same link has no news (a raw file or a heading list has no such pair: its key IS its content)
+    if ((source.kind === 'atom' || source.kind === 'rss') && prev.title === base.to && (prev.link === undefined || prev.link === base.link)) return { ...base, status: 'same' };
+    return { ...base, status: 'changed', from: prev.title || '' };
   } catch (e) {
-    return { source, status: 'error', error: String(e?.message ?? e).slice(0, 120) };
+    return { source, status: 'error', error: oneLine(e?.message ?? e).slice(0, 120) };
   }
 }
 
@@ -120,7 +129,7 @@ export async function fetchSource(source, prev, fetchFn) {
 export function buildDigest({ at, instance, results }) {
   const changed = results.filter((r) => r.status === 'changed');
   const baselined = results.filter((r) => r.status === 'new');
-  const failing = results.filter((r) => r.status === 'error' && r.fails === FAIL_REPORT_AT);
+  const failing = results.filter((r) => r.status === 'error' && (r.fails === FAIL_REPORT_AT || r.flapping));
   const lines = [`${instance} change watcher, ${at}`, ''];
   if (changed.length) {
     lines.push(`Changed (${changed.length}):`);
@@ -130,7 +139,7 @@ export function buildDigest({ at, instance, results }) {
   if (baselined.length) lines.push(`Baselined ${baselined.length} source(s), no earlier state to compare: ${baselined.map((r) => `${r.source.name} (${r.to || 'seen'})`).join(', ')}`, '');
   if (failing.length) {
     lines.push(`Failing (${failing.length}):`);
-    for (const r of failing) lines.push(`  ${r.source.name} - ${r.error} for ${r.fails} runs in a row (${r.source.url})`);
+    for (const r of failing) lines.push(`  ${r.source.name} - ${r.error} ${r.flapping ? `in ${r.failedOf} of the last ${r.window} runs` : `for ${r.fails} runs in a row`} (${r.source.url})`);
     lines.push('');
   }
   const parts = [changed.length && `${changed.length} changed`, baselined.length && `${baselined.length} baselined`, failing.length && `${failing.length} failing`].filter(Boolean);
@@ -148,30 +157,46 @@ async function pooled(items, worker) {
   return out;
 }
 
+// a source's stored entry after a run: an answered run ends the failure streak and moves the window on; hist and rep are kept only while they say something
+const tidy = (e) => { const o = { ...e }; if (!o.hist) delete o.hist; if (!o.rep) delete o.rep; return o; };
+const answered = (e) => {
+  if (!e) return e;
+  const hist = ((e.hist ?? '') + '.').slice(-HIST_LEN);
+  return tidy({ ...e, fails: 0, hist: hist.includes('f') ? hist : '', rep: hist.endsWith('...') ? false : !!e.rep });
+};
+
 export async function runOnce({ config, kv, fetchFn, send, now, to, from }) {
   const at = new Date(now).toISOString();
   const { run, deferred } = pickRun(config.sources, Math.floor(now / 3600000), config.maxPerRun);
   const state = (await kv.get('state', 'json')) ?? { v: 1, sources: {} };
   const next = { v: 1, sources: { ...state.sources } };
   const results = await pooled(run, (s) => fetchSource(s, state.sources[s.id], fetchFn));
-  const firstEver = Object.keys(state.sources).length === 0;
+  // the hello digest belongs to the first run that actually BASELINES something: a failed source leaves a {fails} stub in state, which is no baseline
+  const firstEver = !Object.values(state.sources).some((s) => s.key);
   let dirty = false;
   const report = [];
   for (const r of results) {
-    const prev = state.sources[r.source.id];
+    const id = r.source.id;
+    const prev = state.sources[id];
+    let entry;
     if (r.status === 'changed' || r.status === 'new') {
-      next.sources[r.source.id] = { key: r.key, title: r.to, etag: r.etag, lastModified: r.lastModified, fails: 0 };
-      // a baseline is not a change: only the very first run reports them (one hello digest); a source that comes due in a later hour is recorded silently
-      dirty = true; if (r.status === 'changed' || firstEver) report.push(r);
+      entry = answered({ ...prev, key: r.key, title: r.to, link: r.link, etag: r.etag, lastModified: r.lastModified });
+      // a baseline is not a change: only the first run that baselines reports them (one hello digest); a source that comes due later is recorded silently
+      if (r.status === 'changed' || firstEver) report.push(r);
     } else if (r.status === 'same') {
-      if (r.key) next.sources[r.source.id] = { ...prev, etag: r.etag || prev?.etag || '', lastModified: r.lastModified || prev?.lastModified || '' };
-      if (prev?.fails) { next.sources[r.source.id] = { ...next.sources[r.source.id], fails: 0 }; dirty = true; }
+      // a refreshed validator is state too: persisting it spares the next run a full body
+      entry = answered(r.key ? { ...prev, etag: r.etag || prev?.etag || '', lastModified: r.lastModified || prev?.lastModified || '' } : prev);
     } else {
-      const before = prev?.fails ?? 0;
-      const fails = Math.min(FAIL_REPORT_AT, before + 1);
-      r.fails = fails;
-      if (fails !== before) { next.sources[r.source.id] = { ...prev, fails }; dirty = true; if (fails === FAIL_REPORT_AT) report.push(r); }
+      const hist = ((prev?.hist ?? '') + 'f').slice(-HIST_LEN);
+      const failedOf = [...hist].filter((c) => c === 'f').length;
+      const fails = Math.min(FAIL_REPORT_AT, (prev?.fails ?? 0) + 1);
+      // reported once per trouble spell: three in a row, or FLAP_AT failures in the window; a spell ends after three answered runs
+      const due = !prev?.rep && (fails === FAIL_REPORT_AT || failedOf >= FLAP_AT);
+      Object.assign(r, { fails, flapping: fails < FAIL_REPORT_AT, failedOf, window: hist.length });
+      if (due) report.push(r);
+      entry = tidy({ ...prev, fails, hist, rep: !!prev?.rep || due });
     }
+    if (JSON.stringify(entry) !== JSON.stringify(prev)) { next.sources[id] = entry; dirty = true; }
   }
   const summary = {
     checked: results.length, deferred: deferred.length,
