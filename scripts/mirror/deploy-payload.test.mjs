@@ -53,6 +53,14 @@ test('a first deploy creates the bucket, uploads the Worker with the BUCKET bind
   assert.deepStrictEqual([out.bucket.reused, out.domain.attached, out.crons, out.bindings], [false, true, ['23 * * * *'], ['BUCKET:r2_bucket']]);
 });
 
+test('the compatibility date is yesterday UTC, never a future date the API refuses (it refused a date one day ahead of its own clock)', async () => {
+  const fake = fakeCloudflare();
+  await runPayload(buildPayload({ files: FILES, ...ARGS }), fake);
+  const d = metadataOf(fake.calls).compatibility_date;
+  assert.match(d, /^\d{4}-\d{2}-\d{2}$/);
+  assert.ok(d < new Date().toISOString().slice(0, 10), d);
+});
+
 test('a redeploy reuses the bucket and the attached domain', async () => {
   const fake = fakeCloudflare({ buckets: ['demo-releases'], domains: ['dl.example.org'] });
   const out = await runPayload(buildPayload({ files: FILES, ...ARGS }), fake);

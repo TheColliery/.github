@@ -46,7 +46,7 @@ export function buildPayload({ files, name, bucket, domain, zone, cron = '23 * *
     const made = await cloudflare.request({ method: 'POST', path: acct + '/r2/buckets', body: { name: BUCKET } });
     if (!made.success) return { stage: 'bucket not created', errors: made.errors, blobs };
   }
-  const metadata = { main_module: 'worker.mjs', compatibility_date: '2026-10-05', bindings: [{ type: 'r2_bucket', name: 'BUCKET', bucket_name: BUCKET }], observability: { enabled: true } };
+  const metadata = { main_module: 'worker.mjs', compatibility_date: new Date(Date.now() - 864e5).toISOString().slice(0, 10), bindings: [{ type: 'r2_bucket', name: 'BUCKET', bucket_name: BUCKET }], observability: { enabled: true } };
   const b = '----mirror' + Date.now();
   const parts = ['--' + b, 'Content-Disposition: form-data; name="metadata"', 'Content-Type: application/json', '', JSON.stringify(metadata)];
   for (const [part, t] of Object.entries(texts)) parts.push('--' + b, 'Content-Disposition: form-data; name="' + part + '"; filename="' + part + '"', 'Content-Type: application/javascript+module', '', t);
