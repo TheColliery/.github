@@ -91,3 +91,25 @@ test('both git hooks run the suite through the runner, and still name every test
     assert.doesNotMatch(t, /^node --test /m, h + ': no bare node --test left');
   }
 });
+
+// A-5 (pass 14): the runner is a harness child, so it carries a heap cap and a kill-timeout (testing.md's harness-child line; AGENTS.md,
+// the runaway test child). A hung test file must not hold a hook forever, and its whole process tree dies with it.
+test('the test children run under a heap cap (about 2 GB), not the default of this machine -- RED before the cap', () => {
+  const dir = scratchRepo();
+  fs.writeFileSync(path.join(dir, 'heap.test.mjs'), "import v8 from 'node:v8';\nconsole.log('HEAP-LIMIT-MB=' + Math.round(v8.getHeapStatistics().heap_size_limit / 1048576));\n");
+  const r = run(dir, ['heap.test.mjs']);
+  assert.equal(r.status, 0, r.stderr);
+  const mb = Number(r.stdout.match(/HEAP-LIMIT-MB=(\d+)/)[1]);
+  assert.ok(mb >= 1900 && mb <= 2300, 'heap limit ' + mb + ' MB');
+});
+
+test('a run past its time limit is killed with its whole tree, says so, keeps its output, and exits 1 -- RED before the timeout', () => {
+  const dir = scratchRepo();
+  fs.writeFileSync(path.join(dir, 'hang.test.mjs'), "process.stderr.write('HANG-STARTED\\n');\nsetInterval(() => {}, 1000);\n");
+  const t0 = Date.now();
+  const r = run(dir, ['hang.test.mjs'], { GATE_TEST_RUN_TIMEOUT_MS: '4000' });
+  assert.ok(Date.now() - t0 < 60000, 'it did not hang');
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /gate-test-run: killed after 4 seconds \(the time limit\)/);
+  assert.match(fs.readFileSync(LOG(dir), 'utf8'), /HANG-STARTED/);
+});
