@@ -154,13 +154,15 @@ export async function runOnce({ config, kv, fetchFn, send, now, to, from }) {
   const state = (await kv.get('state', 'json')) ?? { v: 1, sources: {} };
   const next = { v: 1, sources: { ...state.sources } };
   const results = await pooled(run, (s) => fetchSource(s, state.sources[s.id], fetchFn));
+  const firstEver = Object.keys(state.sources).length === 0;
   let dirty = false;
   const report = [];
   for (const r of results) {
     const prev = state.sources[r.source.id];
     if (r.status === 'changed' || r.status === 'new') {
       next.sources[r.source.id] = { key: r.key, title: r.to, etag: r.etag, lastModified: r.lastModified, fails: 0 };
-      dirty = true; report.push(r);
+      // a baseline is not a change: only the very first run reports them (one hello digest); a source that comes due in a later hour is recorded silently
+      dirty = true; if (r.status === 'changed' || firstEver) report.push(r);
     } else if (r.status === 'same') {
       if (r.key) next.sources[r.source.id] = { ...prev, etag: r.etag || prev?.etag || '', lastModified: r.lastModified || prev?.lastModified || '' };
       if (prev?.fails) { next.sources[r.source.id] = { ...next.sources[r.source.id], fails: 0 }; dirty = true; }

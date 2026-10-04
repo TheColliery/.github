@@ -196,6 +196,18 @@ test('runOnce, first sight of the list: baselines every source, writes state and
   assert.strictEqual(JSON.parse(kv.store['digest:last']).emailed, true);
 });
 
+test('runOnce: a source baselined LATER (it came due in a later hour, or the list grew) is recorded silently: state written, no email, no digest', async () => {
+  const kv = fakeKv(); const sent = [];
+  const routes = { 'https://example.invalid/s0': { body: atom('a1') }, 'https://example.invalid/s1': { body: atom('b1') }, 'https://example.invalid/s2': { body: atom('c1') } };
+  await runWith({ kv, routes, send: async () => ({}), config: cfg(2) }); // the first run: the hello digest
+  kv.writes.length = 0;
+  const r = await runWith({ kv, routes, send: async (m) => { sent.push(m); }, config: cfg(3) });
+  assert.deepStrictEqual([r.baselined, r.changed, r.emailed], [1, 0, false]);
+  assert.strictEqual(sent.length, 0);
+  assert.deepStrictEqual(kv.writes, ['state']);
+  assert.strictEqual(JSON.parse(kv.store.state).sources.s2.title, 'c1');
+});
+
 test('runOnce, nothing changed: no KV write, no email, no matter how many sources were checked', async () => {
   const kv = fakeKv(); const sent = [];
   const routes = { 'https://example.invalid/s0': { body: atom('a1') }, 'https://example.invalid/s1': { body: atom('b1') } };
