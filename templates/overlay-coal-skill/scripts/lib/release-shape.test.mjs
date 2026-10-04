@@ -200,3 +200,22 @@ test('buildReleaseTitle: a CamelCase first word keeps its case (the product name
   assert.equal(buildReleaseTitle('1.0.0', 'Fixed the CoalFace config walk'), 'v1.0.0 - fixed the CoalFace config walk', 'only the first word decides');
   assert.equal(buildReleaseTitle('1.0.0', 'A project config is now reported'), 'v1.0.0 - a project config is now reported');
 });
+
+// A-2 (pass 14): only a first word made of ONE capital followed by lower-case letters is an ordinary sentence opener and lower-cases;
+// every other opener is left as written ("V8 flags", "Node.js 22", "CoalFace", "SHA256SUMS.txt", "CI", "Python3").
+test('buildReleaseTitle: V8, Node.js and every other non-ordinary opener keeps its case; only One-capital-then-lowercase lowers -- RED before the pass 14 fix', () => {
+  const t = (s) => buildReleaseTitle('1.0.0', s);
+  assert.equal(t('V8 flags are now documented'), 'v1.0.0 - V8 flags are now documented');
+  assert.equal(t('Node.js 22 is now the floor'), 'v1.0.0 - Node.js 22 is now the floor');
+  assert.equal(t('Python3 hooks now run'), 'v1.0.0 - Python3 hooks now run');
+  assert.equal(t('CoalFace reads both paths'), 'v1.0.0 - CoalFace reads both paths');
+  assert.equal(t('SHA256SUMS.txt now ships'), 'v1.0.0 - SHA256SUMS.txt now ships');
+  assert.equal(t('CI now runs on macOS'), 'v1.0.0 - CI now runs on macOS');
+  // ordinary openers still lower, with punctuation, a contraction or a hyphenated compound
+  assert.equal(t('Fixed the thing'), 'v1.0.0 - fixed the thing');
+  assert.equal(t('Fixed, then shipped'), 'v1.0.0 - fixed, then shipped');
+  assert.equal(t("It's fixed now"), "v1.0.0 - it's fixed now");
+  assert.equal(t('Two-phase commit now ships'), 'v1.0.0 - two-phase commit now ships');
+  assert.equal(t('A fix'), 'v1.0.0 - a fix');
+  assert.equal(t('I moved the file'), 'v1.0.0 - i moved the file');
+});
