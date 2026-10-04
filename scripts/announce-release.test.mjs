@@ -331,3 +331,15 @@ test('exitCodeFor: a held Release or a failed post makes the run exit 1 so it go
   assert.equal(exitCodeFor({ posted: 0, 'would-post': 0, already: 0, failed: 1, held: 0 }), 1);
   assert.equal(exitCodeFor({ held: 1 }), 1);
 });
+
+// Found by the live dry run at the 30-hour window: CoalBoard v2.7.0 (discussion #23, re-titled by hand) came back HELD, because the title check ran
+// BEFORE the marker lookup. An already-announced Release must read "already announced" whatever its title, or the scheduled run would go red every
+// six hours while it sits in the window.
+test('an overflowing Release that is already announced reads "already announced", never HELD, and the run does not go red -- RED while the title check came first', async () => {
+  const gh = fakeGithub({ repos: { CoalBoard: { name: 'CoalBoard', private: false, html_url: repoUrl, releases: [{ ...longRelease(192), draft: false, published_at: hoursAgo(3) }] } } });
+  const first = await go(gh, { repo: 'CoalBoard', tag: 'v2.7.0', post: true, title: 'CoalBoard v2.7.0 - the data lens reads live advisories' });
+  assert.deepEqual(first.r, { posted: 1 });
+  const sweep = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, now: NOW, windowHours: 24, post: true, repo: '', tag: '' });
+  assert.deepEqual(sweep, { posted: 0, 'would-post': 0, already: 1, failed: 0, held: 0 });
+  assert.equal(exitCodeFor(sweep), 0);
+});

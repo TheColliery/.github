@@ -142,6 +142,9 @@ export async function announceOne(api, target, repo, tag, { post, log, title: ha
   if (meta.private) throw new Error(`${ORG}/${repo} is private: a private repository is never announced`);
   const release = await api.rest(`/repos/${ORG}/${repo}/releases/tags/${tag}`);
   if (release.draft) throw new Error(`${repo} ${tag} is a draft: only a published Release is announced`);
+  // The marker lookup comes FIRST: a Release already announced (whatever its title, a hand-re-composed one included) is never held again.
+  const existing = await findExisting(api, target, marker(repo, tag));
+  if (existing) { log(`already announced: ${repo} ${tag} -> ${existing}`); return 'already'; }
   let built;
   try { built = buildAnnouncement(repo, release, meta.html_url, handedTitle); } catch (e) {
     if (!(e instanceof HeldPost)) throw e;
@@ -150,8 +153,6 @@ export async function announceOne(api, target, repo, tag, { post, log, title: ha
     return 'held';
   }
   const { title, body } = built;
-  const existing = await findExisting(api, target, marker(repo, tag));
-  if (existing) { log(`already announced: ${repo} ${tag} -> ${existing}`); return 'already'; }
   if (!post) { log(`DRY RUN, nothing posted. Would open in Announcements: "${title}" (${body.length} characters)`); return 'would-post'; }
   const made = await api.gql(M_CREATE, { r: target.repositoryId, c: target.categoryId, t: title, b: body });
   const url = made.createDiscussion.discussion.url;
