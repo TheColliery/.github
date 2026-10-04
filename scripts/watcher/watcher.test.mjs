@@ -45,6 +45,15 @@ test('headingsKey joins the first three headings, tags stripped and entities dec
   assert.strictEqual(headingsKey('<p>no headings</p>'), null);
 });
 
+test('text taken from a page or feed never carries a "<": tags are stripped by character, so no nesting or unterminated tag leaves one (CodeQL js/incomplete-multi-character-sanitization)', () => {
+  for (const hostile of ['a<b', 'x<scr<script>ipt>y', '<<b>script>z', 'q<!-- c --', '1 < 2']) {
+    const r = headingsKey(`<h1>${hostile}</h1>`);
+    assert.ok(r === null || !r.key.includes('<'), JSON.stringify(hostile) + ' -> ' + JSON.stringify(r));
+  }
+  // entities decode AFTER stripping, so an escaped angle bracket in a title is text and stays text
+  assert.strictEqual(headingsKey('<h1>a &lt;b&gt; c</h1>').key, 'a <b> c');
+});
+
 test('rawKey changes when the text changes, keeps when it does not, and titles itself with the first heading line', async () => {
   const a = await rawKey('# Changelog\n\n## 1.2.0\n- x\n');
   assert.strictEqual(a.key, (await rawKey('# Changelog\n\n## 1.2.0\n- x\n')).key);
@@ -91,7 +100,7 @@ test('fetchSource names TheColliery and the forge in the User-Agent and sends th
   const s = { id: 'a', url: 'https://example.invalid/a.atom', kind: 'atom' };
   await fetchSource(s, { etag: '"abc"', lastModified: 'Mon, 01 Oct 2026 00:00:00 GMT', key: 'k' }, fakeFetch({ [s.url]: { status: 304 } }, seen));
   assert.match(seen[0].headers['user-agent'], /TheColliery/);
-  assert.match(seen[0].headers['user-agent'], /https:\/\/thecolliery\.org/);
+  assert.ok(seen[0].headers['user-agent'].includes('https://thecolliery.org'));
   assert.strictEqual(USER_AGENT, seen[0].headers['user-agent']);
   assert.strictEqual(seen[0].headers['if-none-match'], '"abc"');
   assert.strictEqual(seen[0].headers['if-modified-since'], 'Mon, 01 Oct 2026 00:00:00 GMT');

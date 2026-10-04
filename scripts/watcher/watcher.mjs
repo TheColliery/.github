@@ -17,10 +17,13 @@ const KINDS = ['atom', 'rss', 'headings', 'raw'];
 const SOURCE_FIELDS = ['id', 'name', 'url', 'kind', 'everyHours', 'ignoreTitle'];
 
 const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
-const decode = (s) => s
-  .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-  .replace(/&(?:#x([0-9a-f]+)|#(\d+)|([a-z]+));/gi, (m, hex, dec, name) => (hex ? String.fromCodePoint(parseInt(hex, 16)) : dec ? String.fromCodePoint(Number(dec)) : ENTITIES[name.toLowerCase()] ?? m));
-const clean = (s) => decode(s).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+const unwrap = (s) => s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
+const entities = (s) => s.replace(/&(?:#x([0-9a-f]+)|#(\d+)|([a-z]+));/gi, (m, hex, dec, name) => (hex ? String.fromCodePoint(parseInt(hex, 16)) : dec ? String.fromCodePoint(Number(dec)) : ENTITIES[name.toLowerCase()] ?? m));
+// Tags are stripped by character, not by a regex: every "<" opens a tag that runs to the next ">" (or to the end), so no nesting or unterminated tag can leave a
+// "<" behind (CodeQL js/incomplete-multi-character-sanitization). Entities decode AFTER, so an escaped bracket in a title stays text.
+const stripTags = (s) => { let out = ''; let inTag = false; for (const ch of s) { if (ch === '<') inTag = true; else if (ch === '>' && inTag) inTag = false; else if (!inTag) out += ch; } return out; };
+const decode = (s) => entities(unwrap(s));
+const clean = (s) => entities(stripTags(unwrap(s))).replace(/\s+/g, ' ').trim();
 const tag = (block, name) => { const m = new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`, 'i').exec(block); return m ? clean(m[1]) : ''; };
 
 // atom or RSS: the first entry whose title is not ignored.
