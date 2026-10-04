@@ -106,7 +106,8 @@ test('a release that already has its marker costs one feed read and nothing else
   const before = gh.seen.length; bucket.calls.put.length = 0;
   const out = await run({ bucket, fetchFn: gh.fetchFn });
   const urls = gh.seen.slice(before).map((s) => s.url);
-  assert.ok(!urls.some((u) => u.includes('api.github.com') || u.includes('/download/')));
+  // parsed, not substring-matched (CodeQL js/incomplete-url-substring-sanitization): only feed reads on github.com are allowed
+  assert.deepEqual(urls.map((u) => { const p = new URL(u); return `${p.hostname}${p.pathname.endsWith('.atom') ? ' feed' : ' other'}`; }), ['github.com feed', 'github.com feed']);
   assert.equal(out.copied, 0);
   assert.deepEqual(bucket.calls.put, ['.mirror/last-run.json']);
 });
