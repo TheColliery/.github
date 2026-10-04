@@ -6,13 +6,16 @@ name: announce-release
 # scripts/lib/announce-release.mjs.
 #
 # Two ways to run it. On the SIX-HOURLY SCHEDULE (opened by the owner on 2026-10-04, after the first post was read) it sweeps the
-# stable Releases published in the last 24 hours and
-# posts each one once. The window covers two dropped slots plus the measured delay: a Release published just after a slot waits for the
-# third slot after it (18 hours) and then GitHub's delay (the first scheduled run came 3 hours late), 21 hours, with a margin. The marker
-# only prevents a DOUBLE post; it cannot rescue a Release the window never reached. Posting: a hidden marker in the body is the key, so a Release already announced is found and never posted twice, and a run
-# that finds nothing new posts nothing and says so. A pre-release (a launch-form Release) is left to a manual run. By hand
-# (workflow_dispatch) a run with post left false only prints what it would open; post: true opens one discussion per Release, once,
-# and reads it back. The schedule runs on the default branch only.
+# stable Releases published in the last 30 hours and posts each one once. The window is sized in scripts/lib/announce-release.mjs
+# (SCHEDULE_WINDOW_HOURS; its arithmetic is there): two dropped slots plus the largest scheduled-run delay measured so far
+# (MEASURED_MAX_DELAY_HOURS, 5 h 36 min on the second run) plus a period of headroom. The marker only prevents a DOUBLE post; it
+# cannot rescue a Release the window never reached. A hidden marker in the body is the key, so a Release already announced is found
+# and never posted twice, and a run that finds nothing new posts nothing and says so. A pre-release (a launch-form Release) is
+# left to a manual run. A Release whose mirrored title would overflow GitHub's 200-character title ceiling is HELD, never cut and
+# never posted bare: the run names it in its summary and fails, and a manual run with repo, tag, post and title posts it once the
+# room has re-composed a title (a manual run is not limited by the window). By hand (workflow_dispatch) a run with post left false
+# only prints what it would open; post: true opens one discussion per Release, once, and reads it back. The schedule runs on the
+# default branch only.
 on:
   schedule:
     # 07:37 Bangkok, 13:37, 19:37, 01:37: a fixed minute off the hour, clear of the 06:45 to 07:20 router window.
@@ -34,6 +37,11 @@ on:
         required: false
         type: boolean
         default: false
+      title:
+        description: 'A manual post only (needs repo and tag): the re-composed title (from the room) for a Release held because its mirrored title overflows 200 characters.'
+        required: false
+        type: string
+        default: ''
       window_hours:
         description: 'Sweep only: how far back a Release counts as new (1 to 744).'
         required: false
@@ -74,8 +82,9 @@ jobs:
           # Inputs reach the script through env, never interpolated into the run: line (GitHub's hardening guide: script injection).
           INPUT_REPO: ${{ inputs.repo }}
           INPUT_TAG: ${{ inputs.tag }}
+          INPUT_TITLE: ${{ inputs.title }}
           # A scheduled run posts (the schedule IS the switch); a manual run follows its post input, a dry run by default.
           INPUT_POST: ${{ github.event_name == 'schedule' && 'true' || inputs.post }}
-          INPUT_WINDOW_HOURS: ${{ github.event_name == 'schedule' && '24' || inputs.window_hours }}
+          INPUT_WINDOW_HOURS: ${{ github.event_name == 'schedule' && '30' || inputs.window_hours }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/announce-release.mjs

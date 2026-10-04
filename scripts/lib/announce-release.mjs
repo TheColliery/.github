@@ -13,13 +13,25 @@
 //
 // Zero dependencies: node builtins and the global fetch. Every call carries a timeout; the create is never retried (a timeout does not
 // prove the post did not land, and a second create would double-post).
-import { SUMMARY_BAND } from '../../templates/overlay-coal-skill/scripts/lib/release-shape.mjs';
+import fs from 'node:fs';
+import { MIRROR_TITLE_CAP, mirroredTitle, mirroredTitleOverflow } from '../../templates/overlay-coal-skill/scripts/lib/release-shape.mjs';
 
 export const ORG = 'TheColliery';
 export const SOURCE_REPO = '.github';
 export const API = 'https://api.github.com';
 export const BODY_CAP = 60000; // GitHub's discussion body limit is 65,536; leave room for the footer
-export const TITLE_CAP = 200; // GitHub's ceiling is a hard one: it stored a 211-character title as 199 (n = 1), so a title is never cut to fit
+export const TITLE_CAP = MIRROR_TITLE_CAP; // GitHub's ceiling is a hard 200 (it stored a 211-character title as 199, n = 1): a title is never cut to fit
+
+// THE SCHEDULE'S WINDOW (pass 14 A-7, pass 15 A-1). GitHub drops scheduled runs under load and runs the rest late; the marker only prevents a
+// double post, it cannot rescue a Release the window never reached. So the window covers two dropped slots plus the LARGEST delay measured so
+// far, plus headroom: (2 + 1) x 6 + 5.7 + 6 = 29.7, 30 hours. The delay is ONE number: the second scheduled run came 5 h 36 min late (run
+// 37182179241, n = 2; the first was 3 h 04 min), rounded up to 5.7. A later wider delay changes this constant, the workflow's '30' and the list of
+// measured runs in announce-release.test.mjs, and nothing else (a test holds all three together).
+export const SCHEDULE_PERIOD_HOURS = 6;
+export const SCHEDULE_DROPPED_SLOTS = 2;
+export const MEASURED_MAX_DELAY_HOURS = 5.7;
+export const SCHEDULE_HEADROOM_HOURS = 6;
+export const SCHEDULE_WINDOW_HOURS = Math.ceil((SCHEDULE_DROPPED_SLOTS + 1) * SCHEDULE_PERIOD_HOURS + MEASURED_MAX_DELAY_HOURS + SCHEDULE_HEADROOM_HOURS);
 export const SCAN_PAGES = 5; // 250 discussions back when looking for an existing marker
 
 const REPO_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -44,16 +56,31 @@ export function neutralizeMentions(text) {
     : part.replace(/(^|[^\w@`/])@([A-Za-z0-9][A-Za-z0-9-]*(?:\/[A-Za-z0-9_-]+)?)/g, '$1`@$2`'))).join('');
 }
 
-export function buildAnnouncement(repo, release, repoUrl) {
+// A post the machine will not make: the mirrored title overflows GitHub's ceiling (UMB-433). It is never cut and never posted bare; the
+// room's DRAFTER re-composes the summary (release-notes.mjs --check fails it before the tag), and a manual run posts it with that title.
+export class HeldPost extends Error {}
+
+// A title handed in for a manual post (INPUT_TITLE): the room's re-composition, used as written after three checks.
+function checkHandedTitle(title) {
+  const s = String(title).trim();
+  if (!s) throw new Error('the title handed in is empty');
+  if (s.length > TITLE_CAP) throw new Error(`the title handed in is ${s.length} characters, over GitHub's ${TITLE_CAP}-character title ceiling`);
+  if (/[\u0000-\u001f\u007f]/.test(s)) throw new Error('the title handed in carries a control character or a line break');
+  return s;
+}
+
+export function buildAnnouncement(repo, release, repoUrl, handedTitle = '') {
   const tag = checkTag(release.tag_name);
-  const name = (release.name || '').trim();
-  const full = name ? (name.startsWith(tag) ? `${repo} ${name}` : `${repo} ${tag} - ${name}`) : `${repo} ${tag}`;
-  // The title is never cut mid-sentence. The Release title's summary is bounded at its source (RELEASE-PATTERN.md, the band's top); a title
-  // longer than the band allows is an older Release, and it posts as "<Repo> vX.Y.Z"; the Release body is posted as published (its first line is
-  // the summary when the Release followed the canon, and nothing here re-derives it).
-  const longest = Array.from(`${repo} ${tag} - `).length + SUMMARY_BAND[1];
-  const title = Array.from(full).length <= Math.min(longest, TITLE_CAP) ? full : `${repo} ${tag}`;
-  if (Array.from(title).length > TITLE_CAP) throw new Error(`the title for ${repo} ${tag} would exceed ${TITLE_CAP} characters`);
+  // A mirrored title that fits the ceiling posts WHOLE, summary and all. One that does not is held (HeldPost), never cut and never posted as
+  // the bare "<Repo> vX.Y.Z"; a title handed in by hand replaces it. The Release body is posted as published (its first line is the summary
+  // when the Release followed the canon, and nothing here re-derives it).
+  let title;
+  if (handedTitle) title = checkHandedTitle(handedTitle);
+  else {
+    const overflow = mirroredTitleOverflow(repo, tag, release.name);
+    if (overflow) throw new HeldPost(overflow);
+    title = mirroredTitle(repo, tag, release.name);
+  }
   let notes = neutralizeMentions((release.body || '').replace(/\r\n/g, '\n').trim());
   if (notes.length > BODY_CAP) notes = notes.slice(0, notes.lastIndexOf('\n', BODY_CAP) > 0 ? notes.lastIndexOf('\n', BODY_CAP) : BODY_CAP).trimEnd() + '\n\n(Truncated here; the full notes are on the Release page below.)';
   if (!notes) notes = `${repo} ${tag} is published.`;
@@ -108,14 +135,21 @@ export async function findExisting(api, target, mk) {
   return null;
 }
 
-// One Release: 'posted' | 'would-post' | 'already'. `post` false = print what would be posted and stop.
-export async function announceOne(api, target, repo, tag, { post, log }) {
+// One Release: 'posted' | 'would-post' | 'already' | 'held'. `post` false = print what would be posted and stop.
+export async function announceOne(api, target, repo, tag, { post, log, title: handedTitle = '', held = [] }) {
   checkRepo(repo); checkTag(tag);
   const meta = await api.rest(`/repos/${ORG}/${repo}`);
   if (meta.private) throw new Error(`${ORG}/${repo} is private: a private repository is never announced`);
   const release = await api.rest(`/repos/${ORG}/${repo}/releases/tags/${tag}`);
   if (release.draft) throw new Error(`${repo} ${tag} is a draft: only a published Release is announced`);
-  const { title, body } = buildAnnouncement(repo, release, meta.html_url);
+  let built;
+  try { built = buildAnnouncement(repo, release, meta.html_url, handedTitle); } catch (e) {
+    if (!(e instanceof HeldPost)) throw e;
+    held.push({ repo, tag, reason: e.message });
+    log(`HELD ${repo} ${tag}: ${e.message} Not posted. To post it once the room has re-composed a title, run this workflow by hand with repo=${repo}, tag=${tag}, post=true and title=<the re-composed title>; a manual run is not limited by the sweep window.`);
+    return 'held';
+  }
+  const { title, body } = built;
   const existing = await findExisting(api, target, marker(repo, tag));
   if (existing) { log(`already announced: ${repo} ${tag} -> ${existing}`); return 'already'; }
   if (!post) { log(`DRY RUN, nothing posted. Would open in Announcements: "${title}" (${body.length} characters)`); return 'would-post'; }
@@ -129,7 +163,7 @@ export async function announceOne(api, target, repo, tag, { post, log }) {
 }
 
 // Sweep: every published Release of every public, non-archived, non-fork repository of the org published within `windowHours`.
-export async function sweep(api, target, { post, log, windowHours, now = Date.now() }) {
+export async function sweep(api, target, { post, log, windowHours, now = Date.now(), held = [] }) {
   const repos = await api.rest(`/orgs/${ORG}/repos?type=public&per_page=100`);
   if (!Array.isArray(repos)) throw new Error('the org repository list is not a list');
   if (repos.length >= 100) throw new Error('the org has 100 or more public repositories: the sweep reads one page and refuses to run on a partial list');
@@ -142,19 +176,34 @@ export async function sweep(api, target, { post, log, windowHours, now = Date.no
   }
   due.sort((a, b) => a.at - b.at);
   log(`sweep: ${due.length} Release(s) published in the last ${windowHours} hours`);
-  const counts = { posted: 0, 'would-post': 0, already: 0, failed: 0 };
+  const counts = { posted: 0, 'would-post': 0, already: 0, failed: 0, held: 0 };
   for (const d of due) {
-    try { counts[await announceOne(api, target, d.repo, d.tag, { post, log })]++; } catch (e) { counts.failed++; log(`FAIL ${d.repo} ${d.tag}: ${e.message}`); }
+    try { counts[await announceOne(api, target, d.repo, d.tag, { post, log, held })]++; } catch (e) { counts.failed++; log(`FAIL ${d.repo} ${d.tag}: ${e.message}`); }
   }
   return counts;
 }
 
-export async function run({ repo, tag, post, windowHours, token, fetchImpl, log = console.log, now }) {
+// The held posts are written into the run's summary page (GITHUB_STEP_SUMMARY), best effort: the log line is the record that cannot fail.
+function writeSummary(file, held) {
+  if (!file || !held.length) return;
+  const lines = ['## Held, not posted', '', 'These Releases were not announced: the mirrored title would overflow GitHub\'s title ceiling. Nothing was cut and nothing was posted bare. The room re-composes the summary; then run this workflow by hand (repo, tag, post=true, title). A manual run is not limited by the sweep window.', ''];
+  for (const h of held) lines.push(`- **${h.repo} ${h.tag}**: ${h.reason}`);
+  try { fs.appendFileSync(file, lines.join('\n') + '\n'); } catch { /* the log line already names it */ }
+}
+
+export async function run({ repo, tag, post, windowHours, token, fetchImpl, log = console.log, now, title = '', summaryFile = '' }) {
   if (!token) throw new Error('GH_TOKEN is not set');
+  if (title && !(repo && tag)) throw new Error('a title needs a repo and a tag (one named Release), never a sweep');
   if (repo) { checkRepo(repo); checkTag(tag); } // before any network call
   const api = client({ token, fetchImpl });
   const target = await findTarget(api);
-  if (repo) return { [await announceOne(api, target, repo, tag, { post, log })]: 1 };
+  const held = [];
+  if (repo) { const outcome = await announceOne(api, target, repo, tag, { post, log, title, held }); writeSummary(summaryFile, held); return { [outcome]: 1 }; }
   if (tag) throw new Error('a tag needs a repo');
-  return sweep(api, target, { post, log, windowHours, now });
+  const counts = await sweep(api, target, { post, log, windowHours, now, held });
+  writeSummary(summaryFile, held);
+  return counts;
 }
+
+// The exit code of a run: a failed post or a HELD Release is not a success (the run must go red so the held post is seen), a dry run is.
+export const exitCodeFor = (counts) => (counts.failed || counts.held ? 1 : 0);

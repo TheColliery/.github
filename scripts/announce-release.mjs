@@ -7,16 +7,19 @@
 //   INPUT_TAG           the vX.Y.Z tag to announce (needed with INPUT_REPO)
 //   INPUT_POST          "true" posts; anything else is a dry run that prints what it would post and stops
 //   INPUT_WINDOW_HOURS  sweep only: how far back a Release counts as new (default 48)
+//   INPUT_TITLE         a manual post only (needs INPUT_REPO and INPUT_TAG): the room's re-composed title, for a Release whose mirrored title
+//                       would overflow GitHub's 200-character ceiling and was therefore held
+//   GITHUB_STEP_SUMMARY the run summary file, set by Actions: held Releases are written into it
 //   GH_TOKEN            the workflow token (discussions: write); read here, never printed
 //
 // Example: INPUT_REPO=CoalMine INPUT_TAG=v3.17.3 INPUT_POST=false GH_TOKEN=... node scripts/announce-release.mjs
-// Exit:    0 done (or a dry run) · 1 a refusal or a failed post · 64 usage error
+// Exit:    0 done (or a dry run) · 1 a refusal, a failed post or a HELD Release (named in the log and the run summary) · 64 usage error
 // Report a problem: TheColliery/.github issues. Zero dependencies.
-import { run } from './lib/announce-release.mjs';
+import { run, exitCodeFor } from './lib/announce-release.mjs';
 
 const USAGE = 'usage: INPUT_REPO=<repo> INPUT_TAG=<vX.Y.Z> [INPUT_POST=true] GH_TOKEN=<token> node scripts/announce-release.mjs | -h\n'
   + '  opens an Announcements discussion on the TheColliery organisation page for a published Release; INPUT_REPO empty = sweep the last INPUT_WINDOW_HOURS (48)\n'
-  + '  without INPUT_POST=true it only prints what it would post\n'
+  + '  without INPUT_POST=true it only prints what it would post; INPUT_TITLE (with a repo and a tag) posts a held Release under the room\'s re-composed title\n'
   + '  example: INPUT_REPO=CoalMine INPUT_TAG=v3.17.3 GH_TOKEN=... node scripts/announce-release.mjs\n'
   + '  exit 0 done or dry run · 1 refused or failed · 64 usage error';
 
@@ -26,9 +29,9 @@ async function main(args, env) {
   const windowHours = env.INPUT_WINDOW_HOURS ? Number(env.INPUT_WINDOW_HOURS) : 48;
   if (!Number.isInteger(windowHours) || windowHours < 1 || windowHours > 24 * 31) { console.error('announce-release: INPUT_WINDOW_HOURS must be a whole number of hours from 1 to 744'); return 1; }
   const post = env.INPUT_POST === 'true';
-  const counts = await run({ repo: env.INPUT_REPO || '', tag: env.INPUT_TAG || '', post, windowHours, token: env.GH_TOKEN });
+  const counts = await run({ repo: env.INPUT_REPO || '', tag: env.INPUT_TAG || '', post, windowHours, token: env.GH_TOKEN, title: env.INPUT_TITLE || '', summaryFile: env.GITHUB_STEP_SUMMARY || '' });
   console.log(`done (${post ? 'posting' : 'dry run'}): ${Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(', ')}`);
-  return counts.failed ? 1 : 0;
+  return exitCodeFor(counts);
 }
 
 try { process.exitCode = await main(process.argv.slice(2), process.env); } catch (e) { console.error(`announce-release: ${e && e.message ? e.message : e}`); process.exitCode = 1; }

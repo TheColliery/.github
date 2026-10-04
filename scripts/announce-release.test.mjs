@@ -5,15 +5,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { run, neutralizeMentions, buildAnnouncement, checkRepo, checkTag, marker, BODY_CAP } from './lib/announce-release.mjs';
+import { run, neutralizeMentions, buildAnnouncement, checkRepo, checkTag, marker, BODY_CAP, HeldPost, exitCodeFor, SCHEDULE_PERIOD_HOURS, SCHEDULE_DROPPED_SLOTS, MEASURED_MAX_DELAY_HOURS, SCHEDULE_HEADROOM_HOURS, SCHEDULE_WINDOW_HOURS } from './lib/announce-release.mjs';
 
 const SCRIPTS = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(SCRIPTS, '..');
 const TOKEN = 'fake-token-' + 'z'.repeat(12); // a fake, built at run time so it matches no secret shape
-const NOW = Date.parse('2026-10-03T12:00:00Z');
+// A-4 (pass 15): a fixed clock far in the past. No window (the longest is 744 hours) reaches it from the real clock on any day after it, so a
+// sweep that drops `now` and reads Date.now() fails these tests on every day, not only once the calendar has passed a nearer date.
+const NOW = Date.parse('2026-01-15T12:00:00Z');
 const hoursAgo = (h) => new Date(NOW - h * 3600 * 1000).toISOString();
 
 function fakeGithub(over = {}) {
@@ -127,10 +130,10 @@ test('sweep: only published Releases inside the window, of public non-archived n
     Priv: { name: 'Priv', private: true, html_url: 'https://x/P', releases: [rel('v0.7.0', 1)] },
   } });
   const { r, logs } = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, now: NOW, windowHours: 48, post: true, repo: '', tag: '' }).then((x) => ({ r: x }));
-  assert.deepEqual(r, { posted: 2, 'would-post': 0, already: 0, failed: 0 });
+  assert.deepEqual(r, { posted: 2, 'would-post': 0, already: 0, failed: 0, held: 0 });
   assert.deepEqual(gh.st.discussions.map((d) => d.title), ['B v2.0.0 - s', 'A v1.1.0 - s'], 'oldest first');
   const again = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, now: NOW, windowHours: 48, post: true, repo: '', tag: '' });
-  assert.deepEqual(again, { posted: 0, 'would-post': 0, already: 2, failed: 0 });
+  assert.deepEqual(again, { posted: 0, 'would-post': 0, already: 2, failed: 0, held: 0 });
   assert.equal(gh.st.creates, 2);
   void logs;
 });
@@ -146,7 +149,7 @@ test('CLI: -h exits 0 with the usage; an argument is exit 64; a missing token an
   r = cli([], { INPUT_REPO: '../etc', INPUT_TAG: 'v1.0.0', GH_TOKEN: 'x' }); assert.equal(r.status, 1); assert.match(r.stderr, /not a repository name/);
 });
 
-test('the workflow runs on a six-hourly schedule and by hand: only those two triggers, a scheduled run posts a 24-hour window, a manual run is a dry run unless post is true, the write permission at the job only, a never-cancel group', () => {
+test('the workflow runs on a six-hourly schedule and by hand: only those two triggers, a scheduled run posts the named window, a manual run is a dry run unless post is true, the write permission at the job only, a never-cancel group', () => {
   const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'announce-release.yml'), 'utf8').replace(/\r\n/g, '\n');
   const code = y.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
   const on = code.match(/^on:\n((?: {2}.*\n|\n)+)/m)[1];
@@ -160,9 +163,11 @@ test('the workflow runs on a six-hourly schedule and by hand: only those two tri
   assert.match(code, /^concurrency:\n {2}group: announce-release\n {2}cancel-in-progress: false$/m);
   assert.match(code, /post:\n(?: {8}.*\n)*? {8}default: false/, 'a manual run still defaults to a dry run');
   assert.match(code, /^ {10}INPUT_POST: \$\{\{ github\.event_name == 'schedule' && 'true' \|\| inputs\.post \}\}$/m, 'a scheduled run posts; a manual run follows its input');
-  assert.match(code, /^ {10}INPUT_WINDOW_HOURS: \$\{\{ github\.event_name == 'schedule' && '24' \|\| inputs\.window_hours \}\}$/m, 'the scheduled window: see the arithmetic test');
+  assert.match(code, /^ {10}INPUT_WINDOW_HOURS: \$\{\{ github\.event_name == 'schedule' && '30' \|\| inputs\.window_hours \}\}$/m, 'the scheduled window: see the arithmetic test');
   assert.match(code, /GH_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}/, 'the workflow token, no new credential');
   assert.match(code, /INPUT_REPO: \$\{\{ inputs\.repo \}\}/, 'inputs reach the script through env, never interpolated into run:');
+  assert.match(code, /INPUT_TITLE: \$\{\{ inputs\.title \}\}/, 'a manual post may carry the room\'s re-composed title, through env');
+  assert.match(code, /^ {6}title:\n(?: {8}.*\n)*? {8}default: ''/m, 'the title input defaults to empty');
   assert.doesNotMatch(code, /run:[^\n]*\$\{\{/, 'no expression inside a run: line');
 });
 
@@ -171,7 +176,7 @@ test('sweep: a pre-release (a launch-form Release) is not announced by the sweep
   const repos = { A: { name: 'A', private: false, html_url: 'https://x/A', releases: [rel('v1.0.0'), rel('v1.1.0-beta.1', { prerelease: true })] } };
   const gh = fakeGithub({ repos });
   const r = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, now: NOW, windowHours: 12, post: true, repo: '', tag: '' });
-  assert.deepEqual(r, { posted: 1, 'would-post': 0, already: 0, failed: 0 });
+  assert.deepEqual(r, { posted: 1, 'would-post': 0, already: 0, failed: 0, held: 0 });
   assert.deepEqual(gh.st.discussions.map((d) => d.title), ['A v1.0.0 - s']);
   const by = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, now: NOW, windowHours: 12, post: true, repo: 'A', tag: 'v1.1.0-beta.1' });
   assert.deepEqual(by, { posted: 1 });
@@ -180,71 +185,149 @@ test('sweep: a pre-release (a launch-form Release) is not announced by the sweep
 test('a scheduled run with nothing new posts nothing and says so', async () => {
   const gh = fakeGithub({ repos: { A: { name: 'A', private: false, html_url: 'https://x/A', releases: [{ tag_name: 'v1.0.0', name: 'v1.0.0 - s', body: 'b', html_url: 'https://x/v1', draft: false, published_at: hoursAgo(100) }] } } });
   const logs = []; const r = await run({ token: TOKEN, fetchImpl: gh.f, log: (l) => logs.push(l), now: NOW, windowHours: 12, post: true, repo: '', tag: '' });
-  assert.deepEqual(r, { posted: 0, 'would-post': 0, already: 0, failed: 0 }); assert.equal(gh.st.creates, 0);
+  assert.deepEqual(r, { posted: 0, 'would-post': 0, already: 0, failed: 0, held: 0 }); assert.equal(gh.st.creates, 0);
   assert.match(logs.join('\n'), /sweep: 0 Release\(s\) published in the last 12 hours/);
 });
 
-// BA-14 / the first live post (discussion 23, CoalBoard v2.7.0): a 211-character title was cut at the 200 cap and GitHub stored it as 199,
-// so the read-back failed. The title is never cut mid-sentence: when "<Repo> <Release title>" is longer than the source band allows
-// (an older Release, from before the summary band), the title is "<Repo> vX.Y.Z" and the summary stays the body's first line.
+// UMB-433 (the owner on org discussion #23, verbatim: "if it really overflows, re-compose it, never leave the text off"): a mirrored title
+// that fits GitHub's 200-character ceiling posts WHOLE; a real overflow is never cut by the machine and never posted bare, it is HELD and
+// named, and a manual run with the room's re-composed title posts it. (GitHub stored a 211-character title as 199: n = 1, discussion #23.)
 const longRelease = (summaryLen) => ({ tag_name: 'v2.7.0', name: 'v2.7.0 - ' + 'word '.repeat(Math.ceil(summaryLen / 5)).slice(0, summaryLen).trimEnd(), body: 'The summary line.\n\n### Added\n- x', html_url: 'https://github.com/TheColliery/CoalBoard/releases/tag/v2.7.0' });
+const repoUrl = 'https://github.com/TheColliery/CoalBoard';
 
-test('buildAnnouncement: an older Release whose name is 201 characters posts as "<Repo> vX.Y.Z" and keeps the summary as the body\'s first line', () => {
+test('buildAnnouncement: a title over the band that still fits the 200 ceiling posts WHOLE, summary and all -- RED while it fell back to the bare "<Repo> vX.Y.Z"', () => {
+  for (const n of [76, 120, 150]) {
+    const rel = longRelease(n);
+    const a = buildAnnouncement('CoalBoard', rel, repoUrl);
+    assert.equal(a.title, 'CoalBoard ' + rel.name, 'summary ' + n);
+    assert.ok(a.title.length <= 200);
+  }
+  // the boundary: the mirrored title of exactly 200 characters posts, 201 is held
+  const at = (total) => ({ ...longRelease(1), name: 'v2.7.0 - ' + 'a'.repeat(total - 'CoalBoard '.length - 'v2.7.0 - '.length) });
+  assert.equal(buildAnnouncement('CoalBoard', at(200), repoUrl).title.length, 200);
+  assert.throws(() => buildAnnouncement('CoalBoard', at(201), repoUrl), HeldPost);
+});
+
+test('buildAnnouncement: a real overflow (CoalBoard v2.7.0, a 201-character name, 211 mirrored) is HELD, never cut and never posted bare; the message names the way out', () => {
   const rel = longRelease(192); assert.equal(rel.name.length, 201);
-  const a = buildAnnouncement('CoalBoard', rel, 'https://github.com/TheColliery/CoalBoard');
-  assert.equal(a.title, 'CoalBoard v2.7.0');
-  assert.ok(a.body.startsWith('The summary line.\n\n### Added'));
-  assert.ok(Array.from(a.title).length <= 200, 'the 200 ceiling holds');
+  assert.throws(() => buildAnnouncement('CoalBoard', rel, repoUrl), (e) => e instanceof HeldPost && /release-title-cap: the announcement title "CoalBoard v2\.7\.0 - word/.test(e.message) && /Re-compose/.test(e.message));
 });
 
-test('buildAnnouncement: the title stays "<Repo> <Release title>" up to the source band (75 characters of summary) and falls back past it, never cut', () => {
-  const at = (n) => buildAnnouncement('CoalBoard', longRelease(n), 'u').title;
-  const clean = at(75); assert.equal(clean, 'CoalBoard ' + longRelease(75).name, 'a summary at the band top posts whole');
-  assert.equal(at(76), 'CoalBoard v2.7.0', 'one character past the band falls back');
-  assert.equal(at(60), 'CoalBoard ' + longRelease(60).name);
-  for (const n of [76, 150, 211, 400]) assert.ok(!at(n).includes(' - '), 'a fallback title carries no cut summary: ' + n);
+test('buildAnnouncement: a title handed in by hand (the room\'s re-composition) is used as written, after checks: not empty, not over 200, no control characters', () => {
+  const rel = longRelease(192);
+  const a = buildAnnouncement('CoalBoard', rel, repoUrl, 'CoalBoard v2.7.0 - the data lens reads the target\'s alerts');
+  assert.equal(a.title, 'CoalBoard v2.7.0 - the data lens reads the target\'s alerts');
+  assert.ok(a.body.startsWith('The summary line.'), 'the body is still the Release as published');
+  for (const bad of ['', '   ', 'x'.repeat(201), 'two\nlines', 'tab\there']) assert.throws(() => buildAnnouncement('CoalBoard', rel, repoUrl, bad), /title/, JSON.stringify(bad).slice(0, 30));
 });
 
-test('a post of an older long-titled Release reads back equal (the title GitHub stores is the title sent)', async () => {
-  const gh = fakeGithub({ repos: { CoalBoard: { name: 'CoalBoard', private: false, html_url: 'https://github.com/TheColliery/CoalBoard', releases: [{ ...longRelease(192), draft: false, published_at: hoursAgo(3) }] } } });
-  const { r } = await go(gh, { repo: 'CoalBoard', tag: 'v2.7.0', post: true });
+test('a held Release is NOT posted: the run names it, counts it, creates nothing, and does not read as success -- RED before UMB-433', async () => {
+  const gh = fakeGithub({ repos: { CoalBoard: { name: 'CoalBoard', private: false, html_url: repoUrl, releases: [{ ...longRelease(192), draft: false, published_at: hoursAgo(3) }] } } });
+  const { r, logs } = await go(gh, { repo: 'CoalBoard', tag: 'v2.7.0', post: true });
+  assert.deepEqual(r, { held: 1 }); assert.equal(gh.st.creates, 0);
+  assert.match(logs.join('\n'), /HELD CoalBoard v2\.7\.0: release-title-cap/);
+  assert.match(logs.join('\n'), /repo=CoalBoard, tag=v2\.7\.0, post=true and title=/, 'it says how to post it once re-composed');
+});
+
+test('a sweep that holds one Release still posts the others, counts the held one, and writes the held one into the run summary file', async () => {
+  const rel = (tag, name, h) => ({ tag_name: tag, name, body: 'b', html_url: 'https://x/' + tag, draft: false, published_at: hoursAgo(h) });
+  const summaryFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'announce-summary-')), 'summary.md');
+  const gh = fakeGithub({ repos: { A: { name: 'A', private: false, html_url: 'https://x/A', releases: [rel('v1.0.0', 'v1.0.0 - ok', 4), rel('v1.1.0', 'v1.1.0 - ' + 'x'.repeat(200), 2)] } } });
+  const r = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, now: NOW, windowHours: 24, post: true, repo: '', tag: '', summaryFile });
+  assert.deepEqual(r, { posted: 1, 'would-post': 0, already: 0, failed: 0, held: 1 });
+  const s = fs.readFileSync(summaryFile, 'utf8');
+  assert.match(s, /Held, not posted/); assert.match(s, /A v1\.1\.0/); assert.match(s, /release-title-cap/);
+  assert.doesNotMatch(s, /A v1\.0\.0/, 'the posted one is not listed as held');
+  fs.rmSync(path.dirname(summaryFile), { recursive: true, force: true });
+});
+
+test('a post of the held Release with the room\'s title posts it whole, reads back equal, and the title is the one handed in', async () => {
+  const gh = fakeGithub({ repos: { CoalBoard: { name: 'CoalBoard', private: false, html_url: repoUrl, releases: [{ ...longRelease(192), draft: false, published_at: hoursAgo(400) }] } } });
+  const { r } = await go(gh, { repo: 'CoalBoard', tag: 'v2.7.0', post: true, title: 'CoalBoard v2.7.0 - the data lens reads live advisories' });
   assert.deepEqual(r, { posted: 1 });
-  assert.equal(gh.st.discussions[0].title, 'CoalBoard v2.7.0');
+  assert.equal(gh.st.discussions[0].title, 'CoalBoard v2.7.0 - the data lens reads live advisories');
 });
 
-// A-7 (pass 14): GitHub dropped no run yet but ran the first one three hours late, and drops scheduled runs under load. The marker only
-// prevents a DOUBLE post; it cannot rescue a Release the window never reached. So the scheduled window covers two dropped slots plus the
-// measured delay: with a six-hour period, a Release published just after a slot waits for the slot after the next two are dropped (18 hours)
-// and then the delay (3 hours measured, the first scheduled run) = 21 hours; 24 is that with a margin.
-const WORKFLOW = () => fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'announce-release.yml'), 'utf8').replace(/\r\n/g, '\n');
-const PERIOD_HOURS = 6, DROPPED_SLOTS = 2, MEASURED_DELAY_HOURS = 3;
+test('a title is only taken with a repo and a tag (one named Release), never for a sweep', async () => {
+  await assert.rejects(go(fakeGithub(), { title: 'a title', post: false }), /a title needs a repo and a tag/);
+});
 
-test('the scheduled window covers two dropped slots plus the measured delay (the period from the cron, never a guess) -- RED while it was 12', () => {
+// A-7 (pass 14) and A-1 (pass 15): GitHub drops scheduled runs under load and runs the rest late. The marker only prevents a DOUBLE post; it
+// cannot rescue a Release the window never reached. So the scheduled window covers two dropped slots plus the LARGEST delay measured so far,
+// plus headroom. The delay is ONE named constant (MEASURED_MAX_DELAY_HOURS, in the library, cited by the workflow comment) and THIS test
+// carries the measured runs; a later wider delay changes that one number and one list here.
+const WORKFLOW = () => fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'announce-release.yml'), 'utf8').replace(/\r\n/g, '\n');
+// Every scheduled run read at the API (/actions/workflows/announce-release.yml/runs): the slot it was due at and when GitHub created it.
+const MEASURED_RUNS = [
+  { run: '37155964643', slot: '2026-10-03T18:37:00Z', created: '2026-10-03T21:41:03Z' },
+  { run: '37182179241', slot: '2026-10-04T00:37:00Z', created: '2026-10-04T06:13:29Z' },
+];
+const delayHours = (r) => (Date.parse(r.created) - Date.parse(r.slot)) / 3600000;
+
+test('the measured scheduled runs fit under the one named delay constant (n = 2: 3.07 h and 5.61 h) -- RED while the constant was 3', () => {
+  assert.equal(MEASURED_RUNS.length >= 2, true);
+  const worst = Math.max(...MEASURED_RUNS.map(delayHours));
+  assert.ok(worst > 5.6 && worst < 5.7, 'the largest measured delay: ' + worst);
+  assert.ok(MEASURED_MAX_DELAY_HOURS >= worst, 'MEASURED_MAX_DELAY_HOURS ' + MEASURED_MAX_DELAY_HOURS + ' must be at least the largest measured delay ' + worst);
+  assert.ok(MEASURED_MAX_DELAY_HOURS <= worst + 0.5, 'and be the measurement, not a guess');
+});
+
+test('the scheduled window covers two dropped slots plus the largest measured delay plus headroom; the workflow carries that number and its comment cites the constant -- RED while it was 24', () => {
   const code = WORKFLOW().split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
   const step = Number(code.match(/- cron: '\d+ \*\/(\d+) \* \* \*'/)[1]);
-  assert.equal(step, PERIOD_HOURS, 'the cron period is the one the window is sized for');
+  assert.equal(step, SCHEDULE_PERIOD_HOURS, 'the cron period is the one the window is sized for');
   const window = Number(code.match(/INPUT_WINDOW_HOURS: \$\{\{ github\.event_name == 'schedule' && '(\d+)' \|\|/)[1]);
-  const need = (DROPPED_SLOTS + 1) * step + MEASURED_DELAY_HOURS;
-  assert.ok(window >= need, 'the window ' + window + ' h must cover ' + need + ' h (two dropped slots, then the delayed third run)');
-  assert.ok(window <= need + 6, 'and stay a window, not a backlog: ' + window + ' h');
+  const need = (SCHEDULE_DROPPED_SLOTS + 1) * step + MEASURED_MAX_DELAY_HOURS + SCHEDULE_HEADROOM_HOURS;
+  assert.equal(SCHEDULE_WINDOW_HOURS, Math.ceil(need), 'the library constant is the arithmetic');
+  assert.equal(window, SCHEDULE_WINDOW_HOURS, 'the workflow carries the library constant');
+  assert.ok(window - (SCHEDULE_DROPPED_SLOTS + 1) * step - Math.max(...MEASURED_RUNS.map(delayHours)) >= SCHEDULE_HEADROOM_HOURS, 'headroom of at least one period beyond the worst measured delay');
+  assert.ok(window <= need + 1, 'and stay a window, not a backlog: ' + window + ' h');
+  const comments = WORKFLOW().split('\n').filter((l) => /^\s*#/.test(l)).join('\n');
+  assert.match(comments, /MEASURED_MAX_DELAY_HOURS/, 'the workflow comment cites the named constant');
 });
 
-test('a Release older than the old 12-hour window but inside the 24-hour one is announced once by the scheduled path; a second run posts nothing', async () => {
+test('a Release older than the old 24-hour window but inside the 30-hour one is announced once by the scheduled path; a second run posts nothing', async () => {
   const rel = (tag, h) => ({ tag_name: tag, name: tag + ' - s', body: 'b', html_url: 'https://x/' + tag, draft: false, published_at: hoursAgo(h) });
-  const gh = fakeGithub({ repos: { A: { name: 'A', private: false, html_url: 'https://x/A', releases: [rel('v1.0.0', 20), rel('v1.1.0', 30)] } } });
-  const old = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, now: NOW, windowHours: 12, post: true, repo: '', tag: '' });
-  assert.deepEqual(old, { posted: 0, 'would-post': 0, already: 0, failed: 0 }, 'the old window never reaches a Release 20 hours old');
-  const first = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, now: NOW, windowHours: 24, post: true, repo: '', tag: '' });
-  assert.deepEqual(first, { posted: 1, 'would-post': 0, already: 0, failed: 0 }, 'inside 24 hours it is announced; the 30-hour one is past the window');
-  const second = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, now: NOW, windowHours: 24, post: true, repo: '', tag: '' });
-  assert.deepEqual(second, { posted: 0, 'would-post': 0, already: 1, failed: 0 }, 'the marker keeps it to one post');
+  const gh = fakeGithub({ repos: { A: { name: 'A', private: false, html_url: 'https://x/A', releases: [rel('v1.0.0', 28), rel('v1.1.0', 40)] } } });
+  const old = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, now: NOW, windowHours: 24, post: true, repo: '', tag: '' });
+  assert.deepEqual(old, { posted: 0, 'would-post': 0, already: 0, failed: 0, held: 0 }, 'the old window never reaches a Release 28 hours old');
+  const first = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, now: NOW, windowHours: SCHEDULE_WINDOW_HOURS, post: true, repo: '', tag: '' });
+  assert.deepEqual(first, { posted: 1, 'would-post': 0, already: 0, failed: 0, held: 0 }, 'inside the window it is announced; the 40-hour one is past it');
+  const second = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, now: NOW, windowHours: SCHEDULE_WINDOW_HOURS, post: true, repo: '', tag: '' });
+  assert.deepEqual(second, { posted: 0, 'would-post': 0, already: 1, failed: 0, held: 0 }, 'the marker keeps it to one post');
   assert.equal(gh.st.creates, 1);
 });
 
-// A-3 (pass 14): the comment said the fallback title posts "with the summary as the body's first line"; the code posts the Release body
-// exactly as published (its first line is the summary only when the Release followed the canon, and nothing re-derives it).
-test('the fallback-title comment says what the code does: the Release body is posted as published -- RED while it promised a first line', () => {
+// A-4 (pass 15): the clock fix is proven by the suite, not by the calendar. With NOW far in the past, a sweep that is handed its clock finds
+// the Release; the SAME sweep reading the real clock finds nothing, so a run() or sweep() that drops \`now\` fails the first of these tests on
+// any day.
+test('the sweep uses the clock it is handed: with a far-past NOW a Release is found, and the real clock finds none -- A-4', async () => {
+  const gh = fakeGithub({ repos: { A: { name: 'A', private: false, html_url: 'https://x/A', releases: [{ tag_name: 'v1.0.0', name: 'v1.0.0 - s', body: 'b', html_url: 'https://x/v1', draft: false, published_at: hoursAgo(2) }] } } });
+  const logs = [];
+  const handed = await run({ token: TOKEN, fetchImpl: gh.f, log: (l) => logs.push(l), now: NOW, windowHours: 12, post: false, repo: '', tag: '' });
+  assert.deepEqual(handed, { posted: 0, 'would-post': 1, already: 0, failed: 0, held: 0 });
+  const real = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, windowHours: 12, post: false, repo: '', tag: '' });
+  assert.deepEqual(real, { posted: 0, 'would-post': 0, already: 0, failed: 0, held: 0 }, 'the real clock is far past NOW: no window reaches the Release');
+});
+
+// A-3 (pass 14): the comment must say what the code does: the Release body is posted as published.
+test('the title comment says what the code does: the Release body is posted as published; a mirrored title that fits posts whole -- RED while it described a bare fallback', () => {
   const src = fs.readFileSync(path.join(SCRIPTS, 'lib', 'announce-release.mjs'), 'utf8');
-  assert.doesNotMatch(src, /with the summary as the body's first line/);
-  assert.match(src, /the Release body is posted as published/);
+  assert.doesNotMatch(src, /posts as "<Repo> vX\.Y\.Z"/);
+  assert.match(src, /the Release body is posted as published/i);
+});
+
+test('CLI: INPUT_TITLE without a repo and a tag is refused before any network call, and the usage names the title', () => {
+  const r = cli([], { INPUT_TITLE: 'a title', GH_TOKEN: 'x' });
+  assert.equal(r.status, 1); assert.match(r.stderr, /a title needs a repo and a tag/);
+  assert.match(cli(['-h'], {}).stdout, /INPUT_TITLE/);
+});
+
+test('exitCodeFor: a held Release or a failed post makes the run exit 1 so it goes red; a clean run, a dry run and a nothing-new sweep exit 0 -- RED before UMB-433', () => {
+  assert.equal(exitCodeFor({ posted: 1, 'would-post': 0, already: 0, failed: 0, held: 0 }), 0);
+  assert.equal(exitCodeFor({ posted: 0, 'would-post': 3, already: 1, failed: 0, held: 0 }), 0);
+  assert.equal(exitCodeFor({ posted: 0, 'would-post': 0, already: 0, failed: 0, held: 0 }), 0);
+  assert.equal(exitCodeFor({ posted: 2, 'would-post': 0, already: 0, failed: 0, held: 1 }), 1);
+  assert.equal(exitCodeFor({ posted: 0, 'would-post': 0, already: 0, failed: 1, held: 0 }), 1);
+  assert.equal(exitCodeFor({ held: 1 }), 1);
 });
