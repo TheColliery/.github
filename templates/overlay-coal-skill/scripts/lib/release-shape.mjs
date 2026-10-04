@@ -117,8 +117,10 @@ export function buildReleaseTitle(version, summary) {
   // project..."), but leave an acronym/identifier-shaped first word alone -- one whose first
   // TWO characters are both capitals ("SHA256SUMS.txt", "CI") reads as an acronym or a file
   // name, never an ordinary sentence opener; an ordinary word has at most one leading capital.
+  // A CamelCase word (a capital, then an interior capital: "CoalFace", "McKinsey") is a product or
+  // identifier name and keeps its case too (UMB-417): an ordinary word has no interior capital.
   const firstWord = s.match(/^\S+/)?.[0] ?? '';
-  const looksLikeIdentifier = /^[A-Z]{2}/.test(firstWord);
+  const looksLikeIdentifier = /^[A-Z]\S*[A-Z]/.test(firstWord);
   if (!looksLikeIdentifier && /^[A-Z]/.test(s)) s = s[0].toLowerCase() + s.slice(1);
   return `v${version} - ${s}`;
 }

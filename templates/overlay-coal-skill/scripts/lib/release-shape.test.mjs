@@ -184,3 +184,19 @@ test('buildReleaseBody: Lead, then the lead paragraph, then the sections, a blan
   assert.equal(buildReleaseBody('Short.', '### Fixed\n- x', ''), 'Short.\n\n### Fixed\n- x\n');
   assert.equal(buildReleaseBody('Short.', '### Fixed\n- x'), 'Short.\n\n### Fixed\n- x\n');
 });
+
+// UMB-417 (the CoalFace room's INSPECT, M-A): a first word with an INTERIOR capital is a product or identifier name, never an
+// ordinary sentence opener, so it keeps its case. "CoalFace ..." used to become "coalFace ..." in the Release title.
+test('buildReleaseTitle: a CamelCase first word keeps its case (the product name), the cases the comment names are unchanged -- RED before UMB-417', () => {
+  assert.equal(buildReleaseTitle('0.14.0', 'CoalFace now reads its config from both legacy paths'), 'v0.14.0 - CoalFace now reads its config from both legacy paths');
+  assert.equal(buildReleaseTitle('0.14.0', "CoalFace's config walk names the file it read."), "v0.14.0 - CoalFace's config walk names the file it read");
+  assert.equal(buildReleaseTitle('2.0.0', 'CoalBoard, CoalTipple and CoalHearth share one config walk'), 'v2.0.0 - CoalBoard, CoalTipple and CoalHearth share one config walk');
+  assert.equal(buildReleaseTitle('1.0.0', 'McKinsey-style review now ships'), 'v1.0.0 - McKinsey-style review now ships');
+  // unchanged: an acronym or file name, an article, a pronoun, an ordinary word with later capitals in other words
+  assert.equal(buildReleaseTitle('1.0.0', 'SHA256SUMS.txt now ships beside every ZIP'), 'v1.0.0 - SHA256SUMS.txt now ships beside every ZIP');
+  assert.equal(buildReleaseTitle('1.0.0', 'CI now runs on macOS'), 'v1.0.0 - CI now runs on macOS');
+  assert.equal(buildReleaseTitle('1.0.0', 'A fix'), 'v1.0.0 - a fix');
+  assert.equal(buildReleaseTitle('1.0.0', 'I moved the file'), 'v1.0.0 - i moved the file');
+  assert.equal(buildReleaseTitle('1.0.0', 'Fixed the CoalFace config walk'), 'v1.0.0 - fixed the CoalFace config walk', 'only the first word decides');
+  assert.equal(buildReleaseTitle('1.0.0', 'A project config is now reported'), 'v1.0.0 - a project config is now reported');
+});
