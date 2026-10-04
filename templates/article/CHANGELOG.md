@@ -7,7 +7,9 @@ Versions follow [Semantic Versioning](https://semver.org/) applied to a standard
 - **MINOR**—a rule or register entry is added; existing conforming work still conforms.
 - **PATCH**—wording, citations, corrections that do not move a value.
 
-## {{VERSION}}—{{DATE}}
+## [{{VERSION}}] - {{DATE}}
+
+{{SUMMARY}}
 
 ### Added
 

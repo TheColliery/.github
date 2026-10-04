@@ -880,3 +880,42 @@ test('RELEASE-PATTERN.md names the opener ceiling (a one-capital proper noun low
   assert.doesNotMatch(src, /whose first\s+\/\/ TWO characters are both capitals/);
   assert.match(src, /THE CEILING, named/);
 });
+
+// BB-19 (signed (1) by the owner): the article repositories' Releases are made by the machine too. The article template carries the SAME bare
+// create-release.yml and the three scripts it runs, byte-identical to the overlay's (never a second parser), and its CHANGELOG heading is the
+// canon form the one parser reads ("## [X.Y.Z] - YYYY-MM-DD"). The template's own heading used to be "## {{VERSION}}—{{DATE}}": a repository
+// born from it could never be parsed (Sprite, born that way, writes "## 2.0.5—2026-10-03").
+const lfRead = (p) => fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n');
+const ARTICLE_RELEASE_FILES = ['.github/workflows/create-release.yml', 'scripts/release-notes.mjs', 'scripts/verify-release-shape.mjs', 'scripts/lib/release-shape.mjs'];
+
+test('the article template carries create-release.yml and the three scripts it runs, byte-identical to the overlay (one parser, no second copy of the logic) -- RED before BB-19', () => {
+  for (const rel of ARTICLE_RELEASE_FILES) {
+    const art = path.join(TEMPLATES, 'article', rel);
+    assert.ok(fs.existsSync(art), 'the article template is missing ' + rel);
+    assert.equal(lfRead(art), lfRead(path.join(TEMPLATES, 'overlay-coal-skill', rel)), rel + ' differs from the overlay copy');
+  }
+});
+
+test('the article template\'s CHANGELOG heading is the canon "## [X.Y.Z] - YYYY-MM-DD" with a summary line, and the one parser reads a filled-in copy -- RED before BB-19', async () => {
+  const { extractChangelogEntry } = await import(pathToFileURL(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', 'release-shape.mjs')).href);
+  const raw = lfRead(path.join(TEMPLATES, 'article', 'CHANGELOG.md'));
+  assert.match(raw, /^## \[\{\{VERSION\}\}\] - \{\{DATE\}\}$/m, 'the canon heading, a hyphen and brackets');
+  assert.doesNotMatch(raw, /^## .*—/m, 'no em-dash version heading');
+  const filled = raw.replace('{{VERSION}}', '1.0.0').replace('{{DATE}}', '2026-10-04').replace('{{SUMMARY}}', 'The first published draft of the standard.');
+  const e = extractChangelogEntry(filled, '1.0.0');
+  assert.equal(e.summary, 'The first published draft of the standard.');
+  assert.match(e.sectionsBody, /^### Added/);
+});
+
+test('the article skeleton rows own the release workflow and its three scripts, and a no-remote change-request room reads the workflow N/A -- RED before BB-19', async () => {
+  const { SKELETON_FILES, NO_REMOTE_NA_FILES } = await import(pathToFileURL(path.join(here, 'lib', 'skeleton-check-lib.mjs')).href);
+  for (const kind of ['article', 'article (change-request)']) for (const rel of ARTICLE_RELEASE_FILES) assert.ok(SKELETON_FILES[kind].includes(rel), kind + ' lacks ' + rel);
+  for (const kind of ['article (private)', 'private-working']) assert.ok(!SKELETON_FILES[kind].includes('scripts/release-notes.mjs'), kind + ' cuts no public Release and lists no release script');
+  assert.ok(NO_REMOTE_NA_FILES['article (change-request)'].includes('.github/workflows/create-release.yml'));
+});
+
+test('RELEASE-PATTERN.md says an article repository that cuts version tags carries the same create-release.yml from the article template, one parser, one heading form -- RED before BB-19', () => {
+  const t = lfRead(path.join(ROOT, 'RELEASE-PATTERN.md'));
+  assert.match(t, /An article repository that cuts version tags carries the same bare `create-release\.yml`/);
+  assert.match(t, /templates\/article\//);
+});

@@ -70,6 +70,8 @@ export const SKELETON_FILES = {
     // UMB-282 (a): the house secret scan and the hook pair that runs it (see the published-code row).
     '.gitattributes', '.githooks/pre-commit', '.githooks/pre-push',
     'scripts/lib/secret-scan.mjs', 'scripts/secret-scan.test.mjs', 'scripts/secret-gate.mjs', 'scripts/secret-gate.test.mjs',
+    // BB-19: the Release by the machine, the overlay's bare create-release.yml and the three scripts it runs, byte-identical to the overlay's.
+    '.github/workflows/create-release.yml', 'scripts/release-notes.mjs', 'scripts/verify-release-shape.mjs', 'scripts/lib/release-shape.mjs',
   ],
   // UMB-055 item 1 (main's Option-A-amended ruling): a private, unpublished article --
   // never GitBook-synced, cuts no public Release -- declares this with a repo-root
@@ -103,6 +105,8 @@ export const SKELETON_FILES = {
     'LICENSE', 'CONTRIBUTING.md', 'CHANGELOG.md', '.gitignore',
     '.github/workflows/check.yml', '.github/workflows/watch-sources.yml',
     '.github/PULL_REQUEST_TEMPLATE.md',
+    // BB-19: as the public article row.
+    '.github/workflows/create-release.yml', 'scripts/release-notes.mjs', 'scripts/verify-release-shape.mjs', 'scripts/lib/release-shape.mjs',
   ],
 };
 
@@ -174,7 +178,7 @@ export const TEMPLATE_DIR_FOR_KIND = {
 // which has zero remotes by rule) these two cells would demand files that can never execute,
 // and placing them would turn an honest ABSENT into a green cell for a workflow that never runs.
 export const NO_REMOTE_NA_FILES = {
-  'article (change-request)': ['.github/workflows/check.yml', '.github/workflows/watch-sources.yml'],
+  'article (change-request)': ['.github/workflows/check.yml', '.github/workflows/watch-sources.yml', '.github/workflows/create-release.yml'],
 };
 
 // { state: 'none' | 'present' | 'unknown', reason } read from the folder's own files, offline.
