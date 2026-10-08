@@ -104,7 +104,7 @@ test('every github.com/TheColliery/.github/blob/main/<path> link in the defaults
 // BB-98 (g), owner 2026-10-09: GitHub applies `.github/VULNERABILITY_REPORT.yml` of the org `.github` repository to every repository the org owns that has private
 // vulnerability reporting on. An invalid form silently falls back to the default form ("If GitHub cannot parse or validate a custom form, reporters see the default form
 // instead", docs.github.com), so this reads the file line by line (no YAML parser without an npm install, Phoenix #2) and holds what the owner asked for: GitHub's four default
-// required fields, the optional AI checkbox, GitHub's own 150-character floor on the proof of concept and no floor of ours anywhere else, no tab, no mail address.
+// required fields, the optional AI checkbox, GitHub's own 150-character floor on the proof of concept (the default form's, per the changelog of 2026-10-01: "proof of concept (at least 150 characters)"; the docs example's 100 is only an example) and no floor of ours anywhere else, no tab, no mail address.
 test('VULNERABILITY_REPORT.yml: the four default fields are required, the AI checkbox is optional, the only minimum length is GitHub\'s 150 on the proof of concept -- RED before BB-98 (g)', () => {
   assert.ok(exists('.github/VULNERABILITY_REPORT.yml'), 'the form exists at .github/VULNERABILITY_REPORT.yml');
   const text = read('.github/VULNERABILITY_REPORT.yml');
