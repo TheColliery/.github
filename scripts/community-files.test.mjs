@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SKELETON_FILES, ORG_DEFAULT_FILES, liveFileVerdict } from './lib/skeleton-check-lib.mjs';
 
 // UMB-177. GitHub serves a public `.github` repository's default community files (CODE_OF_CONDUCT, CONTRIBUTING,
 // SECURITY, SUPPORT, PULL_REQUEST_TEMPLATE) to every org repo that ships none of its own; a file may sit in the
@@ -133,4 +134,38 @@ test('VULNERABILITY_REPORT.yml: the four default fields are required, the AI che
   assert.ok(!blocks.at(-1).some((l) => /required/.test(l)), 'the AI checkbox carries no required flag, on the element or on its option');
   assert.match(text, /- label: I used AI assistance to find or write up this report\./);
   assert.match(lines[1], /SECURITY\.md/, 'one line pointing at the org security policy, nothing restated');
+});
+
+// Item 3 (b) of the 09b order, 2026-10-09: GitHub highlights an `ACCESSIBILITY.md` on the repository overview ("Accessibility" tab and an About link). Mechanism, from GitHub's
+// docs (adding-an-accessibility-page-to-your-repository.md, read 2026-10-09): the file is looked for in `.github`, the repository root and `docs`, in that order, and a repository
+// without one inherits the one in the organization's `.github` repository; all plans on github.com. So this repo ships the org default, the two public templates carry the same bytes, and
+// the text claims only what a written rule backs: DOC-PATTERN's alt-text and link-text obligation and its heading hierarchy, and an explicit "no conformance level claimed".
+test('ACCESSIBILITY.md: the org default and the published-code and article template masters are byte-identical, claim only what DOC-PATTERN backs, and claim no conformance level -- RED before the 09b order', () => {
+  const own = read('.github/ACCESSIBILITY.md');
+  assert.equal(own, read('templates/published-code/ACCESSIBILITY.md'));
+  assert.equal(own, read('templates/article/ACCESSIBILITY.md'));
+  assert.ok(own.length < 2500, 'a short statement');
+  assert.doesNotMatch(own, /@[a-z0-9-]+\.[a-z]{2,}/i, 'no mail address: the org takes no mail');
+  assert.ok(!own.includes(String.fromCharCode(0x2014)), 'no em dash in the statement');
+  for (const must of [/alt text/, /link text states where the link goes/, /W3C WCAG/, /no skipped levels/, /No WCAG conformance level is claimed/, /Report a barrier/]) assert.match(own, must);
+  assert.doesNotMatch(own, /\b(WCAG 2\.\d|level (A|AA|AAA)|conforms|compliant|fully accessible)\b/i, 'no conformance claim of any kind');
+  // every link into the org repo resolves to a file that exists (the existing link test covers .github/ paths; this one also covers a root file)
+  for (const m of own.matchAll(/github\.com\/TheColliery\/\.github\/blob\/main\/([^)\s]+)/g)) assert.ok(exists(m[1]), 'dead link: ' + m[1]);
+});
+
+test('ACCESSIBILITY.md is an org-default skeleton file: a live room without one inherits it, one with a different file is a NAMED divergence -- RED before the 09b order', () => {
+  for (const kind of ['published-code', 'article', 'article (change-request)']) assert.ok(SKELETON_FILES[kind].includes('ACCESSIBILITY.md'), kind);
+  for (const kind of ['private-working', 'article (private)']) assert.ok(!SKELETON_FILES[kind].includes('ACCESSIBILITY.md'), kind + ': a private repo shows no Accessibility tab on the public overview');
+  assert.ok(ORG_DEFAULT_FILES.has('ACCESSIBILITY.md'));
+  assert.match(liveFileVerdict('ACCESSIBILITY.md', 'ABSENT'), /inherits the org default/);
+});
+
+test('SERIES-CANON.md carries the Accessibility statement row with its mechanism and its source -- RED before the 09b order', () => {
+  const row = read('SERIES-CANON.md').split('\n').find((l) => l.startsWith('| Accessibility statement |'));
+  assert.ok(row, 'the row exists');
+  assert.match(row, /`ACCESSIBILITY\.md`/);
+  assert.match(row, /`\.github`, the repository root and `docs`, in that order/);
+  assert.match(row, /inherit/);
+  assert.match(row, /no conformance level/);
+  assert.equal(row.split('|').length, 6, 'one cell per column');
 });

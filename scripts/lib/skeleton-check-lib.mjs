@@ -54,6 +54,7 @@ export const SKELETON_FILES = {
     '.github/workflows/coverage.yml', '.github/scripts/lcov-to-cobertura.mjs',
     '.github/ISSUE_TEMPLATE/bug-report.yml', '.github/ISSUE_TEMPLATE/config.yml',
     '.github/PULL_REQUEST_TEMPLATE.md',
+    'ACCESSIBILITY.md', // GitHub's Accessibility tab; an org default (ORG_DEFAULT_FILES), so a live room without one inherits it
     // UMB-282 (a): the house secret scan. The lib and its test are byte-equal in every carrier (the umbrella's
     // scanner-parity.mjs); the gate is the caller, and the hook pair above carries the call.
     'scripts/lib/secret-scan.mjs', 'scripts/secret-scan.test.mjs', 'scripts/secret-gate.mjs', 'scripts/secret-gate.test.mjs',
@@ -67,6 +68,7 @@ export const SKELETON_FILES = {
     'LICENSE', 'CONTRIBUTING.md', 'CHANGELOG.md', '.gitbook.yaml', '.gitignore',
     '.github/workflows/check.yml', '.github/workflows/watch-sources.yml',
     '.github/PULL_REQUEST_TEMPLATE.md',
+    'ACCESSIBILITY.md', // GitHub's Accessibility tab; an org default (ORG_DEFAULT_FILES), so a live room without one inherits it
     // UMB-282 (a): the house secret scan and the hook pair that runs it (see the published-code row).
     '.gitattributes', '.githooks/pre-commit', '.githooks/pre-push',
     'scripts/lib/secret-scan.mjs', 'scripts/secret-scan.test.mjs', 'scripts/secret-gate.mjs', 'scripts/secret-gate.test.mjs',
@@ -105,6 +107,7 @@ export const SKELETON_FILES = {
     'LICENSE', 'CONTRIBUTING.md', 'CHANGELOG.md', '.gitignore',
     '.github/workflows/check.yml', '.github/workflows/watch-sources.yml',
     '.github/PULL_REQUEST_TEMPLATE.md',
+    'ACCESSIBILITY.md', // GitHub's Accessibility tab; an org default (ORG_DEFAULT_FILES), so a live room without one inherits it
     // BB-19: as the public article row.
     '.github/workflows/create-release.yml', 'scripts/release-notes.mjs', 'scripts/verify-release-shape.mjs', 'scripts/lib/release-shape.mjs',
   ],
@@ -115,7 +118,7 @@ export const SKELETON_FILES = {
 // state (it inherits) and a differing file is a deliberate override: a NAMED divergence, never silence. Everything
 // else in a skeleton keeps its plain verdict, and a template-repo clone (--clone) is judged by the plain verdict
 // too, since a repo born from a template should carry the file.
-export const ORG_DEFAULT_FILES = new Set(['CODE_OF_CONDUCT.md', '.github/PULL_REQUEST_TEMPLATE.md', 'GOVERNANCE.md']);
+export const ORG_DEFAULT_FILES = new Set(['CODE_OF_CONDUCT.md', '.github/PULL_REQUEST_TEMPLATE.md', 'GOVERNANCE.md', 'ACCESSIBILITY.md']);
 
 /** The printed verdict for one skeleton file of a LIVE room: compareFile's verdict, restated for org-default files. */
 export function liveFileVerdict(rel, verdict) {
