@@ -147,8 +147,17 @@ test('ACCESSIBILITY.md: the org default and the published-code and article templ
   assert.ok(own.length < 2500, 'a short statement');
   assert.doesNotMatch(own, /@[a-z0-9-]+\.[a-z]{2,}/i, 'no mail address: the org takes no mail');
   assert.ok(!own.includes(String.fromCharCode(0x2014)), 'no em dash in the statement');
-  for (const must of [/alt text/, /link text states where the link goes/, /W3C WCAG/, /no skipped levels/, /No WCAG conformance level is claimed/, /Report a barrier/]) assert.match(own, must);
-  assert.doesNotMatch(own, /\b(WCAG 2\.\d|level (A|AA|AAA)|conforms|compliant|fully accessible)\b/i, 'no conformance claim of any kind');
+  for (const must of [/alt text/, /link text states where the link goes/, /W3C WCAG 2\.2/, /no skipped levels/, /No WCAG conformance level is claimed/, /Report a barrier/]) assert.match(own, must);
+  // W3C WAI, "Developing an Accessibility Statement" (read 2026-10-09): a commitment, the standard applied WITH its version, contact information; advisable: measures taken, known limitations, and no declaration of conformity
+  assert.match(own.split('\n').find((l, i, a) => a[i - 1] === '' && a[i - 2] === '# Accessibility'), /^We are committed to /, 'the commitment is the first sentence under the title, in the organization\'s voice');
+  assert.match(own, /\[WCAG 2\.2\]\(https:\/\/www\.w3\.org\/TR\/WCAG22\/\)/, 'the standard applied, named with its version and linked');
+  // every WCAG is followed by its version, except the no-claim sentence ("WCAG conformance level") and the 22 of the W3C's own address (TR/WCAG22/)
+  for (const bare of own.matchAll(/WCAG(?! 2\.2| conformance level|22\/)/g)) assert.fail('WCAG without its version at ' + bare.index + ': ' + own.slice(bare.index, bare.index + 30));
+  const known = own.slice(own.indexOf('## Known limitations'), own.indexOf('## What we do not claim'));
+  assert.match(known, /written before 2026-10-09 have not all been re-checked for alt text and link text/);
+  assert.match(known, /GitBook site's own interface/);
+  assert.match(known, /not tested with a screen reader or other assistive technology, and we do not claim to have/);
+  assert.doesNotMatch(own, /\b(level (A|AA|AAA)|conforms|conformant|compliant|fully accessible)\b/i, 'no conformance claim of any kind');
   // every link into the org repo resolves to a file that exists (the existing link test covers .github/ paths; this one also covers a root file)
   for (const m of own.matchAll(/github\.com\/TheColliery\/\.github\/blob\/main\/([^)\s]+)/g)) assert.ok(exists(m[1]), 'dead link: ' + m[1]);
 });
@@ -167,5 +176,6 @@ test('SERIES-CANON.md carries the Accessibility statement row with its mechanism
   assert.match(row, /`\.github`, the repository root and `docs`, in that order/);
   assert.match(row, /inherit/);
   assert.match(row, /no conformance level/);
+  assert.match(row, /https:\/\/www\.w3\.org\/WAI\/planning\/statements\//, 'the W3C WAI page is the second source');
   assert.equal(row.split('|').length, 6, 'one cell per column');
 });

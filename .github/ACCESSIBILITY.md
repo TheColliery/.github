@@ -1,5 +1,7 @@
 # Accessibility
 
+We are committed to accessibility for people with disabilities in the documentation of our repositories.
+
 This is the accessibility statement for TheColliery's repositories. GitHub shows it as the **Accessibility** tab on a repository that has no `ACCESSIBILITY.md` of its own; a repository that ships its own file overrides this one.
 
 ## What it covers
@@ -8,8 +10,15 @@ The documentation in the repository: its README and the other Markdown files, as
 
 ## What we do
 
-- Every image in a document carries alt text, and link text states where the link goes, never "click here" or a bare URL. This is the rule in our [documentation pattern](https://github.com/TheColliery/.github/blob/main/DOC-PATTERN.md), which follows W3C WCAG.
+- The standard we apply is [WCAG 2.2](https://www.w3.org/TR/WCAG22/), the W3C's Web Content Accessibility Guidelines.
+- Every image in a document carries alt text, and link text states where the link goes, never "click here" or a bare URL. This is the rule in our [documentation pattern](https://github.com/TheColliery/.github/blob/main/DOC-PATTERN.md), which follows W3C WCAG 2.2.
 - Headings keep a correct hierarchy, with no skipped levels.
+
+## Known limitations
+
+- Documents written before 2026-10-09 have not all been re-checked for alt text and link text.
+- The GitBook site's own interface (navigation, search and theme) belongs to GitBook and is outside these repositories.
+- We have not tested with a screen reader or other assistive technology, and we do not claim to have.
 
 ## What we do not claim
 
