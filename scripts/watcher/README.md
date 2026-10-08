@@ -15,6 +15,7 @@ A new website joins as ONE data row in the instance's list, appended at the END 
 2. Fetches each with a User-Agent that names TheColliery and `https://thecolliery.org`, sending the stored `ETag` / `Last-Modified`; reads at most 64 KB of a body.
 3. Compares the newest entry's key with the stored state. State is one KV key, written only when something changed.
 4. When anything changed, sends ONE digest email for the run through the `send_email` binding, and keeps the last digest in KV (`digest:last`).
+   The digest ends with a machine-readable change list for the zone editors (one JSON line per reported source under a marker line, also in `digest:last.changes`): its shape, the registry, the sizing for hundreds of sources and the push-intake design are in [ANTENNA.md](./ANTENNA.md).
 
 A source that fails three runs in a row, or four times within its last eight runs (a source that answers every other hour), is reported once per trouble spell; the spell ends after three answered runs. A feed that mints a new entry id on every render but shows the same title at the same link is quiet. A feed whose newest entries are all ignored (`ignoreTitle`) is quiet, not an error.
 

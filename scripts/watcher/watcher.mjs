@@ -15,6 +15,8 @@ const POOL = 6; // simultaneous outgoing connections per request on every plan (
 const FAIL_REPORT_AT = 3; // consecutive failed runs before a source is reported, once
 const HIST_LEN = 8; // a source's last runs kept as 'f' (failed) and '.' (answered), so a flapping source shows
 const FLAP_AT = 4; // failures within that window that report a source even when no three came in a row
+export const CHANGE_LIST_MARK = '--- change list (JSON lines, schema v1) ---'; // the machine-readable foot of every digest (UMB-453)
+const LINK_CAP = 500;
 const TITLE_CAP = 200; // a title in the mail and in state; a feed entry can carry far more
 // whitespace, C0/C1 controls and the Unicode line separators: none may reach a link or an error text that goes into a mail body
 const UNSAFE = new RegExp('[\\x00-\\x20\\x7f-\\x9f' + String.fromCharCode(0x2028, 0x2029) + ']', 'g');
@@ -66,7 +68,11 @@ export async function rawKey(text) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   const key = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
   // a title for the digest: the first level 2-4 heading, else the first level 1 heading, else the "version" of an npm manifest (a package's latest dist-tag)
-  const title = (/^#{2,4}\s+(.+?)\s*$/m.exec(text) ?? /^#\s+(.+?)\s*$/m.exec(text) ?? /"version"\s*:\s*"([^"]+)"/.exec(text) ?? [])[1] ?? '';
+  // A status page's JSON titles with its newest incident (Statuspage lists them newest first), a Hugging Face model list with its newest model id.
+  const title = (/^#{2,4}\s+(.+?)\s*$/m.exec(text) ?? /^#\s+(.+?)\s*$/m.exec(text)
+    ?? /"incidents"\s*:\s*\[\s*\{[^{}]*?"name"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(text)
+    ?? /^\s*\[\s*\{\s*"_id"\s*:\s*"[^"]*"\s*,\s*"id"\s*:\s*"([^"]+)"/.exec(text)
+    ?? /"version"\s*:\s*"([^"]+)"/.exec(text) ?? [])[1] ?? '';
   return { key, title: clean(title), link: '', updated: '' };
 }
 
@@ -144,10 +150,23 @@ export function buildDigest({ at, instance, results }) {
   }
   const parts = [changed.length && `${changed.length} changed`, baselined.length && `${baselined.length} baselined`, failing.length && `${failing.length} failing`].filter(Boolean);
   const pick = (r) => ({ id: r.source.id, name: r.source.name, url: r.source.url, from: r.from, to: r.to, link: r.link, error: r.error });
+  // One record per reported source, in the digest's own order. Absent fields are absent, not empty; every string is JSON-escaped, so one record is one line.
+  const record = (kind, r) => {
+    let host = '';
+    try { host = new URL(r.source.url).hostname; } catch { /* validateConfig has already refused a bad URL */ }
+    const o = { v: 1, instance, at, kind, id: r.source.id, site: r.source.name, host, url: r.source.url };
+    if (r.link) o.link = String(r.link).slice(0, LINK_CAP);
+    if (kind === 'changed' && r.from) o.from = String(r.from).slice(0, TITLE_CAP);
+    if (kind !== 'failing' && r.to) o.to = String(r.to).slice(0, TITLE_CAP);
+    if (kind === 'failing') o.error = r.error;
+    return o;
+  };
+  const changes = [...changed.map((r) => record('changed', r)), ...baselined.map((r) => record('baselined', r)), ...failing.map((r) => record('failing', r))];
+  lines.push(CHANGE_LIST_MARK, ...changes.map((c) => JSON.stringify(c)));
   return {
     subject: `[${instance} watcher] ${parts.join(', ')}`,
     text: lines.join('\n').trimEnd() + '\n',
-    json: { at, instance, changed: changed.map(pick), baselined: baselined.map(pick), failing: failing.map(pick) },
+    json: { at, instance, changed: changed.map(pick), baselined: baselined.map(pick), failing: failing.map(pick), changes },
   };
 }
 

@@ -9,7 +9,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
-  USER_AGENT, BODY_CAP, parseFeed, headingsKey, rawKey, keyFor, isDue, pickRun, fetchSource, buildDigest, runOnce, validateConfig,
+  USER_AGENT, BODY_CAP, CHANGE_LIST_MARK, parseFeed, headingsKey, rawKey, keyFor, isDue, pickRun, fetchSource, buildDigest, runOnce, validateConfig,
 } from './watcher.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -535,4 +535,68 @@ test('the stagger keeps every instance\'s busiest hour close to its mean, so a q
     const mean = per.reduce((a, b) => a + b, 0) / per.length;
     assert.ok(Math.max(...per) <= Math.ceil(mean * 1.5), `${file}: worst ${Math.max(...per)}, mean ${mean.toFixed(1)}`);
   }
+});
+
+// ---- UMB-453: the machine-readable change list for the zone editors ----
+// Where it lands: at the foot of every digest mail, under CHANGE_LIST_MARK, one JSON object per line (the editors already read the mail through their Gmail
+// label), and in digest:last.changes (readable through the Cloudflare API). One shape, schema v1: { v, instance, at, kind, id, site, host, url, link?, from?, to?, error? }.
+const SRC = (over = {}) => ({ id: 'cf-blog', name: 'Cloudflare blog', url: 'https://blog.cloudflare.com/rss/', ...over });
+const digestOf = (results) => buildDigest({ at: '2026-10-08T03:17:00.000Z', instance: 'kolwen', results });
+const listOf = (d) => d.text.split('\n').slice(d.text.split('\n').indexOf(CHANGE_LIST_MARK) + 1).filter(Boolean).map((l) => JSON.parse(l));
+
+test('the digest ends with the change list: one JSON line per changed, baselined and failing source, in that order, each with its id, site, host, url, what changed and when', () => {
+  const d = digestOf([
+    { source: SRC(), status: 'changed', from: 'old', to: 'new', link: 'https://blog.cloudflare.com/new/' },
+    { source: SRC({ id: 'hf', name: 'Qwen on the Hub', url: 'https://huggingface.co/api/models?author=Qwen' }), status: 'new', from: 'a stray earlier title', to: 'Qwen/Qwen-Image' },
+    { source: SRC({ id: 'dead', name: 'Dead feed', url: 'https://example.invalid/dead' }), status: 'error', error: 'HTTP 500', fails: 3 },
+    { source: SRC({ id: 'quiet' }), status: 'same' },
+  ]);
+  const lines = d.text.split('\n');
+  assert.ok(lines.includes(CHANGE_LIST_MARK), 'the marker line');
+  assert.strictEqual(lines[lines.length - 2].startsWith('{'), true, 'the list is the last thing in the mail');
+  const list = listOf(d);
+  assert.deepStrictEqual(list.map((r) => [r.kind, r.id]), [['changed', 'cf-blog'], ['baselined', 'hf'], ['failing', 'dead']]);
+  assert.deepStrictEqual(list[0], { v: 1, instance: 'kolwen', at: '2026-10-08T03:17:00.000Z', kind: 'changed', id: 'cf-blog', site: 'Cloudflare blog', host: 'blog.cloudflare.com', url: 'https://blog.cloudflare.com/rss/', link: 'https://blog.cloudflare.com/new/', from: 'old', to: 'new' });
+  assert.deepStrictEqual([list[1].host, list[1].to, 'from' in list[1], 'link' in list[1]], ['huggingface.co', 'Qwen/Qwen-Image', false, false]);
+  assert.deepStrictEqual([list[2].error, 'to' in list[2]], ['HTTP 500', false]);
+  assert.deepStrictEqual(d.json.changes, list, 'digest:last carries the same list');
+});
+
+test('the change list is one line per record whatever the text holds: a newline, a quote or a very long link cannot split or break a line', () => {
+  const d = digestOf([{ source: SRC(), status: 'changed', from: 'a\nb"c', to: 'x'.repeat(5000), link: 'https://example.invalid/' + 'y'.repeat(5000) }]);
+  const body = d.text.split('\n').slice(d.text.split('\n').indexOf(CHANGE_LIST_MARK) + 1).filter(Boolean);
+  assert.strictEqual(body.length, 1);
+  const r = JSON.parse(body[0]);
+  assert.strictEqual(r.from, 'a\nb"c');
+  assert.ok(r.to.length <= 200 && r.link.length <= 500, [r.to.length, r.link.length].join(','));
+  assert.doesNotMatch(body[0], /@/);
+  const long = digestOf([{ source: SRC(), status: 'changed', from: 'f'.repeat(5000), to: 't' }]);
+  assert.ok(listOf(long)[0].from.length <= 200, 'from is capped as well');
+});
+
+test('a run that reports nothing sends no list; a run that reports stores it in digest:last', async () => {
+  const kv = fakeKv(); const sent = [];
+  const routes = { 'https://example.invalid/s0': { body: atom('a1') }, 'https://example.invalid/s1': { body: atom('b1') } };
+  await runWith({ kv, routes, send: async (m) => { sent.push(m); } });
+  const first = JSON.parse(kv.store['digest:last']);
+  assert.deepStrictEqual(first.changes.map((r) => r.kind), ['baselined', 'baselined']);
+  assert.ok(sent[0].text.includes(CHANGE_LIST_MARK));
+  sent.length = 0;
+  await runWith({ kv, routes, send: async (m) => { sent.push(m); } });
+  assert.strictEqual(sent.length, 0);
+  const again = await runWith({ kv, routes: { ...routes, 'https://example.invalid/s1': { body: atom('b2', 'b1') } }, send: async (m) => { sent.push(m); } });
+  assert.strictEqual(again.changed, 1);
+  assert.deepStrictEqual(listOf({ text: sent[0].text }).map((r) => [r.kind, r.id, r.from, r.to]), [['changed', 's1', 'b1', 'b2']]);
+});
+
+// A JSON source (a status page, the Hugging Face API) used to digest as "? -> ?": its title is the newest incident name or the newest model id.
+test('rawKey titles a status-page JSON with its newest incident and a Hugging Face list with its newest model id; an empty incident list has no title', async () => {
+  const status = JSON.stringify({ page: { id: 'p', name: 'Cloudflare Status' }, incidents: [{ id: 'i1', name: 'Cloudflare One Clients are incorrectly challenged', status: 'identified' }, { id: 'i0', name: 'older' }] });
+  assert.strictEqual((await rawKey(status)).title, 'Cloudflare One Clients are incorrectly challenged');
+  assert.strictEqual((await rawKey(JSON.stringify({ page: { id: 'p', name: 'Groq Status' }, incidents: [] }))).title, '');
+  const hf = JSON.stringify([{ _id: 'x', id: 'Qwen/Qwen-Image-2.1-PE-I2I', createdAt: '2026-09-20T08:46:47.000Z' }, { _id: 'y', id: 'Qwen/Other', createdAt: '2026-09-20T08:45:29.000Z' }]);
+  assert.strictEqual((await rawKey(hf)).title, 'Qwen/Qwen-Image-2.1-PE-I2I');
+  assert.strictEqual((await rawKey('{"name":"@openai/codex","version":"0.160.0"}')).title, '0.160.0', 'an npm manifest still titles by its version');
+  assert.strictEqual((await rawKey('# Changelog\n\n## 1.2.0\n- x\n')).title, '1.2.0', 'a markdown file still titles by its heading');
+  assert.notStrictEqual((await rawKey(status)).key, (await rawKey(status.replace('identified', 'resolved'))).key, 'the key is still the hash of the whole body');
 });
