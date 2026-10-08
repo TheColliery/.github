@@ -7,6 +7,7 @@
 // send deletes nothing, so the next tick retries. Free-plan budget (Cloudflare docs read 2026-10-04): 10 ms CPU per request, 1,000 KV writes a day.
 
 export const MAX_BODY = 1048576; // GitHub org events are a few KB; a megabyte is far past any real delivery
+export const MAX_LIST_PAGES = 5; // KV list pages (1,000 keys each) one tick reads: past this the rest waits for the next tick, so a runaway backlog cannot spend a tick on list calls
 export const BATCH = 50; // records per digest: keeps one tick's KV calls (1 list + n deletes) well under the Free plan's internal-call budget
 // What the owner's org webhook subscribes to (ten of GitHub's event names). App installations (installation, installation_repositories) are App-only: an org
 // webhook is never sent them, so they are not here; the README names that gap.
@@ -21,11 +22,12 @@ const txt = (s, n = 100) => (typeof s === 'string' || typeof s === 'number' ? St
 const hexToBytes = (h) => Uint8Array.from(h.match(/../g).map((b) => parseInt(b, 16)));
 
 // true only for a well-formed header whose MAC matches; crypto.subtle.verify compares in constant time.
+// `body` is the raw bytes of the delivery (a string is encoded as UTF-8): the MAC covers the bytes GitHub sent, never a decoded-and-re-encoded copy (B-1).
 export async function verifySignature(secret, body, header) {
   const m = SIGNATURE.exec(header ?? '');
   if (!secret || !m) return false;
   const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
-  return crypto.subtle.verify('HMAC', key, hexToBytes(m[1]), enc.encode(body));
+  return crypto.subtle.verify('HMAC', key, hexToBytes(m[1]), typeof body === 'string' ? enc.encode(body) : body);
 }
 
 const DETAIL = {
@@ -49,6 +51,7 @@ export function classify(event, payload) {
     action: txt(payload.action, 30),
     scope: txt(payload.repository?.full_name ?? payload.organization?.login),
     sender: txt(payload.sender?.login, 40),
+    private: payload.repository?.private === true ? true : undefined, // B-2: a private repository's line says so
     detail: DETAIL[event]?.(payload) ?? '',
   };
 }
@@ -57,14 +60,14 @@ export function buildDigest({ at, org, records, more }) {
   const sorted = [...records].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
   const n = sorted.length;
   const lines = [`${org} GitHub inbox, ${at}`, ''];
-  for (const r of sorted) lines.push(`${r.at} ${r.event}${r.action ? '.' + r.action : ''} ${r.scope}${r.detail ? ' (' + r.detail + ')' : ''}${r.sender ? ' by ' + r.sender : ''}`);
+  for (const r of sorted) lines.push(`${r.at} ${r.event}${r.action ? '.' + r.action : ''} ${r.scope}${r.private ? ' [private]' : ''}${r.detail ? ' (' + r.detail + ')' : ''}${r.sender ? ' by ' + r.sender : ''}`);
   if (more > 0) lines.push('', `${more} more event(s) are waiting and go in the next digest.`);
   return { subject: `[${org} inbox] ${n} org event${n === 1 ? '' : 's'}`, text: lines.join('\n') + '\n', json: { at, org, records: sorted, more } };
 }
 
 async function readCapped(request) {
   const reader = request.body?.getReader();
-  if (!reader) return '';
+  if (!reader) return new Uint8Array(0);
   const chunks = []; let got = 0;
   while (true) {
     const { done, value } = await reader.read();
@@ -75,7 +78,7 @@ async function readCapped(request) {
   }
   const all = new Uint8Array(got); let at = 0;
   for (const c of chunks) { all.set(c, at); at += c.length; }
-  return new TextDecoder().decode(all);
+  return all;
 }
 
 const reply = (status, body = '') => new Response(body, { status });
@@ -94,7 +97,7 @@ export async function handleRequest(request, { kv, secret }, now) {
   if (!DELIVERY_ID.test(id)) return reply(400);
   if (!EVENTS.includes(event)) return reply(202, 'ignored');
   let payload;
-  try { payload = JSON.parse(body); } catch { return reply(400); }
+  try { payload = JSON.parse(new TextDecoder().decode(body)); } catch { return reply(400); }
   const rec = classify(event, payload);
   if (!rec) return reply(202, 'ignored');
   await kv.put('ev:' + id, '1', { metadata: { ...rec, at: new Date(now).toISOString() } });
@@ -102,7 +105,15 @@ export async function handleRequest(request, { kv, secret }, now) {
 }
 
 export async function runDigest({ kv, send, now, to, from, org }) {
-  const listed = (await kv.list({ prefix: 'ev:', limit: 1000 })).keys.filter((k) => k.metadata);
+  const listed = [];
+  let cursor;
+  for (let page = 0; page < MAX_LIST_PAGES; page++) {
+    const res = await kv.list({ prefix: 'ev:', limit: 1000, cursor });
+    listed.push(...res.keys.filter((k) => k.metadata));
+    if (res.list_complete || !res.cursor) break;
+    cursor = res.cursor;
+  }
+  listed.sort((a, b) => (a.metadata.at < b.metadata.at ? -1 : a.metadata.at > b.metadata.at ? 1 : 0)); // the oldest go first
   if (!listed.length) return { pending: 0, sent: 0, more: 0, emailed: false };
   const batch = listed.slice(0, BATCH);
   const more = listed.length - batch.length;

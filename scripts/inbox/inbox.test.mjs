@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { EVENTS, MAX_BODY, BATCH, verifySignature, classify, buildDigest, handleRequest, runDigest } from './inbox.mjs';
+import fs from 'node:fs';
+import { EVENTS, MAX_BODY, BATCH, MAX_LIST_PAGES, verifySignature, classify, buildDigest, handleRequest, runDigest } from './inbox.mjs';
 import worker from './worker.mjs';
 
 const SECRET = 'test-secret-not-real';
@@ -19,9 +20,14 @@ function fakeKv() {
     async get(k) { return store.has(k) ? store.get(k).value : null; },
     async put(k, value, opts = {}) { store.set(k, { value, metadata: opts.metadata }); },
     async delete(k) { store.delete(k); },
-    async list({ prefix = '', limit = 1000 } = {}) {
-      const keys = [...store.keys()].filter((k) => k.startsWith(prefix)).sort().slice(0, limit).map((name) => ({ name, metadata: store.get(name).metadata }));
-      return { keys, list_complete: keys.length < limit };
+    lists: 0,
+    async list({ prefix = '', limit = 1000, cursor } = {}) {
+      this.lists++;
+      const all = [...store.keys()].filter((k) => k.startsWith(prefix)).sort();
+      const from = cursor ? Number(cursor) : 0;
+      const keys = all.slice(from, from + Math.min(limit, 1000)).map((name) => ({ name, metadata: store.get(name).metadata }));
+      const done = from + keys.length >= all.length;
+      return done ? { keys, list_complete: true } : { keys, list_complete: false, cursor: String(from + keys.length) };
     },
   };
 }
@@ -259,4 +265,74 @@ test('the Worker entry wires fetch and scheduled to the same logic', async () =>
   assert.equal(waits.length, 1);
   await Promise.all(waits);
   assert.equal(mails.length, 1);
+});
+
+// ---- the auditor's pass 18 LOWs, B-1 to B-4 (UMB-452), each in the probe shape the auditor named ----
+
+// B-1: the MAC is over the RAW bytes. A body that is not valid UTF-8, signed over its bytes, used to fail the MAC (decoded, then re-encoded).
+test('B-1: a delivery whose bytes are not valid UTF-8 passes the MAC over the raw bytes and is then refused as bad JSON (400), never as a bad signature (401)', async () => {
+  const kv = fakeKv();
+  const bytes = Uint8Array.from([0x7b, 0xff, 0xfe, 0x7d]);
+  const key = await crypto.subtle.importKey('raw', enc.encode(SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, bytes));
+  const sig = 'sha256=' + [...mac].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const req = new Request('https://inbox.example/', { method: 'POST', headers: { 'x-github-event': 'repository', 'x-github-delivery': ID(1), 'x-hub-signature-256': sig }, body: bytes });
+  assert.equal((await handleRequest(req, { kv, secret: SECRET }, 0)).status, 400);
+  assert.equal(await verifySignature(SECRET, bytes, sig), true, 'verifySignature takes bytes');
+  assert.equal(await verifySignature(SECRET, '{}', await sign(SECRET, '{}')), true, 'and still a string');
+  assert.equal(kv.store.size, 0);
+});
+
+// B-2: a private repository's line says so.
+test('B-2: repository.private rides the record and the digest line carries [private]; a public repository carries nothing', async () => {
+  assert.equal(classify('deploy_key', { action: 'created', repository: { full_name: 'a/b', private: true }, key: { title: 'k' } }).private, true);
+  assert.equal(classify('deploy_key', { action: 'created', repository: { full_name: 'a/b', private: false }, key: { title: 'k' } }).private, undefined);
+  assert.equal(classify('deploy_key', { action: 'created', repository: { full_name: 'a/b' }, key: { title: 'k' } }).private, undefined);
+  assert.equal(classify('deploy_key', { action: 'created', repository: { full_name: 'a/b', private: 'yes' }, key: { title: 'k' } }).private, undefined, 'only the boolean true');
+  const recs = [
+    { event: 'deploy_key', action: 'created', scope: 'a/secret', sender: 'u', detail: 'ci, read-only', private: true, at: '2026-10-04T10:01:00.000Z' },
+    { event: 'deploy_key', action: 'created', scope: 'a/open', sender: 'u', detail: 'ci, read-only', at: '2026-10-04T10:02:00.000Z' },
+  ];
+  const d = buildDigest({ at: 'x', org: 'O', records: recs, more: 0 });
+  const lines = d.text.split('\n');
+  assert.match(lines.find((l) => l.includes('a/secret')), /a\/secret \[private\] /);
+  assert.doesNotMatch(lines.find((l) => l.includes('a/open')), /\[private\]/);
+  const kv = fakeKv();
+  const body = { action: 'created', repository: { full_name: 'a/secret', private: true }, key: { title: 'k', read_only: true }, sender: { login: 'u' } };
+  await post({ kv, event: 'deploy_key', body });
+  assert.equal([...kv.store.values()][0].metadata.private, true);
+});
+
+// B-3: more than 1,000 pending records are all counted, and the oldest 50 go first.
+test('B-3: a backlog past one KV list page (1,000) is paged to its end, counted whole, and the batch is the 50 OLDEST', async () => {
+  const kv = fakeKv(); const mails = [];
+  const N = 1205;
+  for (let i = 1; i <= N; i++) kv.store.set('ev:' + ID(i), { value: '1', metadata: { event: 'team', action: 'created', scope: 'O', sender: 'u', detail: 'n' + i, at: new Date(1_700_000_000_000 + (N - i) * 1000).toISOString() } });
+  const out = await runDigest({ kv, send: async (m) => { mails.push(m); }, now: 1_800_000_000_000, to: 't', from: 'f', org: 'O' });
+  assert.equal(out.pending, N); assert.equal(out.sent, BATCH); assert.equal(out.more, N - BATCH);
+  assert.ok(kv.lists >= 2, 'it asked for the next page: ' + kv.lists);
+  const first = mails[0].text.split('\n').filter((l) => /^2023-/.test(l));
+  assert.equal(first.length, BATCH);
+  const times = first.map((l) => l.slice(0, 24));
+  const oldest = Array.from({ length: BATCH }, (_, k) => new Date(1_700_000_000_000 + k * 1000).toISOString());
+  assert.deepEqual(times, oldest, 'the 50 oldest records, in order');
+  assert.equal([...kv.store.keys()].filter((k) => k.startsWith('ev:')).length, N - BATCH);
+});
+
+test('B-3: paging stops at the cap, so a runaway backlog cannot spend the tick on list calls', async () => {
+  const kv = fakeKv();
+  for (let i = 1; i <= 5300; i++) kv.store.set('ev:' + ID(i), { value: '1', metadata: { event: 'team', action: 'created', scope: 'O', sender: 'u', detail: 'n', at: '2026-10-04T10:00:00.000Z' } });
+  const out = await runDigest({ kv, send: async () => {}, now: 1, to: 't', from: 'f', org: 'O' });
+  assert.equal(kv.lists, MAX_LIST_PAGES, 'stopped at the cap: ' + kv.lists + ' list calls');
+  assert.equal(out.pending, MAX_LIST_PAGES * 1000);
+  assert.equal(out.sent, BATCH);
+});
+
+// B-4: the window the setup key is readable in is named where the owner reads about it.
+test('B-4: the README names the three-day window, who can read the key in it, and that the key expires on its own', () => {
+  const readme = fs.readFileSync(new URL('./README.md', import.meta.url), 'utf8');
+  assert.match(readme, /three days/);
+  assert.match(readme, /read token/i);
+  assert.match(readme, /expires on its own/);
+  assert.match(readme, /delete/i);
 });
