@@ -179,3 +179,15 @@ test('CLI: the payload goes to stdout by default and to --out when given; the re
     assert.match(fs.readFileSync(out, 'utf8'), /kolwen-change-watcher/);
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
+
+// UMB-453 (BB-45): the beat's digest goes from the beat's own antenna address. The retired sender must not survive in the text a redeploy is copied from,
+// or the next redeploy undoes the cutover (main moved TheColliery's Worker to antenna-coal@ on 2026-10-07; a copy of the old README line would move it back).
+test('the README and the generator\'s own usage name the antenna senders, never the retired watcher@ addresses', () => {
+  const readme = fs.readFileSync(path.join(HERE, 'README.md'), 'utf8');
+  assert.doesNotMatch(readme, /watcher@(thecolliery\.org|kolwen\.com)/);
+  assert.match(readme, /deploy-payload\.mjs thecolliery --from antenna-coal@thecolliery\.org/);
+  assert.match(readme, /deploy-payload\.mjs kolwen --from antenna-llm@kolwen\.com/);
+  const help = spawnSync(process.execPath, ['--max-old-space-size=512', SCRIPT, '--help'], { encoding: 'utf8', timeout: 30000 });
+  assert.doesNotMatch(help.stdout, /watcher@/);
+  assert.match(help.stdout, /--from antenna-llm@kolwen\.com/);
+});

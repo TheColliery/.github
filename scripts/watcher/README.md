@@ -41,8 +41,8 @@ The payload finds or creates the KV namespace `<name>-state`, uploads `worker.mj
 
 | Instance | Command | Account |
 | --- | --- | --- |
-| `thecolliery` | `node scripts/watcher/deploy-payload.mjs thecolliery --from watcher@thecolliery.org` | TheColliery |
-| `kolwen` | `node scripts/watcher/deploy-payload.mjs kolwen --from <a sender on the Kolwen zone>` | Kolwen |
+| `thecolliery` | `node scripts/watcher/deploy-payload.mjs thecolliery --from antenna-coal@thecolliery.org` | TheColliery |
+| `kolwen` | `node scripts/watcher/deploy-payload.mjs kolwen --from antenna-llm@kolwen.com` | Kolwen |
 
 Bindings of the deployed Worker: `STATE` (KV namespace), `EMAIL` (`send_email`, restricted to the verified destination address), `DIGEST_TO` (secret text, that address), `DIGEST_FROM` (plain text, the sender).
 

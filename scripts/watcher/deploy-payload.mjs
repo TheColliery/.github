@@ -29,7 +29,7 @@ export function loadInstance(instance, dir = HERE) {
 export function buildPayload({ files, name, from, cron = '17 * * * *', kvId = null }) {
   if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(name ?? '')) throw new Error('name must be a lowercase worker name (letters, digits, hyphens)');
   if (!/^(\S+\s+){4}\S+$/.test(cron ?? '') || /[^0-9*/,\-\sA-Za-z]/.test(cron)) throw new Error('cron must be five fields, for example "17 * * * *"');
-  if (!/^[^\s@"'\\]+@[^\s@"'\\]+\.[^\s@"'\\]+$/.test(from ?? '')) throw new Error('from must be a sender address such as watcher@your-domain');
+  if (!/^[^\s@"'\\]+@[^\s@"'\\]+\.[^\s@"'\\]+$/.test(from ?? '')) throw new Error('from must be a sender address such as antenna-coal@your-domain');
   if (kvId !== null && !/^[0-9a-f]{32}$/.test(kvId)) throw new Error('kvId must be a 32-hex namespace id');
   const expected = Object.fromEntries(Object.entries(files).map(([k, t]) => [k, gitBlobId(t)]));
   return `async () => {
@@ -94,7 +94,7 @@ const USAGE = `usage: node scripts/watcher/deploy-payload.mjs <instance> --from 
   Prints the body of the Cloudflare MCP execute call that deploys a change-watcher instance (the modules embedded, a git blob guard, the KV namespace
   found or created, the schedule set, workers.dev switched off, bindings and schedule read back). Instances: ${INSTANCES.join(', ')}.
   --name defaults to <instance>-change-watcher; --cron to "17 * * * *" (hourly). With --out the payload goes to that file and stdout carries one summary line.
-  example: node scripts/watcher/deploy-payload.mjs kolwen --from watcher@kolwen.com --out payload.js
+  example: node scripts/watcher/deploy-payload.mjs kolwen --from antenna-llm@kolwen.com --out payload.js
   exit 0 done · 1 refused · 64 usage error`;
 
 function main() {
