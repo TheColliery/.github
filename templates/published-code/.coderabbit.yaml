@@ -7,6 +7,15 @@
 #   2. reviews.path_instructions that restate this org's written CONTRACTS. Each block names the
 #      document it restates. There is no tone_instructions key and no taste in any block: an
 #      instruction here may encode a contract, never a preference.
+#   3. knowledge_base: the Learnings posture (BB-82, owner 2026-10-08). Learnings stay repository-local and wait the
+#      maximum approval delay, so the owner approves or rejects each one in the dashboard before it applies. The
+#      knowledge-base switch itself (data retention) is the organization's dashboard setting and the owner's click;
+#      this file never flips it, so opt_out is not set here (a private repository sets opt_out: true in its own file).
+#      THE OWNER'S LAW ON TEACHING, 2026-10-08, verbatim: ถ้าจะสอน CodeRabbit อย่าสอนให้เข้าพวก เพราะตัวตรวจจับ จะไม่เป็นตัวตรวจจับอีกต่อไป
+#      -- an instruction or a learning encodes a fact or a contract (what a file is, where its fix lands, which
+#      standard binds); it never tells the reviewer to stay quiet on a class, never grants an exception and never
+#      carries our conclusion about a finding. A learning that would lower the number of findings is rejected at
+#      the approval step. A detector taught to agree with its subject is no longer a detector.
 #
 # PRECEDENCE, from the vendor (docs.coderabbit.ai/guides/configuration-overview, "Understanding
 # configuration priority"): "Configuration sources don't merge by default." The repository
@@ -19,6 +28,10 @@
 # below this file would REPLACE the organization's other settings with schema defaults instead of adding
 # to them. Read the merged result on any pull request with the comment: @coderabbitai configuration
 inheritance: true
+knowledge_base:
+  learnings:
+    scope: local
+    approval_delay: 30
 reviews:
   profile: assertive
   path_instructions:
@@ -49,3 +62,7 @@ reviews:
         - Every third-party action is pinned to a full 40-character commit SHA with a version comment, never a bare tag or branch.
         - Every workflow has a concurrency group. cancel-in-progress is true for CI, lint and CodeQL, and never true for a job that uploads a Release or tag asset.
         - A checkout that pushes nothing sets persist-credentials: false.
+    # Restates the scanner canon's parity contract (the umbrella's scripts/scanner-parity.mjs): these four files are byte-equal copies of one source room's scanner and gate, and a copy is never edited locally.
+    - path: "scripts/{lib/secret-scan.mjs,secret-scan.test.mjs,secret-gate.mjs,secret-gate.test.mjs}"
+      instructions: |
+        These files are byte-equal copies of the organization's scanner canon, held equal to their source by a parity check; a local edit breaks the parity on purpose. Review them on their merits exactly as any other file and report every finding at its severity. Add to each finding that the fix is made at the canon's source and arrives here by blob id at the next sync, so the author routes it there instead of editing this copy. Never lower a severity, drop a finding or accept a local patch because the file is a copy.

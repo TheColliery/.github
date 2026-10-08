@@ -1,0 +1,12 @@
+# CodeRabbit configuration for the private-working repo kind (BB-82, owner 2026-10-08).
+#
+# A private repository keeps CodeRabbit's knowledge base OFF: opt_out: true disables every feature that needs the
+# vendor to retain data about this repository and removes any data already stored (docs.coderabbit.ai/reference/
+# configuration, knowledge_base.opt_out). The explicit layer, path instructions that restate a written contract,
+# is the only teaching here; none is written until the room has a contract to restate. Inheritance stays on so the
+# organization's other settings still apply (docs.coderabbit.ai/configuration/configuration-inheritance).
+# THE OWNER'S LAW ON TEACHING, 2026-10-08, verbatim: ถ้าจะสอน CodeRabbit อย่าสอนให้เข้าพวก เพราะตัวตรวจจับ จะไม่เป็นตัวตรวจจับอีกต่อไป
+# -- an instruction or a learning encodes a fact or a contract, never a suppression and never our conclusion.
+inheritance: true
+knowledge_base:
+  opt_out: true

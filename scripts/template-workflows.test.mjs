@@ -242,17 +242,18 @@ test('.coderabbit.yaml: the template and the .github repo own copy are byte-iden
   assert.equal(a, b);
 });
 
-test('.coderabbit.yaml: the signed shape -- assertive, inheritance, four traced path_instructions, no tone_instructions', () => {
+test('.coderabbit.yaml: the signed shape -- assertive, inheritance, the knowledge_base posture, five traced path_instructions, no tone_instructions', () => {
   const lines = crLines(CR_TEMPLATE);
   const code = lines.filter((l) => l.trim() !== '' && !l.trim().startsWith('#'));
   assert.ok(!lines.some((l) => l.includes('\t')), 'no tab characters (YAML forbids them for indentation)');
-  assert.equal(code.filter((l) => /^\S/.test(l)).map((l) => l.split(':')[0]).join(','), 'inheritance,reviews', 'top-level keys');
+  assert.equal(code.filter((l) => /^\S/.test(l)).map((l) => l.split(':')[0]).join(','), 'inheritance,knowledge_base,reviews', 'top-level keys');
   assert.ok(lines.includes('inheritance: true'), 'without it the file REPLACES the org settings (vendor: disabled by default)');
   assert.ok(lines.includes('  profile: assertive'));
   assert.ok(!lines.some((l) => /tone_instructions/.test(l) && !l.trim().startsWith('#')), 'a preference, never a contract');
   const paths = lines.map((l, i) => ({ l, i })).filter((x) => /^ {4}- path: /.test(x.l));
   assert.deepEqual(paths.map((x) => x.l.trim()), [
     '- path: "hooks/**"', '- path: "scripts/**"', '- path: "{README,SECURITY,CONTRIBUTING}.md"', '- path: ".github/workflows/**"',
+    '- path: "scripts/{lib/secret-scan.mjs,secret-scan.test.mjs,secret-gate.mjs,secret-gate.test.mjs}"',
   ]);
   for (const x of paths) {
     assert.match(lines[x.i - 1], /^ {4}# Restates /, 'the line above ' + x.l.trim() + ' must name the rule it restates');
@@ -262,6 +263,70 @@ test('.coderabbit.yaml: the signed shape -- assertive, inheritance, four traced 
   const bodyLines = code.filter((l) => /^ {8}\S/.test(l));
   assert.ok(!bodyLines.some((l) => /\b(style|structure|tone|nits?)\b/i.test(l)), 'no taste in any block: ' + bodyLines.filter((l) => /\b(style|structure|tone|nits?)\b/i.test(l)).join(' | '));
   assert.ok(code.every((l) => (l.match(/^ */)[0].length % 2) === 0), 'indentation is a multiple of two');
+});
+
+// BB-82 (owner 2026-10-08): the teaching posture in every repo kind's .coderabbit.yaml. The published-code canon is the source; the article kind is derived from it
+// (the hooks and scripts blocks dropped; the doc, workflow and parity-held scanner blocks and the knowledge_base block kept, because the article scaffold carries the
+// scanner and gate copies); the private-working kind keeps the knowledge base off. Each of the four files states the owner's law in its header.
+const CR_PRIVATE = path.join(TEMPLATES, 'private-working', '.coderabbit.yaml');
+const CR_ARTICLE = path.join(TEMPLATES, 'article', '.coderabbit.yaml');
+const CR_CODE = (p) => crLines(p).filter((l) => l.trim() !== '' && !l.trim().startsWith('#'));
+const OWNER_LAW = 'ถ้าจะสอน CodeRabbit อย่าสอนให้เข้าพวก เพราะตัวตรวจจับ จะไม่เป็นตัวตรวจจับอีกต่อไป';
+// One path_instructions block: its "# Restates" comment line through the line before the next block's comment (or the end).
+function crBlock(lines, pathLine) {
+  const at = lines.indexOf(pathLine);
+  assert.ok(at > 0, 'the block exists: ' + pathLine);
+  let end = at + 1;
+  while (end < lines.length && !/^ {4}# Restates /.test(lines[end])) end++;
+  return lines.slice(at - 1, end).join('\n').trimEnd();
+}
+
+test('.coderabbit.yaml, every kind: the owner\'s law on teaching is stated in the header comment, verbatim -- RED before BB-82', () => {
+  for (const p of [CR_TEMPLATE, CR_OWN, CR_PRIVATE, CR_ARTICLE]) {
+    assert.ok(fs.existsSync(p), 'missing ' + p);
+    const header = crLines(p).filter((l) => l.startsWith('#')).join('\n');
+    assert.ok(header.includes(OWNER_LAW), p + ' carries the law');
+  }
+});
+
+test('.coderabbit.yaml knowledge_base: the public kinds keep Learnings repository-local behind the maximum approval delay and never flip the data switch; the private kind opts out -- RED before BB-82', () => {
+  for (const p of [CR_TEMPLATE, CR_ARTICLE]) {
+    const c = CR_CODE(p);
+    const at = c.indexOf('knowledge_base:');
+    assert.ok(at >= 0, p + ' has the block');
+    assert.deepEqual(c.slice(at, at + 4), ['knowledge_base:', '  learnings:', '    scope: local', '    approval_delay: 30']);
+    assert.ok(!c.some((l) => /opt_out/.test(l)), p + ': the switch is the owner\'s dashboard click, a repository file never flips it');
+  }
+  assert.deepEqual(CR_CODE(CR_PRIVATE), ['inheritance: true', 'knowledge_base:', '  opt_out: true']);
+});
+
+test('.coderabbit.yaml article kind: derived from the canon -- no hooks or scripts block, the doc, workflow and scanner blocks byte-equal to the canon\'s, the same knowledge_base block -- RED before BB-82', () => {
+  const canon = crLines(CR_TEMPLATE);
+  const art = crLines(CR_ARTICLE);
+  assert.equal(CR_CODE(CR_ARTICLE).filter((l) => /^\S/.test(l)).map((l) => l.split(':')[0]).join(','), 'inheritance,knowledge_base,reviews');
+  assert.ok(art.includes('inheritance: true') && art.includes('  profile: assertive'));
+  const paths = art.filter((l) => /^ {4}- path: /.test(l)).map((l) => l.trim());
+  assert.deepEqual(paths, [
+    '- path: "{README,SECURITY,CONTRIBUTING}.md"', '- path: ".github/workflows/**"',
+    '- path: "scripts/{lib/secret-scan.mjs,secret-scan.test.mjs,secret-gate.mjs,secret-gate.test.mjs}"',
+  ]);
+  for (const p of paths) {
+    const line = '    ' + p;
+    assert.equal(crBlock(art, line), crBlock(canon, line), 'the block is the canon\'s, never retyped: ' + p);
+  }
+  const kb = (ls) => ls.slice(ls.indexOf('knowledge_base:'), ls.indexOf('knowledge_base:') + 4).join('\n');
+  assert.equal(kb(art), kb(canon));
+});
+
+test('.coderabbit.yaml scanner block: it restates the parity contract (the fix lands at the canon\'s source) and never lowers a finding -- a contract, not a suppression -- RED before BB-82', () => {
+  for (const p of [CR_TEMPLATE, CR_OWN, CR_ARTICLE]) {
+    const text = crBlock(crLines(p), '    - path: "scripts/{lib/secret-scan.mjs,secret-scan.test.mjs,secret-gate.mjs,secret-gate.test.mjs}"');
+    assert.match(text, /^ {4}# Restates the scanner canon's parity contract/m);
+    assert.match(text, /report every finding at its severity/);
+    assert.match(text, /the fix is made at the canon's source and arrives here by blob id at the next sync/);
+    assert.match(text, /Never lower a severity, drop a finding or accept a local patch because the file is a copy/);
+    assert.ok(!/\b(ignore|suppress|stay quiet|do not report|no finding)\b/i.test(text.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n')), 'no instruction to stay quiet');
+  }
 });
 
 // UMB-182: the five Coal* rooms that ship no claude.ai ZIPs get a bare tag-push create-release.yml beside the

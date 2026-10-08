@@ -1,3 +1,7 @@
+# CodeRabbit configuration for the article repo kind (BB-82, owner 2026-10-08), DERIVED from the published-code canon, never retyped:
+# the hooks and scripts/** blocks are dropped (an article repository ships no hooks and no scripts of its own beyond the parity-held scanner copies, which keep their block);
+# the doc, workflow and scanner blocks and the knowledge_base block are the canon's, byte for byte (scripts/template-workflows.test.mjs holds that).
+#
 # CodeRabbit configuration for the published-code repo kind (AR-46, owner-signed 2026-09-21).
 #
 # It carries two things and only two:
@@ -35,22 +39,6 @@ knowledge_base:
 reviews:
   profile: assertive
   path_instructions:
-    # Restates hooks-safety.md section 6 (Phoenix Canary), commandments 2, 4, 7, 8 and 10.
-    - path: "hooks/**"
-      instructions: |
-        These files are agent-platform hooks and are held to the Phoenix contract. Report a change that breaks any of these:
-        - Fail-silent: all logic sits inside try { main(); } catch {}; the hook never sets a non-zero exit code and never calls process.exit().
-        - Zero dependencies: Node built-in modules only, nothing that needs npm install.
-        - No network: local filesystem only.
-        - Deterministic: the same input gives the same output.
-        - Sandboxed: reads and writes stay inside the OS temp directory and the tool's own state directory under the user's agent config directory, except reading the project's own config file from the project root, and except writing the tool's own project-scoped state folder (<project root>/.<agent-dir>/<tool>/) through a realpath-containment helper that resolves both the project root and the candidate with fs.realpathSync.native, refuses a candidate that is not inside that folder itself (not merely inside the project root), fails closed, and is named in the room's SECURITY.md or the README; a delete under it pins each owned directory to its literal realpath and sweeps nothing in a directory it refuses. Any other write to the project is a finding.
-    # Restates scripts-quality.md section 1 (fail loud) and hooks-safety.md section 6, commandment 2 (zero dependencies).
-    - path: "scripts/**"
-      instructions: |
-        Report a change that breaks any of these:
-        - Node built-in modules only: no npm install, no dependency declared in a manifest.
-        - A user-invoked script exits non-zero when any unit of work fails, and its done-summary line reports the failed count.
-        - A gate script wraps every per-item check, so one bad input produces a "FAIL <item>: <reason>" line while the remaining checks still run, and never a raw stack trace.
     # Restates DOC-PATTERN.md: "Data is verbatim from its source, never invented" and "a behaviour claim = the code".
     - path: "{README,SECURITY,CONTRIBUTING}.md"
       instructions: |
