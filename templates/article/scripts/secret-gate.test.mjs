@@ -260,6 +260,8 @@ test('the fixtures run in the test\'s own sandbox: a hostile global git config a
 // UMB-456 (1) vi (CoalGob N1): when the machine's temp folder sits inside a git repository, the sandbox sits inside it too, and a fixture folder that is
 // NOT a repository would find that outer repository. The sandbox's git calls carry a ceiling at the sandbox's parent so the search stops there.
 // The witness runs the test that needs "not inside a git repository" in a child whose TEMP, TMP and TMPDIR are a folder inside a real repository.
+// The child's reporter is PINNED to tap: left to its default it is spec on Node 24 (measured, stdout a pipe or a file) and tap on Node 22 when stdout is not a TTY
+// (nodejs.org v22 test docs), so a count read from the default was right on a developer's Node 24 and wrong on CI's Node 22 (run 37722574073).
 test('the sandbox is closed against a repository ABOVE the temp folder: a non-repository fixture is still not inside one -- RED before UMB-456 (1) vi', { skip: process.env.SECRET_GATE_NESTED ? 'this is the nested run' : false }, () => {
   const outer = fs.mkdtempSync(path.join(os.tmpdir(), 'secret-gate-outer-'));
   made.push(outer);
@@ -268,7 +270,7 @@ test('the sandbox is closed against a repository ABOVE the temp folder: a non-re
   fs.mkdirSync(tmpInside);
   const keep = ['PATH', 'Path', 'SystemRoot', 'SYSTEMROOT', 'COMSPEC', 'PATHEXT', 'WINDIR'];
   const env = { ...Object.fromEntries(keep.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]])), TEMP: tmpInside, TMP: tmpInside, TMPDIR: tmpInside, HOME: tmpInside, USERPROFILE: tmpInside, SECRET_GATE_NESTED: '1' };
-  const r = spawnSync(process.execPath, ['--max-old-space-size=512', '--test', '--test-timeout=60000', '--test-name-pattern=a scan that cannot run', fileURLToPath(import.meta.url)], { encoding: 'utf8', timeout: 120000, env });
-  assert.match(r.stdout, /ℹ pass 1\b/, 'the nested run really ran the test: ' + r.stdout.slice(-400));
+  const r = spawnSync(process.execPath, ['--max-old-space-size=512', '--test', '--test-timeout=60000', '--test-reporter=tap', '--test-name-pattern=a scan that cannot run', fileURLToPath(import.meta.url)], { encoding: 'utf8', timeout: 120000, env });
+  assert.match(r.stdout, /^# pass 1$/m, 'the nested run really ran the test: ' + r.stdout.slice(-400));
   assert.strictEqual(r.status, 0, r.stdout.slice(-800) + r.stderr.slice(-400));
 });
