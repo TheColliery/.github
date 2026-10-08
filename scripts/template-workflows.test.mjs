@@ -1108,3 +1108,18 @@ test('no template or own workflow uses the pull_request_target event, and SKILL-
   assert.match(row, /a new workflow never adopts it/);
   assert.match(row, /a job that must read a secret on an outside pull request waits for the belt's own event policy/);
 });
+
+// BB-98 (c), 2026-10-09: the two org defaults a new repository is born under are written where the canon lists what a repo inherits, so nobody re-derives them from the dashboard.
+test('SERIES-CANON.md records the org defaults a new repo inherits: Dependabot malware alerts (public only) and commit comments disabled -- RED before BB-98 (c)', () => {
+  const rows = fs.readFileSync(path.join(ROOT, 'SERIES-CANON.md'), 'utf8').split(/\r?\n/);
+  const mal = rows.find((l) => l.startsWith('| Org default: Dependabot malware alerts |'));
+  assert.ok(mal, 'the malware row exists');
+  assert.match(mal, /TheColliery baseline/);
+  assert.match(mal, /not available for the private configuration on the Free plan/i);
+  const cc = rows.find((l) => l.startsWith('| Org default: commit comments |'));
+  assert.ok(cc, 'the commit-comments row exists');
+  assert.match(cc, /Disabled by default/);
+  assert.match(cc, /a repository may override/);
+  assert.match(cc, /existing comments stay/);
+  for (const r of [mal, cc]) assert.equal(r.split('|').length, 6, 'four cells, one per column (the kind column and three kinds)');
+});
