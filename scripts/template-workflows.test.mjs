@@ -812,7 +812,15 @@ test('no template hook or secret gate claims the scan catches a connection strin
     const t = fs.readFileSync(path.join(ROOT, f), 'utf8').replace(/\r?\n# ?|\r?\n\/\/ ?/g, ' ');
     assert.ok(/does NOT catch a credential inside a URL/.test(t), f + ': it must say what the scan does not catch');
     assert.ok(!/but not the generic kinds|a connection string or an HTTP\s+authentication header is a "generic" pattern/.test(t), f + ': the old coverage claim is still there');
+    // CoalWash F-08b-2 and CoalMine LOW-1 (08b/08c, measured against the scanner): a provider-shaped token is found ANYWHERE on a line, a URL or an HTTP header included, so the
+    // limit is stated for a credential that is NOT provider-shaped, and an authentication header whose value is a scheme and a token (a Bearer value) is missed even under a secret-named header.
+    assert.match(t, /a provider-shaped token anywhere on a line/, f + ': the catch side names the provider-shaped token anywhere on a line');
+    assert.match(t, /\(scheme:\/\/user:pass@host\) unless the credential is provider-shaped/, f + ': the URL limit carries the provider-shaped exception');
+    assert.match(t, /whose value is a scheme and a token \(Authorization: Bearer <key>, X-Api-Token: Bearer <key>\) unless that token is provider-shaped/, f + ': the header limit names the Bearer shape and the exception');
   }
+  const canon = fs.readFileSync(path.join(ROOT, 'SERIES-CANON.md'), 'utf8').replace(/\r?\n/g, ' ');
+  assert.match(canon, /a provider-shaped token anywhere on a line/, 'SERIES-CANON.md: the Secret scan row states the same limit');
+  assert.match(canon, /unless that token is provider-shaped/, 'SERIES-CANON.md: the header limit carries the exception');
 });
 
 test('the layout check runs after the zip step and before the Release is created or any asset is attached', () => {
