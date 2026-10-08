@@ -1096,3 +1096,15 @@ test('SKILL-REPO-PATTERN.md Layer 4 carries the wave-run row: waves by the live 
     assert.ok(fs.existsSync(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', f)), f + ' is in the overlay lib folder');
   }
 });
+
+// BB-98 (b), 2026-10-09: GitHub's default policy blocks the `pull_request_target` event in public repositories from 2026-11-02 (workflow execution protections). The
+// canon says no new workflow adopts it, and the templates and this repo's own workflows carry none (a grep over 85 workflows of the org, its templates and the rooms found none).
+test('no template or own workflow uses the pull_request_target event, and SKILL-REPO-PATTERN.md bans adopting it -- RED before BB-98 (b)', () => {
+  const offenders = ALL_WORKFLOWS().filter((f) => fs.readFileSync(f, 'utf8').split(/\r?\n/).some((l) => !l.trim().startsWith('#') && /\bpull_request_target\b/.test(l)));
+  assert.deepEqual(offenders.map((f) => path.relative(ROOT, f)), []);
+  const row = PATTERN.split('\n').find((l) => /^- \*\*`pull_request_target` is never adopted/.test(l));
+  assert.ok(row, 'the row exists');
+  assert.match(row, /2026-11-02/);
+  assert.match(row, /a new workflow never adopts it/);
+  assert.match(row, /a job that must read a secret on an outside pull request waits for the belt's own event policy/);
+});
