@@ -4,8 +4,10 @@ One Cloudflare Cron Worker per Cloudflare account (owner ruling BB-28, UMB-445).
 
 | Instance | List | Watches |
 | --- | --- | --- |
-| TheColliery | `sources/thecolliery.mjs` | every AI agent platform the Coal* skills support |
-| Kolwen | `sources/kolwen.mjs` (the LLM chief adds it) | Cloudflare, GitHub, CodeRabbit, Claude Code |
+| TheColliery | `sources/thecolliery.mjs` (30 sources) | every AI agent platform the Coal* skills support, and GitHub's own changelog by label (actions, application security, supply chain security, platform governance, account management, copilot) |
+| Kolwen | `sources/kolwen.mjs` (51 sources; the LLM chief deploys it) | the commercial hub's beat: Cloudflare, GitHub, CodeRabbit, Claude Code, the model vendors and the open-weight organisations (rows from `LLMWorks/warehouse/antenna-beat-2026-10.md`), the Paddle changelog, and two status watches (Cloudflare, Groq) |
+
+A new website joins as ONE data row in the instance's list, appended at the END (the order is the stagger). The busiest hour of the week stays under `maxPerRun` and the Free plan's 50 subrequests: a test prints the worst hour and holds it near the mean. A feed URL appears once per list.
 
 ## What one run does
 

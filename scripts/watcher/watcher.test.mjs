@@ -480,3 +480,59 @@ test('worker.mjs: the scheduled handler runs the watcher with the env bindings, 
     assert.strictEqual(out.waited, 1);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+// ---- the registry as data (UMB2-014, UMB-460 (1), BB-56): the rows are a list the test reads, not code ----
+const load = async (file) => (await import(pathToFileURL(path.join(HERE, 'sources', file)).href)).default;
+const idsOf = (c) => c.sources.map((s) => s.id);
+
+test('no instance list names one URL twice (a second row for a feed is a second mail for one change)', async () => {
+  for (const file of INSTANCES) {
+    const urls = (await load(file)).sources.map((s) => s.url);
+    assert.deepStrictEqual(urls.filter((u, i) => urls.indexOf(u) !== i), [], file);
+  }
+});
+
+test('thecolliery.mjs: GitHub\'s own changelog label feeds sit at the END of the list (the stagger rule), copilot once, as RSS, every 2 or 6 hours -- RED before UMB2-014', async () => {
+  const c = await load('thecolliery.mjs');
+  const labels = ['actions', 'application-security', 'supply-chain-security', 'platform-governance', 'account-management'];
+  const tail = c.sources.slice(-labels.length);
+  assert.deepStrictEqual(tail.map((s) => s.url), labels.map((l) => `https://github.blog/changelog/label/${l}/feed/`));
+  for (const s of tail) { assert.strictEqual(s.kind, 'rss'); assert.ok([2, 6].includes(s.everyHours), s.id); assert.match(s.id, /^github-changelog-/); }
+  assert.strictEqual(c.sources.filter((s) => s.url === 'https://github.blog/changelog/label/copilot/feed/').length, 1, 'the sixth label, copilot, was already a row (copilot-changelog)');
+  assert.strictEqual(c.sources.indexOf(c.sources.find((s) => s.id === 'claude-code')), 0, 'no earlier slot moved');
+  assert.deepStrictEqual(idsOf(c).slice(0, 25), ['claude-code', 'codex', 'gemini-cli', 'antigravity', 'copilot-cli', 'copilot-changelog', 'cursor', 'cline', 'windsurf', 'devin', 'kiro', 'augment', 'goose', 'amp', 'opencode', 'roo-code', 'kilo-code', 'continue', 'aider', 'qwen-code', 'openhands', 'mistral-vibe', 'crush', 'zed', 'jules'], 'the first 25 keep their slots');
+});
+
+test('kolwen.mjs: the five kept rows keep their slots, the beat\'s 44 rows follow, the two status watches close the list -- RED before UMB-460 (1) and BB-56', async () => {
+  const c = await load('kolwen.mjs');
+  assert.deepStrictEqual(idsOf(c).slice(0, 5), ['claude-code', 'cloudflare-changelog', 'github-changelog', 'cloudflare-blog', 'coderabbit-changelog']);
+  assert.strictEqual(c.sources.length, 5 + 44 + 2);
+  const byId = Object.fromEntries(c.sources.map((s) => [s.id, s]));
+  for (const id of ['anthropic-api-notes', 'anthropic-pricing', 'openai-status', 'gemini-api-changelog', 'groq-changelog', 'cloudflare-workers-ai', 'github-copilot', 'paddle-changelog', 'deepseek-updates', 'xai-news']) assert.ok(byId[id], id);
+  assert.strictEqual(byId['paddle-changelog'].url, 'https://developer.paddle.com/changelog.xml');
+  assert.strictEqual(byId['anthropic-news'].kind, 'headings');
+  assert.strictEqual(byId['anthropic-status'].kind, 'atom');
+  const hf = c.sources.filter((s) => s.id.startsWith('hfapi-'));
+  assert.strictEqual(hf.length, 13, 'the 13 Hugging Face organisation rows');
+  for (const s of hf) {
+    assert.match(s.url, /^https:\/\/huggingface\.co\/api\/models\?author=[A-Za-z0-9._-]+&sort=createdAt&direction=-1&limit=2&expand\[\]=createdAt$/, s.id);
+    assert.strictEqual(s.kind, 'raw'); assert.strictEqual(s.everyHours, 12);
+  }
+  assert.strictEqual(new Set(hf.map((s) => s.url)).size, 13);
+  const tail = c.sources.slice(-2);
+  assert.deepStrictEqual(tail.map((s) => [s.id, s.kind, s.url]), [
+    ['cloudflare-status', 'raw', 'https://www.cloudflarestatus.com/api/v2/incidents/unresolved.json'],
+    ['groq-status', 'raw', 'https://groqstatus.com/api/v2/incidents.json'],
+  ]);
+  assert.strictEqual(tail[0].everyHours, 1, 'the platform the zone runs on is read every hour');
+  assert.ok(!c.sources.some((s) => /history\.atom$/.test(s.url) && /cloudflarestatus/.test(s.url)), 'not history.atom: its newest entries are scheduled maintenance dated in the future');
+});
+
+test('the stagger keeps every instance\'s busiest hour close to its mean, so a quiet hour is not paid for with a spike', async () => {
+  for (const file of INSTANCES) {
+    const c = await load(file);
+    const per = Array.from({ length: 168 }, (_, h) => pickRun(c.sources, h, 1e9).run.length);
+    const mean = per.reduce((a, b) => a + b, 0) / per.length;
+    assert.ok(Math.max(...per) <= Math.ceil(mean * 1.5), `${file}: worst ${Math.max(...per)}, mean ${mean.toFixed(1)}`);
+  }
+});

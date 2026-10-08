@@ -33,5 +33,11 @@ export default {
     { id: 'crush', name: 'Crush', url: 'https://github.com/charmbracelet/crush/releases.atom', kind: 'atom', everyHours: 12, ignoreTitle: 'nightly' },
     { id: 'zed', name: 'Zed', url: 'https://github.com/zed-industries/zed/releases.atom', kind: 'atom', everyHours: 12, ignoreTitle: 'nightly|staging|-pre|^[a-z]+-v' },
     { id: 'jules', name: 'Google Jules', url: 'https://jules.google/docs/changelog.md', kind: 'raw', everyHours: 12 },
+    // UMB2-014: GitHub's own changelog, one feed per label the Coal* beat follows (each holds the last 10 entries). The sixth label, copilot, is already `copilot-changelog` above.
+    { id: 'github-changelog-actions', name: 'GitHub changelog (Actions)', url: 'https://github.blog/changelog/label/actions/feed/', kind: 'rss', everyHours: 2 },
+    { id: 'github-changelog-application-security', name: 'GitHub changelog (application security)', url: 'https://github.blog/changelog/label/application-security/feed/', kind: 'rss', everyHours: 2 },
+    { id: 'github-changelog-supply-chain-security', name: 'GitHub changelog (supply chain security)', url: 'https://github.blog/changelog/label/supply-chain-security/feed/', kind: 'rss', everyHours: 2 },
+    { id: 'github-changelog-platform-governance', name: 'GitHub changelog (platform governance)', url: 'https://github.blog/changelog/label/platform-governance/feed/', kind: 'rss', everyHours: 6 },
+    { id: 'github-changelog-account-management', name: 'GitHub changelog (account management)', url: 'https://github.blog/changelog/label/account-management/feed/', kind: 'rss', everyHours: 6 },
   ],
 };
