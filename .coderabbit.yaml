@@ -50,7 +50,7 @@ reviews:
         Report a change that breaks any of these:
         - Node built-in modules only: no npm install, no dependency declared in a manifest.
         - A user-invoked script exits non-zero when any unit of work fails, and its done-summary line reports the failed count.
-        - A gate script wraps every per-item check, so one bad input produces a "FAIL <item>: <reason>" line while the remaining checks still run, and never a raw stack trace.
+        - A gate script wraps every per-item check, so one bad input produces a FAIL <item>: <reason> line while the remaining checks still run, and never a raw stack trace.
     # Restates DOC-PATTERN.md: "Data is verbatim from its source, never invented" and "a behaviour claim = the code".
     - path: "{README,SECURITY,CONTRIBUTING}.md"
       instructions: |

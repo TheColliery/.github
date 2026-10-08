@@ -329,6 +329,16 @@ test('.coderabbit.yaml scanner block: it restates the parity contract (the fix l
   }
 });
 
+test('.coderabbit.yaml, every kind: no string value holds a double quote or a backslash (the settings editor mangles both) -- RED before BB-82', () => {
+  for (const p of [CR_TEMPLATE, CR_OWN, CR_PRIVATE, CR_ARTICLE]) {
+    for (const l of CR_CODE(p)) {
+      // A path value is a quoted scalar: only its inside counts, the delimiters are YAML's own.
+      const value = l.replace(/^( *- path: )"(.*)"$/, '$1$2');
+      assert.ok(!/["\\]/.test(value), p + ': ' + l.trim());
+    }
+  }
+});
+
 // UMB-182: the five Coal* rooms that ship no claude.ai ZIPs get a bare tag-push create-release.yml beside the
 // overlay's claude-ai-zips.yml. Both are the SOLE Release creator in their room, so the derive / create / re-read
 // steps must stay the same lines in both files (one flock, one color), and neither may drop the UMB-182 parts.
