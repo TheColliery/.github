@@ -115,16 +115,22 @@ test('VULNERABILITY_REPORT.yml: the four default fields are required, the AI che
   // each body element starts at "  - type:"; its id, required flag and min_length are read inside its own block
   const starts = lines.map((l, i) => (/^ {2}- type: /.test(l) ? i : -1)).filter((i) => i >= 0);
   const blocks = starts.map((s, k) => lines.slice(s, k + 1 < starts.length ? starts[k + 1] : lines.length));
-  const info = blocks.map((b) => ({
-    type: /^ {2}- type: (\w+)$/.exec(b[0])[1],
-    id: (/^ {4}id: ([A-Za-z0-9_-]+)$/m.exec(b.join('\n')) || [])[1],
-    required: b.includes('      required: true'),
-    min: (/^ {6}min_length: (\d+)$/m.exec(b.join('\n')) || [])[1],
-  }));
+  // required and min_length count only inside the block's own `validations:` section (CodeRabbit, PR 38: under `attributes:` they would read the same at the same indent and do nothing)
+  const info = blocks.map((b) => {
+    const at = b.indexOf('    validations:');
+    const validations = at < 0 ? [] : b.slice(at + 1);
+    return {
+      type: /^ {2}- type: (\w+)$/.exec(b[0])[1],
+      id: (/^ {4}id: ([A-Za-z0-9_-]+)$/m.exec(b.join('\n')) || [])[1],
+      required: validations.includes('      required: true'),
+      min: (/^ {6}min_length: (\d+)$/m.exec(validations.join('\n')) || [])[1],
+    };
+  });
   assert.deepEqual(info.map((x) => x.id), ['summary', 'details', 'proof_of_concept', 'impact', 'ai_assistance']);
   assert.deepEqual(info.filter((x) => x.required).map((x) => x.id), ['summary', 'details', 'proof_of_concept', 'impact'], 'GitHub default required fields; the AI checkbox stays optional');
   assert.deepEqual(info.filter((x) => x.min).map((x) => [x.id, x.min]), [['proof_of_concept', '150']], 'GitHub floor only: a stricter form turns a good reporter away');
   assert.equal(info.at(-1).type, 'checkboxes');
+  assert.ok(!blocks.at(-1).some((l) => /required/.test(l)), 'the AI checkbox carries no required flag, on the element or on its option');
   assert.match(text, /- label: I used AI assistance to find or write up this report\./);
   assert.match(lines[1], /SECURITY\.md/, 'one line pointing at the org security policy, nothing restated');
 });
