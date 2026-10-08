@@ -183,11 +183,14 @@ test('CLI: the payload goes to stdout by default and to --out when given; the re
 // UMB-453 (BB-45): the beat's digest goes from the beat's own antenna address. The retired sender must not survive in the text a redeploy is copied from,
 // or the next redeploy undoes the cutover (main moved TheColliery's Worker to antenna-coal@ on 2026-10-07; a copy of the old README line would move it back).
 test('the README and the generator\'s own usage name the antenna senders, never the retired watcher@ addresses', () => {
+  // Compared whole (extracted, then strictEqual), never by substring or regex over a host name (CodeQL js/incomplete-url-substring-sanitization, 24-27).
+  const senderOf = (line) => line.split('--from ')[1].split('`')[0].split(' ')[0];
   const readme = fs.readFileSync(path.join(HERE, 'README.md'), 'utf8');
-  assert.doesNotMatch(readme, /watcher@(thecolliery\.org|kolwen\.com)/);
-  assert.match(readme, /deploy-payload\.mjs thecolliery --from antenna-coal@thecolliery\.org/);
-  assert.match(readme, /deploy-payload\.mjs kolwen --from antenna-llm@kolwen\.com/);
+  assert.ok(!readme.split('\n').some((l) => l.includes('watcher@')), 'no line of the README names a watcher@ sender');
+  const rows = readme.split('\n').filter((l) => l.startsWith('| `thecolliery` | `node scripts/watcher/deploy-payload.mjs') || l.startsWith('| `kolwen` | `node scripts/watcher/deploy-payload.mjs'));
+  assert.deepStrictEqual(rows.map(senderOf), ['antenna-coal@thecolliery.org', 'antenna-llm@kolwen.com']);
   const help = spawnSync(process.execPath, ['--max-old-space-size=512', SCRIPT, '--help'], { encoding: 'utf8', timeout: 30000 });
-  assert.doesNotMatch(help.stdout, /watcher@/);
-  assert.match(help.stdout, /--from antenna-llm@kolwen\.com/);
+  assert.ok(!help.stdout.includes('watcher@'));
+  const example = help.stdout.split('\n').find((l) => l.trim().startsWith('example:'));
+  assert.strictEqual(senderOf(example), 'antenna-llm@kolwen.com');
 });
