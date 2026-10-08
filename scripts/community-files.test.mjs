@@ -100,3 +100,31 @@ test('every github.com/TheColliery/.github/blob/main/<path> link in the defaults
   }
   assert.deepEqual(bad, []);
 });
+
+// BB-98 (g), owner 2026-10-09: GitHub applies `.github/VULNERABILITY_REPORT.yml` of the org `.github` repository to every repository the org owns that has private
+// vulnerability reporting on. An invalid form silently falls back to the default form ("If GitHub cannot parse or validate a custom form, reporters see the default form
+// instead", docs.github.com), so this reads the file line by line (no YAML parser without an npm install, Phoenix #2) and holds what the owner asked for: GitHub's four default
+// required fields, the optional AI checkbox, GitHub's own 150-character floor on the proof of concept and no floor of ours anywhere else, no tab, no mail address.
+test('VULNERABILITY_REPORT.yml: the four default fields are required, the AI checkbox is optional, the only minimum length is GitHub\'s 150 on the proof of concept -- RED before BB-98 (g)', () => {
+  assert.ok(exists('.github/VULNERABILITY_REPORT.yml'), 'the form exists at .github/VULNERABILITY_REPORT.yml');
+  const text = read('.github/VULNERABILITY_REPORT.yml');
+  assert.ok(!text.includes('\t'), 'no tab: YAML forbids it for indentation');
+  assert.doesNotMatch(text, /@[a-z0-9-]+\.[a-z]{2,}/i, 'no mail address: the org takes no mail');
+  const lines = text.split('\n');
+  assert.deepEqual(lines.filter((l) => /^[a-z_]+:/.test(l)).map((l) => l.split(':')[0]), ['name', 'description', 'body'], 'top-level keys');
+  // each body element starts at "  - type:"; its id, required flag and min_length are read inside its own block
+  const starts = lines.map((l, i) => (/^ {2}- type: /.test(l) ? i : -1)).filter((i) => i >= 0);
+  const blocks = starts.map((s, k) => lines.slice(s, k + 1 < starts.length ? starts[k + 1] : lines.length));
+  const info = blocks.map((b) => ({
+    type: /^ {2}- type: (\w+)$/.exec(b[0])[1],
+    id: (/^ {4}id: ([A-Za-z0-9_-]+)$/m.exec(b.join('\n')) || [])[1],
+    required: b.includes('      required: true'),
+    min: (/^ {6}min_length: (\d+)$/m.exec(b.join('\n')) || [])[1],
+  }));
+  assert.deepEqual(info.map((x) => x.id), ['summary', 'details', 'proof_of_concept', 'impact', 'ai_assistance']);
+  assert.deepEqual(info.filter((x) => x.required).map((x) => x.id), ['summary', 'details', 'proof_of_concept', 'impact'], 'GitHub default required fields; the AI checkbox stays optional');
+  assert.deepEqual(info.filter((x) => x.min).map((x) => [x.id, x.min]), [['proof_of_concept', '150']], 'GitHub floor only: a stricter form turns a good reporter away');
+  assert.equal(info.at(-1).type, 'checkboxes');
+  assert.match(text, /- label: I used AI assistance to find or write up this report\./);
+  assert.match(lines[1], /SECURITY\.md/, 'one line pointing at the org security policy, nothing restated');
+});
