@@ -1046,3 +1046,27 @@ test('SKILL-REPO-PATTERN.md Layer 5 carries the fetch-depth row (MUST where a ga
   assert.match(par, /no (dedicated )?sweep/i);
   assert.match(par, /a step that writes the tree another step reads stays sequential/);
 });
+
+// CoalBoard's canon half (the CoalWorks chief's 08b, routed 2026-10-08): the auto-merge carve-out is PATCH and MINOR (AGENTS.md, Autonomous GitHub management), so the
+// enable step names those two and nothing else. `!= semver-major` let an EMPTY update-type through (a grouped or unclassified PR has none) and any value added later.
+test('dependabot-auto-merge (template and this repo\'s copy): the enable step is an allowlist of PATCH and MINOR, never a "not major" test -- RED before the CoalBoard canon ticket', () => {
+  for (const f of [path.join(TEMPLATES, 'published-code', '.github', 'workflows', 'dependabot-auto-merge.yml'), path.join(OWN_WF, 'dependabot-auto-merge.yml')]) {
+    const ifLine = fs.readFileSync(f, 'utf8').split(/\r?\n/).find((l) => /^ {8}if: .*steps\.meta\.outputs\.update-type/.test(l));
+    assert.ok(ifLine, f + ': the enable step has an update-type condition');
+    assert.match(ifLine, /steps\.meta\.outputs\.update-type == 'version-update:semver-patch'/);
+    assert.match(ifLine, /steps\.meta\.outputs\.update-type == 'version-update:semver-minor'/);
+    assert.doesNotMatch(ifLine, /!=|semver-major/, f + ': a "not major" test lets an empty update-type through');
+  }
+});
+
+// CoalBoard PR 19 #12: the header said every step is gated on scripts/test.mjs, and the checkout step is not (the skip decision needs the tree). The sentence follows the file.
+test('coverage.yml: the header says the steps AFTER the checkout are gated, and every step after the checkout is -- RED before the CoalBoard canon ticket', () => {
+  const text = fs.readFileSync(path.join(TEMPLATES, 'published-code', '.github', 'workflows', 'coverage.yml'), 'utf8').replace(/\r\n/g, '\n');
+  const comment = text.slice(0, text.indexOf('\non:\n'));
+  assert.doesNotMatch(comment, /Every step is gated/);
+  assert.match(comment, /Every step after the checkout is gated on scripts\/test\.mjs existing/);
+  const steps = text.slice(text.indexOf('\n    steps:\n')).split(/\n {6}- (?=name:|uses:)/).slice(1);
+  assert.ok(steps.length >= 5, 'the steps were found');
+  assert.doesNotMatch(steps[0], /^uses: actions\/checkout[^\n]*\n(?:.*\n)*?\s+if:/, 'the checkout carries no gate');
+  for (const s of steps.slice(1)) assert.match(s, /\n {8}if: hashFiles\('scripts\/test\.mjs'\) != ''/, 'a gated step: ' + s.split('\n')[0]);
+});
