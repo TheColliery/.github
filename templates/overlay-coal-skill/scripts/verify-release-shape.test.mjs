@@ -14,15 +14,22 @@ const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'verify-r
 // LATEST_TAG, LAUNCH_FORM, GITHUB_REF_NAME and the rest of an Actions run's variables change what these scripts do, so none of the
 // parent's reaches the child. Only what a node child needs to start (the program path and, on Windows, SystemRoot) is passed through.
 const BASE_ENV_KEYS = ['PATH', 'Path', 'SystemRoot', 'SYSTEMROOT'];
-const sandboxEnv = (dir, extra = {}) => ({
-  ...Object.fromEntries(BASE_ENV_KEYS.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]])),
-  HOME: dir, USERPROFILE: dir, TEMP: dir, TMP: dir, TMPDIR: dir, GIT_CEILING_DIRECTORIES: path.dirname(dir),
-  // Windows puts HOMEDRIVE and HOMEPATH (the real profile) into every process it starts; they are overridden too, so no path variable points out.
-  ...(process.platform === 'win32' ? { HOMEDRIVE: path.parse(dir).root.replace(/[\\/]+$/, ''), HOMEPATH: dir.slice(path.parse(dir).root.length - 1) } : {}),
-  ...extra,
-});
+// The keys that make this a sandbox. A caller's `extra` env may add or change anything else, but changing one of these needs the caller to name it in `allow`:
+// a silent override of HOME, TEMP or the ceiling would defeat the sandbox every other test here relies on (CoalBoard's patrol, t24 #5).
+const SANDBOX_KEYS = ['HOME', 'USERPROFILE', 'TEMP', 'TMP', 'TMPDIR', 'HOMEDRIVE', 'HOMEPATH', 'GIT_CEILING_DIRECTORIES'];
+const sandboxEnv = (dir, extra = {}, allow = []) => {
+  const silent = Object.keys(extra).filter((k) => SANDBOX_KEYS.includes(k.toUpperCase()) && !allow.includes(k));
+  if (silent.length) throw new Error('sandboxEnv: the caller overrides sandbox key(s) ' + silent.join(', ') + ' without naming them in allow');
+  return {
+    ...Object.fromEntries(BASE_ENV_KEYS.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]])),
+    HOME: dir, USERPROFILE: dir, TEMP: dir, TMP: dir, TMPDIR: dir, GIT_CEILING_DIRECTORIES: path.dirname(dir),
+    // Windows puts HOMEDRIVE and HOMEPATH (the real profile) into every process it starts; they are overridden too, so no path variable points out.
+    ...(process.platform === 'win32' ? { HOMEDRIVE: path.parse(dir).root.replace(/[\\/]+$/, ''), HOMEPATH: dir.slice(path.parse(dir).root.length - 1) } : {}),
+    ...extra,
+  };
+};
 // The one place every spawn of these tests goes through, so the sandbox is applied by construction.
-const spawnIn = (cwd, script, args = [], { env, input } = {}) => spawnSync(process.execPath, [script, ...args], { cwd, encoding: 'utf8', timeout: 30000, input, env: sandboxEnv(cwd, env) });
+const spawnIn = (cwd, script, args = [], { env, allow, input } = {}) => spawnSync(process.execPath, [script, ...args], { cwd, encoding: 'utf8', timeout: 30000, input, env: sandboxEnv(cwd, env, allow) });
 const made = [];
 test.after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
 
@@ -152,4 +159,17 @@ test('verify-release-shape.mjs tests: the shared spawn gives the child the scrat
   const r = spawnIn(dir, probe);
   assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(JSON.parse(r.stdout), [dir, dir, dir, dir, dir, path.dirname(dir)]);
+});
+
+// CoalBoard's patrol (t24 #5, 2026-10-08): `extra` was spread last, so a caller could override HOME, TEMP or the ceiling and silently defeat the sandbox. A sandbox key now
+// changes only when the caller names it in `allow`; any other key (GITHUB_REF_NAME, LATEST_TAG ...) passes as before.
+test('sandboxEnv: overriding a sandbox key without naming it in allow throws; naming it, or changing any other key, works -- RED before the CoalBoard canon ticket', () => {
+  const dir = path.join(os.tmpdir(), 'sandbox-env-probe');
+  for (const key of ['HOME', 'USERPROFILE', 'TEMP', 'TMP', 'TMPDIR', 'GIT_CEILING_DIRECTORIES']) {
+    assert.throws(() => sandboxEnv(dir, { [key]: 'elsewhere' }), /overrides sandbox key/, key + ' is a sandbox key');
+    assert.equal(sandboxEnv(dir, { [key]: 'elsewhere' }, [key])[key], 'elsewhere', key + ' named in allow');
+  }
+  assert.throws(() => sandboxEnv(dir, { HOME: 'x', GIT_CEILING_DIRECTORIES: 'y' }, ['HOME']), /GIT_CEILING_DIRECTORIES/, 'allowing one key does not allow the next');
+  assert.equal(sandboxEnv(dir, { GITHUB_REF_NAME: 'v1.2.0' }).GITHUB_REF_NAME, 'v1.2.0', 'a key outside the sandbox set passes');
+  assert.equal(sandboxEnv(dir, {}).HOME, dir);
 });
