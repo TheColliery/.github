@@ -934,8 +934,40 @@ test('.coderabbit.yaml hooks block: the Sandboxed line names the own project-sco
   assert.match(line, /not inside that folder itself/, 'containment in the folder, never merely the project root');
   assert.match(line, /fails closed/);
   assert.match(line, /SECURITY\.md or the README/, 'named in the room\'s shipped text');
+  assert.match(line, /a delete under it pins each owned directory to its literal realpath and sweeps nothing in a directory it refuses/, 'the delete clause of the amended Phoenix #10 (UMB-456 (1) ix)');
   assert.match(line, /Any other write to the project is a finding/);
   assert.match(line, /except reading the project's own config file from the project root/, 'the older exception is kept');
   assert.ok(!/[\\"]/.test(line), 'no double quote or backslash: the settings editor mangles both');
   assert.equal(lines[at - 1].trim().startsWith('- Deterministic'), true, 'the neighbouring lines did not move');
+});
+
+// UMB-456 (4) and UMB2-013: two canon rows in SKILL-REPO-PATTERN.md's Layer 5. The template's gate job already fetches full history; the row says why it must
+// and a test holds the template. The `parallel:` row is a PREFER with its measurement beside it (never a MUST: Windows was inside the noise).
+const PATTERN = fs.readFileSync(path.join(here, '..', 'SKILL-REPO-PATTERN.md'), 'utf8');
+test('published-code ci.yml: the gate job checkout fetches full history and tags (fetch-depth: 0), the shallow default would skip a tag-form check', () => {
+  const ci = fs.readFileSync(path.join(TEMPLATES, 'published-code', '.github', 'workflows', 'ci.yml'), 'utf8');
+  const gate = ci.slice(ci.indexOf('\n  gate:'));
+  const checkout = gate.slice(gate.indexOf('actions/checkout'), gate.indexOf('actions/setup-node'));
+  assert.match(checkout, /^ {10}fetch-depth: 0$/m);
+});
+
+test('SKILL-REPO-PATTERN.md Layer 5 carries the fetch-depth row (MUST where a gate reads a tag) and the parallel row (a PREFER with its measurement, no sweep) -- RED before UMB-456 (4) and UMB2-013', () => {
+  const rows = PATTERN.split('\n').filter((l) => l.startsWith('- **'));
+  const depth = rows.find((l) => /fetch-depth: 0/.test(l) && /^- \*\*`fetch-depth: 0`/.test(l));
+  assert.ok(depth, 'the fetch-depth row exists');
+  assert.match(depth, /tag-form check/);
+  assert.match(depth, /MUST/);
+  const par = rows.find((l) => /^- \*\*`parallel:`/.test(l));
+  assert.ok(par, 'the parallel row exists');
+  assert.match(par, /prefer/i);
+  assert.match(par.split(';')[0], /\(prefer, never MUST$/, 'the headline is a PREFER, stated as one');
+  assert.match(par, /Ubuntu 5 to 7 s a job/);
+  assert.match(par, /macOS 0 to 3 s/);
+  assert.match(par, /Windows inside the noise/);
+  assert.match(par, /80 to 168 s/);
+  assert.match(par, /five attempts|5 attempts/);
+  assert.match(par, /a32338f7/, 'the exemplar');
+  assert.match(par, /next `ci\.yml` touch/);
+  assert.match(par, /no (dedicated )?sweep/i);
+  assert.match(par, /a step that writes the tree another step reads stays sequential/);
 });

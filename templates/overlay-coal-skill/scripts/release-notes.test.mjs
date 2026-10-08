@@ -231,6 +231,17 @@ test('release-notes.mjs (the derive step after the tag): an announcement overflo
   assert.ok(fs.existsSync(path.join(dir, 'release-title.txt')), 'the Release is still derived');
 });
 
+// UMB-456 (1) i: the keys a node child is expected to hold are a NAMED set, not an inline guess. Two of them are not ours and not the parent's: macOS adds
+// __CF_USER_TEXT_ENCODING to every process it starts, and node:test adds NODE_V8_COVERAGE to a child when the run measures coverage (CoalBoard's run
+// 37224469491 failed on the first; a coverage run on this box fails on the second). A parent's credential or a workflow variable is still refused.
+const CHILD_KEY_NAMES = ['path', 'systemroot', 'home', 'userprofile', 'temp', 'tmp', 'tmpdir', 'git_ceiling_directories', 'systemdrive', 'comspec', 'pathext', 'windir', 'homedrive', 'homepath', 'username', 'userdomain', 'logonserver', '__cf_user_text_encoding', 'node_v8_coverage'];
+const CHILD_KEYS_OK = new RegExp('^(' + CHILD_KEY_NAMES.join('|') + ')$', 'i');
+
+test('the allowed child keys take the two a runtime or an OS injects and refuse a credential or a workflow variable -- RED before UMB-456 (1) i', () => {
+  for (const k of ['__CF_USER_TEXT_ENCODING', 'NODE_V8_COVERAGE', 'PATH', 'Path', 'HOME']) assert.ok(CHILD_KEYS_OK.test(k), k);
+  for (const k of ['GITHUB_TOKEN', 'GH_TOKEN', 'RELEASE_TAG', 'GITHUB_REF_NAME', 'GIT_DIR', 'NODE_OPTIONS', 'LATEST_TAG']) assert.ok(!CHILD_KEYS_OK.test(k), k);
+});
+
 // UMB-443 ruling 2: the sandbox is real. A probe run through the same spawn function every test uses prints what the child sees.
 test('the spawn the tests share gives the child the scratch folder as HOME, USERPROFILE, TEMP, TMP and TMPDIR, a git ceiling above it, and nothing of the parent\'s -- RED before UMB-443', () => {
   const dir = scratchWithLib();
@@ -246,7 +257,7 @@ test('the spawn the tests share gives the child the scratch folder as HOME, USER
     assert.equal(seen.CEIL, path.dirname(dir));
     if (process.platform === 'win32') assert.equal(seen.HOMEDRIVE + seen.HOMEPATH, dir, 'HOMEDRIVE and HOMEPATH point into the scratch folder too');
     assert.ok(!seen.KEYS.includes('GITHUB_TOKEN') && !seen.KEYS.includes('GH_TOKEN'), 'no credential of the parent reaches the child');
-    assert.deepEqual(seen.KEYS.filter((k) => !/^(path|systemroot|home|userprofile|temp|tmp|tmpdir|git_ceiling_directories|systemdrive|comspec|pathext|windir|homedrive|homepath|username|userdomain|logonserver)$/i.test(k)), [], 'nothing else but what node needs to start');
+    assert.deepEqual(seen.KEYS.filter((k) => !CHILD_KEYS_OK.test(k)), [], 'nothing else but what node needs to start');
   } finally { for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } }
 });
 
@@ -262,4 +273,33 @@ test('release-notes.mjs --check reads the origin of the repository it runs in, n
   assert.equal(res.status, 0, res.stderr);
   assert.match(res.stdout, /announcement title "Realrepo v1\.2\.0 - /, res.stdout);
   assert.doesNotMatch(res.stdout, /Decoyrepo/);
+});
+
+// UMB-456 (1) iii: the keep list passes GIT_CEILING_DIRECTORIES through, so a folder that is NOT a repository but sits inside one does not read the
+// enclosing repository's origin when a ceiling says where the search stops (CoalBoard LOW-2). RED before UMB-456 (1) iii: the ceiling was dropped.
+test('release-notes.mjs --check: a plain folder inside a repository honours GIT_CEILING_DIRECTORIES and never reads the enclosing origin -- RED before UMB-456 (1) iii', () => {
+  const outer = scratchWithLib();
+  const git = (cwd, ...a) => spawnSync('git', a, { cwd, encoding: 'utf8', timeout: 30000, env: sandboxEnv(cwd) });
+  git(outer, 'init', '-q'); git(outer, 'remote', 'add', 'origin', 'https://github.com/TheColliery/Enclosing.git');
+  const sub = path.join(outer, 'sub'); fs.mkdirSync(sub);
+  fs.writeFileSync(path.join(sub, 'CHANGELOG.md'), checkEntry(60));
+  const res = run(sub, { GIT_CEILING_DIRECTORIES: outer }, ['--check']);
+  assert.equal(res.status, 1, res.stdout);
+  assert.match(res.stderr, /cannot tell the repository name/);
+  assert.doesNotMatch(res.stdout + res.stderr, /Enclosing/);
+  // and without a ceiling the enclosing repository is what git finds, which is why the ceiling has to get through
+  const open = run(sub, { GIT_CEILING_DIRECTORIES: path.dirname(outer) }, ['--check']);
+  assert.equal(open.status, 0, open.stderr);
+  assert.match(open.stdout, /announcement title "Enclosing v1\.2\.0 - /);
+});
+
+// UMB-456 (1) vii: --repo names the repository for --check only. In the derive step it was silently accepted and ignored.
+test('release-notes.mjs: --repo outside --check is an unknown argument (exit 64), and --check --repo still works -- RED before UMB-456 (1) vii', () => {
+  const dir = scratchWithLib();
+  fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), '## [1.2.0] - 2026-09-22\n\nA proof.\n');
+  const res = run(dir, { GITHUB_REF_NAME: 'v1.2.0' }, ['--repo', 'CoalBoard']);
+  assert.equal(res.status, 64, res.stderr);
+  assert.match(res.stderr, /unknown argument "--repo"/);
+  assert.equal(fs.existsSync(path.join(dir, 'release-title.txt')), false, 'nothing was derived');
+  assert.equal(run(dir, {}, ['--check', '--repo', 'CoalBoard']).status, 0);
 });
