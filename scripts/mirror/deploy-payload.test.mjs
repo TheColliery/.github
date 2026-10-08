@@ -13,16 +13,18 @@ import { buildPayload, loadFiles } from './deploy-payload.mjs';
 import { gitBlobId } from '../watcher/deploy-payload.mjs';
 
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'deploy-payload.mjs');
-const ARGS = { name: 'demo-release-mirror', bucket: 'demo-releases', domain: 'dl.example.org', zone: 'example.org', cron: '23 * * * *' };
+const ADDRESS = 'owner-address-fixture@example.invalid';
+const ARGS = { name: 'demo-release-mirror', bucket: 'demo-releases', domain: 'dl.example.org', zone: 'example.org', cron: '23 * * * *', from: 'antenna@example.invalid' };
 const FILES = { 'worker.mjs': 'export default {};\n', 'mirror.mjs': 'export const x = `a${1}b\\n`;\n', 'config.mjs': 'export default { org: "O" };\n' };
 
-function fakeCloudflare({ buckets = [], zones = [{ id: 'z'.repeat(32), name: 'example.org' }], domains = [], uploadOk = true } = {}) {
+function fakeCloudflare({ buckets = [], zones = [{ id: 'z'.repeat(32), name: 'example.org' }], domains = [], uploadOk = true, addresses = [{ email: ADDRESS, verified: true }] } = {}) {
   const calls = [];
   const cloudflare = {
     async request(o) {
       calls.push(o);
       const key = `${o.method} ${o.path.replace(/^\/accounts\/[^/]+/, '')}`;
       if (key === 'GET /zones') return { success: true, status: 200, result: zones };
+      if (key === 'GET /email/routing/addresses') return { success: true, status: 200, result: addresses };
       if (key === 'GET /r2/buckets') return { success: true, status: 200, result: { buckets: buckets.map((name) => ({ name })) } };
       if (key === 'POST /r2/buckets') return { success: true, status: 200, result: { name: o.body.name } };
       if (o.method === 'PUT' && /\/workers\/scripts\/[^/]+$/.test(o.path)) return { success: uploadOk, status: uploadOk ? 200 : 400, errors: uploadOk ? [] : [{ code: 1, message: 'bad' }], result: {} };
@@ -30,7 +32,7 @@ function fakeCloudflare({ buckets = [], zones = [{ id: 'z'.repeat(32), name: 'ex
       if (o.method === 'POST' && o.path.endsWith('/subdomain')) return { success: true, status: 200, result: o.body };
       if (o.method === 'GET' && o.path.endsWith('/domains/custom')) return { success: true, status: 200, result: { domains: domains.map((domain) => ({ domain })) } };
       if (o.method === 'POST' && o.path.endsWith('/domains/custom')) return { success: true, status: 200, result: {} };
-      if (o.method === 'GET' && o.path.endsWith('/settings')) return { success: true, status: 200, result: { bindings: [{ name: 'BUCKET', type: 'r2_bucket' }] } };
+      if (o.method === 'GET' && o.path.endsWith('/settings')) return { success: true, status: 200, result: { bindings: [{ name: 'BUCKET', type: 'r2_bucket' }, { name: 'EMAIL', type: 'send_email' }, { name: 'DIGEST_TO', type: 'secret_text' }, { name: 'DIGEST_FROM', type: 'plain_text' }] } };
       if (o.method === 'GET' && o.path.endsWith('/schedules')) return { success: true, status: 200, result: { schedules: [{ cron: ARGS.cron }] } };
       return { success: false, status: 404, errors: [{ message: 'unexpected ' + key }], result: null };
     },
@@ -44,13 +46,19 @@ test('a first deploy creates the bucket, uploads the Worker with the BUCKET bind
   const fake = fakeCloudflare();
   const out = await runPayload(buildPayload({ files: FILES, ...ARGS }), fake);
   const seq = fake.calls.map((c) => `${c.method} ${c.path.replace(/^\/accounts\/acct/, '')}`);
-  assert.deepStrictEqual(seq, ['GET /zones', 'GET /r2/buckets', 'POST /r2/buckets', 'PUT /workers/scripts/demo-release-mirror', 'PUT /workers/scripts/demo-release-mirror/schedules', 'POST /workers/scripts/demo-release-mirror/subdomain', 'GET /r2/buckets/demo-releases/domains/custom', 'POST /r2/buckets/demo-releases/domains/custom', 'GET /workers/scripts/demo-release-mirror/settings', 'GET /workers/scripts/demo-release-mirror/schedules']);
+  assert.deepStrictEqual(seq, ['GET /zones', 'GET /email/routing/addresses', 'GET /r2/buckets', 'POST /r2/buckets', 'PUT /workers/scripts/demo-release-mirror', 'PUT /workers/scripts/demo-release-mirror/schedules', 'POST /workers/scripts/demo-release-mirror/subdomain', 'GET /r2/buckets/demo-releases/domains/custom', 'POST /r2/buckets/demo-releases/domains/custom', 'GET /workers/scripts/demo-release-mirror/settings', 'GET /workers/scripts/demo-release-mirror/schedules']);
   assert.deepStrictEqual(fake.calls[0].query, { name: 'example.org', status: 'active' });
-  assert.deepStrictEqual(metadataOf(fake.calls).bindings, [{ type: 'r2_bucket', name: 'BUCKET', bucket_name: 'demo-releases' }]);
-  assert.deepStrictEqual(fake.calls[4].body, [{ cron: '23 * * * *' }]);
-  assert.deepStrictEqual(fake.calls[5].body, { enabled: false, previews_enabled: false });
-  assert.deepStrictEqual(fake.calls[7].body, { domain: 'dl.example.org', zoneId: 'z'.repeat(32), enabled: true, minTLS: '1.2' });
-  assert.deepStrictEqual([out.bucket.reused, out.domain.attached, out.crons, out.bindings], [false, true, ['23 * * * *'], ['BUCKET:r2_bucket']]);
+  assert.deepStrictEqual(metadataOf(fake.calls).bindings, [
+    { type: 'r2_bucket', name: 'BUCKET', bucket_name: 'demo-releases' },
+    { type: 'send_email', name: 'EMAIL', destination_address: ADDRESS },
+    { type: 'secret_text', name: 'DIGEST_TO', text: ADDRESS },
+    { type: 'plain_text', name: 'DIGEST_FROM', text: 'antenna@example.invalid' },
+  ]);
+  assert.ok(!JSON.stringify(out).includes(ADDRESS), 'the destination address is read in the sandbox and never returned');
+  assert.deepStrictEqual(fake.calls[5].body, [{ cron: '23 * * * *' }]);
+  assert.deepStrictEqual(fake.calls[6].body, { enabled: false, previews_enabled: false });
+  assert.deepStrictEqual(fake.calls[8].body, { domain: 'dl.example.org', zoneId: 'z'.repeat(32), enabled: true, minTLS: '1.2' });
+  assert.deepStrictEqual([out.bucket.reused, out.domain.attached, out.crons, out.bindings], [false, true, ['23 * * * *'], ['BUCKET:r2_bucket', 'EMAIL:send_email', 'DIGEST_TO:secret_text', 'DIGEST_FROM:plain_text']]);
 });
 
 test('the compatibility date is yesterday UTC, never a future date the API refuses (it refused a date one day ahead of its own clock)', async () => {
@@ -66,6 +74,13 @@ test('a redeploy reuses the bucket and the attached domain', async () => {
   const out = await runPayload(buildPayload({ files: FILES, ...ARGS }), fake);
   assert.ok(!fake.calls.some((c) => c.method === 'POST' && (c.path.endsWith('/r2/buckets') || c.path.endsWith('/domains/custom'))));
   assert.deepStrictEqual([out.bucket.reused, out.domain.alreadyAttached], [true, true]);
+});
+
+test('no verified destination address writes nothing: the failure mail has nowhere to go, so the Worker is not deployed half-wired', async () => {
+  const fake = fakeCloudflare({ addresses: [{ email: ADDRESS, verified: false }] });
+  const out = await runPayload(buildPayload({ files: FILES, ...ARGS }), fake);
+  assert.match(out.stage, /no verified destination/);
+  assert.ok(!fake.calls.some((c) => c.method !== 'GET'));
 });
 
 test('no active zone by that name writes nothing', async () => {
@@ -91,7 +106,7 @@ test('a refused upload stops before the schedule or the domain', async () => {
 });
 
 test('buildPayload refuses a bad name, bucket, domain outside its zone, or cron', () => {
-  for (const bad of [{ name: 'Bad Name' }, { bucket: 'X' }, { bucket: 'a' }, { domain: 'dl.other.org' }, { domain: 'evilexample.org' }, { domain: 'not a host' }, { cron: '1 2' }, { cron: '1 2 3 4 5;x' }]) assert.throws(() => buildPayload({ files: FILES, ...ARGS, ...bad }), JSON.stringify(bad));
+  for (const bad of [{ from: 'not-an-address' }, { from: undefined }, { name: 'Bad Name' }, { bucket: 'X' }, { bucket: 'a' }, { domain: 'dl.other.org' }, { domain: 'evilexample.org' }, { domain: 'not a host' }, { cron: '1 2' }, { cron: '1 2 3 4 5;x' }]) assert.throws(() => buildPayload({ files: FILES, ...ARGS, ...bad }), JSON.stringify(bad));
 });
 
 test('the shipped modules embed whole and verbatim, and the payload carries no credential-looking text', () => {
@@ -108,7 +123,10 @@ test('the CLI prints help, refuses missing flags, and writes a payload file with
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mirror-payload-'));
   try {
     const out = path.join(tmp, 'p.js');
-    const r = run(['--bucket', 'demo-releases', '--domain', 'dl.example.org', '--zone', 'example.org', '--out', out]);
+    const noFrom = run(['--bucket', 'demo-releases', '--domain', 'dl.example.org', '--zone', 'example.org']);
+    assert.strictEqual(noFrom.status, 1, 'no --from, no deploy');
+    assert.match(noFrom.stderr, /--from/, 'and the refusal names the flag');
+    const r = run(['--bucket', 'demo-releases', '--domain', 'dl.example.org', '--zone', 'example.org', '--from', 'antenna@example.invalid', '--out', out]);
     assert.strictEqual(r.status, 0, r.stderr);
     assert.match(r.stdout, /blob ids worker\.mjs=[0-9a-f]{40} mirror\.mjs=[0-9a-f]{40} config\.mjs=[0-9a-f]{40}/);
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }

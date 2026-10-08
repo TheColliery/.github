@@ -13,10 +13,11 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const lf = (file) => fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
 export const loadFiles = (dir = HERE) => Object.fromEntries(['worker.mjs', 'mirror.mjs', 'config.mjs'].map((f) => [f, lf(path.join(dir, f))]));
 
-export function buildPayload({ files, name, bucket, domain, zone, cron = '23 * * * *' }) {
+export function buildPayload({ files, name, bucket, domain, zone, from, cron = '23 * * * *' }) {
   if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(name ?? '')) throw new Error('name must be a lowercase worker name (letters, digits, hyphens)');
   if (!/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(bucket ?? '')) throw new Error('bucket must be a lowercase R2 bucket name (3-63 letters, digits, hyphens)');
   if (!/^([a-z0-9-]+\.)+[a-z]{2,}$/.test(domain ?? '') || !/^([a-z0-9-]+\.)+[a-z]{2,}$/.test(zone ?? '') || !(domain === zone || domain.endsWith('.' + zone))) throw new Error('domain must be a hostname inside the zone, for example dl.thecolliery.org in thecolliery.org');
+  if (!/^[^\s@"'\\]+@[^\s@"'\\]+\.[^\s@"'\\]+$/.test(from ?? '')) throw new Error('from must be a sender address such as antenna-coal@your-domain');
   if (!/^(\S+\s+){4}\S+$/.test(cron ?? '') || /[^0-9*/,\-\sA-Za-z]/.test(cron)) throw new Error('cron must be five fields, for example "23 * * * *"');
   const expected = Object.fromEntries(Object.entries(files).map(([k, t]) => [k, gitBlobId(t)]));
   return `async () => {
@@ -38,6 +39,9 @@ export function buildPayload({ files, name, bucket, domain, zone, cron = '23 * *
   const zones = await cloudflare.request({ method: 'GET', path: '/zones', query: { name: ${JSON.stringify(zone)}, status: 'active' } });
   const zoneRow = (zones.result || [])[0];
   if (!zoneRow) return { stage: 'no active zone named ${zone}, nothing written', blobs };
+  const addrs = await cloudflare.request({ method: 'GET', path: acct + '/email/routing/addresses' });
+  const dest = (addrs.result || []).find(a => a.verified);
+  if (!dest) return { stage: 'no verified destination address, nothing written', blobs };
   const out = { blobs };
   const have = await cloudflare.request({ method: 'GET', path: acct + '/r2/buckets' });
   const names = ((have.result || {}).buckets || have.result || []).map(b => b.name);
@@ -46,7 +50,12 @@ export function buildPayload({ files, name, bucket, domain, zone, cron = '23 * *
     const made = await cloudflare.request({ method: 'POST', path: acct + '/r2/buckets', body: { name: BUCKET } });
     if (!made.success) return { stage: 'bucket not created', errors: made.errors, blobs };
   }
-  const metadata = { main_module: 'worker.mjs', compatibility_date: new Date(Date.now() - 864e5).toISOString().slice(0, 10), bindings: [{ type: 'r2_bucket', name: 'BUCKET', bucket_name: BUCKET }], observability: { enabled: true } };
+  const metadata = { main_module: 'worker.mjs', compatibility_date: new Date(Date.now() - 864e5).toISOString().slice(0, 10), bindings: [
+    { type: 'r2_bucket', name: 'BUCKET', bucket_name: BUCKET },
+    { type: 'send_email', name: 'EMAIL', destination_address: dest.email },
+    { type: 'secret_text', name: 'DIGEST_TO', text: dest.email },
+    { type: 'plain_text', name: 'DIGEST_FROM', text: ${JSON.stringify(from)} },
+  ], observability: { enabled: true } };
   const b = '----mirror' + Date.now();
   const parts = ['--' + b, 'Content-Disposition: form-data; name="metadata"', 'Content-Type: application/json', '', JSON.stringify(metadata)];
   for (const [part, t] of Object.entries(texts)) parts.push('--' + b, 'Content-Disposition: form-data; name="' + part + '"; filename="' + part + '"', 'Content-Type: application/javascript+module', '', t);
@@ -73,27 +82,28 @@ export function buildPayload({ files, name, bucket, domain, zone, cron = '23 * *
 }`;
 }
 
-const USAGE = `usage: node scripts/mirror/deploy-payload.mjs --bucket <name> --domain <host> --zone <zone> [--name <worker>] [--cron "<5 fields>"] [--out <file>]
+const USAGE = `usage: node scripts/mirror/deploy-payload.mjs --bucket <name> --domain <host> --zone <zone> --from <sender> [--name <worker>] [--cron "<5 fields>"] [--out <file>]
   Prints the body of the Cloudflare MCP execute call that deploys the Release mirror (modules embedded behind a git blob guard, R2 bucket found or created,
   Worker with the BUCKET binding, schedule, workers.dev off, the bucket's custom domain attached, everything read back).
+  --from is the sender of the failure mail (the beat's antenna address, for example antenna-coal@thecolliery.org); the destination is the account's verified Email Routing address, read in the sandbox and never returned.
   --name defaults to thecolliery-release-mirror; --cron to "23 * * * *" (hourly).
-  example: node scripts/mirror/deploy-payload.mjs --bucket thecolliery-releases --domain dl.thecolliery.org --zone thecolliery.org --out payload.js
+  example: node scripts/mirror/deploy-payload.mjs --bucket thecolliery-releases --domain dl.thecolliery.org --zone thecolliery.org --from antenna-coal@thecolliery.org --out payload.js
   exit 0 done · 1 refused`;
 
 function main() {
   const args = process.argv.slice(2);
   if (args.includes('-h') || args.includes('--help')) { console.log(USAGE); return; }
   const opts = {};
-  const flags = { '--bucket': 'bucket', '--domain': 'domain', '--zone': 'zone', '--name': 'name', '--cron': 'cron', '--out': 'out' };
+  const flags = { '--bucket': 'bucket', '--domain': 'domain', '--zone': 'zone', '--from': 'from', '--name': 'name', '--cron': 'cron', '--out': 'out' };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (flags[a]) { opts[flags[a]] = args[++i]; if (opts[flags[a]] === undefined) { console.error(`deploy-payload: ${a} needs a value\n${USAGE}`); process.exitCode = 1; return; } }
     else { console.error(`deploy-payload: unexpected argument ${a}\n${USAGE}`); process.exitCode = 1; return; }
   }
-  if (!opts.bucket || !opts.domain || !opts.zone) { console.error(`deploy-payload: --bucket, --domain and --zone are required\n${USAGE}`); process.exitCode = 1; return; }
+  if (!opts.bucket || !opts.domain || !opts.zone || !opts.from) { console.error(`deploy-payload: --bucket, --domain, --zone and --from are required\n${USAGE}`); process.exitCode = 1; return; }
   try {
     const files = loadFiles();
-    const code = buildPayload({ files, name: opts.name ?? 'thecolliery-release-mirror', bucket: opts.bucket, domain: opts.domain, zone: opts.zone, cron: opts.cron });
+    const code = buildPayload({ files, name: opts.name ?? 'thecolliery-release-mirror', bucket: opts.bucket, domain: opts.domain, zone: opts.zone, from: opts.from, cron: opts.cron });
     if (opts.out) {
       fs.writeFileSync(opts.out, code, 'utf8');
       console.log(`deploy-payload: mirror, ${code.length} characters written to ${opts.out}; blob ids ${Object.entries(files).map(([k, t]) => `${k}=${gitBlobId(t)}`).join(' ')}`);

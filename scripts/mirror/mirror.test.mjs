@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { parseTags, parseAssets, assetKey, validateConfig, runOnce, BUDGET, USER_AGENT } from './mirror.mjs';
+import { parseTags, parseAssets, assetKey, validateConfig, runOnce, settle, buildFailureMail, FAIL_RUNS, BUDGET, USER_AGENT } from './mirror.mjs';
 import worker from './worker.mjs';
 
 const OWNER = 'DemoOrg';
@@ -256,4 +256,98 @@ test('the Worker entry runs on the cron tick with the bucket binding, writes the
   const last = JSON.parse(bucket.objects.get('.mirror/last-run.json').body.toString());
   assert.equal(last.repos, 8); assert.equal(last.errors, 8);
   assert.equal(worker.fetch, undefined);
+});
+
+// ---- UMB-454 / BB-46 (1): ONE mail after three failed runs in a row, reported once per trouble spell (the watcher's own pattern) ----
+const bad = (problems = ['CoalMine@v3.22.1: release page HTTP 503']) => ({ at: '2026-10-08T03:23:21.000Z', repos: 8, copied: 0, releasesDone: 0, deferred: 0, pruned: 0, errors: problems.length, problems });
+const good = () => ({ at: '2026-10-08T04:23:21.000Z', repos: 8, copied: 0, releasesDone: 0, deferred: 0, pruned: 0, errors: 0, problems: [] });
+const mailer = () => { const sent = []; return { sent, send: async (m) => { sent.push(m); }, to: 'dest-fixture', from: 'from-fixture' }; };
+
+test('buildFailureMail names the run, the number of failed runs, and every failing repo and error in one line each, with no address and nothing a line break could split', () => {
+  const m = buildFailureMail({ org: 'TheColliery', fails: 3, run: bad(['CoalMine@v3.22.1: release page HTTP 503', 'CoalFace: feed bad\nBcc: x']) });
+  assert.strictEqual(m.subject, '[TheColliery mirror] release mirror failing for 3 runs');
+  const lines = m.text.split('\n');
+  assert.ok(lines[0].includes('2026-10-08T03:23:21.000Z'), 'the run');
+  assert.ok(lines.includes('  CoalMine@v3.22.1: release page HTTP 503'));
+  assert.ok(lines.includes('  CoalFace: feed bad Bcc: x'), 'one line, the break gone');
+  assert.doesNotMatch(m.subject + m.text, /[A-Za-z0-9._-]+@[A-Za-z0-9-]+\.[a-z]{2,}/, 'no address (a repo@tag is not one)');
+  const big = buildFailureMail({ org: 'O', fails: 3, run: bad(Array.from({ length: 30 }, (_, i) => 'r' + i + ': ' + 'e'.repeat(500))) });
+  assert.ok(big.text.split('\n').every((l) => l.length <= 210));
+  assert.strictEqual(big.text.split('\n').filter((l) => /^ {2}r\d+: /.test(l)).length, 10, 'ten problems named');
+  assert.ok(big.text.includes('  and 20 more'), 'and the rest counted');
+});
+
+test('settle: a clean run with no streak sends nothing and writes nothing', async () => {
+  const bucket = fakeBucket(); const mail = mailer();
+  const out = await settle({ bucket, run: good(), ...mail });
+  assert.deepStrictEqual([mail.sent.length, bucket.calls.put.length, out.mailed], [0, 0, false]);
+});
+
+test('settle: two failed runs send nothing; the third sends ONE mail; the fourth and fifth send none; a clean run ends the spell; the next three send one again', async () => {
+  const bucket = fakeBucket(); const mail = mailer();
+  const step = (run) => settle({ bucket, run, ...mail });
+  await step(bad()); await step(bad());
+  assert.strictEqual(mail.sent.length, 0, 'fewer than ' + FAIL_RUNS);
+  const third = await step(bad());
+  assert.strictEqual(mail.sent.length, 1); assert.strictEqual(third.mailed, true);
+  assert.deepStrictEqual([mail.sent[0].to, mail.sent[0].from], ['dest-fixture', 'from-fixture']);
+  await step(bad());
+  const putsAtFour = bucket.calls.put.length;
+  await step(bad());
+  assert.strictEqual(mail.sent.length, 1, 'once per trouble spell');
+  assert.strictEqual(bucket.calls.put.length, putsAtFour, 'a reported, capped spell writes nothing more');
+  assert.strictEqual(JSON.parse(bucket.objects.get('.mirror/streak.json').body.toString()).fails, FAIL_RUNS, 'the streak is capped at the threshold');
+  await step(good());
+  assert.strictEqual(JSON.parse(bucket.objects.get('.mirror/streak.json').body.toString()).fails, 0);
+  await step(bad()); await step(bad());
+  assert.strictEqual(mail.sent.length, 1);
+  await step(bad());
+  assert.strictEqual(mail.sent.length, 2, 'a new spell is a new mail');
+});
+
+test('settle: a failed send keeps the spell unreported, so the next failed run tries again; the error is named and not thrown', async () => {
+  const bucket = fakeBucket(); const sent = [];
+  let boom = true;
+  const send = async (m) => { if (boom) { const e = new Error('nope'); e.code = 'E_SEND'; throw e; } sent.push(m); };
+  for (let i = 0; i < 3; i++) await settle({ bucket, run: bad(), send, to: 't', from: 'f' });
+  const failed = JSON.parse(bucket.objects.get('.mirror/streak.json').body.toString());
+  assert.deepStrictEqual([failed.fails, failed.reported, failed.mailError], [3, false, 'E_SEND']);
+  boom = false;
+  const again = await settle({ bucket, run: bad(), send, to: 't', from: 'f' });
+  assert.deepStrictEqual([sent.length, again.mailed], [1, true]);
+});
+
+test('settle: a run with deferred work and no error is not a failure; a missing mail binding counts the streak and sends nothing', async () => {
+  const bucket = fakeBucket(); const mail = mailer();
+  for (let i = 0; i < 4; i++) await settle({ bucket, run: { ...good(), deferred: 3 }, ...mail });
+  assert.strictEqual(mail.sent.length, 0);
+  assert.ok(!bucket.objects.has('.mirror/streak.json'));
+  for (let i = 0; i < 3; i++) await settle({ bucket, run: bad(), send: undefined, to: undefined, from: undefined });
+  const kept = JSON.parse(bucket.objects.get('.mirror/streak.json').body.toString());
+  assert.deepStrictEqual(kept, { fails: 3, reported: false }, 'counted, not reported, no error invented');
+});
+
+test('settle writes the streak only when it changed: a quiet run after a clean streak writes nothing', async () => {
+  const bucket = fakeBucket(); const mail = mailer();
+  await settle({ bucket, run: bad(), ...mail });
+  bucket.calls.put.length = 0;
+  await settle({ bucket, run: bad(), ...mail });
+  assert.strictEqual(bucket.calls.put.length, 1, 'a growing streak is a change');
+  await settle({ bucket, run: good(), ...mail });
+  bucket.calls.put.length = 0;
+  await settle({ bucket, run: good(), ...mail }); await settle({ bucket, run: good(), ...mail });
+  assert.strictEqual(bucket.calls.put.length, 0);
+});
+
+test('the Worker sends the failure mail on the third failed tick through its EMAIL binding, from DIGEST_FROM to DIGEST_TO', async () => {
+  const bucket = fakeBucket(); const mails = [];
+  const env = { BUCKET: bucket, EMAIL: { send: async (m) => { mails.push(m); } }, DIGEST_TO: 'dest-fixture', DIGEST_FROM: 'from-fixture' };
+  const realFetch = globalThis.fetch; globalThis.fetch = async () => new Response('down', { status: 503 });
+  try {
+    for (let i = 0; i < 3; i++) { const waits = []; await worker.scheduled({ scheduledTime: 1_700_000_000_000 + i * 3600_000 }, env, { waitUntil: (p) => waits.push(p) }); await Promise.all(waits); }
+  } finally { globalThis.fetch = realFetch; }
+  assert.strictEqual(mails.length, 1);
+  assert.deepStrictEqual([mails[0].to, mails[0].from], ['dest-fixture', 'from-fixture']);
+  assert.match(mails[0].subject, /failing for 3 runs/);
+  assert.match(mails[0].text, /CoalMine: feed HTTP 503/);
 });

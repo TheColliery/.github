@@ -17,6 +17,9 @@ const REPO = /^[A-Za-z0-9._-]{1,100}$/;
 const ORG = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/;
 const MARKER_DIR = '.mirror';
 const LAST_RUN = `${MARKER_DIR}/last-run.json`;
+const STREAK = `${MARKER_DIR}/streak.json`;
+export const FAIL_RUNS = 3; // failed runs in a row before ONE mail, the watcher's own pattern (UMB-454)
+const MAIL_LINES = 10;
 
 const safeSegment = (s) => typeof s === 'string' && SEGMENT.test(s) && s !== '.' && s !== '..' && !s.includes('..');
 
@@ -158,5 +161,41 @@ export async function runOnce({ config, bucket, fetchFn, now }) {
     out.pruned += await pruneRepo(bucket, repo, tags);
   }
   await bucket.put(LAST_RUN, JSON.stringify(out));
+  return out;
+}
+
+// ---- the failure mail (UMB-454, BB-46 (1)): ONE mail after FAIL_RUNS failed runs in a row, once per trouble spell ----
+// A text is one line: controls, line separators and runs of blanks become one space. No regex, no typed escape.
+const oneLine = (s) => Array.from(String(s), (c) => { const n = c.codePointAt(0); return n <= 32 || (n >= 0x7f && n <= 0x9f) || n === 0x2028 || n === 0x2029 ? ' ' : c; }).join('').replace(/ +/g, ' ').trim();
+
+export function buildFailureMail({ org, fails, run }) {
+  const lines = [`${org} release mirror, run ${run.at}: ${fails} failed runs in a row.`, '', 'Failing in the last run:'];
+  for (const p of run.problems.slice(0, MAIL_LINES)) lines.push('  ' + oneLine(p).slice(0, 200));
+  if (run.errors > Math.min(run.problems.length, MAIL_LINES)) lines.push(`  and ${run.errors - Math.min(run.problems.length, MAIL_LINES)} more`);
+  lines.push('', 'The last run is also in .mirror/last-run.json on the bucket. One mail per trouble spell: the next one comes only after a clean run and three failed ones.');
+  return { subject: `[${org} mirror] release mirror failing for ${fails} runs`, text: lines.join('\n') + '\n' };
+}
+
+// Called after every run. The streak (.mirror/streak.json) counts consecutive runs with an error; the mail goes out at FAIL_RUNS, once, and a clean run ends the
+// spell. A failed send leaves the spell unreported, so the next failed run tries again; a missing mail binding only counts. The file is written only when it changed.
+export async function settle({ bucket, run, send, to, from, org = 'TheColliery' }) {
+  let prev = { fails: 0, reported: false };
+  const file = await bucket.get(STREAK);
+  if (file) {
+    try { prev = { fails: 0, reported: false, ...JSON.parse(await file.text()) }; } catch { prev = { fails: 0, reported: false }; }
+  }
+  const out = { fails: 0, mailed: false };
+  let next = { fails: 0, reported: false };
+  if (run.errors > 0) {
+    next = { fails: Math.min((prev.fails || 0) + 1, FAIL_RUNS), reported: !!prev.reported };
+    if (next.fails >= FAIL_RUNS && !next.reported && send && to && from) {
+      try {
+        await send({ to, from, ...buildFailureMail({ org, fails: next.fails, run }) });
+        next.reported = true; out.mailed = true;
+      } catch (e) { next.mailError = String(e?.code ?? e?.message ?? e).slice(0, 120); }
+    } else if (prev.mailError) next.mailError = prev.mailError;
+  }
+  out.fails = next.fails;
+  if (JSON.stringify(next) !== JSON.stringify({ fails: prev.fails || 0, reported: !!prev.reported, ...(prev.mailError ? { mailError: prev.mailError } : {}) })) await bucket.put(STREAK, JSON.stringify(next));
   return out;
 }
