@@ -1078,3 +1078,21 @@ test('coverage.yml: the header says the steps AFTER the checkout are gated, and 
   assert.doesNotMatch(steps[0], /^uses: actions\/checkout[^\n]*\n(?:.*\n)*?\s+if:/, 'the checkout carries no gate');
   for (const s of steps.slice(1)) assert.match(s, /\n {8}if: hashFiles\('scripts\/test\.mjs'\) != ''/, 'a gated step: ' + s.split('\n')[0]);
 });
+
+// BB-87 (owner 2026-10-08): the wave runner is a canon file pair, and the pattern says what it is and what it refuses. The pair lives in the overlay's lib folder and is outside the
+// overlay SET (no workflow runs it), so this row is where a room learns it exists.
+test('SKILL-REPO-PATTERN.md Layer 4 carries the wave-run row: waves by the live reading, the room\'s own numbers, VACUOUS as a status, the core never edited in a room -- RED before BB-87', () => {
+  const row = PATTERN.split('\n').find((l) => l.startsWith('| `scripts/lib/wave-run.mjs`'));
+  assert.ok(row, 'the row exists');
+  assert.match(row, /scripts\/lib\/machine-reading\.mjs/);
+  assert.match(row, /templates\/overlay-coal-skill\/scripts\/lib\//, 'adopted by blob id from the overlay lib folder');
+  assert.match(row, /fresh reading of the machine says BREATHE/);
+  assert.match(row, /the first always runs/);
+  assert.match(row, /a run with no finite clock is refused/);
+  assert.match(row, /VACUOUS, its own status beside PASS, FAIL, SKIP and NOT-RUN/);
+  assert.match(row, /never edited in a room/);
+  assert.match(row, /prefer, after the umbrella auditor's pass/);
+  for (const f of ['wave-run.mjs', 'wave-run.test.mjs', 'machine-reading.mjs']) {
+    assert.ok(fs.existsSync(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', f)), f + ' is in the overlay lib folder');
+  }
+});
