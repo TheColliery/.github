@@ -7,10 +7,15 @@
 //   node --test --test-reporter=tap --test-timeout=<file clock> --test-force-exit <file>
 // under the room's heap cap (NODE_OPTIONS, so a test's own spawns inherit it), and admits the next file only while a FRESH reading says BREATHE.
 // The first file always runs (the core's own rule: a queue never sticks), a WAIT holds the next file until a running one exits, and the whole run
-// has a deadline that kills the tree. The reading is CoalFace's machine-reading.mjs, adopted byte for byte beside this file and called as a child:
+// has a deadline that kills the tree. An optional clock on each FILE (--file-clock-ms) kills just that file's tree, so a hang before its first test, which --test-timeout never
+// reaches, ends that file alone and the rest of the roster still runs. The reading is CoalFace's machine-reading.mjs, adopted byte for byte beside this file and called as a child:
 // it is the one core, `decide()` included, and an improvement to it belongs to CoalFace (its blob id is held by wave-run.test.mjs).
 //
-// NO NUMBER OF OURS: the heap cap, the clock per file and the whole-run deadline are flags the room passes (a run with no finite clock is refused, not defaulted),
+// A FORCE-EXITED FILE MUST NOT LOSE ITS TAIL (08d D2, 2026-10-09): --test-force-exit ends the file process with process.exit(), and on a POSIX pipe whatever the kernel buffer had not
+// taken yet is discarded, so the reader counts fewer tests than ran and the file reads VACUOUS or, worse, a lost `not ok` reads green. Windows pipes are blocking, so the defect was
+// invisible on the machine that wrote this. Every child gets stdout-sync.mjs as a preload (withStdoutSync), which makes the pipes blocking.
+//
+// NO NUMBER OF OURS: the heap cap, the clock per test and the whole-run deadline are flags the room passes (a run with no finite clock is refused, not defaulted),
 // and the CPU and memory thresholds are passed to the core only when the room gives them, so the core's own defaults apply otherwise.
 //
 // EVERY FILE IS COUNTED, AND A PASS IS READ FROM THE TAP, NEVER FROM THE EXIT CODE (measured on Node 24.19, 2026-10-08): a file that calls process.exit(0) before
@@ -98,6 +103,13 @@ export function summarize(results, roster) {
   return { line, red, counts };
 }
 
+// The preload that keeps a force-exited file process from losing what it has written (see stdout-sync.mjs: a POSIX pipe queues writes and process.exit() drops them).
+const STDOUT_SYNC = new URL('./stdout-sync.mjs', import.meta.url).href;
+export function withStdoutSync(env) {
+  const have = String(env.NODE_OPTIONS || '');
+  return have.includes(STDOUT_SYNC) ? env : { ...env, NODE_OPTIONS: (have + ' --import ' + STDOUT_SYNC).trim() };
+}
+
 // The room's heap cap rides NODE_OPTIONS so every descendant inherits it, a test's own spawns included. A caller's own heap flag wins, in either spelling.
 export function nodeOptionsWithHeap(caller, heapMb) {
   const have = String(caller || '');
@@ -131,16 +143,18 @@ function killTree(child) {
 const posInt = (n) => Number.isInteger(n) && n > 0;
 
 export async function runWaves(opts) {
-  const { files, cwd = process.cwd(), env = process.env, heapMb, fileTimeoutMs, deadlineMs, serial = false, onEvent = () => {} } = opts;
+  const { files, cwd = process.cwd(), env = process.env, heapMb, fileTimeoutMs, deadlineMs, fileClockMs, serial = false, onEvent = () => {} } = opts;
   if (!Array.isArray(files) || files.length === 0) throw new UsageError('no test files were given');
   for (const [k, v] of [['heapMb', heapMb], ['fileTimeoutMs', fileTimeoutMs], ['deadlineMs', deadlineMs]]) {
     if (!posInt(v)) throw new UsageError(`${k} must be a positive integer: the heap cap, the clock per file and the whole-run deadline are the room's numbers, and a run with no finite clock is refused`);
   }
+  if (fileClockMs !== undefined && !posInt(fileClockMs)) throw new UsageError('fileClockMs must be a positive integer when given: it is the wall clock of one file, in milliseconds');
   const dupe = files.find((f, i) => files.indexOf(f) !== i);
   if (dupe) throw new UsageError(`${dupe} is listed twice`);
   const read = opts.read ?? defaultRead({ timeoutMs: fileTimeoutMs, cpuMax: opts.cpuMax, memMin: opts.memMin });
   // NODE_TEST_CONTEXT is what a parent test runner sets for its own children: a nested `node --test` that inherits it reports in the runner's binary format, not TAP.
-  const childEnv = { ...env, NODE_OPTIONS: nodeOptionsWithHeap(env.NODE_OPTIONS, heapMb) };
+  const syncEnv = withStdoutSync(env);
+  const childEnv = { ...syncEnv, NODE_OPTIONS: nodeOptionsWithHeap(syncEnv.NODE_OPTIONS, heapMb) };
   delete childEnv.NODE_TEST_CONTEXT;
   const display = (f) => {
     const rel = path.relative(cwd, path.resolve(cwd, f));
@@ -172,6 +186,9 @@ export async function runWaves(opts) {
     child.stdout.on('data', (d) => { out += d; });
     child.stderr.on('data', (d) => { err += d; });
     const entry = { child, killed: null };
+    const clock = fileClockMs === undefined ? null : setTimeout(() => {
+      if (!entry.killed) { entry.killed = `killed at the file clock (${fileClockMs} ms)`; killTree(child); }
+    }, fileClockMs);
     running.set(file, entry);
     onEvent({ type: 'start', file, running: running.size });
     closes.push(new Promise((resolve) => {
@@ -179,6 +196,7 @@ export async function runWaves(opts) {
       const finish = (code, signal, startError) => {
         if (finished) return;
         finished = true;
+        if (clock) clearTimeout(clock);
         running.delete(file);
         const r = startError
           ? { file, status: STATUS.FAIL, reason: `could not start: ${startError}`, counts: null, failing: [] }
@@ -237,11 +255,12 @@ export async function runWaves(opts) {
 }
 
 // ---- the command line ------------------------------------------------------------------------------------------------------------------
-const USAGE = `usage: wave-run.mjs --heap-mb N --file-timeout-ms N --deadline-ms N [--cpu-max N] [--mem-min N] [--serial] [--] <test files...>
+const USAGE = `usage: wave-run.mjs --heap-mb N --file-timeout-ms N --deadline-ms N [--file-clock-ms N] [--cpu-max N] [--mem-min N] [--serial] [--] <test files...>
   Runs each test file as its own node --test child, admitting the next only while a fresh machine reading says BREATHE (the first always runs).
   --heap-mb N          heap cap for every child and every process a test starts (required: the room's number)
-  --file-timeout-ms N  clock per test, passed as --test-timeout (required)
+  --file-timeout-ms N  clock per TEST, passed as --test-timeout (required)
   --deadline-ms N      whole-run deadline; the tree of every running file is killed there (required)
+  --file-clock-ms N    wall clock of ONE file; the tree of a file still running at it is killed and the file is FAIL, the rest of the roster runs (optional)
   --cpu-max N          WAIT when CPU busy is at or above N percent (passed to the core only when given)
   --mem-min N          WAIT when free memory is below N percent (passed to the core only when given)
   --serial             one file at a time, no reading
@@ -251,7 +270,7 @@ const USAGE = `usage: wave-run.mjs --heap-mb N --file-timeout-ms N --deadline-ms
 
 function parseArgs(argv) {
   const out = { files: [], serial: false, help: false };
-  const num = { '--heap-mb': 'heapMb', '--file-timeout-ms': 'fileTimeoutMs', '--deadline-ms': 'deadlineMs', '--cpu-max': 'cpuMax', '--mem-min': 'memMin' };
+  const num = { '--heap-mb': 'heapMb', '--file-timeout-ms': 'fileTimeoutMs', '--deadline-ms': 'deadlineMs', '--file-clock-ms': 'fileClockMs', '--cpu-max': 'cpuMax', '--mem-min': 'memMin' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--') { out.files.push(...argv.slice(i + 1)); break; }

@@ -1223,8 +1223,11 @@ test('SKILL-REPO-PATTERN.md Layer 4 carries the wave-run row: waves by the live 
   assert.match(row, /a run with no finite clock is refused/);
   assert.match(row, /VACUOUS, its own status beside PASS, FAIL, SKIP and NOT-RUN/);
   assert.match(row, /never edited in a room/);
+  assert.match(row, /scripts\/lib\/stdout-sync\.mjs/, 'the preload is named');
+  assert.match(row, /a POSIX pipe/, 'the tail loss is named');
+  assert.match(row, /--file-clock-ms N/, 'the file clock is named');
   assert.match(row, /prefer, after the umbrella auditor's pass/);
-  for (const f of ['wave-run.mjs', 'wave-run.test.mjs', 'machine-reading.mjs']) {
+  for (const f of ['wave-run.mjs', 'wave-run.test.mjs', 'machine-reading.mjs', 'stdout-sync.mjs']) {
     assert.ok(fs.existsSync(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', f)), f + ' is in the overlay lib folder');
   }
 });
