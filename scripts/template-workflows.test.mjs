@@ -1283,6 +1283,15 @@ test('RELEASE-PATTERN.md: the NEVER of the immutability section names the launch
   assert.match(sec, /AR-71 \(a1\)/);
 });
 
+// 09g item 12 (b), CoalFace T4 (main's ruling 2026-10-09): the census trusts the room's `gitEnv()` by name and import path and never opens the helper, so a helper that returned process.env
+// would pass. The cheaper cure is a row sentence, no interface change: the room keeps a behaviour test of its own helper. R6 (a variable second argument) names the same guard.
+test('the census row of SKILL-REPO-PATTERN.md says a room keeps a behaviour test of its git-env.mjs helper, whose gitEnv() never returns process.env -- RED before 09g', () => {
+  const row = PATTERN.split('\n').find((l) => l.startsWith('| `scripts/lib/git-env-census.mjs`'));
+  assert.ok(row, 'the row exists');
+  assert.match(row, /a room adopting the census keeps a behaviour test of its `git-env\.mjs` helper \(its `gitEnv\(\)` never returns `process\.env`\)/);
+  assert.match(row, /trusts the helper by its name and import path and never opens it/, 'the reason is stated beside the sentence');
+});
+
 // BB-98 (b), 2026-10-09: GitHub's default policy blocks the `pull_request_target` event in public repositories from 2026-11-02 (workflow execution protections). The
 // canon says no new workflow adopts it, and the templates and this repo's own workflows carry none (a grep over 85 workflows of the org, its templates and the rooms found none).
 test('no template or own workflow uses the pull_request_target event, and SKILL-REPO-PATTERN.md bans adopting it -- RED before BB-98 (b)', () => {
