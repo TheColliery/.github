@@ -380,7 +380,8 @@ test('both overlay workflows pass --latest and --prerelease where the Release is
   assert.equal(b.filter((l) => l.includes('--latest="$(cat release-latest.txt)"')).length, 2, 'claude-ai-zips.yml: --latest on the edit fallback and the publish step');
   for (const [name, lines] of [['create-release.yml', a], ['claude-ai-zips.yml', b]]) {
     assert.ok(lines.some((l) => /^ {10}fetch-depth: 0 /.test(l)), `${name}: fetch-depth 0`);
-    assert.ok(lines.filter((l) => /gh release (create|edit) /.test(l)).every((l) => l.includes('--prerelease="$(cat release-prerelease.txt)"')), `${name}: --prerelease on every create/edit`);
+    // the re-point step edits the OLD tag's Release (draft, move its tag) and publishes nothing, so it carries no --prerelease
+    assert.ok(lines.filter((l) => /gh release (create|edit) /.test(l) && !l.includes('"${OLD_TAG}"')).every((l) => l.includes('--prerelease="$(cat release-prerelease.txt)"')), `${name}: --prerelease on every create/edit`);
   }
   for (const step of SHARED_STEPS) {
     const sa = stepBlock(a, step);
@@ -441,7 +442,8 @@ test('the posting-path gate step is the same lines in both workflows, runs only 
   assert.ok(body.includes('git/matching-refs/tags/${tag}') && body.includes('grep -Fxq -- "refs/tags/${tag}"'), 'the tag must exist in the repository, compared by exact ref name (a prefix match is not a tag)');
   assert.ok(!body.includes('git/ref/tags/'), 'git/ref/tags answers 200 for a mere prefix, so it is never the existence check');
   assert.ok(body.includes('launch_form'), 'a pre-release tag needs the launch form flag');
-  assert.ok(body.includes('select(.tag_name != \\"${tag}\\")'), 'the launch form is refused when another tag already has a Release');
+  assert.ok(body.includes("releases?per_page=100") && body.includes("--jq '.[].tag_name'"), 'the launch form reads every Release tag (drafts included, paginated), not a count');
+  assert.ok(body.includes('compare/${old}...${tag}') && body.includes('!= "ahead"'), 'a re-point needs the compare API to call the new tag ahead of the old');
 });
 
 test('both workflows check out the canon scripts and the tag separately, and derive from the TAG tree with the canon scripts (a back-filled tag may predate the scripts)', () => {
@@ -508,7 +510,8 @@ const GH_STUB = [
   '  case "$*" in',
   '    *git/ref/tags/*) a="$*"; name="${a##*git/ref/tags/}"; name="${name%% *}"; for t in ${FAKE_TAGS-v2.6.0 v1.0.0 v0.1.0-beta.1}; do [[ "$t" == "$name"* ]] && return 0; done; return 1 ;;', // GitHub: 200 on a prefix match
   '    *git/matching-refs/tags/*) [[ "${FAKE_API_FAIL:-no}" == "yes" ]] && return 1; a="$*"; name="${a##*git/matching-refs/tags/}"; name="${name%% *}"; for t in ${FAKE_TAGS-v2.6.0 v1.0.0 v0.1.0-beta.1}; do [[ "$t" == "$name"* ]] && echo "refs/tags/$t"; done; return 0 ;;',
-  '    *"releases?per_page=100"*) echo "${FAKE_OTHER_RELEASES:-0}"; return 0 ;;',
+  '    *"releases?per_page=100"*) [[ "${FAKE_LIST_FAIL:-no}" == "yes" ]] && return 1; for t in ${FAKE_RELEASES-}; do echo "$t"; done; return 0 ;;', // the tag names of the repository\'s Releases, drafts included
+  '    *compare/*) echo "${FAKE_COMPARE-ahead}"; return 0 ;;', // the compare API\'s status of NEW against OLD
   '    *) echo "unexpected gh call: $*" >&2; return 99 ;;',
   '  esac',
   '}',
@@ -565,15 +568,142 @@ test('gate behaviour: a tag that only PREFIX-matches an existing ref is refused 
   assert.equal(r.code, 1, r.err); assert.match(r.err, /not a tag of this repository/);
 });
 
-test('gate behaviour: the launch form posts ONE pre-release tag only with the flag, only while no other tag has a Release, never for a stable tag', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+test('gate behaviour: the launch form posts a pre-release tag only with the flag, never for a stable tag, and a first launch (no Release of another tag) posts without a re-point', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
   let r = runGate({ INPUT_TAG: 'v0.1.0-beta.1' });
   assert.equal(r.code, 1); assert.match(r.err, /launch_form/);
-  r = runGate({ INPUT_TAG: 'v0.1.0-beta.1', INPUT_LAUNCH: 'true', FAKE_OTHER_RELEASES: '3' });
-  assert.equal(r.code, 1); assert.match(r.err, /ONE pre-release Release/);
-  r = runGate({ INPUT_TAG: 'v0.1.0-beta.1', INPUT_LAUNCH: 'true', FAKE_OTHER_RELEASES: '0' });
-  assert.equal(r.code, 0, r.err); assert.match(r.out, /post=true\ntag=v0\.1\.0-beta\.1\nlaunch=true/);
+  r = runGate({ INPUT_TAG: 'v0.1.0-beta.1', INPUT_LAUNCH: 'true', FAKE_RELEASES: '' });
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /post=true\ntag=v0\.1\.0-beta\.1\nlaunch=true\nrepoint=\n/);
   r = runGate({ INPUT_TAG: 'v1.0.0', INPUT_LAUNCH: 'true' });
   assert.equal(r.code, 1); assert.match(r.err, /stable/);
+});
+
+// BB-112 (a), CoalLedger issue 25: a later pre-release tag used to be tag-only, so a repository whose only Release is the
+// launch-form pre-release could never carry newer ZIPs. The ONE launch-form Release is now RE-POINTED to the newer
+// pre-release tag, and only while no stable Release exists.
+test('gate behaviour: a re-run for the tag the launch-form Release already carries posts without a re-point', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  const r = runGate({ INPUT_TAG: 'v0.1.0-beta.2', INPUT_LAUNCH: 'true', FAKE_TAGS: 'v0.1.0-beta.1 v0.1.0-beta.2', FAKE_RELEASES: 'v0.1.0-beta.2' });
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /post=true\ntag=v0\.1\.0-beta\.2\nlaunch=true\nrepoint=\n/);
+});
+
+test('gate behaviour: the ONE launch-form Release of an older pre-release tag is re-pointed to a NEWER pre-release tag, and the old tag is handed to the re-point step', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  const r = runGate({ INPUT_TAG: 'v0.1.0-beta.2', INPUT_LAUNCH: 'true', FAKE_TAGS: 'v0.1.0-beta.1 v0.1.0-beta.2', FAKE_RELEASES: 'v0.1.0-beta.1', FAKE_COMPARE: 'ahead' });
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /post=true\ntag=v0\.1\.0-beta\.2\nlaunch=true\nrepoint=v0\.1\.0-beta\.1\n/);
+  const again = runGate({ INPUT_TAG: 'v0.1.0-beta.3', INPUT_LAUNCH: 'true', FAKE_TAGS: 'v0.1.0-beta.1 v0.1.0-beta.2 v0.1.0-beta.3', FAKE_RELEASES: 'v0.1.0-beta.2 v0.1.0-beta.1' });
+  assert.equal(again.code, 1, 'two pre-release Releases is not the launch form'); assert.match(again.err, /ONE pre-release Release/);
+});
+
+test('gate behaviour: a re-point is refused when the tag is not NEWER than the Release it would replace, when a stable Release exists, and when the lists cannot be read', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  const base = { INPUT_TAG: 'v0.1.0-beta.2', INPUT_LAUNCH: 'true', FAKE_TAGS: 'v0.1.0-beta.1 v0.1.0-beta.2' };
+  for (const status of ['behind', 'identical', 'diverged', '']) {
+    const r = runGate({ ...base, FAKE_RELEASES: 'v0.1.0-beta.1', FAKE_COMPARE: status });
+    assert.equal(r.code, 1, JSON.stringify(status)); assert.match(r.err, /not newer/); assert.ok(!r.out.includes('post=true'));
+  }
+  let r = runGate({ ...base, FAKE_RELEASES: 'v0.1.0' });
+  assert.equal(r.code, 1, r.err); assert.match(r.err, /stable Release/); assert.ok(!r.out.includes('post=true'));
+  r = runGate({ ...base, FAKE_RELEASES: 'v0.1.0-beta.1 v0.1.0' });
+  assert.equal(r.code, 1, r.err); assert.match(r.err, /stable Release/);
+  r = runGate({ ...base, FAKE_LIST_FAIL: 'yes' });
+  assert.equal(r.code, 1, r.err); assert.match(r.err, /could not list/); assert.ok(!r.out.includes('post=true'));
+  r = runGate({ ...base, FAKE_RELEASES: 'launch-draft' }); // a hyphenated name that is no vX.Y.Z-label tag: refused before it is compared or handed on
+  assert.equal(r.code, 1, r.err); assert.match(r.err, /not a vX\.Y\.Z-label pre-release tag/); assert.ok(!r.out.includes('post=true'));
+  r = runGate({ ...base, FAKE_RELEASES: 'v0.1.0-beta.1; echo pwned' });
+  assert.equal(r.code, 1, r.err); assert.ok(!r.out.includes('post=true'));
+});
+
+const REPOINT_NAME = 'Re-point the launch-form Release';
+const REPOINT_GH = [
+  'gh() {',
+  '  echo "gh $*" >> "$CALLS"',
+  '  case "$*" in',
+  '    "release view "*"--json assets"*) [[ "${FAKE_VIEW_FAIL:-no}" == "yes" ]] && return 1; for a in ${FAKE_ASSETS-}; do echo "$a"; done; return 0 ;;',
+  '    "release delete-asset "*) [[ "${FAKE_DELETE_FAIL:-no}" == "yes" ]] && return 1; return 0 ;;',
+  '    "release edit "*"--draft=true"*) [[ "${FAKE_DRAFT_FAIL:-no}" == "yes" ]] && return 1; return 0 ;;',
+  '    "release edit "*"--tag "*) [[ "${FAKE_RETAG_FAIL:-no}" == "yes" ]] && return 1; return 0 ;;',
+  '    *) echo "unexpected gh call: $*" >&2; return 99 ;;',
+  '  esac',
+  '}',
+].join('\n');
+function runRepoint(wfName, env) {
+  const body = runBody(stepBySubstr(wfLines(wfName), REPOINT_NAME));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'repoint-run-'));
+  const calls = path.join(dir, 'calls.txt');
+  fs.writeFileSync(calls, '');
+  const r = spawnSync('bash', ['-c', `${REPOINT_GH}\n${body}`], { encoding: 'utf8', timeout: 30000, cwd: dir, env: { ...process.env, CALLS: calls, OLD_TAG: 'v0.1.0-beta.1', RELEASE_TAG: 'v0.1.0-beta.2', ...env } });
+  const log = fs.readFileSync(calls, 'utf8').split('\n').filter(Boolean);
+  fs.rmSync(dir, { recursive: true, force: true });
+  return { code: r.status, log, err: r.stderr + r.stdout };
+}
+
+test('re-point step (both canon workflows): the old Release goes back to a draft, its assets are emptied, THEN it takes the new tag -- and nothing past a failure runs', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  for (const name of BOTH) {
+    let r = runRepoint(name, { FAKE_ASSETS: 'a.zip b.zip SHA256SUMS.txt' });
+    assert.equal(r.code, 0, `${name}: ${r.err}`);
+    const verbs = r.log.map((l) => l.replace(/^gh release /, '').split(' ').slice(0, 1).join('')).join(',');
+    assert.equal(verbs, 'edit,view,delete-asset,delete-asset,delete-asset,edit', `${name}: the order of the calls`);
+    assert.match(r.log[0], /^gh release edit v0\.1\.0-beta\.1 --draft=true$/);
+    assert.deepEqual(r.log.filter((l) => l.includes('delete-asset')).map((l) => l.split(' ').pop()), ['a.zip', 'b.zip', 'SHA256SUMS.txt']);
+    assert.match(r.log.at(-1), /^gh release edit v0\.1\.0-beta\.1 --tag v0\.1\.0-beta\.2 --verify-tag$/);
+    r = runRepoint(name, {});
+    assert.equal(r.code, 0, `${name} (a Release with no assets): ${r.err}`); assert.match(r.log.at(-1), /--tag v0\.1\.0-beta\.2 --verify-tag$/);
+    for (const [flag, calls] of [['FAKE_DRAFT_FAIL', 1], ['FAKE_VIEW_FAIL', 2], ['FAKE_DELETE_FAIL', 3], ['FAKE_RETAG_FAIL', 4]]) {
+      r = runRepoint(name, { FAKE_ASSETS: 'a.zip', [flag]: 'yes' });
+      assert.equal(r.code, 1, `${name} ${flag}`); assert.match(r.err, /::error::/); assert.equal(r.log.length, calls, `${name} ${flag}: stops at the failing call`);
+      assert.ok(!r.log.some((l) => /--draft=false/.test(l)), 'a re-point never publishes');
+    }
+  }
+});
+
+function runEnsure(wfName, env) {
+  const body = runBody(stepBySubstr(wfLines(wfName), 'Ensure the GitHub Release exists'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ensure-run-'));
+  const calls = path.join(dir, 'calls.txt');
+  fs.writeFileSync(calls, '');
+  for (const [f, text] of [['release-title.txt', 'v0.1.0-beta.2 - summary'], ['release-body.md', 'body'], ['release-prerelease.txt', 'true'], ['release-latest.txt', 'false']]) fs.writeFileSync(path.join(dir, f), text);
+  const gh = ['gh() {', '  echo "gh $*" >> "$CALLS"', '  [[ "$1 $2" == "release create" && "${FAKE_CREATE_FAIL:-no}" == "yes" ]] && return 1', '  return 0', '}'].join('\n');
+  const r = spawnSync('bash', ['-c', `${gh}\n${body}`], { encoding: 'utf8', timeout: 30000, cwd: dir, env: { ...process.env, CALLS: calls, RELEASE_TAG: 'v0.1.0-beta.2', REPOINTED: '', ...env } });
+  const log = fs.readFileSync(calls, 'utf8').split('\n').filter(Boolean);
+  fs.rmSync(dir, { recursive: true, force: true });
+  return { code: r.status, log, err: r.stderr + r.stdout };
+}
+
+test('ensure step: a first run creates the draft (and falls back to an edit); a RE-POINTED Release is only edited, never created a second time, and never given --latest', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  for (const name of BOTH) {
+    let r = runEnsure(name, {});
+    assert.equal(r.code, 0, r.err); assert.equal(r.log.length, 1, name); assert.match(r.log[0], /^gh release create v0\.1\.0-beta\.2 --verify-tag --draft /);
+    r = runEnsure(name, { FAKE_CREATE_FAIL: 'yes' });
+    assert.equal(r.code, 0, r.err); assert.equal(r.log.length, 2, name); assert.match(r.log[1], /^gh release edit v0\.1\.0-beta\.2 .*--latest=false --prerelease=true$/);
+    r = runEnsure(name, { REPOINTED: 'v0.1.0-beta.1' });
+    assert.equal(r.code, 0, r.err); assert.equal(r.log.length, 1, `${name}: exactly one call`); assert.match(r.log[0], /^gh release edit v0\.1\.0-beta\.2 /);
+    assert.ok(!r.log[0].includes('--latest') && !r.log[0].includes('--draft') && r.log[0].includes('--prerelease=true'), `${name}: a draft carries neither Latest nor a second draft flag`);
+  }
+});
+
+test('RELEASE-PATTERN.md and the overlay README state that a newer pre-release tag re-points the ONE launch-form Release, and that the first stable closes it -- RED before BB-112 (a)', () => {
+  const rp = fs.readFileSync(path.join(ROOT, 'RELEASE-PATTERN.md'), 'utf8');
+  assert.match(rp, /A NEWER pre-release tag RE-POINTS that one Release while no stable Release exists/);
+  assert.match(rp, /the compare API calls the new tag ahead/);
+  assert.match(rp, /after which no re-point is possible/);
+  assert.doesNotMatch(rp, /while any other tag already has a Release/, 'the old refusal sentence is gone');
+  assert.match(fs.readFileSync(path.join(TEMPLATES, 'overlay-coal-skill', 'OVERLAY-README.md'), 'utf8'), /newer pre-release tag re-points/);
+});
+
+test('re-point step: same lines in both canon workflows, gated on the gate\'s repoint output, runs AFTER everything that builds or checks and BEFORE the Release is created, and the old tag reaches it through env only', () => {
+  const a = stepBySubstr(wfLines('create-release.yml'), REPOINT_NAME);
+  const b = stepBySubstr(wfLines('claude-ai-zips.yml'), REPOINT_NAME);
+  assert.ok(a && b, 'the re-point step exists in both');
+  assert.equal(a.join('\n'), b.join('\n'));
+  const s = a.join('\n');
+  assert.ok(s.includes("if: steps.gate.outputs.post == 'true' && steps.gate.outputs.repoint != ''"), 'only when the gate found a Release to re-point');
+  assert.ok(s.includes('OLD_TAG: ${{ steps.gate.outputs.repoint }}'), 'the old tag arrives through env');
+  assert.ok(!runBody(a).includes('${{'), 'no expression inside the run block');
+  for (const name of BOTH) {
+    const names = wfLines(name).filter((l) => /^ {6}- (name|uses): /.test(l));
+    const at = names.findIndex((l) => l.includes(REPOINT_NAME));
+    const ensure = names.findIndex((l) => l.includes('Ensure the GitHub Release exists'));
+    assert.ok(at > 0 && ensure === at + 1, `${name}: the re-point step sits directly before the Release is ensured`);
+  }
+  const zips = wfLines('claude-ai-zips.yml').filter((l) => /^ {6}- name: /.test(l));
+  assert.ok(zips.findIndex((l) => l.includes('Generate SHA256SUMS.txt')) < zips.findIndex((l) => l.includes(REPOINT_NAME)), 'the ZIPs are built and checked before the old Release is touched');
 });
 
 // UMB-333: claude.ai's page says the ZIP must hold the skill FOLDER as its top level (<name>/SKILL.md); a SKILL.md at the
