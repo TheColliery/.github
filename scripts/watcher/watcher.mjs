@@ -111,6 +111,17 @@ export async function keyFor(source, text, prev) {
   }
 }
 
+// A feed entry or an incident id is an IDENTITY, so a key that comes back (a feed retracts its newest entry, an incident falls out of the history and returns) is the same item and is not
+// reported twice: the last SEEN_MAX keys of such a source are remembered. A raw page or a heading list keys on its CONTENT, where a return to an earlier content is a real change, so they keep none.
+const RECALL_KINDS = new Set(['atom', 'rss', 'incidents']);
+const SEEN_MAX = 8;
+const CLAIM_WINDOW_MS = 5 * 60 * 1000; // two overlapping runs start within seconds of each other; an older claim is a finished run's
+// the keys a source has shown, oldest first, the one now current last
+const remember = (prev, key) => {
+  const all = [...(prev?.seen ?? []), ...(prev?.key ? [prev.key] : []), key];
+  return all.filter((k, i) => all.lastIndexOf(k) === i).slice(-SEEN_MAX);
+};
+
 // stateless cadence: a source with everyHours=n is due when (hour + its list index) % n === 0, so a list spreads over the hours by construction.
 export const isDue = (source, index, hourNumber) => (hourNumber + index) % (source.everyHours || 1) === 0;
 export function pickRun(sources, hourNumber, max) {
@@ -149,6 +160,7 @@ export async function fetchSource(source, prev, fetchFn) {
     const base = { source, key: found.key, to: found.title.slice(0, TITLE_CAP), link: found.link, etag: r.headers.get('etag') || '', lastModified: r.headers.get('last-modified') || '' };
     if (!prev?.key) return { ...base, status: 'new' };
     if (prev.key === found.key) return { ...base, status: 'same' };
+    if (RECALL_KINDS.has(source.kind) && prev.seen?.includes(found.key)) return { ...base, status: 'same', returning: true };
     // a feed that mints a new id on every render but shows the same title at the same link has no news (a raw file or a heading list has no such pair: its key IS its content)
     if ((source.kind === 'atom' || source.kind === 'rss') && prev.title === base.to && (prev.link === undefined || prev.link === base.link)) return { ...base, status: 'same' };
     return { ...base, status: 'changed', from: prev.title || '' };
@@ -210,7 +222,20 @@ const answered = (e) => {
   return tidy({ ...e, fails: 0, hist: hist.includes('f') ? hist : '', rep: hist.endsWith('...') ? false : !!e.rep });
 };
 
-export async function runOnce({ config, kv, fetchFn, send, now, to, from }) {
+// Another run committed this item while this one was fetching: the source already holds the key this run found, or the failure spell this run was about to report has been reported.
+function committedElsewhere(r, prev, fresh) {
+  if (!fresh) return false;
+  if (r.status === 'changed' || r.status === 'new') return fresh.key === r.key;
+  return !prev?.rep && fresh.rep === true;
+}
+
+// ONE ITEM IS REPORTED ONCE (the owner, 2026-10-09). The order of a run that reports is: take what other runs have committed since this run read the state (case 1, a slow or overlapping run) ->
+// claim and WRITE THE STATE -> send -> record the digest. The state goes before the mail (case 2): a KV failure then stops the mail, and the next hour sends it once, where the old order mailed
+// first and re-mailed every hour while the write kept failing; the price is that a mail binding that fails AFTER the state is written is not retried (at most once), and digest:last keeps its
+// text with emailed false. The claim is this run's id written into the state and read back: of two runs that commit in the same moment, the one whose id is not read back gives way. KV has no
+// compare-and-set and is eventually consistent between locations, so the claim is exact for runs that share a location and best effort otherwise; the fresh read before it is what catches a
+// run that was slow, which is the usual shape of an overlap.
+export async function runOnce({ config, kv, fetchFn, send, now, to, from, runId = globalThis.crypto.randomUUID() }) {
   const at = new Date(now).toISOString();
   const { run, deferred } = pickRun(config.sources, Math.floor(now / 3600000), config.maxPerRun);
   const state = (await kv.get('state', 'json')) ?? { v: 1, sources: {} };
@@ -219,15 +244,19 @@ export async function runOnce({ config, kv, fetchFn, send, now, to, from }) {
   // the hello digest belongs to the first run that actually BASELINES something: a failed source leaves a {fails} stub in state, which is no baseline
   const firstEver = !Object.values(state.sources).some((s) => s.key);
   let dirty = false;
+  const changedIds = [];
   const report = [];
   for (const r of results) {
     const id = r.source.id;
     const prev = state.sources[id];
     let entry;
     if (r.status === 'changed' || r.status === 'new') {
-      entry = answered({ ...prev, key: r.key, title: r.to, link: r.link, etag: r.etag, lastModified: r.lastModified });
+      entry = answered({ ...prev, key: r.key, title: r.to, link: r.link, etag: r.etag, lastModified: r.lastModified, ...(RECALL_KINDS.has(r.source.kind) ? { seen: remember(prev, r.key) } : {}) });
       // a baseline is not a change: only the first run that baselines reports them (one hello digest); a source that comes due later is recorded silently
       if (r.status === 'changed' || firstEver) report.push(r);
+    } else if (r.status === 'same' && r.returning) {
+      // a key already reported came back: the stored newest entry follows the feed, nothing is reported
+      entry = answered({ ...prev, key: r.key, title: r.to, link: r.link, etag: r.etag, lastModified: r.lastModified, seen: remember(prev, r.key) });
     } else if (r.status === 'same') {
       // a refreshed validator is state too: persisting it spares the next run a full body
       entry = answered(r.key ? { ...prev, etag: r.etag || prev?.etag || '', lastModified: r.lastModified || prev?.lastModified || '' } : prev);
@@ -241,19 +270,41 @@ export async function runOnce({ config, kv, fetchFn, send, now, to, from }) {
       if (due) report.push(r);
       entry = tidy({ ...prev, fails, hist, rep: !!prev?.rep || due });
     }
-    if (JSON.stringify(entry) !== JSON.stringify(prev)) { next.sources[id] = entry; dirty = true; }
+    if (JSON.stringify(entry) !== JSON.stringify(prev)) { next.sources[id] = entry; dirty = true; changedIds.push(id); }
   }
   const summary = {
     checked: results.length, deferred: deferred.length,
     changed: results.filter((r) => r.status === 'changed').length, baselined: results.filter((r) => r.status === 'new').length,
     errors: results.filter((r) => r.status === 'error').length, emailed: false,
   };
-  if (report.length) {
-    const digest = buildDigest({ at, instance: config.instance, results: report });
-    try { await send({ to, from, subject: digest.subject, text: digest.text }); summary.emailed = true; } catch (e) { summary.emailError = String(e?.code ?? e?.message ?? e).slice(0, 120); }
-    await kv.put('digest:last', JSON.stringify({ ...digest.json, subject: digest.subject, text: digest.text, emailed: summary.emailed, emailError: summary.emailError ?? '' }));
+  if (!report.length) {
+    if (dirty) await kv.put('state', JSON.stringify(next));
+    return summary;
   }
-  if (dirty) await kv.put('state', JSON.stringify(next));
+  // case 1, a slow run: what another run committed while this one fetched is theirs to report; this run keeps only what it alone found
+  const fresh = (await kv.get('state', 'json')) ?? { v: 1, sources: {} };
+  const gone = new Set(report.filter((r) => committedElsewhere(r, state.sources[r.source.id], fresh.sources?.[r.source.id])).map((r) => r.source.id));
+  const merged = { ...fresh.sources };
+  for (const id of changedIds) if (!gone.has(id)) merged[id] = next.sources[id];
+  next.sources = merged;
+  const mine = report.filter((r) => !gone.has(r.source.id));
+  if (gone.size) summary.deduped = true;
+  if (!mine.length) {
+    if (changedIds.some((id) => !gone.has(id))) await kv.put('state', JSON.stringify(next));
+    return summary;
+  }
+  // case 1, overlapping runs: claim, then case 2: the state before the mail
+  const wall = Date.now();
+  next.claim = { id: runId, t: wall };
+  await kv.put('state', JSON.stringify(next));
+  // give way only on SEEING another run's recent claim: a read that shows nothing (an eventually consistent location, a stale value) must never silence a report
+  const other = (await kv.get('state', 'json'))?.claim;
+  if (other && other.id !== runId && Math.abs((other.t ?? 0) - wall) < CLAIM_WINDOW_MS) { summary.deduped = true; return summary; }
+  const digest = buildDigest({ at, instance: config.instance, results: mine });
+  try { await send({ to, from, subject: digest.subject, text: digest.text }); summary.emailed = true; } catch (e) { summary.emailError = String(e?.code ?? e?.message ?? e).slice(0, 120); }
+  try {
+    await kv.put('digest:last', JSON.stringify({ ...digest.json, subject: digest.subject, text: digest.text, emailed: summary.emailed, emailError: summary.emailError ?? '' }));
+  } catch (e) { summary.recordError = String(e?.message ?? e).slice(0, 120); }
   return summary;
 }
 

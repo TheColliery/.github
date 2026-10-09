@@ -753,3 +753,255 @@ test('thecolliery.mjs: eleven Cloudflare rows close the list (status history hou
   const perDay = (week(c.sources) - week(c.sources.slice(0, 30))) / 7;
   assert.ok(perDay > 40 && perDay < 60, 'the eleven rows add about 52 fetches a day, measured ' + perDay);
 });
+
+// ---- order 09g, COURIER 2 (the Kolwen head's 09e item 26): ONE ITEM IS REPORTED ONCE -------------------------------------------------------------------
+// The owner's rule 2026-10-09: if Cron Triggers repeat a notice, keep one. A plain missed hour already held; these are the three cases that did not (watcher.mjs at 5625734).
+const DT0 = Date.UTC(2026, 9, 4, 12);
+const HOUR = 3600000;
+const S0 = 'https://example.invalid/s0';
+const oneAtom = (...titles) => ({ [S0]: { body: atom(...titles) } });
+const counted = () => { const sent = []; return { sent, send: async (m) => { sent.push(m); return {}; } }; };
+const baselined = async (kv, send) => runWith({ kv, routes: oneAtom('a1'), send, config: cfg(1) }); // the hello digest: one mail
+const failOnce = (kv, key) => { const real = kv.put; let spent = false; kv.put = async (k, v) => { if (k === key && !spent) { spent = true; throw new Error('KV put failed: ' + k); } return real(k, v); }; };
+
+test('dedupe case 1a, overlapping runs: two events that read the same old key at the same moment mail the change ONCE -- RED before 09g', async () => {
+  const kv = fakeKv(); const { sent, send } = counted();
+  await baselined(kv, send); sent.length = 0;
+  const routes = oneAtom('a2', 'a1');
+  const results = await Promise.all([
+    runWith({ kv, routes, send, now: DT0 + HOUR, config: cfg(1) }),
+    runWith({ kv, routes, send, now: DT0 + 2 * HOUR, config: cfg(1) }),
+  ]);
+  assert.strictEqual(sent.length, 1, 'one mail for one change');
+  assert.deepStrictEqual(results.map((r) => r.emailed).sort(), [false, true]);
+  assert.ok(results.some((r) => r.deduped === true), 'the run that gave way says so');
+  assert.match(sent[0].text, /S0: a1 -> a2/);
+  assert.strictEqual(JSON.parse(kv.store.state).sources.s0.title, 'a2');
+});
+
+test('dedupe case 1b, a slow run: a run that read the old key before another run mailed and committed it finds the commit and mails nothing -- RED before 09g', async () => {
+  const kv = fakeKv(); const { sent, send } = counted();
+  await baselined(kv, send); sent.length = 0;
+  const routes = oneAtom('a2', 'a1');
+  let release; const gate = new Promise((r) => { release = r; });
+  const slow = runOnce({ config: cfg(1), kv, fetchFn: async (u, i) => { await gate; return fakeFetch(routes)(u, i); }, send, now: DT0 + 2 * HOUR, to: 't', from: 'f' });
+  const fast = await runWith({ kv, routes, send, now: DT0 + HOUR, config: cfg(1) }); // reads the old key, mails, commits while the slow run waits on its fetch
+  release();
+  const late = await slow;
+  assert.strictEqual(fast.emailed, true);
+  assert.strictEqual(late.emailed, false);
+  assert.strictEqual(sent.length, 1);
+  assert.strictEqual(JSON.parse(kv.store.state).sources.s0.title, 'a2');
+});
+
+test('dedupe case 1c: the slow run keeps what only it found -- another source that it alone saw change is still reported and committed', async () => {
+  const kv = fakeKv(); const { sent, send } = counted();
+  const both = (a, b) => ({ [S0]: { body: atom(...a) }, 'https://example.invalid/s1': { body: atom(...b) } });
+  await runWith({ kv, routes: both(['a1'], ['b1']), send, config: cfg(2) }); sent.length = 0;
+  const fastRoutes = { ...both(['a2', 'a1'], ['b1']) };
+  let release; const gate = new Promise((r) => { release = r; });
+  const slow = runOnce({ config: cfg(2), kv, fetchFn: async (u, i) => { await gate; return fakeFetch(both(['a2', 'a1'], ['b2', 'b1']))(u, i); }, send, now: DT0 + 2 * HOUR, to: 't', from: 'f' });
+  await runWith({ kv, routes: fastRoutes, send, now: DT0 + HOUR, config: cfg(2) });
+  release(); await slow;
+  const mails = sent.map((m) => m.text).join('\n');
+  assert.strictEqual((mails.match(/S0: a1 -> a2/g) || []).length, 1, 'a2 mailed once');
+  assert.strictEqual((mails.match(/S1: b1 -> b2/g) || []).length, 1, 'b2 mailed once, by the slow run');
+  const st = JSON.parse(kv.store.state).sources;
+  assert.deepStrictEqual([st.s0.title, st.s1.title], ['a2', 'b2']);
+});
+
+test('dedupe case 2a: a KV failure AFTER the send (the record of the digest) does not mail the same change again next hour -- RED before 09g', async () => {
+  const kv = fakeKv(); const { sent, send } = counted();
+  await baselined(kv, send); sent.length = 0;
+  failOnce(kv, 'digest:last');
+  await runWith({ kv, routes: oneAtom('a2', 'a1'), send, now: DT0 + HOUR, config: cfg(1) }).catch(() => {});
+  assert.strictEqual(sent.length, 1);
+  await runWith({ kv, routes: oneAtom('a2', 'a1'), send, now: DT0 + 2 * HOUR, config: cfg(1) });
+  assert.strictEqual(sent.length, 1, 'the next hour finds the change already recorded');
+});
+
+test('dedupe case 2b: a KV failure on the state write stops the mail BEFORE it is sent, and the next hour mails the change once -- RED before 09g', async () => {
+  const kv = fakeKv(); const { sent, send } = counted();
+  await baselined(kv, send); sent.length = 0;
+  failOnce(kv, 'state');
+  await assert.rejects(runWith({ kv, routes: oneAtom('a2', 'a1'), send, now: DT0 + HOUR, config: cfg(1) }), /KV put failed: state/);
+  assert.strictEqual(sent.length, 0, 'no state, no mail');
+  await runWith({ kv, routes: oneAtom('a2', 'a1'), send, now: DT0 + 2 * HOUR, config: cfg(1) });
+  assert.strictEqual(sent.length, 1);
+  assert.match(sent[0].text, /S0: a1 -> a2/);
+});
+
+test('dedupe case 2c: a mail binding that fails after the state is written is NOT retried (at most once), and digest:last keeps the text with emailed false', async () => {
+  const kv = fakeKv(); let tries = 0;
+  const send = async () => { tries++; throw new Error('E_SENDER_NOT_VERIFIED'); };
+  await runWith({ kv, routes: oneAtom('a1'), send, config: cfg(1) });
+  assert.strictEqual(tries, 1);
+  const last = JSON.parse(kv.store['digest:last']);
+  assert.strictEqual(last.emailed, false);
+  assert.match(last.text, /Baselined 1 source/);
+  await runWith({ kv, routes: oneAtom('a1'), send, now: DT0 + HOUR, config: cfg(1) });
+  assert.strictEqual(tries, 1);
+});
+
+test('dedupe case 3, a key that returns: A, B, A reports B once and never reports A again; a key never seen is still reported -- RED before 09g', async () => {
+  const kv = fakeKv(); const { sent, send } = counted();
+  await baselined(kv, send);
+  const run = (n, ...titles) => runWith({ kv, routes: oneAtom(...titles), send, now: DT0 + n * HOUR, config: cfg(1) });
+  await run(1, 'b1', 'a1');
+  assert.strictEqual(sent.length, 2, 'hello, then B');
+  const back = await run(2, 'a1');
+  assert.deepStrictEqual([back.changed, back.emailed], [0, false]);
+  assert.strictEqual(sent.length, 2, 'A returning is not news');
+  assert.strictEqual(JSON.parse(kv.store.state).sources.s0.title, 'a1', 'the stored newest entry follows the feed');
+  await run(3, 'c1', 'a1');
+  assert.strictEqual(sent.length, 3, 'C was never seen');
+  assert.match(sent[2].text, /S0: a1 -> c1/);
+  await run(4, 'a1');
+  assert.strictEqual(sent.length, 3);
+});
+
+test('dedupe case 3, the incident list: an incident that drops out of the history and comes back moves the key A, B, A and is reported once', async () => {
+  const kv = fakeKv(); const { sent, send } = counted();
+  const U = 'https://example.invalid/status';
+  const config = { instance: 'kolwen', maxPerRun: 5, sources: [{ id: 'st', name: 'Status', url: U, kind: 'incidents', everyHours: 1 }] };
+  const I4 = incident('ddd444ddd444', 'New outage', 'investigating', '2026-10-09T01:00:00.000Z');
+  const run = (n, body) => runWith({ kv, routes: { [U]: { body } }, send, now: DT0 + n * HOUR, config });
+  await run(0, statusBody(I3, I2, I1)); sent.length = 0;
+  await run(1, statusBody(I4, I3, I2, I1));
+  assert.strictEqual(sent.length, 1);
+  await run(2, statusBody(I3, I2, I1));
+  assert.strictEqual(sent.length, 1, 'the history lost I4: the key returned to a value already reported');
+  await run(3, statusBody(I4, I3, I2, I1));
+  assert.strictEqual(sent.length, 1, 'and I4 returning is the same item');
+});
+
+test('dedupe case 3 is for feeds and incidents only: a raw page that returns to an earlier content IS a change (its key is its content)', async () => {
+  const kv = fakeKv(); const { sent, send } = counted();
+  const U = 'https://example.invalid/page';
+  const config = { instance: 'kolwen', maxPerRun: 5, sources: [{ id: 'pg', name: 'Page', url: U, kind: 'raw', everyHours: 1 }] };
+  const run = (n, body) => runWith({ kv, routes: { [U]: { body } }, send, now: DT0 + n * HOUR, config });
+  await run(0, '# Limits\n10 ms\n');
+  await run(1, '# Limits\n50 ms\n');
+  await run(2, '# Limits\n10 ms\n');
+  assert.strictEqual(sent.length, 3, 'hello, then both flips');
+});
+
+test('the recent-key memory is short: a feed that changes every hour keeps at most eight keys per source, and an unchanged run still writes nothing', async () => {
+  const kv = fakeKv(); const { send } = counted();
+  await baselined(kv, send);
+  for (let n = 1; n <= 12; n++) await runWith({ kv, routes: oneAtom('v' + n, 'v' + (n - 1)), send, now: DT0 + n * HOUR, config: cfg(1) });
+  const e = JSON.parse(kv.store.state).sources.s0;
+  assert.ok(Array.isArray(e.seen) && e.seen.length <= 8 && e.seen.length >= 2, 'seen holds ' + JSON.stringify(e.seen && e.seen.length));
+  kv.writes.length = 0;
+  await runWith({ kv, routes: oneAtom('v12', 'v11'), send, now: DT0 + 13 * HOUR, config: cfg(1) });
+  assert.deepStrictEqual(kv.writes, []);
+});
+
+test('dedupe, the claim only silences on SEEING another run: a finished run\'s old claim, and a read that shows nothing, never stop a report', async () => {
+  const stale = fakeKv({ state: JSON.stringify({ v: 1, sources: {}, claim: { id: 'finished-run', t: Date.now() - 2 * HOUR } }) });
+  const a = counted();
+  await runWith({ kv: stale, routes: oneAtom('a1'), send: a.send, config: cfg(1) });
+  assert.strictEqual(a.sent.length, 1, 'an hours-old claim is a finished run, not a contender');
+  const blind = fakeKv(); const real = blind.get;
+  blind.get = async (k, type) => (k === 'state' && blind.writes.includes('state') ? null : real(k, type)); // after the write, the read shows nothing at all
+  const b = counted();
+  const r = await runWith({ kv: blind, routes: oneAtom('a1'), send: b.send, config: cfg(1) });
+  assert.strictEqual(b.sent.length, 1, 'no claim seen, so the run mails');
+  assert.notStrictEqual(r.deduped, true);
+});
+
+test('a source whose stored key is another kind\'s (the old hash) is reported once as a change, and a source with no key is baselined silently: the README states exactly this', async () => {
+  const kv = fakeKv(); const { sent, send } = counted();
+  const U = 'https://example.invalid/status';
+  const config = { instance: 'kolwen', maxPerRun: 5, sources: [{ id: 'st', name: 'Status', url: U, kind: 'incidents', everyHours: 1 }, { id: 'later', name: 'Later', url: S0, kind: 'atom', everyHours: 1 }] };
+  const state = { v: 1, sources: { st: { key: 'f'.repeat(16), title: 'old title' } } }; // a hash from the raw kind; `later` has no entry at all
+  kv.store.state = JSON.stringify(state);
+  const routes = { [U]: { body: statusBody(I3, I2, I1) }, [S0]: { body: atom('a1') } };
+  const r = await runWith({ kv, routes, send, config });
+  assert.deepStrictEqual([r.changed, r.baselined, r.emailed], [1, 1, true]);
+  assert.match(sent[0].text, /Status: old title -> /);
+  assert.doesNotMatch(sent[0].text, /Baselined/, 'the baseline report is for the first run of a fresh state only');
+  assert.ok(JSON.parse(kv.store.state).sources.later.key, 'the keyless source was recorded');
+});
+
+// ---- the survivors of the first mutation table, each given the test that kills it ----------------------------------------------------------------------
+test('dedupe case 3 on a state written before the memory existed (no seen list): the first change records the key it left, so A, B, A is still quiet', async () => {
+  const kv = fakeKv({ state: JSON.stringify({ v: 1, sources: { s0: { key: parseFeed(atom('a1')).key, title: 'a1', link: 'https://example.invalid/r/a1' } } }) });
+  const { sent, send } = counted();
+  const run = (n, ...titles) => runWith({ kv, routes: oneAtom(...titles), send, now: DT0 + n * HOUR, config: cfg(1) });
+  await run(1, 'b1', 'a1');
+  assert.strictEqual(sent.length, 1);
+  await run(2, 'a1');
+  assert.strictEqual(sent.length, 1, 'A returned and was not mailed again');
+});
+
+test('the memory is kept in order of use: a key that returns is the newest of the memory, so the oldest one is what the ninth key pushes out', async () => {
+  const kv = fakeKv(); const { sent, send } = counted();
+  await baselined(kv, send); // a1
+  const run = (n, t) => runWith({ kv, routes: oneAtom(t), send, now: DT0 + n * HOUR, config: cfg(1) });
+  for (let n = 2; n <= 8; n++) await run(n, 'a' + n); // a1..a8: the memory is full
+  await run(9, 'a1'); // a1 returns: quiet, and it becomes the newest of the memory
+  await run(10, 'a9'); // a ninth distinct key pushes out the OLDEST (a2), not a1
+  const before = sent.length;
+  await run(11, 'a1');
+  assert.strictEqual(sent.length, before, 'a1 is still remembered');
+  await run(12, 'a2');
+  assert.strictEqual(sent.length, before + 1, 'a2 was pushed out, so it is news again');
+});
+
+test('dedupe case 2a: a digest record that cannot be written is named in the summary and never unwinds the run', async () => {
+  const kv = fakeKv(); const { sent, send } = counted();
+  await baselined(kv, send); sent.length = 0;
+  failOnce(kv, 'digest:last');
+  const r = await runWith({ kv, routes: oneAtom('a2', 'a1'), send, now: DT0 + HOUR, config: cfg(1) });
+  assert.strictEqual(r.emailed, true);
+  assert.match(r.recordError, /KV put failed: digest:last/);
+  assert.strictEqual(sent.length, 1);
+});
+
+test('dedupe case 1b names the run that gave way (deduped), and 1d: the slow run does not write back an older view of a source another run already moved', async () => {
+  const kv = fakeKv(); const { sent, send } = counted();
+  const two = (a, b) => ({ [S0]: { body: atom(...a) }, 'https://example.invalid/s1': { body: atom(...b) } });
+  await runWith({ kv, routes: two(['a1'], ['b1']), send, config: cfg(2) }); sent.length = 0;
+  let release; const gate = new Promise((r) => { release = r; });
+  // the slow run's upstream still shows a1 for s0 (a stale answer) and b2 for s1
+  const slow = runOnce({ config: cfg(2), kv, fetchFn: async (u, i) => { await gate; return fakeFetch(two(['a1'], ['b2', 'b1']))(u, i); }, send, now: DT0 + 2 * HOUR, to: 't', from: 'f' });
+  await runWith({ kv, routes: two(['a2', 'a1'], ['b1']), send, now: DT0 + HOUR, config: cfg(2) }); // the fast run moves s0 to a2
+  release(); const late = await slow;
+  const st = JSON.parse(kv.store.state).sources;
+  assert.strictEqual(st.s0.title, 'a2', 'the slow run did not write s0 back to a1');
+  assert.strictEqual(st.s1.title, 'b2');
+  assert.strictEqual(sent.length, 2, 'a2 once, b2 once');
+  assert.notStrictEqual(late.deduped, true, 'the slow run reported something of its own');
+  // and a run with nothing of its own gives way and says so
+  const kv2 = fakeKv(); const c2 = counted();
+  await baselined(kv2, c2.send);
+  let rel2; const gate2 = new Promise((r) => { rel2 = r; });
+  const slow2 = runOnce({ config: cfg(1), kv: kv2, fetchFn: async (u, i) => { await gate2; return fakeFetch(oneAtom('a2', 'a1'))(u, i); }, send: c2.send, now: DT0 + 2 * HOUR, to: 't', from: 'f' });
+  await runWith({ kv: kv2, routes: oneAtom('a2', 'a1'), send: c2.send, now: DT0 + HOUR, config: cfg(1) });
+  rel2();
+  assert.strictEqual((await slow2).deduped, true);
+});
+
+test('dedupe case 1e: a failure spell that another run already reported is not reported a second time by the slow run', async () => {
+  const bad = { status: 500, body: '' };
+  const seeded = () => fakeKv({ state: JSON.stringify({ v: 1, sources: { s0: { key: 'k', title: 't', fails: 2, hist: 'ff' } } }) }); // two failed runs in a row: the next one is the third, the report
+  const kv = seeded(); const { sent, send } = counted();
+  let release; const gate = new Promise((r) => { release = r; });
+  const slow = runOnce({ config: cfg(1), kv, fetchFn: async () => { await gate; return new Response('', { status: 500 }); }, send, now: DT0 + 2 * HOUR, to: 't', from: 'f' });
+  await runWith({ kv, routes: { [S0]: bad }, send, now: DT0 + HOUR, config: cfg(1) });
+  release(); await slow;
+  assert.strictEqual(sent.length, 1);
+  assert.match(sent[0].text, /Failing \(1\)/);
+});
+
+test('dedupe, the claim ignores an OLD claim that a stale read shows: only a recent one from another run gives way', async () => {
+  const kv = fakeKv(); const { sent, send } = counted();
+  const old = JSON.stringify({ v: 1, sources: {}, claim: { id: 'finished-run', t: Date.now() - 2 * HOUR } });
+  kv.store.state = old;
+  const real = kv.get; let after = false; const realPut = kv.put;
+  kv.put = async (k, v) => { await realPut(k, v); if (k === 'state') after = true; };
+  kv.get = async (k, type) => (k === 'state' && after ? JSON.parse(old) : real(k, type)); // a stale location: the read after the write still shows the old claim
+  await runWith({ kv, routes: oneAtom('a1'), send, config: cfg(1) });
+  assert.strictEqual(sent.length, 1);
+});
