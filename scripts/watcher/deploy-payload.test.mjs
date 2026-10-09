@@ -85,6 +85,18 @@ test('the uploaded multipart carries each module byte for byte, and the metadata
   assert.strictEqual(meta.bindings.find((b) => b.name === 'EMAIL').destination_address, ADDRESS);
 });
 
+// 09g COURIER 1 (the Kolwen head's 09e item 26): one log event per tick, not two. Cloudflare's schema workers_observability-2 requires logs.enabled and logs.invocation_logs together once logs is sent,
+// so a change that drops either one makes the upload fail or turns the platform's invocation record back on.
+test('the metadata sets observability on, every run kept, and the platform invocation record OFF with the pair the API requires', async () => {
+  const fake = fakeCloudflare();
+  await runPayload(buildPayload({ files: FILES, ...ARGS }), fake);
+  const put = fake.calls.find((c) => c.method === 'PUT' && /scripts\/demo-change-watcher$/.test(c.path));
+  const boundary = /boundary=(.+)$/.exec(put.contentType)[1];
+  const part = put.body.split('--' + boundary).find((p) => p.includes('name="metadata"'));
+  const meta = JSON.parse(part.slice(part.indexOf('\r\n\r\n') + 4).replace(/\r\n$/, ''));
+  assert.deepStrictEqual(meta.observability, { enabled: true, head_sampling_rate: 1, logs: { enabled: true, invocation_logs: false } });
+});
+
 test('the destination address never appears in what the payload returns', async () => {
   const out = await runPayload(buildPayload({ files: FILES, ...ARGS }), fakeCloudflare());
   assert.ok(!JSON.stringify(out).includes(ADDRESS));

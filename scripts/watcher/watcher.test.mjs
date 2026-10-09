@@ -721,6 +721,7 @@ test('worker.mjs writes one small console line per run: a day of runs, with a 4 
     const m = JSON.parse(r.stdout.trim().split('\n').pop());
     assert.strictEqual(m.lines, m.runs, 'exactly one console line per run');
     assert.ok(m.widest <= 512, `the widest line is ${m.widest} bytes`);
+    // 09g: deploy-payload.mjs turns the platform's invocation record OFF, so this allowance now only covers the platform's wrapper around the one console line; it stays at 4 KB as a margin, not as a cost
     const FREE_PER_DAY = 0.5e9; const PLATFORM_RECORD_ALLOWANCE = 4096;
     const day = m.bytes + m.runs * PLATFORM_RECORD_ALLOWANCE;
     assert.ok(day <= FREE_PER_DAY * 0.01, `a day is ${day} bytes against ${FREE_PER_DAY * 0.01}`);

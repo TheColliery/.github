@@ -69,7 +69,8 @@ export function buildPayload({ files, name, from, cron = '17 * * * *', kvId = nu
       { type: 'secret_text', name: 'DIGEST_TO', text: dest.email },
       { type: 'plain_text', name: 'DIGEST_FROM', text: ${JSON.stringify(from)} },
     ],
-    observability: { enabled: true },
+    // invocation_logs false drops the platform's per-run record and keeps the Worker's one console line; the API requires logs.enabled beside it (schema workers_observability-2)
+    observability: { enabled: true, head_sampling_rate: 1, logs: { enabled: true, invocation_logs: false } },
   };
   const b = '----watcher' + Date.now();
   const parts = ['--' + b, 'Content-Disposition: form-data; name="metadata"', 'Content-Type: application/json', '', JSON.stringify(metadata)];
