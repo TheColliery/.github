@@ -39,5 +39,19 @@ export default {
     { id: 'github-changelog-supply-chain-security', name: 'GitHub changelog (supply chain security)', url: 'https://github.blog/changelog/label/supply-chain-security/feed/', kind: 'rss', everyHours: 2 },
     { id: 'github-changelog-platform-governance', name: 'GitHub changelog (platform governance)', url: 'https://github.blog/changelog/label/platform-governance/feed/', kind: 'rss', everyHours: 6 },
     { id: 'github-changelog-account-management', name: 'GitHub changelog (account management)', url: 'https://github.blog/changelog/label/account-management/feed/', kind: 'rss', everyHours: 6 },
+    // BB-112 / Issues 39-42, main's ruling 2026-10-09: the Cloudflare surfaces THIS account runs (the watcher, the release mirror and the inbox Workers, KV, R2, Email Routing, Registrar, DNS), appended at the END so no earlier slot moves.
+    // The status HISTORY by id (an incident that opened and closed between two hourly reads still shows), the per-product changelog feeds of the six products, and the four pages that size the Workers (Free plan limits and pricing, hashed from their .md form).
+    // Not here, by the same ruling: the GitHub release feeds, the One Client feed and Workers AI belong to the commercial hub's list (kolwen.mjs).
+    { id: 'cloudflare-status', name: 'Cloudflare status (incident history)', url: 'https://www.cloudflarestatus.com/api/v2/incidents.json', kind: 'incidents', everyHours: 1 },
+    { id: 'cloudflare-changelog-workers', name: 'Cloudflare changelog · Workers', url: 'https://developers.cloudflare.com/changelog/rss/workers.xml', kind: 'rss', everyHours: 6 },
+    { id: 'cloudflare-changelog-kv', name: 'Cloudflare changelog · KV', url: 'https://developers.cloudflare.com/changelog/rss/kv.xml', kind: 'rss', everyHours: 6 },
+    { id: 'cloudflare-changelog-r2', name: 'Cloudflare changelog · R2', url: 'https://developers.cloudflare.com/changelog/rss/r2.xml', kind: 'rss', everyHours: 6 },
+    { id: 'cloudflare-changelog-dns', name: 'Cloudflare changelog · DNS', url: 'https://developers.cloudflare.com/changelog/rss/dns.xml', kind: 'rss', everyHours: 6 },
+    { id: 'cloudflare-changelog-registrar', name: 'Cloudflare changelog · Registrar', url: 'https://developers.cloudflare.com/changelog/rss/registrar.xml', kind: 'rss', everyHours: 6 },
+    { id: 'cloudflare-changelog-email-service', name: 'Cloudflare changelog · Email Service (Email Routing)', url: 'https://developers.cloudflare.com/changelog/rss/email-service.xml', kind: 'rss', everyHours: 6 },
+    { id: 'cloudflare-doc-workers-limits', name: 'Cloudflare docs · Workers limits', url: 'https://developers.cloudflare.com/workers/platform/limits/index.md', kind: 'raw', everyHours: 24 },
+    { id: 'cloudflare-doc-kv-pricing', name: 'Cloudflare docs · KV pricing', url: 'https://developers.cloudflare.com/kv/platform/pricing/index.md', kind: 'raw', everyHours: 24 },
+    { id: 'cloudflare-doc-r2-pricing', name: 'Cloudflare docs · R2 pricing', url: 'https://developers.cloudflare.com/r2/pricing/index.md', kind: 'raw', everyHours: 24 },
+    { id: 'cloudflare-doc-email-service-limits', name: 'Cloudflare docs · Email Service limits', url: 'https://developers.cloudflare.com/email-service/platform/limits/index.md', kind: 'raw', everyHours: 24 },
   ],
 };

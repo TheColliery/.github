@@ -492,10 +492,10 @@ test('no instance list names one URL twice (a second row for a feed is a second 
   }
 });
 
-test('thecolliery.mjs: GitHub\'s own changelog label feeds sit at the END of the list (the stagger rule), copilot once, as RSS, every 2 or 6 hours -- RED before UMB2-014', async () => {
+test('thecolliery.mjs: GitHub\'s own changelog label feeds sit after the 25 platform rows (the stagger rule), copilot once, as RSS, every 2 or 6 hours; the Cloudflare rows close the list -- RED before UMB2-014', async () => {
   const c = await load('thecolliery.mjs');
   const labels = ['actions', 'application-security', 'supply-chain-security', 'platform-governance', 'account-management'];
-  const tail = c.sources.slice(-labels.length);
+  const tail = c.sources.slice(25, 25 + labels.length);
   assert.deepStrictEqual(tail.map((s) => s.url), labels.map((l) => `https://github.blog/changelog/label/${l}/feed/`));
   for (const s of tail) { assert.strictEqual(s.kind, 'rss'); assert.ok([2, 6].includes(s.everyHours), s.id); assert.match(s.id, /^github-changelog-/); }
   assert.strictEqual(c.sources.filter((s) => s.url === 'https://github.blog/changelog/label/copilot/feed/').length, 1, 'the sixth label, copilot, was already a row (copilot-changelog)');
@@ -725,4 +725,30 @@ test('worker.mjs writes one small console line per run: a day of runs, with a 4 
     const day = m.bytes + m.runs * PLATFORM_RECORD_ALLOWANCE;
     assert.ok(day <= FREE_PER_DAY * 0.01, `a day is ${day} bytes against ${FREE_PER_DAY * 0.01}`);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// Main's ruling 2026-10-09 (the .github deputy's 5 (b) proposal): the TheColliery instance carries the Cloudflare surfaces its own Workers run, appended at the END.
+test('thecolliery.mjs: eleven Cloudflare rows close the list (status history hourly, six per-product changelog feeds every 6 hours, four docs pages every 24 hours) and nothing earlier moved', async () => {
+  const c = await load('thecolliery.mjs');
+  assert.strictEqual(c.sources.length, 30 + 11);
+  const added = c.sources.slice(30);
+  assert.deepStrictEqual(added.map((s) => s.id), [
+    'cloudflare-status',
+    'cloudflare-changelog-workers', 'cloudflare-changelog-kv', 'cloudflare-changelog-r2', 'cloudflare-changelog-dns', 'cloudflare-changelog-registrar', 'cloudflare-changelog-email-service',
+    'cloudflare-doc-workers-limits', 'cloudflare-doc-kv-pricing', 'cloudflare-doc-r2-pricing', 'cloudflare-doc-email-service-limits',
+  ]);
+  assert.deepStrictEqual([added[0].kind, added[0].url, added[0].everyHours], ['incidents', 'https://www.cloudflarestatus.com/api/v2/incidents.json', 1]);
+  const feeds = added.slice(1, 7);
+  for (const s of feeds) { assert.match(s.url, /^https:\/\/developers\.cloudflare\.com\/changelog\/rss\/[a-z0-9-]+\.xml$/, s.id); assert.strictEqual(s.kind, 'rss'); assert.strictEqual(s.everyHours, 6); }
+  assert.deepStrictEqual(feeds.map((s) => s.url.split('/').pop()), ['workers.xml', 'kv.xml', 'r2.xml', 'dns.xml', 'registrar.xml', 'email-service.xml'], 'email-routing.xml answers 404: Email Routing\'s notes sit under email-service');
+  for (const s of added.slice(7)) { assert.match(s.url, /^https:\/\/developers\.cloudflare\.com\/[a-z0-9\/-]+\/index\.md$/, s.id); assert.strictEqual(s.kind, 'raw'); assert.strictEqual(s.everyHours, 24); }
+  const kolwen = await load('kolwen.mjs');
+  const mine = new Set(c.sources.map((s) => s.url));
+  for (const id of ['cloudflare-wrangler', 'cloudflare-mcp-servers', 'cloudflare-agents-sdk', 'cloudflare-sandbox-sdk', 'cloudflare-one-client', 'cloudflare-workers-ai']) {
+    assert.ok(!mine.has(kolwen.sources.find((s) => s.id === id).url), id + ' stays in the commercial hub\'s list only');
+  }
+  // the day's fetches this adds, from the stagger itself: counted over the 168 hours of a week, per day
+  const week = (list) => Array.from({ length: 168 }, (_, h) => pickRun(list, h, 1e9).run.length).reduce((a, b) => a + b, 0);
+  const perDay = (week(c.sources) - week(c.sources.slice(0, 30))) / 7;
+  assert.ok(perDay > 40 && perDay < 60, 'the eleven rows add about 52 fetches a day, measured ' + perDay);
 });
