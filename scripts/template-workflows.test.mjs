@@ -6,6 +6,7 @@ import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { normalizePins, pinsOf } from './lib/pin-normalize.mjs';
+import { scanGitSpawns, gitBlobId } from '../templates/overlay-coal-skill/scripts/lib/git-env-census.mjs';
 
 // GitHub's own context-availability table (docs: contexts.md, "jobs.<job_id>.if") allows only
 // always/cancelled/success/failure at JOB level -- hashFiles is available at STEP level only.
@@ -799,8 +800,8 @@ test('every spawn in a test file passes a timeout, and a node child in this repo
         for (; i < t.length && depth > 0; i++) { if (t[i] === '(') depth++; else if (t[i] === ')') depth--; }
         const call = t.slice(m.index, i); const at = rel + ':' + t.slice(0, m.index).split('\n').length;
         if (!/timeout/.test(call)) missingTimeout.push(at);
-        // templates are copied into rooms and blob-pinned by them, and scripts/secret-gate.test.mjs is byte-equal to the templates copy: a heap cap there is a named decision, not part of this walk
-        if (!rel.startsWith('templates/') && rel !== 'scripts/secret-gate.test.mjs' && /process\.execPath/.test(call) && !/max-old-space-size/.test(call)) missingHeap.push(at);
+        // templates are copied into rooms and blob-pinned by them, and scripts/secret-gate.test.mjs and scripts/secret-scan.test.mjs are byte-equal to the templates copies (the latter to Bankfire's source): a heap cap there is a named decision, not part of this walk
+        if (!rel.startsWith('templates/') && rel !== 'scripts/secret-gate.test.mjs' && rel !== 'scripts/secret-scan.test.mjs' &&/process\.execPath/.test(call) && !/max-old-space-size/.test(call)) missingHeap.push(at);
       }
     }
   };
@@ -1257,4 +1258,91 @@ test('SERIES-CANON.md records the org defaults a new repo inherits: Dependabot m
   assert.match(cc, /a repository may override/);
   assert.match(cc, /existing comments stay/);
   for (const r of [mal, cc]) assert.equal(r.split('|').length, 6, 'four cells, one per column (the kind column and three kinds)');
+});
+
+// ---- 08d D1/D3 (2026-10-09): the git-spawn census is a canon file set, and the canon's own carriers pass it ----
+// The portable part (the witness list as a corpus) is templates/overlay-coal-skill/scripts/lib/git-env-census.test.mjs; what needs the .github repository's own files is here.
+const CARRIER_DIRS = ['scripts', 'templates/published-code/scripts', 'templates/article/scripts'];
+const readText = (rel) => fs.readFileSync(path.join(ROOT, ...rel.split('/')), 'utf8');
+// The canon secret gate keeps GIT_INDEX_FILE BY DESIGN (commit mode reads the commit's own index, which a hook names through that variable), and GIT_INDEX_FILE is outside the three
+// GIT_ names the rule allows, so its two git spawns are findings the census is right to give. It is the ONE pinned carrier, at this blob; any edit spends the pin.
+// The Bankfire source test (blob cc3939db) builds every git environment from named keys, but its gitEnv() returns `(envSeen = { ... })`: it records the last environment it built in a
+// witness variable the file's own tests read and pass to assertGitEnv(). The census reads a helper's returned object literal, and an assignment wrapped around it is outside the grammar, so
+// all five of its git spawns are findings the census cannot clear. It is pinned at this blob until Bankfire drops the witness (the census proves a call takes gitEnv(), so the test can
+// assert on gitEnv() itself); the courier is in the 09e return.
+const SCAN_TEST_PIN = { blob: 'cc3939dbcbd3d8c642bd45d994a2844063f22335', why: 'Bankfire source test: gitEnv() is (envSeen = { named keys }), a witness the census does not read; the literal itself is named keys with GIT_CONFIG_NOSYSTEM; REMOVE when the source returns the literal alone' };
+const GATE_PIN = { rel: 'scripts/secret-gate.mjs', blob: '856956a1cca6f716e5507f6c23ac90ed34cbbe5f', why: 'canon secret gate: keeps GIT_INDEX_FILE and GIT_CEILING_DIRECTORIES by design (its gitEnv() copies process.env minus the other GIT_ names); the two spawns are the findings' };
+
+test('the canon secret-gate test passes the canon census with no pin: it builds every git environment from named keys, in all three places it lives -- RED before 08d D3', () => {
+  for (const dir of CARRIER_DIRS) {
+    const rel = `${dir}/secret-gate.test.mjs`;
+    const r = scanGitSpawns([{ rel, text: readText(rel) }], []);
+    assert.deepEqual(r.findings, [], `${rel} is refused by the census`);
+    assert.ok(r.calls >= 3, `${rel}: the census counted ${r.calls} git spawns`);
+    assert.equal(r.safe, r.calls, rel);
+  }
+});
+
+test('the Bankfire source test is the SECOND pinned carrier: unpinned its five git spawns are findings (the witness form), pinned at its blob it is exempt and says so, and an edit spends the pin', () => {
+  for (const dir of CARRIER_DIRS) {
+    const rel = `${dir}/secret-scan.test.mjs`;
+    const text = readText(rel);
+    const bare = scanGitSpawns([{ rel, text }], []);
+    assert.equal(bare.findings.length, 5, `${rel}: its five fixture git calls`);
+    assert.ok(bare.findings.every((f) => /gitEnv\(\) returns an env the census refuses/.test(f)), 'refused for the witness form of gitEnv(), not for a copy of process.env');
+    assert.ok(!/\.\.\.process\.env|Object\.entries\(process\.env\)/.test(text), `${rel} copies no process environment`);
+    assert.equal(gitBlobId(text), SCAN_TEST_PIN.blob, `${rel} changed: re-read the pin's reason (and the parity contract), then update SCAN_TEST_PIN`);
+    const pinned = scanGitSpawns([{ rel, text }], [{ ...SCAN_TEST_PIN, rel }]);
+    assert.deepEqual([pinned.findings, pinned.exempted], [[], 1], rel);
+    assert.ok(scanGitSpawns([{ rel, text: text + '\n' }], [{ ...SCAN_TEST_PIN, rel }]).findings.length === 5, 'one added byte spends the pin');
+  }
+});
+
+test('the canon secret gate is the FIRST pinned carrier: unpinned its two git spawns are findings, pinned at its blob it is exempt and says so, and an edit spends the pin', () => {
+  for (const dir of CARRIER_DIRS) {
+    const rel = `${dir}/secret-gate.mjs`;
+    const text = readText(rel);
+    const bare = scanGitSpawns([{ rel, text }], []);
+    assert.equal(bare.findings.length, 2, `${rel}: the two spawns of the gate, no more`);
+    assert.ok(bare.findings.every((f) => /execFileSync\('git'/.test(f)), rel);
+    assert.equal(gitBlobId(text), GATE_PIN.blob, `${rel} changed: re-read the pin's reason, then update GATE_PIN`);
+    const pinned = scanGitSpawns([{ rel, text }], [{ ...GATE_PIN, rel }]);
+    assert.deepEqual([pinned.findings, pinned.exempted], [[], 1], rel);
+    assert.ok(scanGitSpawns([{ rel, text: text + '\n' }], [{ ...GATE_PIN, rel }]).findings.length === 2, 'one added byte spends the pin');
+  }
+});
+
+test('the canon release-notes.mjs and its test (the list\'s P1 and P2) read clean with no pin, and are counted', () => {
+  for (const rel of ['templates/overlay-coal-skill/scripts/release-notes.mjs', 'templates/overlay-coal-skill/scripts/release-notes.test.mjs']) {
+    const r = scanGitSpawns([{ rel, text: readText(rel) }], []);
+    assert.deepEqual(r.findings, [], rel);
+    assert.ok(r.calls >= 1 && r.safe === r.calls, rel);
+  }
+});
+
+test('the three places a secret-scan or secret-gate file lives hold the same bytes, and the secret-scan test is the Bankfire source\'s (blob cc3939db): the scanner parity contract -- RED before 08d D3', () => {
+  for (const name of ['secret-scan.test.mjs', 'secret-gate.test.mjs', 'secret-gate.mjs']) {
+    const blobs = CARRIER_DIRS.map((d) => gitBlobId(readText(`${d}/${name}`)));
+    assert.equal(new Set(blobs).size, 1, `${name} differs between the three places: ${blobs.join(' ')}`);
+  }
+  assert.ok(gitBlobId(readText('scripts/secret-scan.test.mjs')).startsWith('cc3939db'), 'the Bankfire source test moved: re-copy it byte for byte into the three places (scripts/scanner-parity.mjs reads it)');
+});
+
+test('the public hooks say what the secret scan does NOT catch, including a token header with a scheme word: the answer to CoalMine LOW-1 -- the scan-limit sentence', () => {
+  for (const rel of ['templates/published-code/.githooks/pre-commit', 'templates/published-code/.githooks/pre-push', 'templates/article/.githooks/pre-commit', 'templates/article/.githooks/pre-push']) {
+    const text = readText(rel).replace(/\r?\n#\s*/g, ' ');
+    assert.match(text, /an HTTP authentication header whose value is a scheme and a token \(Authorization: Bearer <key>, X-Api-Token: Bearer <key>\) unless that token is provider-shaped/, rel);
+    assert.match(text, /does NOT catch a credential inside a URL or connection string/, rel);
+  }
+});
+
+test('SKILL-REPO-PATTERN.md Layer 4 carries the git-env-census row: one rule, the token census, the witness corpus, no pin shipped, the two ceilings, adopted by blob -- RED before 08d D3', () => {
+  const row = PATTERN.split('\n').find((l) => l.startsWith('| `scripts/lib/git-env-census.mjs`'));
+  assert.ok(row, 'the row exists');
+  for (const re of [/git-env-census\.vectors\.mjs/, /git-env-census\.test\.mjs/, /GIT_CONFIG_NOSYSTEM: '1'/, /never a copy, a spread or a filter of `process\.env`/, /TOKEN census/, /F1-F60/, /R1-R5/, /P1-P7/, /ships NO pin/, /R4 a spawner written with a unicode escape/, /R5 a command built by concatenation/, /adopted by blob id from `templates\/overlay-coal-skill\/scripts\/lib\/`/, /MUST for the rule \(UMB-456 \(2\)\)/]) {
+    assert.match(row, re);
+  }
+  for (const f of ['git-env-census.mjs', 'git-env-census.vectors.mjs', 'git-env-census.test.mjs']) {
+    assert.ok(fs.existsSync(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', f)), f + ' is in the overlay lib folder');
+  }
 });

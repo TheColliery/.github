@@ -60,6 +60,7 @@ jobs:
                    templates/overlay-coal-skill/scripts/lib/release-shape.test.mjs \
                    templates/overlay-coal-skill/scripts/lib/release-prune.test.mjs \
                    templates/overlay-coal-skill/scripts/lib/wave-run.test.mjs \
+                   templates/overlay-coal-skill/scripts/lib/git-env-census.test.mjs \
                    templates/overlay-coal-skill/scripts/lib/asset-upload-mode.test.mjs \
                    templates/overlay-coal-skill/scripts/release-notes.test.mjs \
                    templates/overlay-coal-skill/scripts/verify-release-shape.test.mjs \
@@ -77,6 +78,7 @@ jobs:
                       templates/overlay-coal-skill/scripts/lib/release-shape.test.mjs \
                       templates/overlay-coal-skill/scripts/lib/release-prune.test.mjs \
                       templates/overlay-coal-skill/scripts/lib/wave-run.test.mjs \
+                      templates/overlay-coal-skill/scripts/lib/git-env-census.test.mjs \
                       templates/overlay-coal-skill/scripts/lib/asset-upload-mode.test.mjs \
                       templates/overlay-coal-skill/scripts/release-notes.test.mjs \
                       templates/overlay-coal-skill/scripts/verify-release-shape.test.mjs \
