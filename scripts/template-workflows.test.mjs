@@ -469,7 +469,7 @@ test('claude-ai-zips.yml publishes in the right order: draft create, re-read, as
   assert.ok(create > 0 && reread > create && upload > reread && publish > upload, `order: create ${create}, re-read ${reread}, upload ${upload}, publish ${publish}`);
   assert.ok(lines.filter((l) => l.includes('gh release create')).every((l) => !l.includes('--latest')), 'a draft create never passes --latest (a draft cannot be Latest)');
   assert.ok(publish > 0 && lines[publish].includes('--latest="$(cat release-latest.txt)"') && lines[publish].includes('--prerelease="$(cat release-prerelease.txt)"'), 'the publish step applies Latest and prerelease');
-  assert.ok(t.includes('"cd -- dist-claude-ai"'.slice(1, -1)) && t.includes('zip -r "${name}.zip" "${name}"') && t.includes('sha256sum -- *.zip'), '-- guards on cd and sha256sum; the skill FOLDER is zipped from its parent (UMB-333)');
+  assert.ok(t.includes('"cd -- dist-claude-ai"'.slice(1, -1)) && t.includes('find "${name}" -type f | LC_ALL=C sort | zip -X -D -@ "${name}.zip"') && t.includes('sha256sum -- *.zip'), '-- guards on cd and sha256sum; the skill FOLDER is zipped from its parent (UMB-333; 09g: as a sorted list of the folder\'s files)');
   assert.ok(!/zip -r --/.test(t), 'zip refuses "--" before the archive name (zip error: can\'t use -- before archive name, measured on the runner 2026-10-02): a leading-dash name is refused by a name check instead');
   assert.ok(t.includes('^[A-Za-z0-9][A-Za-z0-9._-]*$'), 'the staged directory name is checked before it reaches zip as an argument');
   assert.ok(t.includes('isDraft') && t.includes('is still a draft after the publish step'), 'the run re-reads that the Release is no longer a draft');
@@ -748,7 +748,7 @@ function inTemp(prefix, setup, body) {
 
 test('claude-ai-zips.yml zips the skill FOLDER from its parent, never its contents (RED before UMB-333)', () => {
   const body = stepRun('Zip each staged skill');
-  assert.ok(body.includes('zip -r "${name}.zip" "${name}"'), 'the folder name is the zip argument');
+  assert.ok(body.includes('find "${name}" -type f | LC_ALL=C sort | zip -X -D -@ "${name}.zip"'), 'the folder name is the argument of the file list, so every entry keeps the <name>/ prefix');
   assert.ok(!/cd -- "\$name" &&/.test(body), 'no subshell that enters the skill folder before zipping');
   assert.ok(!body.includes('"../${name}.zip" .'), 'never zip "." inside the folder');
 });

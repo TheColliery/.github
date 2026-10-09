@@ -72,6 +72,7 @@ jobs:
                    templates/overlay-coal-skill/scripts/release-notes.test.mjs \
                    templates/overlay-coal-skill/scripts/verify-release-shape.test.mjs \
                    templates/overlay-coal-skill/scripts/decide-upload.test.mjs \
+                   templates/overlay-coal-skill/scripts/build-claude-ai-zips.test.mjs \
                    templates/overlay-coal-skill/scripts/prune-release-zips.test.mjs; do
             [ -f "$t" ] || { echo "::error::listed test file missing: $t"; exit 1; }
           done
@@ -90,6 +91,7 @@ jobs:
                       templates/overlay-coal-skill/scripts/release-notes.test.mjs \
                       templates/overlay-coal-skill/scripts/verify-release-shape.test.mjs \
                       templates/overlay-coal-skill/scripts/decide-upload.test.mjs \
+                      templates/overlay-coal-skill/scripts/build-claude-ai-zips.test.mjs \
                       templates/overlay-coal-skill/scripts/prune-release-zips.test.mjs
 
       - name: Secret scan (the tracked tree; the pushed range runs in the pre-push hook — UMB-282 (a))

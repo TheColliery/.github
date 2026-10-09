@@ -240,11 +240,16 @@ jobs:
       - name: Stage trimmed-description skill directories
         if: steps.pkg.outputs.package == 'true'
         working-directory: tag-src
-        run: node scripts/build-claude-ai-zips.mjs
+        # SOURCE_DATE_EPOCH = the tag commit's time: the staged files carry it as their mtime, so the ZIPs are reproducible (09g, M1)
+        run: SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" node scripts/build-claude-ai-zips.mjs
 
+      # Reproducible (09g, M1): TZ=UTC because zip stores a local DOS time; the file list is SORTED by byte value; -X drops the extra
+      # attributes and -D the folder entries; the dotfile exclusion '*/.*' reaches every depth. Rerun on a runner with the same zip, the bytes match.
       - name: Zip each staged skill directory
         if: steps.pkg.outputs.package == 'true'
         working-directory: tag-src
+        env:
+          TZ: UTC
         run: |
           set -euo pipefail
           cd -- dist-claude-ai
@@ -252,7 +257,7 @@ jobs:
             name="${d%/}"
             # zip refuses "--" before the archive name, so a name that could read as an option is refused here instead.
             [[ "${name}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "::error::skill directory name '${name}' is not a plain name"; exit 1; }
-            zip -r "${name}.zip" "${name}" -x "${name}/.*"
+            find "${name}" -type f | LC_ALL=C sort | zip -X -D -@ "${name}.zip" -x '*/.*'
           done
           ls -la -- *.zip
 
@@ -370,7 +375,9 @@ jobs:
         run: gh release download "${RELEASE_TAG}" -p 'SHA256SUMS.txt' -O existing-SHA256SUMS.txt --clobber 2>/dev/null || true
 
       # UMB-182 M1, measured: zip stores mtimes, so a re-run of a tag whose assets are already
-      # published ends RED here, and that red is the safe outcome (nothing is overwritten; a fully
+      # published ended RED here. Since 09g the staged files carry the tag commit's time and the list is
+      # sorted, so the same zip program rebuilds the same bytes and the decision is `skip`; a different
+      # zip program can still differ, and that red stays the safe outcome (nothing is overwritten; a fully
       # published tag has nothing left to do). A run that died before SHA256SUMS.txt was uploaded
       # finds no prior file and uploads normally. scripts/lib/asset-upload-mode.mjs has the detail.
       - name: Decide whether to upload, skip, or fail (a published version must never silently change)
