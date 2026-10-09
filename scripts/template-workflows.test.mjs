@@ -1251,6 +1251,20 @@ test('the wave-run row names the TODO rule, the process.exitCode wiring and the 
   }
 });
 
+// 09f item 11, CoalTipple t34: create-release.yml is the workflow of a room that ships NO claude.ai ZIPs, so apart from the sentence that says so it never names a ZIP (the re-point comment was copied
+// from claude-ai-zips.yml). The census file's own comments are held to the pointer gate every room runs: no path-shaped token that resolves nowhere, and no count without the command that re-derives it.
+test('create-release.yml names no ZIP except where it says it ships none; the census comments carry no path-shaped placeholder and no unsourced count -- RED before 09f', () => {
+  for (const dir of ['overlay-coal-skill', 'article']) {
+    const lines = fs.readFileSync(path.join(TEMPLATES, dir, '.github', 'workflows', 'create-release.yml'), 'utf8').split(/\r?\n/);
+    const named = lines.map((l, i) => [i + 1, l]).filter(([, l]) => /\bZIPs?\b/.test(l) && !/ships NO claude\.ai ZIPs/.test(l));
+    assert.deepEqual(named, [], dir + '/create-release.yml names a ZIP in a workflow that ships none');
+  }
+  const census = fs.readFileSync(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', 'git-env-census.mjs'), 'utf8');
+  assert.ok(!census.includes('`scripts/lib/...`'), 'the census comment cites scripts/lib/..., a token a room pointer gate refuses');
+  assert.ok(!/the same twelve in the same four pinned files/.test(census), 'the header count names no tree and no deriving command');
+  assert.ok(!/is pinned in git-env-census\.test\.mjs/.test(census), 'CENSUS_EXEMPT names a pin the canon test does not carry');
+});
+
 // BB-98 (b), 2026-10-09: GitHub's default policy blocks the `pull_request_target` event in public repositories from 2026-11-02 (workflow execution protections). The
 // canon says no new workflow adopts it, and the templates and this repo's own workflows carry none (a grep over 85 workflows of the org, its templates and the rooms found none).
 test('no template or own workflow uses the pull_request_target event, and SKILL-REPO-PATTERN.md bans adopting it -- RED before BB-98 (b)', () => {
