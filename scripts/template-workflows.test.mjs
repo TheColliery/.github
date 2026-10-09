@@ -682,6 +682,8 @@ test('RELEASE-PATTERN.md and the overlay README state that a newer pre-release t
   const rp = fs.readFileSync(path.join(ROOT, 'RELEASE-PATTERN.md'), 'utf8');
   assert.match(rp, /A NEWER pre-release tag RE-POINTS that one Release while no stable Release exists/);
   assert.match(rp, /the compare API calls the new tag ahead/);
+  assert.match(rp, /a path that Immutable Releases closes once the owner switches it on \(AR-71 \(a1\), unsigned today\), so the launch form is re-decided before that switch, never after it/);
+  assert.match(fs.readFileSync(path.join(TEMPLATES, 'overlay-coal-skill', 'OVERLAY-README.md'), 'utf8'), /Immutable Releases closes, so the launch form is re-decided before AR-71 \(a1\) is switched on/);
   assert.match(rp, /after which no re-point is possible/);
   assert.doesNotMatch(rp, /while any other tag already has a Release/, 'the old refusal sentence is gone');
   assert.match(fs.readFileSync(path.join(TEMPLATES, 'overlay-coal-skill', 'OVERLAY-README.md'), 'utf8'), /newer pre-release tag re-points/);
