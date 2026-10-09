@@ -25,12 +25,13 @@ concurrency:
 jobs:
   verify:
     # The macOS leg (order 09f, 2026-10-09; node/runtime.md section 6): the canon's tests ran on ubuntu alone, so six rooms' main went red on macOS from a canon test the canon could not see.
-    # The ubuntu leg keeps the check name `verify`; the leg that is not ubuntu is named `verify (<os>)`. Only the unit tests run on both: the three steps after them read the repo, not the OS.
+    # The Windows leg joins in order 09g (node/runtime.md section 6 asks for all three; the box that writes the canon is Windows). The ubuntu leg keeps the check name `verify`; a leg that is not
+    # ubuntu is named `verify (<os>)`. Only the unit tests run on every leg: the three steps after them read the repo, not the OS.
     name: ${{ matrix.os == 'ubuntu-latest' && 'verify' || format('verify ({0})', matrix.os) }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15 # testing.md: every run has a finite clock; a room re-sizes this from its own measured suite time
     steps:
@@ -47,6 +48,7 @@ jobs:
           node-version: 22
 
       - name: Unit-test every scripts/*.test.mjs (enumerated, fails loud on a missing file)
+        shell: bash
         # UMB-055 item 2: this repo's other four test files (release-conform,
         # skeleton-check, license-check, new-repo -- the template/skeleton tooling)
         # never ran in CI before this step; only the landing pair did. `node --test`

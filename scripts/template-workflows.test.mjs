@@ -1243,7 +1243,9 @@ test('the wave-run row names the TODO rule, the process.exitCode wiring and the 
   assert.match(row, /NAMED OPEN, a canon TODO, not built: [^|]*zero tests/, 'VACUOUS covers only a file with zero tests');
   assert.match(row, /NAMED OPEN, a canon TODO, not built: [^|]*TAP of a PASS file/, 'the TAP of a PASS file is kept nowhere');
   const wf = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify-landing.yml'), 'utf8').replace(/\r\n/g, '\n');
-  assert.match(wf, /^ {6}matrix:\n {8}os: \[ubuntu-latest, macos-latest\]$/m, 'the gate job runs on a matrix that includes macos-latest');
+  // 09g item 12 (d): the Windows leg joins (node/runtime.md section 6 asks for all three), so the matrix names the three and the bash step says it runs under bash
+  assert.match(wf, /^ {6}matrix:\n {8}os: \[ubuntu-latest, macos-latest, windows-latest\]$/m, 'the gate job runs on a matrix of the three runners');
+  assert.match(wf, /- name: Unit-test every scripts\/\*\.test\.mjs[^\n]*\n {8}shell: bash\n/, 'the unit-test step is a bash loop, so it names its shell for the Windows leg');
   assert.match(wf, /^ {4}runs-on: \$\{\{ matrix\.os \}\}$/m);
   assert.match(wf, /^ {4}name: \$\{\{ matrix\.os == 'ubuntu-latest' && 'verify' \|\| format\('verify \(\{0\}\)', matrix\.os\) \}\}$/m, 'the ubuntu leg keeps the check name verify');
   for (const step of ['Secret scan', 'Doc references', 'Verify the landing']) {
