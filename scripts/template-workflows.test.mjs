@@ -1265,6 +1265,24 @@ test('create-release.yml names no ZIP except where it says it ships none; the ce
   assert.ok(!/is pinned in git-env-census\.test\.mjs/.test(census), 'CENSUS_EXEMPT names a pin the canon test does not carry');
 });
 
+// 09f item 9 (the umbrella auditor's pass 25, routed through main): the NEVER of "A published version is immutable" names its exceptions inline or has none (AGENTS.md FORCE VOCABULARY), and the posting
+// path edits the title, body and tag of a published launch-form Release. The section names that re-point as the second carve-out, only while no stable Release exists, and says the form is re-decided before Immutable Releases.
+test('RELEASE-PATTERN.md: the NEVER of the immutability section names the launch-form re-point as its second carve-out, only while no stable Release exists -- RED before 09f', () => {
+  const t = fs.readFileSync(path.join(ROOT, 'RELEASE-PATTERN.md'), 'utf8').replace(/\r\n/g, '\n');
+  const start = t.indexOf('## A published version is immutable—NEVER');
+  const end = t.indexOf('\n## ', start + 5);
+  assert.ok(start >= 0 && end > start, 'the section exists');
+  const sec = t.slice(start, end);
+  assert.doesNotMatch(sec, /The one sanctioned exception/, 'two carve-outs are named, so "the one" is false');
+  assert.match(sec, /two sanctioned exceptions/);
+  assert.match(sec, /Back-filling a missed Release/);
+  assert.match(sec, /launch-form re-point/);
+  assert.match(sec, /the only edit of a published Release's tag the house allows/);
+  assert.match(sec, /only while no stable Release exists/);
+  assert.match(sec, /Immutable Releases/);
+  assert.match(sec, /AR-71 \(a1\)/);
+});
+
 // BB-98 (b), 2026-10-09: GitHub's default policy blocks the `pull_request_target` event in public repositories from 2026-11-02 (workflow execution protections). The
 // canon says no new workflow adopts it, and the templates and this repo's own workflows carry none (a grep over 85 workflows of the org, its templates and the rooms found none).
 test('no template or own workflow uses the pull_request_target event, and SKILL-REPO-PATTERN.md bans adopting it -- RED before BB-98 (b)', () => {
