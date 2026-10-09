@@ -21,7 +21,7 @@ const TITLE_CAP = 200; // a title in the mail and in state; a feed entry can car
 // whitespace, C0/C1 controls and the Unicode line separators: none may reach a link or an error text that goes into a mail body
 const UNSAFE = new RegExp('[\\x00-\\x20\\x7f-\\x9f' + String.fromCharCode(0x2028, 0x2029) + ']', 'g');
 const oneLine = (s) => String(s).replace(UNSAFE, ' ').replace(/ +/g, ' ').trim();
-const KINDS = ['atom', 'rss', 'headings', 'raw'];
+const KINDS = ['atom', 'rss', 'headings', 'raw', 'incidents'];
 const SOURCE_FIELDS = ['id', 'name', 'url', 'kind', 'everyHours', 'ignoreTitle'];
 
 const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
@@ -76,11 +76,37 @@ export async function rawKey(text) {
   return { key, title: clean(title), link: '', updated: '' };
 }
 
-export async function keyFor(source, text) {
+// A Statuspage v2 incident history (incidents.json): the ids of its newest incidents, so an incident that opens and closes between two reads still moves the key
+// (the unresolved list forgets it), and an update to an incident already seen moves nothing (a hash of the body would). An incident object opens
+// {"id","name","status","created_at"...}; a component inside it opens the same way but with status operational / degraded_performance / ..., so the status list tells the two apart.
+// Newest first by created_at, whatever order the page lists them in. The page is read to BODY_CAP only; both pages we read list the newest first and stay inside it.
+const INCIDENT_IDS = 5;
+const INCIDENT = new RegExp(String.raw`\{"id":"([A-Za-z0-9_-]{6,40})","name":"((?:[^"\\]|\\.)*)","status":"(investigating|identified|monitoring|resolved|postmortem|scheduled|in_progress|verifying|completed)","created_at":"([^"]+)"`, 'g');
+const IDS_ONLY = /^[A-Za-z0-9_-]{6,40}(?:,[A-Za-z0-9_-]{6,40})*$/;
+const jsonText = (s) => { try { return JSON.parse('"' + s + '"'); } catch { return s; } };
+export function incidentsKey(text, prevKey = '') {
+  const found = [...text.matchAll(INCIDENT)].map((m) => ({ id: m[1], name: m[2], status: m[3], at: Date.parse(m[4]) || 0, index: m.index }));
+  if (!found.length) return /"incidents"\s*:\s*\[\s*\]/.test(text) ? { key: 'none', title: '', link: '', updated: '' } : null;
+  found.sort((a, b) => b.at - a.at || a.index - b.index);
+  const top = found.slice(0, INCIDENT_IDS);
+  // how many of the newest ids are new since the last read; a key from another kind (the old hash) or a first read counts none
+  const seen = IDS_ONLY.test(prevKey) ? new Set(prevKey.split(',')) : null;
+  const fresh = seen ? top.filter((i) => !seen.has(i.id)).length : 0;
+  const href = /"shortlink"\s*:\s*"([^"]+)"/.exec(text.slice(top[0].index, top[0].index + 2000));
+  const name = clean(jsonText(top[0].name));
+  return {
+    key: top.map((i) => i.id).join(','),
+    title: `${name} (${top[0].status})${fresh > 1 ? ` +${fresh - 1} more new` : ''}`,
+    link: href ? decode(href[1]).replace(UNSAFE, '') : '', updated: '',
+  };
+}
+
+export async function keyFor(source, text, prev) {
   switch (source.kind) {
     case 'atom': case 'rss': return parseFeed(text, { ignoreTitle: source.ignoreTitle });
     case 'headings': return headingsKey(text);
     case 'raw': return rawKey(text);
+    case 'incidents': return incidentsKey(text, prev?.key);
     default: throw new Error('unknown kind ' + source.kind);
   }
 }
@@ -117,7 +143,7 @@ export async function fetchSource(source, prev, fetchFn) {
     if (r.status === 304) return { source, status: 'same' };
     if (!r.ok) return { source, status: 'error', error: 'HTTP ' + r.status };
     const body = await readCapped(r);
-    const found = await keyFor(source, body);
+    const found = await keyFor(source, body, prev);
     // a feed of nothing but ignored entries (an alpha-only run of tags) has no news: quiet, not broken
     if (!found) return (source.kind === 'atom' || source.kind === 'rss') && /<(entry|item)[\s>]/i.test(body) ? { source, status: 'same' } : { source, status: 'error', error: 'no entry found' };
     const base = { source, key: found.key, to: found.title.slice(0, TITLE_CAP), link: found.link, etag: r.headers.get('etag') || '', lastModified: r.headers.get('last-modified') || '' };

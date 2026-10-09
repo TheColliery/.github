@@ -9,7 +9,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
-  USER_AGENT, BODY_CAP, CHANGE_LIST_MARK, parseFeed, headingsKey, rawKey, keyFor, isDue, pickRun, fetchSource, buildDigest, runOnce, validateConfig,
+  USER_AGENT, BODY_CAP, CHANGE_LIST_MARK, parseFeed, headingsKey, rawKey, incidentsKey, keyFor, isDue, pickRun, fetchSource, buildDigest, runOnce, validateConfig,
 } from './watcher.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -503,10 +503,10 @@ test('thecolliery.mjs: GitHub\'s own changelog label feeds sit at the END of the
   assert.deepStrictEqual(idsOf(c).slice(0, 25), ['claude-code', 'codex', 'gemini-cli', 'antigravity', 'copilot-cli', 'copilot-changelog', 'cursor', 'cline', 'windsurf', 'devin', 'kiro', 'augment', 'goose', 'amp', 'opencode', 'roo-code', 'kilo-code', 'continue', 'aider', 'qwen-code', 'openhands', 'mistral-vibe', 'crush', 'zed', 'jules'], 'the first 25 keep their slots');
 });
 
-test('kolwen.mjs: the five kept rows keep their slots, the beat\'s 44 rows follow, the two status watches close the list -- RED before UMB-460 (1) and BB-56', async () => {
+test('kolwen.mjs: the five kept rows keep their slots, the beat\'s 44 rows follow, the two status watches follow them -- RED before UMB-460 (1) and BB-56', async () => {
   const c = await load('kolwen.mjs');
   assert.deepStrictEqual(idsOf(c).slice(0, 5), ['claude-code', 'cloudflare-changelog', 'github-changelog', 'cloudflare-blog', 'coderabbit-changelog']);
-  assert.strictEqual(c.sources.length, 5 + 44 + 2);
+  assert.strictEqual(c.sources.length, 5 + 44 + 2 + 12);
   const byId = Object.fromEntries(c.sources.map((s) => [s.id, s]));
   for (const id of ['anthropic-api-notes', 'anthropic-pricing', 'openai-status', 'gemini-api-changelog', 'groq-changelog', 'cloudflare-workers-ai', 'github-copilot', 'paddle-changelog', 'deepseek-updates', 'xai-news']) assert.ok(byId[id], id);
   assert.strictEqual(byId['paddle-changelog'].url, 'https://developer.paddle.com/changelog.xml');
@@ -519,13 +519,14 @@ test('kolwen.mjs: the five kept rows keep their slots, the beat\'s 44 rows follo
     assert.strictEqual(s.kind, 'raw'); assert.strictEqual(s.everyHours, 12);
   }
   assert.strictEqual(new Set(hf.map((s) => s.url)).size, 13);
-  const tail = c.sources.slice(-2);
+  const tail = c.sources.slice(5 + 44, 5 + 44 + 2);
   assert.deepStrictEqual(tail.map((s) => [s.id, s.kind, s.url]), [
-    ['cloudflare-status', 'raw', 'https://www.cloudflarestatus.com/api/v2/incidents/unresolved.json'],
+    ['cloudflare-status', 'incidents', 'https://www.cloudflarestatus.com/api/v2/incidents.json'],
     ['groq-status', 'raw', 'https://groqstatus.com/api/v2/incidents.json'],
   ]);
   assert.strictEqual(tail[0].everyHours, 1, 'the platform the zone runs on is read every hour');
   assert.ok(!c.sources.some((s) => /history\.atom$/.test(s.url) && /cloudflarestatus/.test(s.url)), 'not history.atom: its newest entries are scheduled maintenance dated in the future');
+  assert.ok(!c.sources.some((s) => /unresolved\.json$/.test(s.url)), 'not the unresolved list: an incident that opens and closes between two reads never shows in it (Issue 39)');
 });
 
 test('the stagger keeps every instance\'s busiest hour close to its mean, so a quiet hour is not paid for with a spike', async () => {
@@ -599,4 +600,129 @@ test('rawKey titles a status-page JSON with its newest incident and a Hugging Fa
   assert.strictEqual((await rawKey('{"name":"@openai/codex","version":"0.160.0"}')).title, '0.160.0', 'an npm manifest still titles by its version');
   assert.strictEqual((await rawKey('# Changelog\n\n## 1.2.0\n- x\n')).title, '1.2.0', 'a markdown file still titles by its heading');
   assert.notStrictEqual((await rawKey(status)).key, (await rawKey(status.replace('identified', 'resolved'))).key, 'the key is still the hash of the whole body');
+});
+
+// ---- BB-112 / Issues 39, 41, 42 (2026-10-08): the status source reads the incident HISTORY by id; the Cloudflare beat's gaps; the log volume ----
+// A Statuspage v2 body in the shape of the two pages we read (cloudflarestatus.com, groqstatus.com): incident objects carry id, name, status, created_at first;
+// the components inside one open the same way but carry a component status, and an incident update opens {"id","status","body"}.
+const incident = (id, name, status, createdAt, extra = '') => `{"id":"${id}","name":"${name}","status":"${status}","created_at":"${createdAt}","updated_at":"${createdAt}","monitoring_at":null,"resolved_at":null,"impact":"minor","shortlink":"https://status.example.invalid/incidents/${id}","started_at":"${createdAt}","page_id":"p","incident_updates":[{"id":"u-${id}","status":"${status}","body":"We are looking into it","incident_id":"${id}"}],"components":[{"id":"c-${id}-1","name":"Network","status":"degraded_performance","created_at":"2026-01-01T00:00:00.000Z","updated_at":"2026-01-01T00:00:00.000Z","position":1}]${extra}}`;
+const statusBody = (...incidents) => `{"page":{"id":"p","name":"Status","url":"https://status.example.invalid"},"incidents":[${incidents.join(',')}]}`;
+const I3 = incident('aaa111aaa111', 'Network Performance Issues in Sofia', 'resolved', '2026-10-08T22:31:54.271Z');
+const I2 = incident('bbb222bbb222', 'Elevated errors \\"R2\\" \\u00e9', 'identified', '2026-10-07T10:00:00.000Z');
+const I1 = incident('ccc333ccc333', 'Dashboard login delays', 'resolved', '2026-10-06T09:00:00.000Z');
+
+test('incidentsKey: the key is the ids of the newest incidents by created_at, components and updates are not incidents, and the order of the page does not matter', () => {
+  const k = incidentsKey(statusBody(I3, I2, I1));
+  assert.strictEqual(k.key, 'aaa111aaa111,bbb222bbb222,ccc333ccc333');
+  assert.strictEqual(incidentsKey(statusBody(I1, I3, I2)).key, k.key, 'oldest-first or shuffled gives the same key');
+  assert.strictEqual(k.link, 'https://status.example.invalid/incidents/aaa111aaa111');
+  assert.strictEqual(k.title, 'Network Performance Issues in Sofia (resolved)');
+  const ids = Array.from({ length: 8 }, (_, i) => incident('id' + i + 'xxxxxxxx', 'n' + i, 'resolved', `2026-09-0${i + 1}T00:00:00.000Z`));
+  assert.strictEqual(incidentsKey(statusBody(...ids)).key.split(',').length, 5, 'the five newest');
+});
+
+test('incidentsKey: a name is JSON-decoded and tag-stripped; an update to an incident already seen moves nothing; a new incident moves the key', () => {
+  assert.strictEqual(incidentsKey(statusBody(I2)).title, 'Elevated errors "R2" é (identified)');
+  const before = incidentsKey(statusBody(I2, I1)).key;
+  const flipped = incidentsKey(statusBody(incident('bbb222bbb222', 'Elevated errors \\"R2\\" \\u00e9', 'resolved', '2026-10-07T10:00:00.000Z'), I1)).key;
+  assert.strictEqual(flipped, before, 'identified -> resolved is not a new incident');
+  assert.notStrictEqual(incidentsKey(statusBody(I3, I2, I1)).key, before);
+});
+
+test('incidentsKey: how many are new since the last read is counted from the stored ids only; a first read, an empty list and a non-status body are handled', () => {
+  const now = statusBody(I3, I2, I1);
+  assert.strictEqual(incidentsKey(now, 'ccc333ccc333').title, 'Network Performance Issues in Sofia (resolved) +1 more new');
+  assert.strictEqual(incidentsKey(now, 'bbb222bbb222,ccc333ccc333').title, 'Network Performance Issues in Sofia (resolved)', 'one new incident adds no suffix');
+  assert.strictEqual(incidentsKey(now, 'a'.repeat(64)).title, 'Network Performance Issues in Sofia (resolved)', 'a hash from the raw kind is no id list');
+  assert.strictEqual(incidentsKey(now).title, 'Network Performance Issues in Sofia (resolved)', 'a first read is a baseline, not "N new"');
+  assert.deepStrictEqual(incidentsKey('{"page":{},"incidents":[]}'), { key: 'none', title: '', link: '', updated: '' });
+  assert.strictEqual(incidentsKey('<html>maintenance</html>'), null);
+  assert.strictEqual(incidentsKey('{"components":[{"id":"cccccc1","name":"x","status":"operational","created_at":"2026-01-01T00:00:00Z"}]}'), null, 'a component alone is no incident');
+});
+
+test('fetchSource, kind incidents: an incident that opened and closed between two reads is a change; a status update of a known one is quiet (Issue 39: the unresolved list forgot the first)', async () => {
+  const src = { id: 'cloudflare-status', name: 'Cloudflare status', url: 'https://status.example.invalid/api/v2/incidents.json', kind: 'incidents', everyHours: 1 };
+  const reply = (body) => async () => new Response(body, { status: 200 });
+  const first = await fetchSource(src, undefined, reply(statusBody(I2, I1)));
+  assert.strictEqual(first.status, 'new');
+  const prev = { key: first.key, title: first.to, link: first.link };
+  const quiet = await fetchSource(src, prev, reply(statusBody(incident('bbb222bbb222', 'Elevated errors \\"R2\\" \\u00e9', 'resolved', '2026-10-07T10:00:00.000Z'), I1)));
+  assert.strictEqual(quiet.status, 'same');
+  const missed = await fetchSource(src, prev, reply(statusBody(I3, I2, I1)));
+  assert.strictEqual(missed.status, 'changed');
+  assert.strictEqual(missed.to, 'Network Performance Issues in Sofia (resolved)');
+  assert.strictEqual(missed.link, 'https://status.example.invalid/incidents/aaa111aaa111');
+  const olderRead = await fetchSource(src, undefined, reply(statusBody(I1)));
+  const two = await fetchSource(src, { key: olderRead.key, title: olderRead.to, link: olderRead.link }, reply(statusBody(I3, I2, I1)));
+  assert.strictEqual(two.to, 'Network Performance Issues in Sofia (resolved) +1 more new', 'two incidents opened and closed between two reads: the digest says so');
+  const none = await fetchSource(src, prev, reply('<html>503</html>'));
+  assert.deepStrictEqual([none.status, none.error], ['error', 'no entry found']);
+});
+
+test('validateConfig accepts the incidents kind', () => {
+  assert.strictEqual(validateConfig({ instance: 'x', maxPerRun: 5, sources: [{ id: 's', name: 'S', url: 'https://example.invalid/i.json', kind: 'incidents', everyHours: 1 }] }), null);
+});
+
+test('kolwen.mjs, BB-112 / Issues 41-42: the status row reads the incident history; the One Client feed, the four GitHub release feeds and the seven pages of Free-plan facts close the list, in that order', async () => {
+  const c = await load('kolwen.mjs');
+  const i = idsOf(c).indexOf('cloudflare-status');
+  assert.strictEqual(i, 5 + 44, 'the slots before it did not move');
+  assert.deepStrictEqual([c.sources[i].kind, c.sources[i].url, c.sources[i].everyHours], ['incidents', 'https://www.cloudflarestatus.com/api/v2/incidents.json', 1]);
+  assert.strictEqual(c.sources[i + 1].id, 'groq-status');
+  assert.strictEqual(c.sources[i + 1].kind, 'raw', 'Groq lists its history newest first and was never blind to a closed incident: left as it was');
+  assert.deepStrictEqual(idsOf(c).slice(i + 2), [
+    'cloudflare-one-client', 'cloudflare-wrangler', 'cloudflare-mcp-servers', 'cloudflare-agents-sdk', 'cloudflare-sandbox-sdk',
+    'cloudflare-doc-workers-limits', 'cloudflare-doc-workers-pricing', 'cloudflare-doc-kv-limits', 'cloudflare-doc-kv-pricing',
+    'cloudflare-doc-observability-pricing', 'cloudflare-doc-r2-pricing', 'cloudflare-doc-email-service-limits',
+  ]);
+  const byId = Object.fromEntries(c.sources.map((s) => [s.id, s]));
+  assert.strictEqual(byId['cloudflare-one-client'].url, 'https://developers.cloudflare.com/changelog/rss/cloudflare-one-client.xml');
+  for (const id of ['cloudflare-wrangler', 'cloudflare-mcp-servers', 'cloudflare-agents-sdk', 'cloudflare-sandbox-sdk']) assert.match(byId[id].url, /^https:\/\/github\.com\/cloudflare\/[a-z-]+\/releases\.atom$/, id);
+  const docs = c.sources.filter((s) => s.id.startsWith('cloudflare-doc-'));
+  assert.strictEqual(docs.length, 7);
+  for (const s of docs) { assert.match(s.url, /^https:\/\/developers\.cloudflare\.com\/[a-z0-9\/-]+\/index\.md$/, s.id); assert.strictEqual(s.kind, 'raw'); assert.strictEqual(s.everyHours, 24); }
+  assert.strictEqual(c.sources.length, 5 + 44 + 2 + 12);
+});
+
+test('kolwen.mjs: the monorepo release feeds are filtered to the package the hub runs, and pre-releases are quiet', async () => {
+  const c = await load('kolwen.mjs');
+  const byId = Object.fromEntries(c.sources.map((s) => [s.id, s]));
+  const pick = (id, ...titles) => parseFeed(atom(...titles), { ignoreTitle: byId[id].ignoreTitle })?.title;
+  assert.strictEqual(pick('cloudflare-wrangler', 'miniflare@5.20261006.1-alpha', 'create-cloudflare@2.73.4', 'wrangler@4.149.0', 'wrangler@4.148.0'), 'wrangler@4.149.0');
+  assert.strictEqual(pick('cloudflare-wrangler', 'wrangler@4.150.0-beta.1', 'wrangler@4.149.0'), 'wrangler@4.149.0');
+  assert.strictEqual(pick('cloudflare-agents-sdk', '@cloudflare/worker-bundler@0.2.6', '@cloudflare/think@0.20.1', 'agents@0.27.0'), 'agents@0.27.0');
+  assert.strictEqual(pick('cloudflare-sandbox-sdk', '@cloudflare/sandbox@1.0.1-rc.1', '@cloudflare/sandbox@1.0.0'), '@cloudflare/sandbox@1.0.0');
+  assert.strictEqual(pick('cloudflare-mcp-servers', 'workers-observability@0.5.5'), 'workers-observability@0.5.5');
+});
+
+// Issue 39 (c) / Issue 41 (a): Workers Logs move to Observability pricing on 2026-12-01; the docs page (developers.cloudflare.com/observability/pricing, read
+// 2026-10-09) lists Free as "0.5 GB per day" with seven-day retention and says that "On Free, Cloudflare stops ingesting new data when the account reaches its
+// daily limit". The watcher Worker writes ONE console line per Cron run (worker.mjs). This measures that line in its largest shape, in bytes, with the real
+// worker.mjs and the real Kolwen list, and holds the day's total to 1% of the allowance. The platform's own per-invocation record is NOT measured here: 4 KB per
+// run is an allowance written down as an ASSUMPTION, and the margin (2,000x or more) is what carries the claim.
+test('worker.mjs writes one small console line per run: a day of runs, with a 4 KB allowance for the platform record each, stays under 1% of the Free 0.5 GB a day', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'watcher-logs-'));
+  try {
+    for (const f of ['worker.mjs', 'watcher.mjs']) fs.copyFileSync(path.join(HERE, f), path.join(dir, f));
+    fs.copyFileSync(path.join(HERE, 'sources', 'kolwen.mjs'), path.join(dir, 'sources.mjs'));
+    const probe = `
+      import w from './worker.mjs';
+      const lines = [];
+      console.log = (s) => lines.push(String(s)); console.error = (s) => lines.push(String(s));
+      // the largest summary: every due source changed AND baselined-looking, and a mail binding that fails with a long code
+      const env = { STATE: { get: async () => null, put: async () => {} }, EMAIL: { send: async () => { const e = new Error('x'); e.code = 'E'.repeat(400); throw e; } }, DIGEST_TO: 't', DIGEST_FROM: 'f' };
+      globalThis.fetch = async () => new Response('<feed><entry><id>1</id><title>v1</title></entry></feed>', { status: 200 });
+      for (let h = 0; h < 24; h++) { const waits = []; await w.scheduled({ scheduledTime: Date.UTC(2026, 9, 4, h, 17) }, env, { waitUntil: (p) => waits.push(p) }); await Promise.all(waits); }
+      console.info(JSON.stringify({ runs: 24, lines: lines.length, bytes: lines.reduce((n, l) => n + Buffer.byteLength(l), 0), widest: Math.max(...lines.map((l) => Buffer.byteLength(l))) }));
+    `;
+    fs.writeFileSync(path.join(dir, 'probe.mjs'), probe);
+    const r = spawnSync(process.execPath, ['--max-old-space-size=256', path.join(dir, 'probe.mjs')], { cwd: dir, encoding: 'utf8', timeout: 60000, env: { PATH: process.env.PATH || '', SystemRoot: process.env.SystemRoot || '' } });
+    assert.strictEqual(r.status, 0, r.stderr);
+    const m = JSON.parse(r.stdout.trim().split('\n').pop());
+    assert.strictEqual(m.lines, m.runs, 'exactly one console line per run');
+    assert.ok(m.widest <= 512, `the widest line is ${m.widest} bytes`);
+    const FREE_PER_DAY = 0.5e9; const PLATFORM_RECORD_ALLOWANCE = 4096;
+    const day = m.bytes + m.runs * PLATFORM_RECORD_ALLOWANCE;
+    assert.ok(day <= FREE_PER_DAY * 0.01, `a day is ${day} bytes against ${FREE_PER_DAY * 0.01}`);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

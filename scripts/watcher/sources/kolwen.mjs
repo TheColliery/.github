@@ -2,7 +2,7 @@
 // builds on. DATA ONLY: no function, no credential. The same watcher code as TheColliery's instance; only this list differs. Deployed on the Kolwen account
 // by the LLM chief with `node scripts/watcher/deploy-payload.mjs kolwen --from <sender>` (see README.md).
 // Order is the stagger: a source with everyHours=n is due when (hour + its index) % n === 0, so adding to the END keeps every earlier slot.
-// 51 sources; the busiest hour of the week asks for the number the test prints in its failure message, against maxPerRun and the Free plan's 50 subrequests.
+// 63 sources; the busiest hour of the week asks for the number the test prints in its failure message, against maxPerRun and the Free plan's 50 subrequests.
 export default {
   instance: 'kolwen',
   maxPerRun: 24,
@@ -58,9 +58,26 @@ export default {
     { id: 'github-copilot', name: 'GitHub · Copilot changelog label', url: 'https://github.blog/changelog/label/copilot/feed/', kind: 'rss', everyHours: 2 },
     { id: 'paddle-changelog', name: 'Paddle · developer changelog', url: 'https://developer.paddle.com/changelog.xml', kind: 'rss', everyHours: 6 },
     // BB-56 (owner 2026-10-06): two status watches beside the e-mail subscription; the owner keeps one channel once both have carried the same events.
-    // Raw JSON, not history.atom: Cloudflare's history feed holds scheduled maintenance dated in the future, so no title pattern isolates an incident; this endpoint lists only unresolved ones.
-    { id: 'cloudflare-status', name: 'Cloudflare status (unresolved incidents)', url: 'https://www.cloudflarestatus.com/api/v2/incidents/unresolved.json', kind: 'raw', everyHours: 1 },
+    // The incident HISTORY, read by id (kind incidents): an incident that opens and closes between two hourly reads still moves the key, which the unresolved list (this row's
+    // first version) never saw: an 11-minute CDN incident of 2026-10-02 fell through it (Issue 39). Not history.atom: Cloudflare's history feed holds scheduled maintenance dated in the future.
+    { id: 'cloudflare-status', name: 'Cloudflare status (incident history)', url: 'https://www.cloudflarestatus.com/api/v2/incidents.json', kind: 'incidents', everyHours: 1 },
     // incidents.json, not summary.json: the history keeps an incident that opened and closed between two reads, the summary forgets it.
     { id: 'groq-status', name: 'Groq status (incidents)', url: 'https://groqstatus.com/api/v2/incidents.json', kind: 'raw', everyHours: 2 },
+    // BB-112 sweep gaps (Issues 39, 41, 42 of the .github repo, read 2026-10-08): the Cloudflare beat's holes, appended at the END so every earlier slot keeps its hour.
+    // The One Client (WARP) release notes arrive only through the changelog's per-product feed; the four GitHub feeds carry the releases that never reach the
+    // changelog (a monorepo's tags are filtered to the package the commercial hub runs: Wrangler, the Agents SDK); the seven pages are the Free-plan facts the
+    // deployed Workers are sized on, hashed from their .md form (a change to a number, a date or a sentence moves the hash; the title is the page's first heading).
+    { id: 'cloudflare-one-client', name: 'Cloudflare · One Client (WARP) changelog', url: 'https://developers.cloudflare.com/changelog/rss/cloudflare-one-client.xml', kind: 'rss', everyHours: 6 },
+    { id: 'cloudflare-wrangler', name: 'Cloudflare · Wrangler releases (workers-sdk)', url: 'https://github.com/cloudflare/workers-sdk/releases.atom', kind: 'atom', everyHours: 6, ignoreTitle: '^(?!wrangler@)|-(?:alpha|beta|rc)' },
+    { id: 'cloudflare-mcp-servers', name: 'Cloudflare · MCP servers releases', url: 'https://github.com/cloudflare/mcp-server-cloudflare/releases.atom', kind: 'atom', everyHours: 6 },
+    { id: 'cloudflare-agents-sdk', name: 'Cloudflare · Agents SDK releases', url: 'https://github.com/cloudflare/agents/releases.atom', kind: 'atom', everyHours: 6, ignoreTitle: '^(?!agents@)|-(?:alpha|beta|rc)' },
+    { id: 'cloudflare-sandbox-sdk', name: 'Cloudflare · Sandbox SDK releases', url: 'https://github.com/cloudflare/sandbox-sdk/releases.atom', kind: 'atom', everyHours: 6, ignoreTitle: '-(?:alpha|beta|rc)' },
+    { id: 'cloudflare-doc-workers-limits', name: 'Cloudflare docs · Workers limits', url: 'https://developers.cloudflare.com/workers/platform/limits/index.md', kind: 'raw', everyHours: 24 },
+    { id: 'cloudflare-doc-workers-pricing', name: 'Cloudflare docs · Workers pricing', url: 'https://developers.cloudflare.com/workers/platform/pricing/index.md', kind: 'raw', everyHours: 24 },
+    { id: 'cloudflare-doc-kv-limits', name: 'Cloudflare docs · KV limits', url: 'https://developers.cloudflare.com/kv/platform/limits/index.md', kind: 'raw', everyHours: 24 },
+    { id: 'cloudflare-doc-kv-pricing', name: 'Cloudflare docs · KV pricing', url: 'https://developers.cloudflare.com/kv/platform/pricing/index.md', kind: 'raw', everyHours: 24 },
+    { id: 'cloudflare-doc-observability-pricing', name: 'Cloudflare docs · Observability pricing', url: 'https://developers.cloudflare.com/observability/pricing/index.md', kind: 'raw', everyHours: 24 },
+    { id: 'cloudflare-doc-r2-pricing', name: 'Cloudflare docs · R2 pricing', url: 'https://developers.cloudflare.com/r2/pricing/index.md', kind: 'raw', everyHours: 24 },
+    { id: 'cloudflare-doc-email-service-limits', name: 'Cloudflare docs · Email Service limits', url: 'https://developers.cloudflare.com/email-service/platform/limits/index.md', kind: 'raw', everyHours: 24 },
   ],
 };
