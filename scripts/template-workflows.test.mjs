@@ -1233,6 +1233,24 @@ test('SKILL-REPO-PATTERN.md Layer 4 carries the wave-run row: waves by the live 
   }
 });
 
+// 08d K1-K3 (order 09f, 2026-10-09): the first POSIX runs of the runner found three defects in it, and the canon's own CI ran no macOS leg to see them first. The row carries what a room
+// learned and two opens that are named and not built; node/runtime.md section 6 makes the three-OS matrix a MUST, and this repo's gate job now has the macOS leg.
+test('the wave-run row names the TODO rule, the process.exitCode wiring and the two named opens; verify-landing.yml runs its tests on macOS too -- RED before 09f', () => {
+  const row = PATTERN.split('\n').find((l) => l.startsWith('| `scripts/lib/wave-run.mjs`'));
+  assert.ok(row, 'the row exists');
+  assert.match(row, /# TODO/, 'a failing test marked TODO is not a failure');
+  assert.match(row, /process\.exitCode/, 'a room entry that ends with process.exit() carries the POSIX pipe hazard itself');
+  assert.match(row, /NAMED OPEN, a canon TODO, not built: [^|]*zero tests/, 'VACUOUS covers only a file with zero tests');
+  assert.match(row, /NAMED OPEN, a canon TODO, not built: [^|]*TAP of a PASS file/, 'the TAP of a PASS file is kept nowhere');
+  const wf = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify-landing.yml'), 'utf8').replace(/\r\n/g, '\n');
+  assert.match(wf, /^ {6}matrix:\n {8}os: \[ubuntu-latest, macos-latest\]$/m, 'the gate job runs on a matrix that includes macos-latest');
+  assert.match(wf, /^ {4}runs-on: \$\{\{ matrix\.os \}\}$/m);
+  assert.match(wf, /^ {4}name: \$\{\{ matrix\.os == 'ubuntu-latest' && 'verify' \|\| format\('verify \(\{0\}\)', matrix\.os\) \}\}$/m, 'the ubuntu leg keeps the check name verify');
+  for (const step of ['Secret scan', 'Doc references', 'Verify the landing']) {
+    assert.match(wf, new RegExp('- name: ' + step + '[^\\n]*\\n(?: {8}[^\\n]*\\n)*? {8}if: matrix\\.os == \'ubuntu-latest\''), step + ' runs on the ubuntu leg only');
+  }
+});
+
 // BB-98 (b), 2026-10-09: GitHub's default policy blocks the `pull_request_target` event in public repositories from 2026-11-02 (workflow execution protections). The
 // canon says no new workflow adopts it, and the templates and this repo's own workflows carry none (a grep over 85 workflows of the org, its templates and the rooms found none).
 test('no template or own workflow uses the pull_request_target event, and SKILL-REPO-PATTERN.md bans adopting it -- RED before BB-98 (b)', () => {

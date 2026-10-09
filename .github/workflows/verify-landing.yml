@@ -24,7 +24,14 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # The macOS leg (order 09f, 2026-10-09; node/runtime.md section 6): the canon's tests ran on ubuntu alone, so six rooms' main went red on macOS from a canon test the canon could not see.
+    # The ubuntu leg keeps the check name `verify`; the leg that is not ubuntu is named `verify (<os>)`. Only the unit tests run on both: the three steps after them read the repo, not the OS.
+    name: ${{ matrix.os == 'ubuntu-latest' && 'verify' || format('verify ({0})', matrix.os) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15 # testing.md: every run has a finite clock; a room re-sizes this from its own measured suite time
     steps:
       - name: Checkout Repository
@@ -86,10 +93,13 @@ jobs:
                       templates/overlay-coal-skill/scripts/prune-release-zips.test.mjs
 
       - name: Secret scan (the tracked tree; the pushed range runs in the pre-push hook — UMB-282 (a))
+        if: matrix.os == 'ubuntu-latest'
         run: node scripts/secret-gate.mjs
 
       - name: Doc references (every markdown link resolves — UMB-057)
+        if: matrix.os == 'ubuntu-latest'
         run: node scripts/doc-refs.mjs
 
       - name: Verify the landing (no-Thai · org-row · dated)
+        if: matrix.os == 'ubuntu-latest'
         run: node scripts/verify-landing.mjs
