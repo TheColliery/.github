@@ -1067,4 +1067,27 @@ ${KEYS_ALLOW}  ++/'/.lastIndex; Object.assign(env, process.env); //'
   ] },
 ];
 
-export const VECTORS = [...FROM_TIPPLE, ...ROUND3, ...FROM_FACE, ...FROM_09F];
+// 14h (item 14, courier 2; CoalBoard #101): an env object another module can import is not one the census can read whole -- the importer can write GIT_DIR into it after this file's spawn.
+// Each declaration keyword and each export form is a row; the controls show an export that is NOT the env still passes.
+const EXENV = (kw) => `export ${kw} env = ${MK};\n`;
+const FROM_14H = [
+  { id: 'B-101', src: 'CoalBoard #101', expect: 'fail', texts: [
+    `${HEAD}${EXENV('const')}${SHORT}\n`,
+    `${HEAD}${EXENV('const')}${KEYED}\n`,
+    `${HEAD}${EXENV('let')}${SHORT}\n`,
+    `${HEAD}${EXENV('var')}${KEYED}\n`,
+  ] },
+  { id: 'B-101b', src: 'CoalBoard #101', expect: 'fail', texts: [
+    `${HEAD}const env = ${MK};\nexport { env };\n${SHORT}\n`,
+    `${HEAD}const env = ${MK};\nexport { env as shared };\n${KEYED}\n`,
+    `${HEAD}const env = ${MK};\n${SHORT}\nexport default env;\n`,
+    `${HEAD}const env = ${MK};\n${SHORT}\nmodule.exports = env;\n`,
+    `${HEAD}const env = ${MK};\n${SHORT}\nexports.env = env;\n`,
+  ] },
+  { id: 'P-101', src: 'CoalBoard #101', expect: 'pass', texts: [
+    `${HEAD}const env = ${MK};\n${SHORT}\nexport const other = 1;\n`,
+    `${HEAD}const env = ${MK};\nexport function run() { return spawnSync('git', ['status'], { env }); }\n`,
+    `${HEAD}export const mk = (dir) => (${MK});\nspawnSync('git', ['status'], { env: mk(d) });\n`,
+  ] },
+];
+export const VECTORS = [...FROM_TIPPLE, ...ROUND3, ...FROM_FACE, ...FROM_09F, ...FROM_14H];
