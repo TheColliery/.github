@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPTS = path.dirname(fileURLToPath(import.meta.url));
@@ -113,3 +113,38 @@ test('a run past its time limit is killed with its whole tree, says so, keeps it
   assert.match(r.stderr, /gate-test-run: killed after 4 seconds \(the time limit\)/);
   assert.match(fs.readFileSync(LOG(dir), 'utf8'), /HANG-STARTED/);
 });
+
+// 14h, UMB3-006 (CodeRabbit on gate-test-run.mjs): on POSIX the test children run in a process group of their own (detached), which Ctrl-C and a hook's terminate do NOT reach, so an interrupted
+// hook left the whole suite running. The runner now kills the tree on SIGINT, SIGTERM and SIGHUP and exits 128 + the signal number. A signal cannot be caught on Windows (a terminate is
+// abrupt), so this leg skips visibly there and the ubuntu and macOS runners clear it.
+async function interrupt(signal, timeoutLimitMs = '600000') {
+  const dir = scratchRepo();
+  const pidFile = path.join(dir, 'child.pid');
+  fs.writeFileSync(path.join(dir, 'hang.test.mjs'), "import fs from 'node:fs';\nfs.writeFileSync(process.env.PID_FILE, String(process.pid));\nprocess.stderr.write('HANG-STARTED\\n');\nsetInterval(() => {}, 1000);\n");
+  const child = spawn(process.execPath, ['--max-old-space-size=512', RUNNER, 'hang.test.mjs'], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'], env: { ...gitEnv(), PID_FILE: pidFile, GATE_TEST_RUN_TIMEOUT_MS: timeoutLimitMs } });
+  let err = ''; child.stderr.on('data', (d) => { err += d; });
+  const closed = new Promise((resolve) => child.on('close', (code, sig) => resolve({ code, sig })));
+  for (let i = 0; i < 400 && !fs.existsSync(pidFile); i++) await new Promise((r) => setTimeout(r, 50));
+  assert.ok(fs.existsSync(pidFile), 'the hung test file started');
+  await new Promise((r) => setTimeout(r, 200));
+  const testPid = Number(fs.readFileSync(pidFile, 'utf8'));
+  child.kill(signal);
+  const done = await Promise.race([closed, new Promise((r) => setTimeout(() => r('hung'), 30000))]);
+  if (done === 'hung') { child.kill('SIGKILL'); }
+  let alive = true;
+  for (let i = 0; i < 100 && alive; i++) { try { process.kill(testPid, 0); await new Promise((r) => setTimeout(r, 50)); } catch { alive = false; } }
+  if (alive) { try { process.kill(testPid, 'SIGKILL'); } catch { /* gone */ } }
+  return { done, err, alive, log: fs.existsSync(LOG(dir)) ? fs.readFileSync(LOG(dir), 'utf8') : '' };
+}
+
+for (const [signal, number] of [['SIGTERM', 15], ['SIGINT', 2], ['SIGHUP', 1]]) {
+  test(`an interrupt (${signal}) kills the whole test tree, says so, keeps the output, and exits ${128 + number} -- RED before 14h`, async (t) => {
+    if (process.platform === 'win32') { t.skip('a signal is not caught on Windows (a terminate is abrupt): the ubuntu and macOS runners clear this'); return; }
+    const r = await interrupt(signal);
+    assert.notEqual(r.done, 'hung', 'the runner ended');
+    assert.equal(r.done.code, 128 + number, r.err);
+    assert.match(r.err, new RegExp(`gate-test-run: interrupted by ${signal}; the test tree was killed`));
+    assert.equal(r.alive, false, 'the test file process is gone with its tree');
+    assert.match(r.log, /HANG-STARTED/);
+  });
+}

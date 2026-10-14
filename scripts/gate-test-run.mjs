@@ -52,20 +52,31 @@ async function main(args) {
   const child = spawn(process.execPath, [`--max-old-space-size=${HEAP_CAP_MB}`, '--test', `--test-timeout=${PER_TEST_TIMEOUT_MS}`, ...args], { stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
   let timedOut = false;
   const timer = setTimeout(() => { timedOut = true; killTree(child); }, RUN_TIMEOUT_MS);
+  // the child sits in a process group of its own (detached, POSIX), which Ctrl-C and a hook's terminate do not reach: the runner kills the tree itself on an interrupt and exits 128 + the signal number (UMB3-006)
+  let interrupted = null;
+  const onSignal = (sig, num) => () => { if (!interrupted) { interrupted = { sig, num }; killTree(child); } };
+  const handlers = [['SIGINT', 2], ['SIGTERM', 15], ['SIGHUP', 1]].map(([sig, num]) => [sig, onSignal(sig, num)]);
+  for (const [sig, h] of handlers) process.on(sig, h);
   const pass = (stream, sink) => stream.on('data', (d) => { sink.write(d); if (out) out.write(d); });
   pass(child.stdout, process.stdout); pass(child.stderr, process.stderr);
   const code = await new Promise((resolve) => { child.on('error', () => resolve(1)); child.on('close', (c) => resolve(c === null ? 1 : c)); });
   clearTimeout(timer);
+  for (const [sig, h] of handlers) process.off(sig, h);
+  if (interrupted) {
+    const note = `gate-test-run: interrupted by ${interrupted.sig}; the test tree was killed\n`;
+    process.stderr.write(note); if (out) out.write(note);
+  }
   if (timedOut) {
     const note = `gate-test-run: killed after ${Math.round(RUN_TIMEOUT_MS / 1000)} seconds (the time limit)\n`;
     process.stderr.write(note); if (out) out.write(note);
   }
   if (out) await new Promise((resolve) => out.end(resolve));
 
-  if (code === 0 && !timedOut) { if (log) fs.rmSync(log, { force: true }); return 0; }
+  if (code === 0 && !timedOut && !interrupted) { if (log) fs.rmSync(log, { force: true }); return 0; }
   console.error(log && out !== null
     ? `gate-test-run: this failing run's whole output is kept at ${log}`
     : 'gate-test-run: there is no git directory here, so the output was not kept');
+  if (interrupted) return 128 + interrupted.num;
   return code === 0 ? 1 : code; // a killed run exits non-zero too
 }
 
