@@ -128,6 +128,38 @@ test('--pre-push with a clean range passes and says what it read; with no refs o
   assert.match(run(dir, ['--pre-push'], '').out, /no refs on stdin, nothing to scan/);
 });
 
+// 14h (item 14, courier 3; CoalWash LOW): --remote=<name> names the PUSH remote, so a commit held only by ANOTHER remote still counts as unpushed. Nothing exercised the flag.
+// The fixture: three commits, the middle one adds a key and the last deletes it (the tree at HEAD is clean), the tip sits on the remote-tracking ref of `other` only, and the push is a new branch to `origin`.
+test('--pre-push --remote=<name>: a commit held only by another remote is scanned for the named push remote, and is skipped when the named remote already holds it or no remote is named', () => {
+  const dir = repo([{ 'a.txt': 'one\n' }, { 'k.txt': `${KEY}\n` }, { 'k.txt': null }]);
+  git(dir, 'remote', 'add', 'origin', 'https://example.invalid/o.git');
+  git(dir, 'remote', 'add', 'other', 'https://example.invalid/p.git');
+  const tip = git(dir, 'rev-parse', 'HEAD');
+  git(dir, 'update-ref', 'refs/remotes/other/main', tip);
+  const stdin = `refs/heads/main ${tip} refs/heads/main ${ZERO}\n`;
+  const toOrigin = run(dir, ['--pre-push', '--remote=origin'], stdin);
+  assert.strictEqual(toOrigin.code, 1, toOrigin.out + toOrigin.err);
+  assert.match(toOrigin.out, /pushed [0-9a-f]{12} "k\.txt":1 aws-access-key-id/);
+  for (const flags of [['--remote=other'], [], ['--remote=nosuchremote']]) {
+    const r = run(dir, ['--pre-push', ...flags], stdin);
+    assert.strictEqual(r.code, 0, `${flags.join(' ') || '(no --remote)'}: ${r.out}${r.err}`);
+    assert.match(r.out, /pushed range: 1 ref\(s\), 0 commit\(s\)/);
+  }
+});
+
+test('--pre-push --remote=<name> with a value that is not the name of a remote of this repository (a glob, a dash-led value, empty) is ignored and the scan falls back to every remote', () => {
+  const dir = repo([{ 'a.txt': 'one\n' }, { 'k.txt': `${KEY}\n` }, { 'k.txt': null }]);
+  git(dir, 'remote', 'add', 'other', 'https://example.invalid/p.git');
+  const tip = git(dir, 'rev-parse', 'HEAD');
+  git(dir, 'update-ref', 'refs/remotes/other/main', tip);
+  const stdin = `refs/heads/main ${tip} refs/heads/main ${ZERO}\n`;
+  for (const bad of ['--remote=*', '--remote=--all', '--remote=ot*', '--remote=']) {
+    const r = run(dir, ['--pre-push', bad], stdin);
+    assert.strictEqual(r.code, 0, `${bad}: ${r.out}${r.err}`);
+    assert.match(r.out, /pushed range: 1 ref\(s\), 0 commit\(s\)/, bad);
+  }
+});
+
 test('a pushed tag whose target is not a commit is refused by name, never scanned unread', () => {
   const dir = repo([{ 'a.txt': 'one\n' }]);
   const blob = git(dir, 'hash-object', '-w', 'a.txt');
