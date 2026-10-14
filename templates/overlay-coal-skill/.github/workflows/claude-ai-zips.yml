@@ -1,8 +1,10 @@
 name: claude-ai-zips
 
-# claude.ai installs skills as a ZIP only, and its skill-listing description cap is 200
-# chars vs our own cross-platform 1024 (desc-cap.mjs). For one tag: stage every
-# skill with its description deterministically trimmed to the platform cap
+# claude.ai installs skills as a ZIP only. Its skills page (read 2026-10-02) states a 1,024-char
+# description limit, and this build trims to 200 as a CONSERVATIVE cap until one real upload at the
+# longer length is on record (UMB-333; build-claude-ai-zips.mjs says the same); our own
+# cross-platform cap is 1024 (desc-cap.mjs). For one tag: stage every
+# skill with its description deterministically trimmed to that conservative cap
 # (scripts/build-claude-ai-zips.mjs — a DERIVED artifact, source skills/*/SKILL.md is
 # never edited), zip each staged directory, and attach the ZIPs to the GitHub Release
 # as assets. The user downloads a ZIP from the Release and uploads it to claude.ai

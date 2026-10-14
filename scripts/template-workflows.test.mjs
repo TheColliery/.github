@@ -1425,6 +1425,18 @@ test('the census files the rooms copy cite no scratchpad path (a path no clone c
   }
 });
 
+// 14h item 14 (10 #3), CoalLedger PR #20: the workflow header called 200 characters claude.ai's cap, while the build script beside it says claude.ai's page states 1,024 and 200 is a conservative trim kept until a real
+// upload at the longer length is on record (UMB-333). A comment that contradicts the script beside it misleads whoever reads the workflow alone, so the two say one thing.
+test('claude-ai-zips.yml names 200 as the conservative trim and 1,024 as the stated platform limit, as build-claude-ai-zips.mjs does -- RED before 14h (10 #3)', () => {
+  const wf = fs.readFileSync(path.join(ROOT, 'templates/overlay-coal-skill/.github/workflows/claude-ai-zips.yml'), 'utf8').split(/\r?\n/).slice(0, 12).join('\n');
+  const build = fs.readFileSync(path.join(ROOT, 'templates/overlay-coal-skill/scripts/build-claude-ai-zips.mjs'), 'utf8').split(/\r?\n/).slice(0, 14).join('\n');
+  assert.match(build, /1,024-char limit, so the 200 trim is conservative/, 'the script says it');
+  assert.doesNotMatch(wf, /skill-listing description cap is 200/, 'the header no longer calls 200 the cap');
+  assert.match(wf, /1,024/, 'the header names the stated limit');
+  assert.match(wf, /conservative/, 'the header names 200 as a conservative trim');
+  assert.match(wf, /UMB-333/, 'the header names what keeps the trim');
+});
+
 // BB-98 (b), 2026-10-09: GitHub's default policy blocks the `pull_request_target` event in public repositories from 2026-11-02 (workflow execution protections). The
 // canon says no new workflow adopts it, and the templates and this repo's own workflows carry none (a grep over 85 workflows of the org, its templates and the rooms found none).
 test('no template or own workflow uses the pull_request_target event, and SKILL-REPO-PATTERN.md bans adopting it -- RED before BB-98 (b)', () => {
