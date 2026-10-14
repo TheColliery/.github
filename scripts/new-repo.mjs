@@ -59,6 +59,7 @@ import path from 'path';
 import { fileURLToPath } from 'node:url';
 import { isLicenseStub, identifyLicense, normalizeLicenseId } from './lib/license-check-lib.mjs';
 import { planRulesetSpec, rulesetWriteBody, rulesetMatchesSpec, leftoverRulesets } from './lib/ruleset-match.mjs';
+import { readRulesetDetails } from './lib/ruleset-read.mjs';
 import { syncCoalTeam } from './lib/coal-team.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -284,19 +285,15 @@ async function applyRulesetSurfaces(settings, req, base) {
   if (!settings.ruleset && !settings.tagRuleset && !settings.leftoverRulesets) return out;
   const repoInfo = await req('GET', base);
   const defaultBranch = repoInfo.ok ? repoInfo.json?.default_branch : undefined;
-  const list = await req('GET', `${base}/rulesets`);
   const specs = [['ruleset', settings.ruleset], ['tagRuleset', settings.tagRuleset]];
   for (const [surface, s] of specs) if (s?.status === 'n/a') out.push({ surface, ok: true, status: 'N/A', reason: s.reason });
   const live = specs.filter(([, s]) => s?.name);
   if (live.length === 0 && !settings.leftoverRulesets) return out;
-  if (!Array.isArray(list.json)) {
-    out.push({ surface: 'ruleset', ok: false, status: list.status, reason: 'could not list the repo rulesets' });
+  // every page of the list and every detail, or a named failure: a ruleset dropped from the picture could make the planner create a duplicate beside it (UMB3-006)
+  let details;
+  try { details = await readRulesetDetails((p) => req('GET', p), base); } catch (e) {
+    out.push({ surface: 'ruleset', ok: false, status: 'FAIL', reason: `could not read the repo rulesets whole (${e.message})` });
     return out;
-  }
-  const details = [];
-  for (const c of list.json) {
-    const d = await req('GET', `${base}/rulesets/${c.id}`);
-    if (d.json) details.push(d.json);
   }
   for (const [surface, spec] of live) {
     // coverage of a ruleset that excludes a ref is judged against the default branch's name; without it, and with such a ruleset on the repo, nothing is planned (UMB3-006)

@@ -649,7 +649,8 @@ function scratchUmbrellaWithRoom() {
 function runSettingsWithStubStatus(status) {
   const root = scratchUmbrellaWithRoom();
   const stub = path.join(root, 'stub.mjs');
-  fs.writeFileSync(stub, "globalThis.fetch = async () => new Response('{}', { status: " + status + " });\n");
+  // a ruleset list is a list: an empty one, so the control below reaches the per-field verdicts (a bare {} is an answer that is not a list, a FAIL since UMB3-006)
+  fs.writeFileSync(stub, "globalThis.fetch = async (url) => new Response(String(url).includes('/rulesets') ? '[]' : '{}', { status: " + status + " });\n");
   const res = spawnSync(process.execPath, ['--max-old-space-size=512', path.join(root, '.github', 'scripts', 'skeleton-check.mjs'), '--settings'], {
     encoding: 'utf8',
     timeout: 60000,
@@ -670,6 +671,70 @@ test('skeleton-check.mjs --settings: a 200 repository GET still prints the per-f
   const res = runSettingsWithStubStatus(200);
   assert.doesNotMatch(res.stdout, /\[settings\]: FAIL/, res.stdout);
   assert.match(res.stdout, /repoPatch\.[A-Za-z_]+: DIFFERS/);
+});
+
+// ---- 14h, UMB3-006 (CodeRabbit on skeleton-check.mjs: the workflow-token read, the ruleset list and its details) ----
+// A stub that answers each path (query string dropped) from a table: { status, json } or { pages: [...] } for a list read page by page.
+function runSettingsWithRoutes(routes) {
+  const root = scratchUmbrellaWithRoom();
+  const stub = path.join(root, 'stub.mjs');
+  fs.writeFileSync(stub, [
+    "import fs from 'node:fs';",
+    "const R = JSON.parse(process.env.STUB_ROUTES);",
+    "globalThis.fetch = async (url) => {",
+    "  const u = new URL(String(url));",
+    "  fs.appendFileSync(process.env.STUB_LOG, u.pathname + u.search + '\\n');",
+    "  const hit = R[u.pathname];",
+    "  if (!hit) return new Response('{}', { status: 200 });",
+    "  if (hit.pages) return new Response(JSON.stringify(hit.pages[Number(u.searchParams.get('page') || 1) - 1] ?? []), { status: 200 });",
+    "  return new Response(hit.json === undefined ? '{}' : JSON.stringify(hit.json), { status: hit.status });",
+    "};",
+    "",
+  ].join('\n'));
+  const res = spawnSync(process.execPath, ['--max-old-space-size=512', path.join(root, '.github', 'scripts', 'skeleton-check.mjs'), '--settings'], {
+    encoding: 'utf8', timeout: 60000,
+    env: { ...process.env, GITHUB_TOKEN: 'stub-token', NODE_OPTIONS: '--import=' + pathToFileURL(stub).href, STUB_LOG: path.join(root, 'calls.txt'), STUB_ROUTES: JSON.stringify({ '/repos/TheColliery/Demo': { status: 200, json: { default_branch: 'main' } }, ...routes }) },
+  });
+  res.calls = fs.existsSync(path.join(root, 'calls.txt')) ? fs.readFileSync(path.join(root, 'calls.txt'), 'utf8').split('\n').filter(Boolean) : [];
+  fs.rmSync(root, { recursive: true, force: true });
+  return res;
+}
+const SETTINGS_RULESET = JSON.parse(fs.readFileSync(path.join(path.dirname(SKELETON_SCRIPT), '..', 'templates', 'repo-settings.published-code.json'), 'utf8')).ruleset;
+
+test('skeleton-check.mjs --settings: a workflow-token read that is not 2xx is a FAIL naming the path and status, never per-field drift off an empty body (UMB3-006)', () => {
+  const bad = runSettingsWithRoutes({ '/repos/TheColliery/Demo/actions/permissions/workflow': { status: 403 }, '/repos/TheColliery/Demo/rulesets': { status: 200, json: [] } });
+  assert.equal(bad.status, 1, bad.stdout + bad.stderr);
+  assert.match(bad.stdout, /\[settings\]: FAIL \(GET \/repos\/TheColliery\/Demo\/actions\/permissions\/workflow -> HTTP 403/);
+  assert.doesNotMatch(bad.stdout, /actionsWorkflowToken\.[A-Za-z_]+: DIFFERS/);
+  const ok = runSettingsWithRoutes({ '/repos/TheColliery/Demo/actions/permissions/workflow': { status: 200, json: { default_workflow_permissions: 'read', can_approve_pull_request_reviews: false } }, '/repos/TheColliery/Demo/rulesets': { status: 200, json: [] } });
+  assert.doesNotMatch(ok.stdout, /\[settings\]: FAIL/, ok.stdout);
+  assert.match(ok.stdout, /actionsWorkflowToken\.default_workflow_permissions: identical/);
+});
+
+test('skeleton-check.mjs --settings: a ruleset list that fails or is not a list, and a ruleset detail that fails, are each a FAIL naming the path and status, never an empty or shorter set (UMB3-006)', () => {
+  const list500 = runSettingsWithRoutes({ '/repos/TheColliery/Demo/rulesets': { status: 500 } });
+  assert.equal(list500.status, 1, list500.stdout + list500.stderr);
+  assert.match(list500.stdout, /\[settings\]: FAIL \(GET \/repos\/TheColliery\/Demo\/rulesets -> HTTP 500/);
+  const notList = runSettingsWithRoutes({ '/repos/TheColliery/Demo/rulesets': { status: 200, json: { message: 'x' } } });
+  assert.equal(notList.status, 1);
+  assert.match(notList.stdout, /rulesets -> an answer that is not a list/);
+  const detail = runSettingsWithRoutes({ '/repos/TheColliery/Demo/rulesets': { status: 200, json: [{ id: 7 }] }, '/repos/TheColliery/Demo/rulesets/7': { status: 502 } });
+  assert.equal(detail.status, 1);
+  assert.match(detail.stdout, /\[settings\]: FAIL \(GET \/repos\/TheColliery\/Demo\/rulesets\/7 -> HTTP 502/);
+  assert.doesNotMatch(detail.stdout, /ruleset \(rules:/, 'no ruleset verdict is printed off a partial read');
+});
+
+test('skeleton-check.mjs --settings: the ruleset list follows its pages -- the canon main-guard on page 2 is found, not reported missing (UMB3-006)', () => {
+  const filler = Array.from({ length: 100 }, () => ({ id: 7 }));
+  const r = runSettingsWithRoutes({
+    '/repos/TheColliery/Demo/rulesets': { pages: [filler, [{ id: 8 }]] },
+    '/repos/TheColliery/Demo/rulesets/7': { status: 200, json: { id: 7, name: 'other', target: 'branch', enforcement: 'disabled', conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: [] } }, rules: [], bypass_actors: [] } },
+    '/repos/TheColliery/Demo/rulesets/8': { status: 200, json: { id: 8, ...SETTINGS_RULESET } },
+  });
+  assert.doesNotMatch(r.stdout, /\[settings\]: FAIL/, r.stdout);
+  assert.match(r.stdout, /ruleset \(rules: [^)]*\): identical/, r.stdout);
+  assert.ok(r.calls.includes('/repos/TheColliery/Demo/rulesets?per_page=100&page=1'), 'page 1 is read with the parents (a ruleset inherited from the organization protects the repository too): ' + r.calls.join(' | '));
+  assert.ok(r.calls.includes('/repos/TheColliery/Demo/rulesets?per_page=100&page=2'), 'page 2 was requested');
 });
 
 // --- UMB-226: a no-remote change-request article cannot run a workflow ---

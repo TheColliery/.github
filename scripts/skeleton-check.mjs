@@ -46,6 +46,7 @@ import { isLicenseStub, licenseIdentityMismatches } from './lib/license-check-li
 import { compareOverlaySet } from './lib/overlay-set.mjs';
 import { pinOnlyDifference, pinLine } from './lib/pin-normalize.mjs';
 import { rulesetMatchesSpec, gateBypassVerdicts, gateCheckSourceVerdicts, leftoverRulesets } from './lib/ruleset-match.mjs';
+import { readRulesetDetails } from './lib/ruleset-read.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const githubRepo = path.resolve(scriptDir, '..');
@@ -234,6 +235,8 @@ async function diffSettings(kind, ownerRepo, settingsPath) {
 
   if (settings.actionsWorkflowToken) {
     const r = await ghGet(token, `${base}/actions/permissions/workflow`);
+    // a failed read is a FAIL, never per-field drift off an empty body (as the repository read above; UMB3-006)
+    if (!r.ok) throw new Error(`GET ${base}/actions/permissions/workflow -> HTTP ${r.status}`);
     diffFields('actionsWorkflowToken', settings.actionsWorkflowToken, r.json);
   }
 
@@ -252,12 +255,8 @@ async function diffSettings(kind, ownerRepo, settingsPath) {
     // active ruleset that covers the same rules but lets an admin bypass it (the Coal* rooms'
     // original main-guard) reads as DIFFERS, never as covered.
     const wantedTypes = (settings.ruleset.rules || []).map((rule) => rule.type);
-    const list = await ghGet(token, `${base}/rulesets`);
-    const details = [];
-    for (const c of Array.isArray(list.json) ? list.json : []) {
-      const d = await ghGet(token, `${base}/rulesets/${c.id}`);
-      if (d.json) details.push(d.json);
-    }
+    // the list follows its pages and every detail is read, or the read fails by name: an unsuccessful list read used to be an empty set and a failed detail was dropped (UMB3-006)
+    const details = await readRulesetDetails((p) => ghGet(token, p), base);
     const defaultBranch = repoRes.json?.default_branch;
     const covered = details.some((rs) => rulesetMatchesSpec(rs, settings.ruleset, defaultBranch));
     const coveredButBypassed = !covered && details.some((rs) => rulesetMatchesSpec({ ...rs, bypass_actors: [] }, settings.ruleset, defaultBranch));

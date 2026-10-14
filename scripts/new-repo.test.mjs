@@ -454,7 +454,9 @@ globalThis.fetch = async (url, init = {}) => {
   S.rulesets = S.rulesets || [];
   S.nextId = S.nextId || 900;
   const rsBase = '/repos/TheColliery/' + S.repo.name + '/rulesets';
-  if (method === 'GET' && p === rsBase) return reply(200, S.rulesets.map(({ id, name, target, enforcement }) => ({ id, name, target, enforcement })));
+  // the list is read page by page with a query string (per_page, page): the stub answers the path, the whole store as page 1 and an empty page after it
+  if (method === 'GET' && p.split('?')[0] === rsBase) return reply(200, /[?&]page=([2-9]|[1-9][0-9])/.test(p) ? [] : S.rulesets.map(({ id, name, target, enforcement }) => ({ id, name, target, enforcement })));
+  if (method === 'GET' && S.failDetail && p === rsBase + '/' + S.failDetail) return reply(502, {});
   if (method === 'GET' && p.startsWith(rsBase + '/')) { const rs = S.rulesets.find((r) => String(r.id) === p.slice(rsBase.length + 1)); return rs ? reply(200, rs) : reply(404, {}); }
   if (method === 'POST' && p === rsBase) { const rs = { id: S.nextId++, ...JSON.parse(init.body) }; S.rulesets.push(rs); return reply(201, rs); }
   if (method === 'PUT' && p.startsWith(rsBase + '/')) { const id = Number(p.slice(rsBase.length + 1)); S.rulesets = S.rulesets.map((r) => (r.id === id ? { id, ...JSON.parse(init.body) } : r)); return reply(200, S.rulesets.find((r) => r.id === id)); }
@@ -606,6 +608,13 @@ test('--apply-settings --only rulesets (the repository read has no default branc
   const { res, calls } = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalNext', '--only', 'rulesets'], { ...ROOM, default_branch: undefined }, { rulesets: [excluding] });
   assert.deepEqual(writes(calls), [], 'no write of any kind: ' + writes(calls).join(' | '));
   assert.match(res.stdout, /ruleset: .*default branch/);
+});
+
+// 14h, UMB3-006: a ruleset whose detail read fails is not dropped from the picture (the planner could then create a second ruleset beside it): the surface FAILS by name and nothing is written.
+test('--apply-settings --only rulesets (one ruleset detail read fails): FAIL naming the read, ZERO writes -- never a plan from a partial picture (UMB3-006)', () => {
+  const { res, calls } = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalNext', '--only', 'rulesets'], ROOM, { rulesets: [{ id: 1, ...CANON_BRANCH }], failDetail: 1 });
+  assert.deepEqual(writes(calls), [], 'no write of any kind: ' + writes(calls).join(' | '));
+  assert.match(res.stdout, /ruleset: FAIL \(could not read the repo rulesets whole \(GET \/repos\/TheColliery\/CoalNext\/rulesets\/1 -> HTTP 502\)/);
 });
 
 test('--apply-settings --only <anything but rulesets> fails loud; a private-working repo reports both ruleset surfaces N/A with the reason and writes nothing (rulesets canon)', () => {
