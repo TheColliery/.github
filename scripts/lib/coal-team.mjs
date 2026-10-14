@@ -9,6 +9,7 @@
 
 export const COAL_ORG = 'TheColliery';
 export const COAL_TEAM_SLUG = 'coal';
+const TEAM_PAGE = 100; // the one page the team list is read in
 const TEAM_PERMISSION = 'pull'; // the write-side name of Read; the least role (owner 2026-09-19)
 
 // A room is `Coal` + a name: no path characters, so a name can never steer a request path.
@@ -80,9 +81,11 @@ export async function syncCoalTeam({ call, owner, repoName, dry }) {
   if (early.status === 'N/A') return { ok: true, status: 'N/A', reason: early.reason };
 
   // ponytail: one page of 100 -- the team holds public Coal* rooms (single digits); paginate if it ever nears 100.
-  const listPath = `${teamBase}/repos?per_page=100`;
+  const listPath = `${teamBase}/repos?per_page=${TEAM_PAGE}`;
   const [team, teamRepos] = await Promise.all([read(teamBase), read(listPath)]);
   if (!team || !Array.isArray(teamRepos)) return fail(readError ?? `${listPath} did not return a list`);
+  // a list that fills the page may be truncated, and a description regenerated from it would drop rooms: fail before any plan or write (UMB3-006)
+  if (teamRepos.length >= TEAM_PAGE) return fail(`${listPath} returned ${teamRepos.length} entries, a full page that may be truncated; the sync reads one page and refuses to plan from it`);
 
   const plan = planCoalTeam({ org: owner, repo, teamRepos, teamDescription: team.description ?? '' });
   if (plan.status === 'IN-SYNC') {

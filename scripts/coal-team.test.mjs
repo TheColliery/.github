@@ -231,3 +231,18 @@ test('syncCoalTeam: an API read that fails is a FAIL naming the path, never a si
   assert.equal(res.ok, false);
   assert.match(res.reason, /HTTP 403/);
 });
+
+// 14h, UMB3-006 (CodeRabbit on coal-team.mjs): the team list is read one page of 100, so a list that FILLS the page may be truncated and a description regenerated from it would drop rooms.
+test('syncCoalTeam: a team list that fills its page (100 entries) is a FAIL naming the cap, never a sync from a possibly truncated list (UMB3-006)', async () => {
+  const full = Array.from({ length: 100 }, (_, i) => ({ name: `Coal${i}x`, id: 100 + i, private: false, role_name: 'read' }));
+  for (const dry of [true, false]) {
+    const api = fakeApi({ repo: { name: 'CoalNext', id: 1300000000, private: false }, teamRepos: full, description: LIVE_DESCRIPTION });
+    const res = await syncCoalTeam({ call: api.call, owner: COAL_ORG, repoName: 'CoalNext', dry });
+    assert.equal(res.ok, false, 'dry=' + dry);
+    assert.match(res.reason, /100 entries.*may be truncated/);
+    assert.deepEqual(writesOf(api.log), [], 'nothing written from a partial list');
+  }
+  const ninetyNine = fakeApi({ repo: { name: 'CoalNext', id: 1300000000, private: false }, teamRepos: full.slice(0, 99), description: LIVE_DESCRIPTION });
+  const ok = await syncCoalTeam({ call: ninetyNine.call, owner: COAL_ORG, repoName: 'CoalNext', dry: true });
+  assert.notEqual(ok.status, 'FAIL', '99 entries is a whole page');
+});
