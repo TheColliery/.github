@@ -1,5 +1,5 @@
 // THE WITNESS LIST AS DATA (08d, merged into the canon 2026-10-09): the union of what seven rooms' reviewers found against their git-spawn censuses, rounds 1 to 3
-// (the chief's scratchpad/dispatch/08d-census-witness-list.md: F1-F60 a git spawn whose env must be a finding, R1-R5 a spawn the census must COUNT, P1-P7 an env it must pass
+// (a list kept by the CoalWorks chief at order 08d, a file only the umbrella holds, so this file is the list now: F1-F60 a git spawn whose env must be a finding, R1-R5 a spawn the census must COUNT, P1-P7 an env it must pass
 // with no pin). One entry per vector; `texts` are whole fixture files, so a vector that declares `const env` carries BOTH call forms (the shorthand `{ env }` and
 // `env: env`). Three sources are merged: CoalTipple's fixtures (F1-F42, R1-R2, its own X, B, N and I rows, P3-P8), the round-3 rows written for the canon from the list's own
 // wording (ROUND3), and CoalFace's independent fixtures of the same rows (FROM_FACE, `src: 'CoalFace'`). Every fixture is a string or a template literal here, so the real

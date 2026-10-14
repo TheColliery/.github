@@ -1417,6 +1417,14 @@ test('create-release.yml does not claim a build step the file does not have -- R
   assert.match(fs.readFileSync(path.join(ROOT, 'templates/overlay-coal-skill/.github/workflows/claude-ai-zips.yml'), 'utf8'), /after every build and check above/);
 });
 
+// 14h item 14 (8): a file the rooms copy by blob names no path that only the umbrella holds. The census vectors cited a chief's scratchpad list, which no clone can open; the list is the file now.
+test('the census files the rooms copy cite no scratchpad path (a path no clone can open) -- RED before 14h (8)', () => {
+  for (const name of ['git-env-census.mjs', 'git-env-census.vectors.mjs', 'git-env-census.test.mjs']) {
+    const rel = `templates/overlay-coal-skill/scripts/lib/${name}`;
+    assert.doesNotMatch(fs.readFileSync(path.join(ROOT, rel), 'utf8'), /scratchpad[\\/]/, rel);
+  }
+});
+
 // BB-98 (b), 2026-10-09: GitHub's default policy blocks the `pull_request_target` event in public repositories from 2026-11-02 (workflow execution protections). The
 // canon says no new workflow adopts it, and the templates and this repo's own workflows carry none (a grep over 85 workflows of the org, its templates and the rooms found none).
 test('no template or own workflow uses the pull_request_target event, and SKILL-REPO-PATTERN.md bans adopting it -- RED before BB-98 (b)', () => {
