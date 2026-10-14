@@ -1345,6 +1345,23 @@ test('the check: a SHA256SUMS.txt that is listed but cannot be downloaded fails 
   assert.match(r.stdout + r.stderr, /could not be downloaded/);
 });
 
+// 14h item 14 (9), CoalLedger #5 (Major) and CoalBoard's canon-deferred thread: the canon fixed the `!= semver-major` hole in c015c4b, but seven of the eight rooms still carry it (CoalMine's allowlist is written with
+// contains(fromJSON(...))). The class is now a standing row of the pattern, so a room reading it has the rule and not only the template, and the canon's two copies are held to the env-var URL as well.
+test('SKILL-REPO-PATTERN.md states the auto-merge enable step as an allowlist the rooms take, and both canon copies pass the PR URL through env -- RED before 14h (9)', () => {
+  const bullet = PATTERN.split('\n').find((l) => l.startsWith('- **`dependabot-auto-merge.yml`'));
+  assert.ok(bullet, 'the bullet exists');
+  assert.match(bullet, /ALLOWLIST of patch and minor/);
+  assert.match(bullet, /`version-update:semver-patch` and `version-update:semver-minor`/);
+  assert.match(bullet, /`!= version-update:semver-major` .*empty update-type/);
+  assert.match(bullet, /`PR_URL`/);
+  assert.match(bullet, /`timeout-minutes`/);
+  for (const f of ['.github/workflows/dependabot-auto-merge.yml', 'templates/published-code/.github/workflows/dependabot-auto-merge.yml']) {
+    const text = fs.readFileSync(path.join(ROOT, f), 'utf8');
+    assert.match(text, /run: gh pr merge --squash --auto "\$PR_URL"/, f + ': the URL goes through the environment');
+    assert.doesNotMatch(text, /run: gh pr merge[^\n]*\$\{\{/, f + ': no expression is interpolated into the script');
+  }
+});
+
 // BB-98 (b), 2026-10-09: GitHub's default policy blocks the `pull_request_target` event in public repositories from 2026-11-02 (workflow execution protections). The
 // canon says no new workflow adopts it, and the templates and this repo's own workflows carry none (a grep over 85 workflows of the org, its templates and the rooms found none).
 test('no template or own workflow uses the pull_request_target event, and SKILL-REPO-PATTERN.md bans adopting it -- RED before BB-98 (b)', () => {
