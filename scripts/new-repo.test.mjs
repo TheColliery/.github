@@ -599,6 +599,15 @@ test('--apply-settings --only rulesets (a same-named ruleset that carries a rule
   assert.match(res.stdout, /ruleset: PENDING \(.*required_status_checks/);
 });
 
+// 14h, UMB3-006 (CodeRabbit on ruleset-match.mjs L43): coverage of a ruleset that excludes a concrete ref cannot be judged without the default branch's name, so a repository read that comes back without it
+// plans NOTHING: a write planned from an unjudged ruleset could create a second ruleset beside one that already covers the branch.
+test('--apply-settings --only rulesets (the repository read has no default branch): reports it and plans no ruleset write, whatever the rulesets hold (UMB3-006)', () => {
+  const excluding = { id: 1, ...CANON_BRANCH, conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: ['refs/heads/old'] } } };
+  const { res, calls } = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalNext', '--only', 'rulesets'], { ...ROOM, default_branch: undefined }, { rulesets: [excluding] });
+  assert.deepEqual(writes(calls), [], 'no write of any kind: ' + writes(calls).join(' | '));
+  assert.match(res.stdout, /ruleset: .*default branch/);
+});
+
 test('--apply-settings --only <anything but rulesets> fails loud; a private-working repo reports both ruleset surfaces N/A with the reason and writes nothing (rulesets canon)', () => {
   const bad = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalNext', '--only', 'team'], ROOM);
   assert.notEqual(bad.res.status, 0);

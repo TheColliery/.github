@@ -25,7 +25,8 @@ function refPatternMatches(pattern, ref) {
  * ACTIVE, targets the BRANCH type, applies to the repo's default branch, and its own
  * `rules` array covers every type named in `wantedTypes`. `defaultBranch` (a branch NAME,
  * optional) lets an `exclude` pattern that names or globs the default branch be honoured; a
- * `~DEFAULT_BRANCH`/`~ALL` exclude defeats coverage without it (UMB-112 row 21, CodeRabbit).
+ * `~DEFAULT_BRANCH`/`~ALL` exclude defeats coverage without it (UMB-112 row 21, CodeRabbit). Any OTHER
+ * exclude with no branch name is unjudgeable and reads as not covered (UMB3-006).
  */
 export function rulesetCoversRules(ruleset, wantedTypes, defaultBranch) {
   if (!ruleset || ruleset.enforcement !== 'active') return false;
@@ -40,7 +41,10 @@ export function rulesetCoversRules(ruleset, wantedTypes, defaultBranch) {
     || (defaultRef !== null && refInclude.some((p) => refPatternMatches(p, defaultRef)));
   if (!targetsDefaultBranch) return false;
   const exclude = ruleset.conditions?.ref_name?.exclude || [];
-  if (exclude.some((p) => p === '~DEFAULT_BRANCH' || p === '~ALL' || (defaultRef !== null && refPatternMatches(p, defaultRef)))) return false;
+  if (exclude.some((p) => p === '~DEFAULT_BRANCH' || p === '~ALL')) return false;
+  // a concrete exclude (a name or a glob) can only be judged against the default branch's name: without it coverage cannot be established, so it is not claimed (UMB3-006)
+  if (exclude.length > 0 && defaultRef === null) return false;
+  if (exclude.some((p) => refPatternMatches(p, defaultRef))) return false;
   const haveTypes = new Set((ruleset.rules || []).map((r) => r.type));
   return wantedTypes.every((t) => haveTypes.has(t));
 }
@@ -181,8 +185,8 @@ export function rulesetMatchesSpec(ruleset, spec, defaultBranch) {
  *                                          spec over it (bypass removed, enforcement set) -- only when
  *                                          every rule it carries is one the spec names, so a PUT never
  *                                          drops a rule the spec does not know about
- *   { action: 'conflict', id, reason }     same name, but it carries a rule outside the spec: the
- *                                          owner's decision, never overwritten
+ *   { action: 'conflict', id, reason }     same name, but it carries a rule outside the spec, or protects a
+ *                                          ref the spec does not name: the owner's decision, never overwritten
  *   { action: 'create' }                   nothing by that name
  */
 export function planRulesetSpec(details, spec, defaultBranch) {
@@ -193,6 +197,10 @@ export function planRulesetSpec(details, spec, defaultBranch) {
   const specTypes = new Set((spec.rules || []).map((r) => r.type));
   const extra = (named.rules || []).map((r) => r.type).filter((t) => !specTypes.has(t));
   if (extra.length > 0) return { action: 'conflict', id: named.id, reason: `"${named.name}" carries rule(s) the canon does not name (${extra.join(', ')}); overwriting would drop them` };
+  // the PUT also replaces the ref conditions, so a same-named ruleset that protects a ref the spec does not name would lose that protection (an extra exclude is dropped too, which only widens coverage) (UMB3-006)
+  const specInclude = spec.conditions?.ref_name?.include || [];
+  const extraRefs = specInclude.includes('~ALL') ? [] : (named.conditions?.ref_name?.include || []).filter((p) => !specInclude.includes(p));
+  if (extraRefs.length > 0) return { action: 'conflict', id: named.id, reason: `"${named.name}" protects ref(s) the canon does not name (${extraRefs.join(', ')}); overwriting would drop that protection` };
   return { action: 'update', id: named.id, existing: named };
 }
 

@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { rulesetCoversRules, anyRulesetCovers, GATE_RULESET_BYPASS, bypassActorsDiffer, gateBypassVerdicts, rulesetMatchesSpec, planRulesetSpec, rulesetWriteBody, leftoverRulesets, GATE_CHECK_SOURCE, gateCheckSourceVerdicts, gateCheckSourceBody } from './lib/ruleset-match.mjs';
 
 const WANTED = ['deletion', 'non_fast_forward'];
@@ -345,4 +348,44 @@ test('gateCheckSourceBody: the full PUT body is the ruleset as read with ONLY in
   assert.deepEqual(gateCheckSourceBody(g2).rules[1], { type: 'non_fast_forward' });
   // a check already sourced keeps its source
   assert.deepEqual(gateCheckSourceBody(GATE(CANON_CHECKS)).rules[0].parameters.required_status_checks, CANON_CHECKS);
+});
+
+// ---- 14h, UMB3-006 (CodeRabbit on ruleset-match.mjs: L43, L166, L193-196) ----
+
+test('rulesetCoversRules: a CONCRETE exclude cannot be judged without the default branch name -- false, never a guess; with the name, judged as before (UMB3-006)', () => {
+  assert.equal(rulesetCoversRules(exclusion(['refs/heads/main']), WANTED), false, 'a named exclude may be the default branch');
+  assert.equal(rulesetCoversRules(exclusion(['refs/heads/dev']), WANTED), false, 'coverage cannot be established');
+  assert.equal(rulesetCoversRules(exclusion(['refs/heads/release/*']), WANTED), false);
+  assert.equal(rulesetCoversRules(exclusion(['~DEFAULT_BRANCH']), WANTED), false, 'the symbolic form still needs no name');
+  assert.equal(rulesetCoversRules(exclusion(['refs/heads/dev']), WANTED, 'main'), true, 'with the name: another branch excluded, the default branch covered');
+  assert.equal(rulesetCoversRules(exclusion([]), WANTED), true, 'no exclude at all: nothing to judge');
+});
+
+test('planRulesetSpec: a same-named ruleset that protects refs the spec does not name is a conflict, never PUT over (the replacement would drop that protection); an extra exclude or a spec that names ~ALL is not (UMB3-006)', () => {
+  const wide = { id: 6, ...MAIN_GUARD, conditions: { ref_name: { include: ['~DEFAULT_BRANCH', 'refs/heads/release/**'], exclude: [] } }, bypass_actors: ADMIN };
+  const c = planRulesetSpec([wide], MAIN_GUARD, 'main');
+  assert.equal(c.action, 'conflict');
+  assert.equal(c.id, 6);
+  assert.match(c.reason, /refs\/heads\/release\/\*\*/);
+  const all = planRulesetSpec([{ id: 6, ...MAIN_GUARD, conditions: { ref_name: { include: ['~ALL'], exclude: [] } }, bypass_actors: ADMIN }], MAIN_GUARD, 'main');
+  assert.equal(all.action, 'conflict', 'a ~ALL ruleset protects more than the default branch');
+  const same = planRulesetSpec([{ id: 6, ...MAIN_GUARD, conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: ['refs/heads/x'] } }, bypass_actors: ADMIN }], MAIN_GUARD, 'main');
+  assert.equal(same.action, 'update', 'an exclude is dropped by the PUT, which widens coverage');
+  const tagWide = { id: 4, ...TAG_IMMUTABLE, conditions: { ref_name: { include: ['refs/tags/**', 'refs/tags/odd/*'], exclude: [] } }, bypass_actors: ADMIN };
+  assert.equal(planRulesetSpec([tagWide], TAG_IMMUTABLE).action, 'conflict');
+  const allSpec = { ...MAIN_GUARD, conditions: { ref_name: { include: ['~ALL'], exclude: [] } } };
+  const covered = planRulesetSpec([{ id: 6, ...allSpec, conditions: { ref_name: { include: ['~ALL', 'refs/heads/release/**'], exclude: [] } }, bypass_actors: ADMIN }], allSpec, 'main');
+  assert.equal(covered.action, 'update', 'a spec that names ~ALL already covers every pattern');
+});
+
+// UMB3-006 (L166), CONSIDERED: rulesetMatchesSpec judges a branch spec by the DEFAULT branch alone. That is the whole spec today, so this tripwire pins the assumption: the day a shipped branch spec names
+// another ref, this goes red and the match must judge every named ref (as the tag path does) before the spec ships.
+test('every shipped branch ruleset spec names only ~DEFAULT_BRANCH, the one ref rulesetMatchesSpec judges (UMB3-006 tripwire)', () => {
+  const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'templates');
+  const files = fs.readdirSync(dir).filter((f) => /^repo-settings\..+\.json$/.test(f)).sort();
+  assert.ok(files.length >= 2, files.join(','));
+  for (const f of files) {
+    const s = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+    if (s.ruleset && s.ruleset.target === 'branch') assert.deepEqual(s.ruleset.conditions.ref_name.include, ['~DEFAULT_BRANCH'], f);
+  }
 });

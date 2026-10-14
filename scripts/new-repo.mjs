@@ -299,6 +299,8 @@ async function applyRulesetSurfaces(settings, req, base) {
     if (d.json) details.push(d.json);
   }
   for (const [surface, spec] of live) {
+    // coverage of a ruleset that excludes a ref is judged against the default branch's name; without it, and with such a ruleset on the repo, nothing is planned (UMB3-006)
+    if (!defaultBranch && details.some((rs) => (rs.conditions?.ref_name?.exclude || []).length > 0)) { out.push({ surface, ok: false, status: repoInfo.status, reason: 'the repository read returned no default branch, so no ruleset was planned' }); continue; }
     const plan = planRulesetSpec(details, spec, defaultBranch);
     if (plan.action === 'in-sync') {
       out.push({ surface, ok: true, status: 'IN-SYNC', reason: `"${spec.name}" canon already held (matched by rules ${spec.rules.map((r) => r.type).join('+')} and an empty bypass list)` });
