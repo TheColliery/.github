@@ -291,10 +291,15 @@ test('defaultRead passes the running count and the thresholds the room gives to 
   assert.deepEqual(bare.raw.argv, ['--json', '--running', '1'], 'no threshold of ours is passed: the defaults of the core apply');
 });
 
-test('defaultRead against the real core: one reading comes back as a verdict of the three kinds within the clock of the room -- RED before BB-87', async () => {
+// 14h (item 14, courier 10; CoalLedger PR #20 #15): the real core reads os.cpus() and os.freemem(), which every machine answers, so a reading of it is a BREATHE or a WAIT with its thresholds. The test used to accept
+// UNMEASURED as well, which is exactly what a core that crashes, exits 2 or prints nothing readable becomes, so a broken core passed. UNMEASURED stays a legitimate verdict of the STUB cores above (a missing reader,
+// a garbage line, exit 2); against the real one it is a failure.
+test('defaultRead against the real core: one reading comes back as BREATHE or WAIT with both thresholds, never UNMEASURED and no error, within the clock of the room -- RED before 14h (10 #15)', async () => {
   const r = await defaultRead({ readerPath: MACHINE_READING, timeoutMs: LIMITS.fileTimeoutMs })({ running: 1 });
-  assert.ok(['BREATHE', 'WAIT', 'UNMEASURED'].includes(r.verdict), r.verdict);
-  if (r.verdict !== 'UNMEASURED') assert.equal(typeof r.raw.thresholds.cpuMaxPct, 'number');
+  assert.ok(['BREATHE', 'WAIT'].includes(r.verdict), `${r.verdict} ${r.error ?? ''}`);
+  assert.equal(r.error, undefined);
+  assert.equal(typeof r.raw.thresholds.cpuMaxPct, 'number');
+  assert.equal(typeof r.raw.thresholds.memMinPct, 'number');
 });
 
 // ---- the command line -----------------------------------------------------------------------------------------------------------------
