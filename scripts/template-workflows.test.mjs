@@ -1294,6 +1294,57 @@ test('the census row of SKILL-REPO-PATTERN.md says a room keeps a behaviour test
   assert.match(row, /trusts the helper by its name and import path and never opens it/, 'the reason is stated beside the sentence');
 });
 
+// 14h item 14 (6), CoalFace #1 = CoalLedger #4 (Major): "gh release download ... 2>/dev/null || true" turned an API or network failure into "no prior sums", and decide-upload then answered
+// upload-clobber over published assets. The step now lists the Release's assets first: an API failure fails the step, an absent SHA256SUMS.txt is the first-run answer, and a listed one that
+// cannot be downloaded fails too. A fake gh stands in for the API, each answer chosen by the test.
+const FAKE_GH = [
+  '#!/usr/bin/env bash',
+  'case "$1 $2" in',
+  '  "release view") if [ -n "${FAKE_VIEW_FAIL:-}" ]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi; printf "%s\\n" "${FAKE_ASSETS:-}"; exit 0;;',
+  '  "release download") if [ -n "${FAKE_DL_FAIL:-}" ]; then echo "download failed" >&2; exit 1; fi; out=""; while [ $# -gt 0 ]; do if [ "$1" = "-O" ]; then out="$2"; fi; shift; done; printf "abc  x.zip\\n" > "$out"; exit 0;;',
+  'esac',
+  'exit 99',
+  '',
+].join(String.fromCharCode(10));
+function existingSums(env, stale = false) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'zips-sums-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'bin'));
+    if (stale) fs.writeFileSync(path.join(dir, 'existing-SHA256SUMS.txt'), 'leftover  old.zip\n');
+    fs.writeFileSync(path.join(dir, 'bin', 'gh'), FAKE_GH, { mode: 0o755 });
+    const r = spawnSync('bash', ['-c', 'PATH="$PWD/bin:$PATH"\n' + stepRun('Check for an already-published SHA256SUMS.txt')], { encoding: 'utf8', timeout: 30000, cwd: dir, env: { ...process.env, RELEASE_TAG: 'v1.0.0', ...env } });
+    return { r, downloaded: fs.existsSync(path.join(dir, 'existing-SHA256SUMS.txt')) };
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+test('the already-published SHA256SUMS.txt check tells "asset absent" from "the API failed": a failed listing fails the step (it must never read as a first run) -- RED before 14h (6)', { skip: !HAS_BASH && 'no bash' }, () => {
+  const { r, downloaded } = existingSums({ FAKE_VIEW_FAIL: '1' });
+  assert.notEqual(r.status, 0, 'a listing that failed is not "no prior sums": ' + r.stdout);
+  assert.equal(downloaded, false);
+  assert.match(r.stdout + r.stderr, /could not list the assets/);
+});
+test('the check: a Release with no SHA256SUMS.txt (a first run, or only a similarly named file) succeeds with no file; a listed one is downloaded', { skip: !HAS_BASH && 'no bash' }, () => {
+  const none = existingSums({ FAKE_ASSETS: 'a.zip\nSHA256SUMS.txt.bak' });
+  assert.equal(none.r.status, 0, none.r.stderr);
+  assert.equal(none.downloaded, false, 'SHA256SUMS.txt.bak is not SHA256SUMS.txt');
+  const empty = existingSums({ FAKE_ASSETS: '' });
+  assert.equal(empty.r.status, 0, empty.r.stderr);
+  assert.equal(empty.downloaded, false);
+  const there = existingSums({ FAKE_ASSETS: 'a.zip\nSHA256SUMS.txt' });
+  assert.equal(there.r.status, 0, there.r.stderr);
+  assert.equal(there.downloaded, true);
+});
+test('the check removes a leftover existing-SHA256SUMS.txt before it looks: a re-run on a workspace that still holds one must not read it as the Release\'s', { skip: !HAS_BASH && 'no bash' }, () => {
+  const { r, downloaded } = existingSums({ FAKE_ASSETS: 'a.zip' }, true);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(downloaded, false);
+});
+test('the check: a SHA256SUMS.txt that is listed but cannot be downloaded fails the step, never "no prior sums" -- RED before 14h (6)', { skip: !HAS_BASH && 'no bash' }, () => {
+  const { r, downloaded } = existingSums({ FAKE_ASSETS: 'SHA256SUMS.txt', FAKE_DL_FAIL: '1' });
+  assert.notEqual(r.status, 0);
+  assert.equal(downloaded, false);
+  assert.match(r.stdout + r.stderr, /could not be downloaded/);
+});
+
 // BB-98 (b), 2026-10-09: GitHub's default policy blocks the `pull_request_target` event in public repositories from 2026-11-02 (workflow execution protections). The
 // canon says no new workflow adopts it, and the templates and this repo's own workflows carry none (a grep over 85 workflows of the org, its templates and the rooms found none).
 test('no template or own workflow uses the pull_request_target event, and SKILL-REPO-PATTERN.md bans adopting it -- RED before BB-98 (b)', () => {
