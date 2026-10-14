@@ -58,7 +58,8 @@ export function isLicenseStub(content) {
 // signature first), though the two source texts do not actually collide (verified
 // against both real fixtures: neither's signature phrase appears in the other's file).
 const LICENSE_SIGNATURES = [
-  ['FSL-1.1-Apache-2.0', (c) => /Functional Source License,\s*Version 1\.1/i.test(c)],
+  // the header names its FUTURE licence ("..., ALv2 Future License"): FSL-1.1-MIT carries the same opening words, so the opening alone would read an MIT-future body as Apache (UMB3-006)
+  ['FSL-1.1-Apache-2.0', (c) => /Functional Source License,\s*Version 1\.1,\s*(?:ALv2|Apache\s+2\.0)\s+Future\s+License/i.test(c)],
   ['CC-BY-NC-ND-4.0', (c) => /Attribution-NonCommercial-NoDerivatives 4\.0 International/i.test(c)],
   ['CC-BY-4.0', (c) => /Creative Commons Attribution 4\.0 International/i.test(c)],
   ['Apache-2.0', (c) => /Apache License/i.test(c) && /Version 2\.0/i.test(c)],
@@ -69,7 +70,9 @@ const LICENSE_SIGNATURES = [
  * Identifies a licence from its BODY text via a distinctive phrase per licence.
  * Returns the canonical id ('Apache-2.0', 'MIT', 'CC-BY-4.0', 'CC-BY-NC-ND-4.0',
  * 'FSL-1.1-Apache-2.0') or `null` when the body matches none of the five (a bespoke
- * proprietary notice, an empty file, or a stub with no reproduced legal text).
+ * proprietary notice, an empty file, or a body whose own words name no licence).
+ * Stubness is judged by isLicenseStub() and reported as its own finding: a short pointer that
+ * names a licence is still identified here, so the identity triangle runs on it too (UMB3-006).
  */
 export function identifyLicense(content) {
   if (!content) return null;
@@ -91,18 +94,20 @@ export function normalizeLicenseId(id) {
   // template repo's own NOTICE reads that way). Only Apache-2.0's long name is aliased,
   // because it is the only one met in the estate; add another when one is actually met.
   if (/^(?:the\s+)?apache\s+license,?\s+(?:version\s+)?2(?:\.0)?$/i.test(s)) s = 'Apache-2.0';
+  // MIT is in the estate (the three deliberate MIT keeps, AGENTS.md LICENSE = A PORTFOLIO), and its NOTICE sentence may name it "the MIT License" (UMB3-006)
+  else if (/^(?:the\s+)?mit(?:\s+license)?$/i.test(s)) s = 'MIT';
   return s.toLowerCase().replace(/[-_\s]+/g, '');
 }
 
 // A `{{TOKEN}}` left in a captured badge/NOTICE value: a scaffold's fill-in slot.
 const PLACEHOLDER_VALUE_RE = /^\{\{\s*[A-Z0-9_]+\s*\}\}$/;
 
-const BADGE_RE = /badge\/license-(.+?)-blue\b/;
-// GREEDY, not lazy: a licence id itself commonly contains a literal "." (Apache-2.0's
-// version number) -- a lazy `.+?\.` stops at the FIRST period it meets, truncating
-// "Apache-2.0" to "Apache-2". Greedy backtracks from the end of the line to the LAST
-// period (the sentence's own terminator), correctly capturing the whole id.
-const NOTICE_RE = /is licensed under (.+)\.\s*$/m;
+// shields.io: badge/<label>-<message>-<colour>[.svg|.png][?query]. The colour is ANY word or hex, so it is parsed apart from the value and only the value is compared (a green or
+// lightgrey licence badge was never read before, UMB3-006); a literal hyphen in the value is written as two, and the colour is the LAST segment before the end of the URL.
+const BADGE_RE = /badge\/license-([^\s)"'?]+?)-([A-Za-z0-9]+)(?:\.(?:svg|png))?(?=[\s)"'?>]|$)/;
+// The licence value ends at the first period that ends a sentence (a period followed by whitespace or the end of the line); a period inside an id (Apache-2.0, "Version 2.0") is
+// followed by a digit, so it stays. The earlier greedy form ran to the LAST period on the line, so "... Apache-2.0. See LICENSE." captured "Apache-2.0. See LICENSE" (UMB3-006).
+const NOTICE_RE = /is licensed under (.+?)\.(?:\s|$)/m;
 
 /**
  * The licence-identity triangle (UMB-058): a LICENSE body that IS identifiable, but a

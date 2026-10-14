@@ -322,3 +322,46 @@ test('every templates/*/LICENSE has platform-independent bytes (text unset, or e
   }
   assert.deepEqual(bad, [], 'these template LICENSE files would scaffold different bytes on a CRLF checkout');
 });
+
+// ---- 14h, UMB3-006 (CodeRabbit on license-check-lib.mjs: L61, L100, the MIT alias, L105) ----
+
+test('identifyLicense: FSL-1.1-Apache-2.0 is the ALv2 / Apache future-licence header only -- the MIT future-licence variant is unrecognized (null), never read as Apache (UMB3-006)', () => {
+  assert.equal(identifyLicense('# Functional Source License, Version 1.1, ALv2 Future License\n'), 'FSL-1.1-Apache-2.0');
+  assert.equal(identifyLicense('# Functional Source License, Version 1.1, Apache 2.0 Future License\n'), 'FSL-1.1-Apache-2.0');
+  assert.equal(identifyLicense('# Functional Source License, Version 1.1, MIT Future License\n'), null);
+  assert.equal(identifyLicense(FSL_WITH_EMBEDDED_APACHE), 'FSL-1.1-Apache-2.0', 'the real shape still identifies');
+});
+
+test('licenseIdentityMismatches: a README badge of ANY colour is read, and only the licence value is compared (UMB3-006)', () => {
+  for (const colour of ['blue', 'green', 'brightgreen', 'lightgrey', 'yellow', 'orange', 'red', 'success', 'informational', 'important', 'critical', 'inactive', '2ea44f']) {
+    for (const tail of ['', '.svg', '.svg?style=flat', '?style=flat']) {
+      const wrong = `![license](https://img.shields.io/badge/license-MIT-${colour}${tail})\n`;
+      const mm = licenseIdentityMismatches(REAL_APACHE_TEXT, wrong, '');
+      assert.equal(mm.length, 1, `${colour}${tail}: ${JSON.stringify(mm)}`);
+      assert.match(mm[0], /README badge says "MIT", body identifies as Apache-2\.0/, colour + tail);
+      assert.deepEqual(licenseIdentityMismatches(REAL_APACHE_TEXT, `![license](https://img.shields.io/badge/license-Apache_2.0-${colour}${tail})\n`, ''), [], 'the right badge, any colour: ' + colour + tail);
+    }
+  }
+  // a shields.io escaped hyphen (two hyphens) inside the value, and an HTML img tag, still parse to the whole value
+  assert.deepEqual(licenseIdentityMismatches(FSL_WITH_EMBEDDED_APACHE, '![l](https://img.shields.io/badge/license-FSL--1.1--Apache--2.0-green.svg)\n', ''), []);
+  assert.equal(licenseIdentityMismatches(REAL_APACHE_TEXT, '<img src="https://img.shields.io/badge/license-MIT-orange.svg">\n', '').length, 1);
+  // control: a line that is not a licence badge is not read as one
+  assert.deepEqual(licenseIdentityMismatches(REAL_APACHE_TEXT, '![build](https://img.shields.io/badge/build-passing-green)\n', ''), []);
+});
+
+test('normalizeLicenseId: "MIT License" (with or without "the") is the same licence as "MIT", and the alias does not widen (UMB3-006)', () => {
+  for (const s of ['MIT', 'the MIT', 'MIT License', 'the MIT License', 'The MIT License', 'mit license', ' the  MIT   License '])assert.equal(normalizeLicenseId(s), normalizeLicenseId('MIT'), s);
+  for (const s of ['MIT-0', 'MIT License 2.0', 'the MIT Licensed', 'Apache MIT', 'MITLicenses']) assert.notEqual(normalizeLicenseId(s), normalizeLicenseId('MIT'), s);
+  assert.equal(normalizeLicenseId('the Apache License, Version 2.0'), normalizeLicenseId('Apache-2.0'), 'the existing alias is kept');
+  assert.deepEqual(licenseIdentityMismatches(MIT_TEXT, '', 'x\nand is licensed under the MIT License.\n'), []);
+  assert.equal(licenseIdentityMismatches(REAL_APACHE_TEXT, '', 'x\nand is licensed under the MIT License.\n').length, 1);
+});
+
+test('licenseIdentityMismatches: the NOTICE licence value stops at the first period that ends a sentence, and keeps the periods inside an id (UMB3-006)', () => {
+  assert.deepEqual(licenseIdentityMismatches(REAL_APACHE_TEXT, '', 'x\nThis product is licensed under Apache-2.0. See LICENSE for the full text.\n'), []);
+  assert.deepEqual(licenseIdentityMismatches(REAL_APACHE_TEXT, '', 'x\nThis product is licensed under Apache-2.0.\n'), []);
+  assert.deepEqual(licenseIdentityMismatches(REAL_APACHE_TEXT, '', 'x\nThis product is licensed under the Apache License, Version 2.0. Other text follows.\n'), []);
+  const mm = licenseIdentityMismatches(REAL_APACHE_TEXT, '', 'x\nThis product is licensed under MIT. See LICENSE for the full text.\n');
+  assert.equal(mm.length, 1);
+  assert.match(mm[0], /NOTICE says "MIT"/);
+});
