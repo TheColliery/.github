@@ -868,7 +868,14 @@ function judgeCall(ctx, a, b, st) {
   if (typeof rets === 'string') return rets;
   ctx.memo.add(name);
   try {
-    for (const [ra, rb] of rets) { const r = judgeExpr(ctx, ra, rb, st); if (r) return `${name}() returns an env the census refuses: ${r}`; }
+    for (const [ra, rb] of rets) {
+      // each return is judged on its own: with the flags shared, one return's GIT_CONFIG_NOSYSTEM covered every other return of the helper (14h, CoalMine 09a row 12)
+      const sub = { ...st, ambient: false, nosys: false, trusted: false };
+      const r = judgeExpr(ctx, ra, rb, sub);
+      if (r) return `${name}() returns an env the census refuses: ${r}`;
+      if (rets.length > 1 && sub.ambient && !sub.nosys && !sub.trusted) return `${name}() has a return that reads process.env but sets no GIT_CONFIG_NOSYSTEM: '1' (the helper has ${rets.length} returns, and each is judged alone)`;
+      st.ambient = st.ambient || sub.ambient; st.nosys = st.nosys || sub.nosys; st.trusted = st.trusted || sub.trusted;
+    }
   } finally { ctx.memo.delete(name); }
   return null;
 }

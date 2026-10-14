@@ -1089,5 +1089,34 @@ const FROM_14H = [
     `${HEAD}const env = ${MK};\nexport function run() { return spawnSync('git', ['status'], { env }); }\n`,
     `${HEAD}export const mk = (dir) => (${MK});\nspawnSync('git', ['status'], { env: mk(d) });\n`,
   ] },
+  // 14h (item 14, courier 4), CoalMine's three census couriers of 09a, measured against the canon (scratchpad r09a/shim/disagree.jsonl rows 12-14). Row 12 was a hole and is a finding now;
+  // rows 13 and 14 pass BY DESIGN (a pure read of the binding, a loop over the keys of process.env that writes nowhere), so they are pinned as controls beside the variants that stay refused.
+  { id: 'CM-12', src: 'CoalMine 09a row 12', expect: 'fail', texts: [
+    `${HEAD}function mk() { if (a) return ${MK}; return { PATH: process.env.PATH }; }\nspawnSync('git', ['x'], { env: mk() });\n`,
+    `${HEAD}function mk() { if (a) return { PATH: process.env.PATH }; return ${MK}; }\nspawnSync('git', ['x'], { env: mk() });\n`,
+    `${HEAD}const mk = (a) => { if (a) { return ${MK}; } return { PATH: process.env.PATH }; };\nspawnSync('git', ['x'], { env: mk(1) });\n`,
+  ] },
+  { id: 'P-CM-12', src: 'CoalMine 09a row 12', expect: 'pass', texts: [
+    `${HEAD}function mk() { if (a) return ${MK}; return { HOME: process.env.HOME, GIT_CONFIG_NOSYSTEM: '1' }; }\nspawnSync('git', ['x'], { env: mk() });\n`,
+    `${HEAD}function mk() { if (a) return ${MK}; return { GIT_CONFIG_NOSYSTEM: '1' }; }\nspawnSync('git', ['x'], { env: mk() });\n`,
+    `${HEAD}${IMPORT_HELPER}function mk(d) { if (a) return ${MK}; return { ...gitEnv(d), PATH: process.env.PATH }; }\nspawnSync('git', ['x'], { env: mk(d) });\n`,
+    `${HEAD}${IMPORT_HELPER}function mk(d) { if (a) return { ...gitEnv(d), PATH: process.env.PATH }; return gitEnv(d); }\nspawnSync('git', ['x'], { env: mk(d) });\n`,
+    `${HEAD}function mk() { return { PATH: process.env.PATH }; }\nspawnSync('git', ['x'], { env: { ...mk(), GIT_CONFIG_NOSYSTEM: '1' } });\n`,
+  ] },
+  { id: 'CM-13', src: 'CoalMine 09a row 13', expect: 'fail', texts: [
+    `${HEAD}const env = ${MK};\nlog(env);\n${SHORT}\n`,
+    `${HEAD}const env = ${MK};\nlog({ env });\n${SHORT}\n`,
+    `${HEAD}const env = ${MK};\nlog([env]);\n${SHORT}\n`,
+    `${HEAD}const env = ${MK};\nObject.assign(env, x);\n${SHORT}\n`,
+  ] },
+  { id: 'P-CM-13', src: 'CoalMine 09a row 13', expect: 'pass', texts: [`${HEAD}const env = ${MK};\nlog(Object.keys(env));\n${SHORT}\n`] },
+  { id: 'CM-14', src: 'CoalMine 09a row 14', expect: 'fail', texts: [
+    `${HEAD}const env = ${MK};\nfor (const k in process.env) env[k] = process.env[k];\n${SHORT}\n`,
+    `${HEAD}const env = ${MK};\nfor (const k in process.env) Object.assign(env, { [k]: process.env[k] });\n${SHORT}\n`,
+  ] },
+  { id: 'P-CM-14', src: 'CoalMine 09a row 14', expect: 'pass', texts: [
+    `${HEAD}const env = ${MK};\nlet n = 0;\nfor (const k in process.env) n++;\n${SHORT}\n`,
+    `${HEAD}const env = ${MK};\nconst o = {};\nfor (const k in process.env) o[k] = process.env[k];\n${SHORT}\n`,
+  ] },
 ];
 export const VECTORS = [...FROM_TIPPLE, ...ROUND3, ...FROM_FACE, ...FROM_09F, ...FROM_14H];
