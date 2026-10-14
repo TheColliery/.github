@@ -14,6 +14,7 @@
 // Zero dependencies: node builtins and the global fetch. Every call carries a timeout; the create is never retried (a timeout does not
 // prove the post did not land, and a second create would double-post).
 import fs from 'node:fs';
+import { getAllPages, pageNote } from './paginate.mjs';
 import { MIRROR_TITLE_CAP, mirroredTitle, mirroredTitleOverflow } from '../../templates/overlay-coal-skill/scripts/lib/release-shape.mjs';
 
 export const ORG = 'TheColliery';
@@ -163,6 +164,9 @@ export async function announceOne(api, target, repo, tag, { post, log, title: ha
   return 'posted';
 }
 
+// Pages of a hundred Releases read per repository by the sweep: three hundred, far above any repository of the org; a list still full after them is reported, never read as complete.
+const RELEASE_PAGES = 3;
+
 // Sweep: every published Release of every public, non-archived, non-fork repository of the org published within `windowHours`.
 export async function sweep(api, target, { post, log, windowHours, now = Date.now(), held = [] }) {
   const repos = await api.rest(`/orgs/${ORG}/repos?type=public&per_page=100`);
@@ -170,14 +174,20 @@ export async function sweep(api, target, { post, log, windowHours, now = Date.no
   if (repos.length >= 100) throw new Error('the org has 100 or more public repositories: the sweep reads one page and refuses to run on a partial list');
   const since = now - windowHours * 3600 * 1000;
   const due = [];
+  const unread = [];
+  // the Release list is read page by page (three pages of a hundred) so a Release past the first ten is seen; a repository whose list cannot be read whole is one counted failure and the sweep goes on (UMB3-006)
+  const get = async (p) => { try { return { status: 200, json: await api.rest(p) }; } catch (e) { const m = /answered (\d+)/.exec(String(e && e.message)); return { status: m ? Number(m[1]) : 0, json: null }; } };
   for (const r of repos.filter((x) => !x.archived && !x.fork && !x.is_template && !x.private).sort((a, b) => (a.name < b.name ? -1 : 1))) {
-    const list = await api.rest(`/repos/${ORG}/${r.name}/releases?per_page=10`);
+    const read = await getAllPages(get, `/repos/${ORG}/${r.name}/releases`, (j) => j, RELEASE_PAGES);
+    if (read.partial) unread.push({ repo: r.name, why: pageNote(read) });
+    const list = read.items;
     // A stable Release only: a pre-release (the launch form) is a repo's own announcement and goes by hand, with a repo and a tag.
     for (const rel of list) if (!rel.draft && !rel.prerelease && rel.published_at && Date.parse(rel.published_at) >= since && TAG_RE.test(rel.tag_name)) due.push({ repo: r.name, tag: rel.tag_name, at: Date.parse(rel.published_at) });
   }
   due.sort((a, b) => a.at - b.at);
   log(`sweep: ${due.length} Release(s) published in the last ${windowHours} hours`);
   const counts = { posted: 0, 'would-post': 0, already: 0, failed: 0, held: 0 };
+  for (const u of unread) { counts.failed++; log(`FAIL ${u.repo}: could not read the Release list whole (${u.why}); the Releases read before it are still announced`); }
   for (const d of due) {
     try { counts[await announceOne(api, target, d.repo, d.tag, { post, log, held })]++; } catch (e) { counts.failed++; log(`FAIL ${d.repo} ${d.tag}: ${e.message}`); }
   }

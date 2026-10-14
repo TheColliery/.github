@@ -26,8 +26,10 @@ const USAGE = 'usage: INPUT_REPO=<repo> INPUT_TAG=<vX.Y.Z> [INPUT_POST=true] GH_
 async function main(args, env) {
   if (args.includes('-h') || args.includes('--help')) { console.log(USAGE); return 0; }
   if (args.length) { console.error(`announce-release: takes no arguments, got ${JSON.stringify(args[0])}\n${USAGE}`); return 64; }
+  // the window is the SWEEP's input: a manual run that names a repository takes none (UMB3-006)
+  const sweeping = !env.INPUT_REPO;
   const windowHours = env.INPUT_WINDOW_HOURS ? Number(env.INPUT_WINDOW_HOURS) : 48;
-  if (!Number.isInteger(windowHours) || windowHours < 1 || windowHours > 24 * 31) { console.error('announce-release: INPUT_WINDOW_HOURS must be a whole number of hours from 1 to 744'); return 1; }
+  if (sweeping && (!Number.isInteger(windowHours) || windowHours < 1 || windowHours > 24 * 31)) { console.error('announce-release: INPUT_WINDOW_HOURS must be a whole number of hours from 1 to 744'); return 1; }
   const post = env.INPUT_POST === 'true';
   const counts = await run({ repo: env.INPUT_REPO || '', tag: env.INPUT_TAG || '', post, windowHours, token: env.GH_TOKEN, title: env.INPUT_TITLE || '', summaryFile: env.GITHUB_STEP_SUMMARY || '' });
   console.log(`done (${post ? 'posting' : 'dry run'}): ${Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(', ')}`);

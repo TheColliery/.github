@@ -44,7 +44,12 @@ function fakeGithub(over = {}) {
     let m = u.pathname.match(/^\/repos\/TheColliery\/([^/]+)\/releases\/tags\/(.+)$/);
     if (m) { const rel = repos[m[1]] && repos[m[1]].releases.find((r) => r.tag_name === m[2]); return rel ? ok(rel) : { ok: false, status: 404, json: async () => ({}) }; }
     m = u.pathname.match(/^\/repos\/TheColliery\/([^/]+)\/releases$/);
-    if (m) return ok(repos[m[1]].releases);
+    if (m) {
+      const rr = repos[m[1]];
+      if (rr.releasesStatus) return { ok: false, status: rr.releasesStatus, json: async () => ({}) };
+      if (rr.releasePages) return ok(rr.releasePages[Number(u.searchParams.get('page') || 1) - 1] ?? []);
+      return ok(rr.releases);
+    }
     m = u.pathname.match(/^\/repos\/TheColliery\/([^/]+)$/);
     if (m && repos[m[1]]) return ok(repos[m[1]]);
     return { ok: false, status: 404, json: async () => ({}) };
@@ -147,6 +152,50 @@ test('CLI: -h exits 0 with the usage; an argument is exit 64; a missing token an
   r = cli([], { INPUT_REPO: 'CoalMine', INPUT_TAG: 'v3.17.3' }); assert.equal(r.status, 1); assert.match(r.stderr, /GH_TOKEN is not set/);
   r = cli([], { INPUT_WINDOW_HOURS: '0', GH_TOKEN: 'x' }); assert.equal(r.status, 1); assert.match(r.stderr, /INPUT_WINDOW_HOURS/);
   r = cli([], { INPUT_REPO: '../etc', INPUT_TAG: 'v1.0.0', GH_TOKEN: 'x' }); assert.equal(r.status, 1); assert.match(r.stderr, /not a repository name/);
+});
+
+// ---- 14h, UMB3-006 (CodeRabbit on announce-release.mjs: one repository's failure, pagination, the window input of a manual run) ----
+const relOf = (tag, h) => ({ tag_name: tag, name: tag + ' - s', body: 'b', html_url: 'https://x/' + tag, draft: false, prerelease: false, published_at: hoursAgo(h) });
+const repoOf = (name, extra) => ({ name, private: false, html_url: 'https://x/' + name, releases: [], ...extra });
+
+test('sweep: a repository whose Release list cannot be read is a counted failure with its name in the log, and the other repositories still post (UMB3-006)', async () => {
+  const gh = fakeGithub({ repos: { A: repoOf('A', { releasesStatus: 502 }), B: repoOf('B', { releases: [relOf('v1.0.0', 2)] }) } });
+  const logs = [];
+  const counts = await run({ token: TOKEN, fetchImpl: gh.f, log: (l) => logs.push(l), now: NOW, windowHours: 48, post: true, repo: '', tag: '' });
+  assert.deepEqual(counts, { posted: 1, 'would-post': 0, already: 0, failed: 1, held: 0 });
+  assert.match(logs.join('\n'), /FAIL A: could not read the Release list whole \(HTTP 502\)/);
+  assert.equal(gh.st.creates, 1, 'B was announced');
+  assert.equal(exitCodeFor(counts), 1, 'the run goes red so the unread repository is seen');
+});
+
+test('sweep: the Release list is read page by page -- a Release on the SECOND page inside the window is announced, not dropped after the first ten (UMB3-006)', async () => {
+  const old = Array.from({ length: 100 }, (_, i) => relOf('v0.0.' + i, 400 + i));
+  const gh = fakeGithub({ repos: { A: repoOf('A', { releases: [...old, relOf('v9.9.9', 3)], releasePages: [old, [relOf('v9.9.9', 3)]] }) } });
+  const counts = await run({ token: TOKEN, fetchImpl: gh.f, log: () => {}, now: NOW, windowHours: 48, post: true, repo: '', tag: '' });
+  assert.deepEqual(counts, { posted: 1, 'would-post': 0, already: 0, failed: 0, held: 0 });
+  assert.ok(gh.st.calls.some((c) => /\/repos\/TheColliery\/A\/releases\?per_page=100&page=2/.test(c)), gh.st.calls.join(' | '));
+  assert.ok(!gh.st.calls.some((c) => /per_page=10$|per_page=10&/.test(c)), 'the page size of ten is gone');
+});
+
+test('sweep: a Release list still full at the page cap is a counted failure naming the cap, and what was read is still announced (UMB3-006)', async () => {
+  const full = (tag) => Array.from({ length: 100 }, (_, i) => relOf('v' + tag + '.0.' + i, 400 + i));
+  const gh = fakeGithub({ repos: { A: repoOf('A', { releases: [...full(1), relOf('v8.8.8', 1)], releasePages: [full(1), full(2), [relOf('v8.8.8', 1), ...full(3).slice(1)]] }) } });
+  const logs = [];
+  const counts = await run({ token: TOKEN, fetchImpl: gh.f, log: (l) => logs.push(l), now: NOW, windowHours: 48, post: true, repo: '', tag: '' });
+  assert.equal(counts.failed, 1);
+  assert.match(logs.join('\n'), /FAIL A: could not read the Release list whole \(still full after 3 pages\)/);
+  assert.equal(counts.posted, 1, 'the Release read before the cap is still announced');
+});
+
+test('CLI: INPUT_WINDOW_HOURS is checked for a sweep only -- a manual run with a repo and a tag takes any window value; the sweep still refuses a bad one (UMB3-006)', () => {
+  let r = cli([], { INPUT_REPO: 'CoalMine', INPUT_TAG: 'v3.17.3', INPUT_WINDOW_HOURS: 'not-a-number' });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /GH_TOKEN is not set/, 'it got past the window input to the next check');
+  assert.doesNotMatch(r.stderr, /INPUT_WINDOW_HOURS/);
+  r = cli([], { INPUT_REPO: 'CoalMine', INPUT_TAG: 'v3.17.3', INPUT_WINDOW_HOURS: '0' });
+  assert.doesNotMatch(r.stderr, /INPUT_WINDOW_HOURS/);
+  r = cli([], { INPUT_WINDOW_HOURS: 'not-a-number', GH_TOKEN: 'x' });
+  assert.equal(r.status, 1); assert.match(r.stderr, /INPUT_WINDOW_HOURS/);
 });
 
 test('the workflow runs on a six-hourly schedule and by hand: only those two triggers, a scheduled run posts the named window, a manual run is a dry run unless post is true, the write permission at the job only, a never-cancel group', () => {
