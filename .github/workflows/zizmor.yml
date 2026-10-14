@@ -5,7 +5,14 @@ name: zizmor
 # every room (the "a deterministic check becomes a CI gate" MUST). Findings are annotations on the run.
 #
 # REPORT-ONLY FOR THE FIRST RUNS, with the house's own precedent (markdownlint.yml): nobody has read zizmor's output on these files yet, so a gate that is red on day one would
-# teach the reader to ignore it. The switch is one line: after the first run's findings are fixed or named, delete `continue-on-error` and the step is a gate.
+# teach the reader to ignore it. The switch is one flag: after the first run's findings are fixed or named, delete `--no-exit-codes` from the step and a finding makes it red
+# (zizmor exits 11 to 14 by the highest severity found, 1 on an error). Until then a finding exits 0 and a real ERROR (a bad argument, a file it cannot read) is still red.
+#
+# WHY NOT zizmorcore/zizmor-action (the first version of this file, run 38565145841, 2026-10-14): the org allows an action only if TheColliery owns it, GitHub created it, or it
+# matches one of four patterns (SKILL-REPO-PATTERN.md, Layer 5), and zizmorcore/ is none of them, so GitHub refused the run before any job started (a startup_failure: no step, no log).
+# Widening the org's allowlist is the owner's click, so the tool is installed here instead, from PyPI, as the one wheel this runner needs, pinned by its SHA-256 (`--require-hashes`,
+# `--only-binary`): the bytes, not a tag, are what runs. python3 and pip come with the ubuntu runner image. The hash is the manylinux_2_28_x86_64 wheel of zizmor 1.30.1 as listed at
+# https://pypi.org/pypi/zizmor/1.30.1/json (read 2026-10-15); a version bump changes the version and the hash together.
 on:
   push:
     branches: [main]
@@ -37,12 +44,20 @@ jobs:
           # This job pushes nothing, so the workflow token has no business staying in .git/config for the
           # rest of the job, readable by every later step (SKILL-REPO-PATTERN.md, Layer 5).
           persist-credentials: false
-      # zizmorcore/zizmor-action v0.6.4 (commit cc914d7f…, tag read at the GitHub API 2026-10-14), zizmor 1.30.1 (the latest release, 2026-09-09). annotations, not code scanning:
-      # `advanced-security: true` (the action's default) would need security-events: write for a SARIF upload, a scope this read-only job should not hold, and the two options are mutually exclusive.
-      - uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
-        continue-on-error: true  # report-only: see the header; remove this line to make the step a gate
-        with:
-          inputs: .github/workflows templates
-          version: 1.30.1
-          advanced-security: false
-          annotations: true
+      - name: Install zizmor 1.30.1 (the one wheel, pinned by SHA-256)
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/zizmor-venv"
+          printf 'zizmor==1.30.1 --hash=sha256:eee12266b793cb87ad4a7e3af2e72404f8a63e3de5eb099b80bf7b1cfd232a8e\n' > "$RUNNER_TEMP/zizmor-requirements.txt"
+          "$RUNNER_TEMP/zizmor-venv/bin/pip" install --quiet --require-hashes --only-binary=:all: -r "$RUNNER_TEMP/zizmor-requirements.txt"
+          "$RUNNER_TEMP/zizmor-venv/bin/zizmor" --version
+      # offline (no token): the audits that need the GitHub API are skipped, the rest read the files. Every workflow file is named explicitly: a file named on the command line is always audited,
+      # where how a directory input is walked for nested .github/workflows folders is not stated by the docs (docs.zizmor.sh/usage, read 2026-10-15). The full text goes to the log, then the first
+      # ten findings as annotations (the github format shows no more).
+      - name: zizmor over the workflows and the canon templates (report-only)
+        run: |
+          set -euo pipefail
+          find .github/workflows templates -path '*.github/workflows/*' \( -name '*.yml' -o -name '*.yaml' \) -print0 | sort -z > "$RUNNER_TEMP/zizmor-inputs"
+          test -s "$RUNNER_TEMP/zizmor-inputs" || { echo "::error::no workflow file found to audit"; exit 1; }
+          xargs -0 -a "$RUNNER_TEMP/zizmor-inputs" "$RUNNER_TEMP/zizmor-venv/bin/zizmor" --offline --no-exit-codes --format=plain
+          xargs -0 -a "$RUNNER_TEMP/zizmor-inputs" "$RUNNER_TEMP/zizmor-venv/bin/zizmor" --offline --no-exit-codes --format=github

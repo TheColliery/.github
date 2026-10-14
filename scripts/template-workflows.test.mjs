@@ -1381,20 +1381,23 @@ test('every actions/setup-node step in a workflow whose job holds contents: writ
   }
 });
 
-test('zizmor.yml runs the workflow analyser over this repository\'s workflows and the canon templates, read-only, pinned, as annotations (G-1)', () => {
+test('zizmor.yml runs the workflow analyser over this repository\'s workflows and the canon templates, read-only, from the one SHA-256-pinned wheel, report-only by one flag (G-1; 14h3: no third-party action)', () => {
   const t = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'zizmor.yml'), 'utf8').replace(/\r\n/g, '\n');
   const code = t.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n');
-  assert.match(code, /uses: zizmorcore\/zizmor-action@[0-9a-f]{40} # v\d+\.\d+\.\d+/, 'pinned by commit with a version comment');
-  assert.match(code, /inputs: \.github\/workflows templates\n/, 'the canon templates are scanned beside this repository\'s own workflows');
-  assert.match(code, /version: \d+\.\d+\.\d+\n/, 'zizmor itself is pinned');
-  assert.match(code, /advanced-security: false\n\s+annotations: true/, 'annotations, no SARIF upload');
+  assert.doesNotMatch(code, /zizmorcore\//, 'the org allowlist refuses that action: the run never started (14h3)');
+  assert.match(code, /zizmor==\d+\.\d+\.\d+ --hash=sha256:[0-9a-f]{64}\b/, 'zizmor itself is pinned by version and by the wheel hash');
+  assert.match(code, /pip" install [^\n]*--require-hashes[^\n]*--only-binary=:all:/, 'pip refuses an unhashed or source install');
+  assert.match(code, /-path '\*\.github\/workflows\/\*'/, 'the find reaches this repository\'s own .github/workflows and the templates\' (a `*/.github` pattern misses the root one)');
+  assert.match(code, /find \.github\/workflows templates /, 'the canon templates are scanned beside this repository\'s own workflows');
+  assert.match(code, /--offline --no-exit-codes --format=plain/);
+  assert.match(code, /--offline --no-exit-codes --format=github/);
   assert.doesNotMatch(code, /security-events: write|contents: write/, 'a read-only job');
+  assert.doesNotMatch(code, /continue-on-error/, 'report-only is the one flag --no-exit-codes: a real error of the tool is still red');
   assert.match(code, /workflow_dispatch:/);
   assert.match(code, /persist-credentials: false/);
   assert.match(code, /timeout-minutes: \d+/);
   assert.match(code, /group: zizmor-\$\{\{ github\.ref \}\}\n\s+cancel-in-progress: true/);
-  // the report-only state is a one-line switch and says so
-  assert.match(t, /continue-on-error: true +# report-only: see the header; remove this line to make the step a gate/);
+  assert.match(t, /delete `--no-exit-codes` from the step/, 'the header names the one-flag switch');
 });
 
 test('SKILL-REPO-PATTERN.md states the workflow analyser (G-1): where it runs, that it is report-only with a one-line switch, and the setup-node opt-out -- RED before 14h (11)', () => {
@@ -1402,7 +1405,9 @@ test('SKILL-REPO-PATTERN.md states the workflow analyser (G-1): where it runs, t
   assert.ok(bullet, 'the bullet exists');
   assert.match(bullet, /`\.github\/workflows\/zizmor\.yml`/);
   assert.match(bullet, /REPORT-ONLY for its first runs, as `markdownlint\.yml` is/);
-  assert.match(bullet, /`continue-on-error` line/);
+  assert.match(bullet, /`--no-exit-codes`/);
+  assert.match(bullet, /SHA-256/);
+  assert.match(bullet, /org's allowlist/);
   assert.match(bullet, /`package-manager-cache: false`/);
 });
 
@@ -1542,4 +1547,28 @@ test('SKILL-REPO-PATTERN.md Layer 4 carries the git-env-census row: one rule, th
   for (const f of ['git-env-census.mjs', 'git-env-census.vectors.mjs', 'git-env-census.test.mjs']) {
     assert.ok(fs.existsSync(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', f)), f + ' is in the overlay lib folder');
   }
+});
+
+// 14h3 (zizmor startup_failure, run 38565145841, 2026-10-14): the org allows an action only if it is owned by TheColliery, created by GitHub, or matches the org's patterns, and every action must be
+// pinned to a full SHA. A workflow that names any other action never starts: GitHub refuses it before a job exists, so no step of a run can show it. The patterns below are read from the org's own
+// refusal text on that run (the org policy is the owner's, GET /orgs/TheColliery/actions/permissions); a new pattern the owner adds is added here in the same unit.
+const ORG_ALLOWED_ACTIONS = [/^TheColliery\//, /^actions\//, /^github\//, /^DavidAnson\/markdownlint-cli2-action$/, /^dependabot\/fetch-metadata$/, /^ossf\/scorecard-action$/, /^pypa\/gh-action-pypi-publish$/];
+test('every action this repository\'s workflows and the canon templates use is one the org allows, pinned to a full SHA -- RED while zizmor.yml named zizmorcore/zizmor-action (a startup failure no step can show) -- 14h3', () => {
+  const files = [];
+  const walk = (dir) => { for (const e of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) { const p = `${dir}/${e.name}`; if (e.isDirectory()) walk(p); else if (/\.github\/workflows\/[^/]+\.ya?ml$/.test(p)) files.push(p); } };
+  walk('.github/workflows'); walk('templates');
+  assert.ok(files.length >= 20, 'the walk finds the workflows it polices: ' + files.length);
+  const bad = [];
+  for (const f of files) {
+    const text = fs.readFileSync(path.join(ROOT, f), 'utf8');
+    for (const m of text.matchAll(/^\s*-?\s*uses:\s*([^\s#]+)/gm)) {
+      const ref = m[1];
+      if (ref.startsWith('./') || ref.startsWith('docker://')) continue;
+      const [name, pin] = ref.split('@');
+      const repo = name.split('/').slice(0, 2).join('/');
+      if (!ORG_ALLOWED_ACTIONS.some((re) => re.test(repo))) bad.push(`${f}: ${repo} is not on the org's allowlist`);
+      if (!/^[0-9a-f]{40}$/.test(pin || '')) bad.push(`${f}: ${ref} is not pinned to a full commit SHA`);
+    }
+  }
+  assert.deepEqual(bad, []);
 });
