@@ -1,0 +1,48 @@
+name: zizmor
+
+# G-1 (CoalTipple's E2 pass, routed through the CoalWorks chief's 09b, order 14h): zizmor, the static analyser for GitHub Actions workflows, over this repository's own
+# workflows AND the canon templates the rooms copy from. A deterministic check that a reviewer would otherwise find one room at a time becomes a CI step here, once, for
+# every room (the "a deterministic check becomes a CI gate" MUST). Findings are annotations on the run.
+#
+# REPORT-ONLY FOR THE FIRST RUNS, with the house's own precedent (markdownlint.yml): nobody has read zizmor's output on these files yet, so a gate that is red on day one would
+# teach the reader to ignore it. The switch is one line: after the first run's findings are fixed or named, delete `continue-on-error` and the step is a gate.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+      - 'templates/**/.github/workflows/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+      - 'templates/**/.github/workflows/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# cancel-in-progress: TRUE -- an analysis reads files and publishes nothing, so a superseded run has no partial state to leave behind.
+concurrency:
+  group: zizmor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  zizmor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10 # testing.md: every run has a finite clock; a room re-sizes this from its own measured suite time
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # This job pushes nothing, so the workflow token has no business staying in .git/config for the
+          # rest of the job, readable by every later step (SKILL-REPO-PATTERN.md, Layer 5).
+          persist-credentials: false
+      # zizmorcore/zizmor-action v0.6.4 (commit cc914d7f…, tag read at the GitHub API 2026-10-14), zizmor 1.30.1 (the latest release, 2026-09-09). annotations, not code scanning:
+      # `advanced-security: true` (the action's default) would need security-events: write for a SARIF upload, a scope this read-only job should not hold, and the two options are mutually exclusive.
+      - uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
+        continue-on-error: true  # report-only: see the header; remove this line to make the step a gate
+        with:
+          inputs: .github/workflows templates
+          version: 1.30.1
+          advanced-security: false
+          annotations: true

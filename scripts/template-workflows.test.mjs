@@ -993,6 +993,7 @@ test("this repo's own workflows each carry a top-level concurrency group, sized 
   const want = {
     'dependabot-auto-merge.yml': { group: /^dependabot-auto-merge-\$\{\{ github\.event\.pull_request\.number \}\}$/, cancel: 'true' },
     'markdownlint.yml': { group: /^markdownlint-\$\{\{ github\.ref \}\}$/, cancel: 'true' },
+    'zizmor.yml': { group: /^zizmor-\$\{\{ github\.ref \}\}$/, cancel: 'true' },
     'verify-landing.yml': { group: /^verify-landing-\$\{\{ github\.ref \}\}$/, cancel: 'true' },
     'update-readme.yml': { group: /^update-readme$/, cancel: 'false' },
   };
@@ -1360,6 +1361,49 @@ test('SKILL-REPO-PATTERN.md states the auto-merge enable step as an allowlist th
     assert.match(text, /run: gh pr merge --squash --auto "\$PR_URL"/, f + ': the URL goes through the environment');
     assert.doesNotMatch(text, /run: gh pr merge[^\n]*\$\{\{/, f + ': no expression is interpolated into the script');
   }
+});
+
+// 14h item 14 (11) G-1, CoalTipple t24 row 3 (zizmor, cache-poisoning): actions/setup-node enables a package-manager cache by default when it can, and a cache restored into a job that holds
+// `contents: write` and publishes a Release is a poisoning path from a less-privileged run. Every setup-node step of a workflow whose job writes contents opts out (input `package-manager-cache`,
+// verified in the action.yml of the pinned commit 820762786026740c76f36085b0efc47a31fe5020, read 2026-10-14).
+test('every actions/setup-node step in a workflow whose job holds contents: write sets package-manager-cache: false -- RED before 14h (11)', () => {
+  const files = ['templates/overlay-coal-skill/.github/workflows/create-release.yml', 'templates/overlay-coal-skill/.github/workflows/claude-ai-zips.yml', 'templates/article/.github/workflows/create-release.yml', '.github/workflows/update-readme.yml'];
+  for (const rel of files) {
+    const lines = fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/\r\n/g, '\n').split('\n');
+    assert.ok(lines.some((l) => /^\s+contents: write/.test(l)), rel + ' holds a write job');
+    const at = lines.map((l, i) => [l, i]).filter(([l]) => /uses: actions\/setup-node@/.test(l)).map(([, i]) => i);
+    assert.ok(at.length >= 1, rel + ' sets up node');
+    for (const i of at) {
+      let end = i + 1;
+      while (end < lines.length && !/^\s{6}- /.test(lines[end]) && !/^\s{4}\S/.test(lines[end])) end++;
+      assert.ok(lines.slice(i, end).some((l) => /^\s+package-manager-cache: false\s*(#.*)?$/.test(l)), `${rel}:${i + 1}: setup-node without package-manager-cache: false in a job that can write contents`);
+    }
+  }
+});
+
+test('zizmor.yml runs the workflow analyser over this repository\'s workflows and the canon templates, read-only, pinned, as annotations (G-1)', () => {
+  const t = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'zizmor.yml'), 'utf8').replace(/\r\n/g, '\n');
+  const code = t.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n');
+  assert.match(code, /uses: zizmorcore\/zizmor-action@[0-9a-f]{40} # v\d+\.\d+\.\d+/, 'pinned by commit with a version comment');
+  assert.match(code, /inputs: \.github\/workflows templates\n/, 'the canon templates are scanned beside this repository\'s own workflows');
+  assert.match(code, /version: \d+\.\d+\.\d+\n/, 'zizmor itself is pinned');
+  assert.match(code, /advanced-security: false\n\s+annotations: true/, 'annotations, no SARIF upload');
+  assert.doesNotMatch(code, /security-events: write|contents: write/, 'a read-only job');
+  assert.match(code, /workflow_dispatch:/);
+  assert.match(code, /persist-credentials: false/);
+  assert.match(code, /timeout-minutes: \d+/);
+  assert.match(code, /group: zizmor-\$\{\{ github\.ref \}\}\n\s+cancel-in-progress: true/);
+  // the report-only state is a one-line switch and says so
+  assert.match(t, /continue-on-error: true +# report-only: see the header; remove this line to make the step a gate/);
+});
+
+test('SKILL-REPO-PATTERN.md states the workflow analyser (G-1): where it runs, that it is report-only with a one-line switch, and the setup-node opt-out -- RED before 14h (11)', () => {
+  const bullet = PATTERN.split('\n').find((l) => l.startsWith('- **A workflow static analyser runs in CI'));
+  assert.ok(bullet, 'the bullet exists');
+  assert.match(bullet, /`\.github\/workflows\/zizmor\.yml`/);
+  assert.match(bullet, /REPORT-ONLY for its first runs, as `markdownlint\.yml` is/);
+  assert.match(bullet, /`continue-on-error` line/);
+  assert.match(bullet, /`package-manager-cache: false`/);
 });
 
 // BB-98 (b), 2026-10-09: GitHub's default policy blocks the `pull_request_target` event in public repositories from 2026-11-02 (workflow execution protections). The

@@ -150,6 +150,7 @@ jobs:
         if: steps.gate.outputs.post == 'true'
         with:
           node-version: 24
+          package-manager-cache: false # a restored cache is a poisoning path into a job that can write contents (zizmor cache-poisoning)
 
       # UMB-182: the previous stable tag feeds the CHANGELOG heading-continuity check (courier C-2);
       # the current Latest decides make_latest, so a Release for an older tag never takes Latest.
