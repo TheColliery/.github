@@ -1406,6 +1406,17 @@ test('SKILL-REPO-PATTERN.md states the workflow analyser (G-1): where it runs, t
   assert.match(bullet, /`package-manager-cache: false`/);
 });
 
+// 14h item 14 (1), CoalBoard t34 (a): create-release.yml is the workflow of a room with NO build step, so its re-point comment must not say the step sits "after every build" (CodeRabbit's wording was accurate;
+// the sentence was copied from claude-ai-zips.yml, which does build). Both copies of create-release.yml say what is true; claude-ai-zips.yml keeps its sentence.
+test('create-release.yml does not claim a build step the file does not have -- RED before 14h (1)', () => {
+  for (const rel of ['templates/overlay-coal-skill/.github/workflows/create-release.yml', 'templates/article/.github/workflows/create-release.yml']) {
+    const text = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    assert.doesNotMatch(text, /after every build/, rel);
+    assert.match(text, /after every check above \(the derive step and its file check\), so a failed derive leaves the old Release as it/, rel);
+  }
+  assert.match(fs.readFileSync(path.join(ROOT, 'templates/overlay-coal-skill/.github/workflows/claude-ai-zips.yml'), 'utf8'), /after every build and check above/);
+});
+
 // BB-98 (b), 2026-10-09: GitHub's default policy blocks the `pull_request_target` event in public repositories from 2026-11-02 (workflow execution protections). The
 // canon says no new workflow adopts it, and the templates and this repo's own workflows carry none (a grep over 85 workflows of the org, its templates and the rooms found none).
 test('no template or own workflow uses the pull_request_target event, and SKILL-REPO-PATTERN.md bans adopting it -- RED before BB-98 (b)', () => {
