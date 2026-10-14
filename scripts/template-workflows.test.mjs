@@ -1572,3 +1572,21 @@ test('every action this repository\'s workflows and the canon templates use is o
   }
   assert.deepEqual(bad, []);
 });
+
+// 14h3, UMB3-020 (card BB-162 (ก), the owner 2026-10-14: "ต่อจากนี้ให้โพสต์ช่อง GHSA"): where a fixed vulnerability is announced. One rule, stated where a room reads it (the SECURITY.md row of DOC-PATTERN.md),
+// carried into the template a new repo is stamped from and the org default file, so the pattern and what ships say the same thing.
+test('a fixed vulnerability is announced as a GitHub security advisory: DOC-PATTERN.md row 2 states it (the room drafts, the owner publishes and requests the CVE, SECURITY.md keeps one line per advisory), and the published-code template and the org SECURITY.md say it too -- RED before 14h3 (UMB3-020)', () => {
+  const doc = fs.readFileSync(path.join(ROOT, 'DOC-PATTERN.md'), 'utf8').replace(/\r\n/g, '\n');
+  const row = doc.split('\n').find((l) => l.startsWith('| 2 | Reporting a Vulnerability |'));
+  assert.ok(row, 'row 2 of the SECURITY.md table exists');
+  assert.match(row, /announced as a GitHub repository security advisory \(GHSA\)/);
+  assert.match(row, /room DRAFTS it/);
+  assert.match(row, /OWNER publishes it and requests its CVE/);
+  assert.match(row, /ONE LINE per published advisory, linking to it/);
+  assert.match(row, /never the advisory's full text/);
+  const tpl = fs.readFileSync(path.join(ROOT, 'templates', 'published-code', 'SECURITY.md'), 'utf8').replace(/\r\n/g, '\n');
+  assert.match(tpl, /disclosed once a fix ships as a GitHub security advisory/, 'the stamped template');
+  assert.match(tpl, /one line per published advisory/, 'the template says the file keeps one line each');
+  const org = fs.readFileSync(path.join(ROOT, '.github', 'SECURITY.md'), 'utf8').replace(/\r\n/g, '\n');
+  assert.match(org, /disclosed once a fix ships as a GitHub security advisory/, 'the org default file');
+});

@@ -4,7 +4,7 @@
 
 ## Reporting a Vulnerability
 
-Report a security issue in this repo through GitHub's private vulnerability reporting — [Security → Report a vulnerability](https://github.com/{{ORG}}/{{REPO_NAME}}/security/advisories/new) — never a public issue; enabled and verified live at press. In scope: {{IN_SCOPE_SUMMARY}}. This is a one-person-maintained project: expect the report to be read and acknowledged, triaged against the scope above, and disclosed once a fix ships, with no fixed response-time SLA. A public GitHub issue remains the right channel for an ordinary, non-security bug.
+Report a security issue in this repo through GitHub's private vulnerability reporting — [Security → Report a vulnerability](https://github.com/{{ORG}}/{{REPO_NAME}}/security/advisories/new) — never a public issue; enabled and verified live at press. In scope: {{IN_SCOPE_SUMMARY}}. This is a one-person-maintained project: expect the report to be read and acknowledged, triaged against the scope above, and disclosed once a fix ships as a GitHub security advisory (this file keeps one line per published advisory, linking to it), with no fixed response-time SLA. A public GitHub issue remains the right channel for an ordinary, non-security bug.
 
 ## Commit & Tag Signatures
 
