@@ -76,17 +76,38 @@ const cleanPath = (p) => {
 const joinPath = (...parts) => parts.map((x) => String(x).replace(/^\.\/?$/, '')).filter(Boolean).join('/').replace(/\/+/g, '/');
 const yamlScalar = (text, key) => (new RegExp('^[ \\t-]*' + key + ':[ \\t]*(\\S[^\\r\\n#]*?)[ \\t]*(?:#.*)?$', 'm').exec(text) || [])[1];
 
+// A `directory:` mapping as a prefix of the normalized repository filenames. The repository root (`.`, `./`) is every file, so its prefix is the empty string (UMB3-006).
+function dirPrefix(raw) {
+  const q = String(raw).trim().replace(/^['"]|['"]$/g, '').replace(/\\/g, '/').replace(/\/+$/, '');
+  if (q === '' || /^(?:\.\/)*\.?$/.test(q)) return '';
+  const c = cleanPath(raw);
+  return c ? c + '/' : null;
+}
+
+// What a `.gitbook.yaml` says about the space: its root, and its readme and summary, which GitBook defaults to README.md and SUMMARY.md when the file names a
+// root, a structure or redirects without them (UMB3-006). A gitbook-docs.yaml (`directory:` mappings) carries the whole sync as prefixes instead, and a text that names
+// nothing GitBook reads yields no readme or summary, so it stays unknown.
+export function gitbookStructure(configText) {
+  const text = String(configText || '');
+  const mapped = /^[ \t-]*directory:/m.test(text);
+  const known = /^[ \t]*(?:root|structure|redirects)[ \t]*:/m.test(text);
+  let readme = yamlScalar(text, 'readme'); let summary = yamlScalar(text, 'summary');
+  if (!mapped && known) { readme = readme || 'README.md'; summary = summary || 'SUMMARY.md'; }
+  return { root: cleanPath(yamlScalar(text, 'root') || '.') ?? '', readme, summary };
+}
+
 /** The files a GitBook space syncs, from a repo's `.gitbook.yaml` (root + readme + summary + the pages the summary lists) or its
  *  `gitbook-docs.yaml` (every `directory:` mapping, as a prefix). Returns { exact: string[], prefixes: string[] }, or null when
  *  the config cannot be read, so an unreadable config stays UNKNOWN and is never read as "syncs nothing". */
 export function gitbookSyncedFiles(configText, summaryText = '') {
   const text = String(configText || '');
   const exact = new Set(); const prefixes = [];
-  const dirs = [...text.matchAll(/^[ \t-]*directory:[ \t]*(\S[^\r\n#]*?)[ \t]*(?:#.*)?$/gm)].map((m) => cleanPath(m[1])).filter(Boolean);
-  for (const d of dirs) prefixes.push(d + '/');
-  const readme = yamlScalar(text, 'readme'); const summary = yamlScalar(text, 'summary');
+  for (const m of text.matchAll(/^[ \t-]*directory:[ \t]*(\S[^\r\n#]*?)[ \t]*(?:#.*)?$/gm)) {
+    const p = dirPrefix(m[1]);
+    if (p !== null) prefixes.push(p);
+  }
+  const { root, readme, summary } = gitbookStructure(text);
   if (readme || summary) {
-    const root = cleanPath(yamlScalar(text, 'root') || '.') ?? '';
     const r = readme && cleanPath(readme); const s = summary && cleanPath(summary);
     if (r) exact.add(joinPath(root, r));
     if (s) {
@@ -147,35 +168,61 @@ export function buildReport(findings, counts) {
 async function get(p) {
   const headers = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
   if (process.env.GH_TOKEN) headers.Authorization = `Bearer ${process.env.GH_TOKEN}`;
-  const r = await fetch(API + p, { headers, signal: AbortSignal.timeout(30000) });
-  let json = null;
-  try { json = await r.json(); } catch {}
-  return { status: r.status, json };
+  try {
+    const r = await fetch(API + p, { headers, signal: AbortSignal.timeout(30000) });
+    let json = null;
+    try { json = await r.json(); } catch {}
+    return { status: r.status, json };
+  } catch {
+    // a timeout or a network error is a status of 0: reported as an unreadable finding, never thrown past the report (the contract is report-only, exit 0; UMB3-006)
+    return { status: 0, json: null };
+  }
 }
+
+const PER_PAGE = 100;
+const MAX_PAGES = 20;
+
+/** Every page of a GitHub list endpoint, read until a short one (`getFn` is injected so a test needs no network). `pick` takes the response body to its list.
+ *  { status, items, partial }: partial is true when a read failed (status says how), the body was not a list, or the cap was reached on a full page (capped), so the list may be missing entries (UMB3-006). */
+export async function getAllPages(getFn, p, pick, maxPages = MAX_PAGES) {
+  const items = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const r = await getFn(`${p}${p.includes('?') ? '&' : '?'}per_page=${PER_PAGE}&page=${page}`);
+    if (r.status !== 200) return { status: r.status, items, partial: true };
+    const got = pick(r.json);
+    if (!Array.isArray(got)) return { status: 200, items, partial: true, notList: true };
+    items.push(...got);
+    if (got.length < PER_PAGE) return { status: 200, items, partial: false };
+  }
+  return { status: 200, items, partial: true, capped: true };
+}
+const noteOf = (r) => (r.capped ? `still full after ${MAX_PAGES} pages` : r.notList ? 'an answer that is not a list' : r.status);
 
 /** A read that did not answer 200 is a FINDING, never an empty list: an anonymous rate limit (403) on
  *  the runs endpoint would otherwise read as "nothing queued" (measured 2026-09-25, first live run). */
 export function unreadable(repo, what, status) {
-  return { repo: safeName(repo), kind: 'unreadable', text: `could not read ${what} (HTTP ${status}); this run did NOT check it`, url: '' };
+  const why = status === 0 ? 'no answer: a timeout or a network error' : typeof status === 'number' ? `HTTP ${status}` : String(status);
+  return { repo: safeName(repo), kind: 'unreadable', text: `could not read ${what} (${why}); this run did NOT check it`, url: '' };
 }
 
 async function main() {
-  const repos = (await get(`/orgs/${ORG}/repos?per_page=100&type=public`)).json;
-  if (!Array.isArray(repos)) throw new Error(`could not list ${ORG}'s public repos`);
+  const list = await getAllPages(get, `/orgs/${ORG}/repos?type=public`, (j) => j);
+  const repos = list.items;
   const workflowsByRepo = {};
   const runsByRepo = {};
   const signalByRepo = {};
   const findings = [];
+  if (list.partial) findings.push(unreadable(ORG, "the organization's public repository list", noteOf(list)));
   let workflowCount = 0;
   for (const r of repos) {
     const base = `/repos/${ORG}/${r.name}`;
-    const wf = await get(`${base}/actions/workflows?per_page=100`);
-    if (wf.status !== 200) findings.push(unreadable(r.name, 'the workflow list', wf.status));
-    workflowsByRepo[r.name] = wf.json?.workflows ?? [];
+    const wf = await getAllPages(get, `${base}/actions/workflows`, (j) => j?.workflows);
+    if (wf.partial) findings.push(unreadable(r.name, 'the workflow list', noteOf(wf)));
+    workflowsByRepo[r.name] = wf.items;
     workflowCount += workflowsByRepo[r.name].length;
-    const runs = await get(`${base}/actions/runs?status=queued&per_page=100`);
-    if (runs.status !== 200) findings.push(unreadable(r.name, 'the queued runs', runs.status));
-    runsByRepo[r.name] = runs.json?.workflow_runs ?? [];
+    const runs = await getAllPages(get, `${base}/actions/runs?status=queued`, (j) => j?.workflow_runs);
+    if (runs.partial) findings.push(unreadable(r.name, 'the queued runs', noteOf(runs)));
+    runsByRepo[r.name] = runs.items;
     const gb1 = await get(`${base}/contents/.gitbook.yaml`);
     const gb2 = gb1.status === 200 ? { status: 404 } : await get(`${base}/contents/gitbook-docs.yaml`);
     const decode = (j) => (j && j.encoding === 'base64' && typeof j.content === 'string' ? Buffer.from(j.content, 'base64').toString('utf8') : '');
@@ -189,8 +236,9 @@ async function main() {
     // which files the space syncs: the config, plus the pages the summary lists (one more read, only for a .gitbook.yaml repo)
     const cfgText = decode(gb1.status === 200 ? gb1.json : gb2.json);
     let summaryText = '';
-    const summaryPath = gb1.status === 200 ? yamlScalar(cfgText, 'summary') : '';
-    const sp = summaryPath && cleanPath(summaryPath) ? joinPath(cleanPath(yamlScalar(cfgText, 'root') || '.') ?? '', cleanPath(summaryPath)) : '';
+    const st = gitbookStructure(cfgText);
+    const summaryPath = gb1.status === 200 ? st.summary : '';
+    const sp = summaryPath && cleanPath(summaryPath) ? joinPath(st.root, cleanPath(summaryPath)) : '';
     if (sp) { const sm = await get(`${base}/contents/${sp}`); if (sm.status === 200) summaryText = decode(sm.json); else findings.push(unreadable(r.name, 'the GitBook summary file', sm.status)); }
     const touches = touchesSynced(Array.isArray(head.json?.files) ? head.json.files.map((x) => x && x.filename) : undefined, gitbookSyncedFiles(cfgText, summaryText));
     signalByRepo[r.name] = { headAge: Date.now() - headDate, touches, statuses: status.json?.statuses ?? [] };

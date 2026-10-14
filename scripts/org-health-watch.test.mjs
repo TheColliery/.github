@@ -108,6 +108,11 @@ globalThis.fetch = async (url) => {
   // Longest key wins: '/commits/main/status' must not match the '/commits/main' entry.
   const hit = Object.entries(S).filter(([k]) => p.startsWith(k)).sort((a, b) => b[0].length - a[0].length)[0];
   if (hit && hit[1] && hit[1].__status) return new Response('{}', { status: hit[1].__status });
+  if (hit && hit[1] && hit[1].__throw) throw new TypeError('fetch failed');
+  if (hit && hit[1] && hit[1].__pages) {
+    const page = Number(new URL('https://x' + p).searchParams.get('page') || 1);
+    return new Response(JSON.stringify(hit[1].__pages[page - 1] ?? (Array.isArray(hit[1].__pages[0]) ? [] : {})), { status: 200 });
+  }
   return new Response(JSON.stringify(hit ? hit[1] : {}), { status: hit ? 200 : 404 });
 };
 `;
@@ -192,6 +197,96 @@ test('org-health-watch.mjs: everything healthy -> has_findings=false and a clean
   assert.match(output, /has_findings=false/);
   assert.match(report, /1 public repo/);
   assert.match(report, /no finding/i);
+});
+
+// ---- 14h, UMB3-006 (CodeRabbit on org-health-watch.mjs: the root mapping, the default readme and summary, a rejected fetch, pagination) ----
+
+test('gitbookSyncedFiles: a directory mapping of the repository root (. or ./) syncs every file, a deeper mapping still only its own prefix (UMB3-006)', () => {
+  for (const root of ['.', './', './.']) {
+    const s = gitbookSyncedFiles(`site:\n  structure:\n    - type: space\n      content:\n        directory: ${root}\n`, '');
+    assert.ok(s, root);
+    assert.equal(touchesSynced(['src/a.js'], s), true, root + ' matches any file');
+    assert.equal(touchesSynced(['README.md'], s), true, root);
+  }
+  const deeper = gitbookSyncedFiles('site:\n  structure:\n    - type: space\n      content:\n        directory: ./docs\n', '');
+  assert.equal(touchesSynced(['src/a.js'], deeper), false);
+  assert.equal(touchesSynced(['docs/a.md'], deeper), true);
+  assert.equal(touchesSynced(['README.md', 'SUMMARY.md'], deeper), false, 'a directory-mapped config syncs its mapped directories only, never a default README.md or SUMMARY.md');
+});
+
+test('gitbookSyncedFiles: a .gitbook.yaml that omits structure.readme and structure.summary syncs README.md and SUMMARY.md under its root, and the pages that summary lists (UMB3-006)', () => {
+  const s = gitbookSyncedFiles('root: ./docs/\n', '* [A](guide/a.md)\n');
+  assert.deepEqual([...s.exact].sort(), ['docs/README.md', 'docs/SUMMARY.md', 'docs/guide/a.md']);
+  assert.equal(touchesSynced(['docs/README.md'], s), true);
+  assert.equal(touchesSynced(['README.md', 'scripts/x.mjs'], s), false, 'the repository README is not the space README once a root is set');
+  const half = gitbookSyncedFiles('structure:\n  readme: intro.md\n', '');
+  assert.deepEqual([...half.exact].sort(), ['SUMMARY.md', 'intro.md']);
+  const other = gitbookSyncedFiles('structure:\n  summary: toc/SUMMARY.md\n', '');
+  assert.deepEqual([...other.exact].sort(), ['README.md', 'toc/SUMMARY.md']);
+  assert.equal(gitbookSyncedFiles('', ''), null, 'an unreadable (empty) config stays unknown');
+  assert.deepEqual([...gitbookSyncedFiles('redirects:\n  old: new.md\n', '').exact].sort(), ['README.md', 'SUMMARY.md'], 'a config with only redirects is read as the defaults');
+  assert.equal(gitbookSyncedFiles('# only a comment\n', ''), null, 'a config with no key GitBook reads stays unknown');
+});
+
+test('org-health-watch.mjs: a .gitbook.yaml with no structure reads the default SUMMARY.md and flags a README head with no status (UMB3-006)', () => {
+  const state = synced(['README.md'], []);
+  state['/repos/TheColliery/CoalLedger/contents/.gitbook.yaml'] = { content: b64('root: ./\n'), encoding: 'base64' };
+  const r = runCli(state);
+  assert.equal(r.res.status, 0, r.res.stdout + r.res.stderr);
+  assert.match(r.output, /has_findings=true/);
+  assert.match(r.report, /touched a file the GitBook space syncs/);
+  assert.ok(r.calls.some((c) => c.endsWith('/contents/SUMMARY.md')), 'the default summary is read before the head is judged');
+});
+
+test('org-health-watch.mjs: a fetch that rejects (a timeout or a network error) is an unreadable finding and the report and has_findings are still written, exit 0 (UMB3-006)', () => {
+  let r = runCli({ ...LIVE_SHAPE, '/repos/TheColliery/CoalLedger/actions/runs': { __throw: true } });
+  assert.equal(r.res.status, 0, r.res.stdout + r.res.stderr);
+  assert.match(r.report, /\[CoalLedger\] could not read the queued runs \(no answer: a timeout or a network error\)/);
+  assert.match(r.output, /has_findings=true/);
+  r = runCli({ '/orgs/TheColliery/repos': { __throw: true } });
+  assert.equal(r.res.status, 0, r.res.stdout + r.res.stderr);
+  assert.match(r.report, /could not read the organization's public repository list/);
+  assert.match(r.output, /has_findings=true/);
+  r = runCli({ '/orgs/TheColliery/repos': { __status: 502 } });
+  assert.equal(r.res.status, 0, 'an HTTP failure on the list is a finding too, never a crash');
+  assert.match(r.report, /public repository list \(HTTP 502\)/);
+});
+
+test('getAllPages reads every page until a short one and says when it could not: a list over 100 is whole, an HTTP failure or a full last page at the cap is partial and named (UMB3-006)', async () => {
+  const { getAllPages } = await import('./org-health-watch.mjs');
+  const fake = (total, fail = null, seen = []) => async (u) => {
+    const page = Number(new URL('https://x' + u).searchParams.get('page'));
+    seen.push(page);
+    if (fail === page) return { status: 502, json: null };
+    const from = (page - 1) * 100; const n = Math.max(0, Math.min(100, total - from));
+    return { status: 200, json: Array.from({ length: n }, (_, i) => ({ id: from + i })) };
+  };
+  for (const total of [0, 99, 100, 101, 250]) {
+    const seen = [];
+    const r = await getAllPages(fake(total, null, seen), '/x?a=1', (j) => j);
+    assert.equal(r.items.length, total, String(total));
+    assert.equal(r.partial, false, String(total));
+    assert.equal(new Set(r.items.map((x) => x.id)).size, total, 'no item twice');
+    assert.equal(seen.length, Math.floor(total / 100) + 1, `${total}: one request per page and the short or empty page that ends it`);
+  }
+  const bad = await getAllPages(fake(250, 2), '/x?a=1', (j) => j);
+  assert.equal(bad.partial, true); assert.equal(bad.status, 502); assert.equal(bad.items.length, 100, 'what was read stays');
+  const capped = await getAllPages(fake(100000), '/x', (j) => j, 3);
+  assert.equal(capped.partial, true); assert.equal(capped.capped, true); assert.equal(capped.items.length, 300);
+  const wrapped = await getAllPages(async () => ({ status: 200, json: { workflows: [{ id: 1 }] } }), '/w', (j) => j.workflows);
+  assert.deepEqual(wrapped.items, [{ id: 1 }]);
+  const notList = await getAllPages(async () => ({ status: 200, json: { message: 'x' } }), '/w', (j) => j.workflows);
+  assert.equal(notList.partial, true);
+});
+
+test('org-health-watch.mjs: a queued run on the SECOND page of the runs list is found (the first hundred were all fresh) -- RED while only page one was read (UMB3-006)', () => {
+  const fresh = Array.from({ length: 100 }, (_, i) => ({ name: 'CI ' + i, status: 'queued', created_at: new Date().toISOString() }));
+  const stale = [{ name: 'CodeQL', status: 'queued', created_at: '2026-08-06T16:51:17Z' }];
+  const state = { ...LIVE_SHAPE, '/repos/TheColliery/CoalLedger/actions/runs': { __pages: [{ workflow_runs: fresh }, { workflow_runs: stale }] } };
+  const r = runCli(state);
+  assert.equal(r.res.status, 0, r.res.stdout + r.res.stderr);
+  assert.match(r.report, /\[CoalLedger\] .*CodeQL.*queued/);
+  assert.ok(r.calls.some((c) => /actions\/runs\?.*page=2/.test(c)), 'page 2 was requested: ' + r.calls.join(' | '));
 });
 
 // UMB-257 F (CodeQL js/http-to-file-access, alert #21; the shape that closed alert #2): text from the API reaches the
