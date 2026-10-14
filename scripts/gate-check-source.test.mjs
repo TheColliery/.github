@@ -18,6 +18,11 @@ globalThis.fetch = async (url, init = {}) => {
   if (method === 'PUT') { S.put = JSON.parse(init.body); return new Response(JSON.stringify({ id: 18703484 }), { status: 200 }); }
   if (p === '/repos/TheColliery/CoalMine/rulesets/18703484' && S.put) return new Response(JSON.stringify({ ...S.gate, rules: S.put.rules }), { status: 200 });
   const hit = Object.entries(S.routes).filter(([k]) => p.startsWith(k)).sort((a, b) => b[0].length - a[0].length)[0];
+  if (hit && hit[1] && hit[1].__status) return new Response('{}', { status: hit[1].__status });
+  if (hit && hit[1] && hit[1].__pages) {
+    const page = Number(new URL('https://x' + p).searchParams.get('page') || 1);
+    return new Response(JSON.stringify(hit[1].__pages[page - 1] ?? []), { status: 200 });
+  }
   return new Response(JSON.stringify(hit ? hit[1] : {}), { status: hit ? 200 : 404 });
 };
 `;
@@ -112,4 +117,43 @@ test('the live-shaped bodies pass the boundary check untouched (the safe alphabe
   const { res, bodies } = run([], {}, { routes, gate: live });
   assert.equal(res.status, 0, res.stdout + res.stderr);
   assert.deepEqual(bodies.bodies['CoalMine/18703484'].body.conditions.ref_name.include, ['~DEFAULT_BRANCH', 'refs/heads/release/*']);
+});
+
+// ---- 14h, UMB3-006 (CodeRabbit on gate-check-source.mjs: pagination, a failed detail read, inherited rulesets) ----
+
+test('the repository list and the ruleset list follow their pages: a gate on the SECOND page of rulesets, and a repo on the SECOND page of the org list, are judged (UMB3-006)', () => {
+  const filler = Array.from({ length: 100 }, (_, i) => ({ id: 1000 + i }));
+  const routes = { ...ROUTES, '/repos/TheColliery/CoalMine/rulesets/10': { id: 1000, name: 'filler', enforcement: 'disabled', target: 'branch', conditions: GATE.conditions, bypass_actors: [], rules: [] }, '/repos/TheColliery/CoalMine/rulesets': { __pages: [filler, [{ id: 18703484 }]] } };
+  const a = run([], {}, { routes });
+  assert.equal(a.res.status, 0, a.res.stdout + a.res.stderr);
+  assert.match(a.res.stdout, /CoalMine: "dependabot-auto-merge-gate" \(id 18703484\) DRY-RUN/, 'the gate on page 2 of the rulesets was found');
+  const orgs = { ...ROUTES, '/orgs/TheColliery/repos': { __pages: [Array.from({ length: 100 }, () => ({ name: 'CoalMine' })), [{ name: 'CoalMine' }]] } };
+  const b = run([], {}, { routes: orgs });
+  assert.equal(b.res.status, 0, b.res.stdout + b.res.stderr);
+  assert.equal(b.res.stdout.split('\n').filter((l) => /DRY-RUN -- would PUT/.test(l)).length, 101, 'a hundred repos on page 1 and the one on page 2');
+  assert.ok(b.calls.some((c) => /\/orgs\/TheColliery\/repos\?.*page=2/.test(c.path)), 'page 2 of the org list was requested');
+});
+
+test('a ruleset detail read that fails is a named FAIL for the repository (the ruleset id and the HTTP status), never a silent omission that reads as "no gate" (UMB3-006)', () => {
+  const routes = { ...ROUTES, '/repos/TheColliery/CoalMine/rulesets/2': { __status: 500 } };
+  const r = run([], {}, { routes });
+  assert.equal(r.res.status, 1, r.res.stdout + r.res.stderr);
+  assert.match(r.res.stdout, /CoalMine: FAIL GET \/repos\/TheColliery\/CoalMine\/rulesets\/2 -> HTTP 500/);
+  assert.doesNotMatch(r.res.stdout, /DRY-RUN -- would PUT/, 'no body is prepared from a partial picture');
+  assert.deepEqual(r.calls.filter((c) => c.method !== 'GET'), []);
+  const list = run([], {}, { routes: { ...ROUTES, '/repos/TheColliery/CoalMine/rulesets': { __status: 503 } } });
+  assert.equal(list.res.status, 1);
+  assert.match(list.res.stdout, /CoalMine: FAIL GET \/repos\/TheColliery\/CoalMine\/rulesets -> HTTP 503/);
+  const org = run([], {}, { routes: { ...ROUTES, '/orgs/TheColliery/repos': { __status: 502 } } });
+  assert.equal(org.res.status, 1);
+  assert.match(org.res.stderr, /could not list TheColliery's public repos \(HTTP 502\)/, 'the org list failure names its status, it is not read as an empty org');
+});
+
+test('the ruleset list asks for the repository\'s OWN rulesets (includes_parents=false), so an inherited organization ruleset never reaches the repository update endpoint (UMB3-006)', () => {
+  const r = run([]);
+  const lists = r.calls.filter((c) => /\/repos\/TheColliery\/CoalMine\/rulesets\?/.test(c.path));
+  assert.ok(lists.length >= 1, 'the list was read');
+  for (const c of lists) assert.match(c.path, /includes_parents=false/, c.path);
+  const a = run(['--apply', '--repo', 'CoalMine'], { GITHUB_TOKEN: 'stub-write' });
+  for (const c of a.calls.filter((x) => /\/rulesets\?/.test(x.path))) assert.match(c.path, /includes_parents=false/, c.path);
 });

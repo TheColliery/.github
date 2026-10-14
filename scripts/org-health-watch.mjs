@@ -23,6 +23,9 @@
 // has_findings=true|false. Zero-dependency (Phoenix #2); anonymous reads suffice for public repos,
 // GH_TOKEN raises the rate limit when set.
 import fs from 'node:fs';
+import { getAllPages, pageNote } from './lib/paginate.mjs';
+
+export { getAllPages };
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 // GitBook's `operationTimeout` on every space of this org (getSpaceGitInfo, read 2026-10-03): the longest a sync operation may run.
@@ -179,24 +182,6 @@ async function get(p) {
   }
 }
 
-const PER_PAGE = 100;
-const MAX_PAGES = 20;
-
-/** Every page of a GitHub list endpoint, read until a short one (`getFn` is injected so a test needs no network). `pick` takes the response body to its list.
- *  { status, items, partial }: partial is true when a read failed (status says how), the body was not a list, or the cap was reached on a full page (capped), so the list may be missing entries (UMB3-006). */
-export async function getAllPages(getFn, p, pick, maxPages = MAX_PAGES) {
-  const items = [];
-  for (let page = 1; page <= maxPages; page++) {
-    const r = await getFn(`${p}${p.includes('?') ? '&' : '?'}per_page=${PER_PAGE}&page=${page}`);
-    if (r.status !== 200) return { status: r.status, items, partial: true };
-    const got = pick(r.json);
-    if (!Array.isArray(got)) return { status: 200, items, partial: true, notList: true };
-    items.push(...got);
-    if (got.length < PER_PAGE) return { status: 200, items, partial: false };
-  }
-  return { status: 200, items, partial: true, capped: true };
-}
-const noteOf = (r) => (r.capped ? `still full after ${MAX_PAGES} pages` : r.notList ? 'an answer that is not a list' : r.status);
 
 /** A read that did not answer 200 is a FINDING, never an empty list: an anonymous rate limit (403) on
  *  the runs endpoint would otherwise read as "nothing queued" (measured 2026-09-25, first live run). */
@@ -212,16 +197,16 @@ async function main() {
   const runsByRepo = {};
   const signalByRepo = {};
   const findings = [];
-  if (list.partial) findings.push(unreadable(ORG, "the organization's public repository list", noteOf(list)));
+  if (list.partial) findings.push(unreadable(ORG, "the organization's public repository list", pageNote(list)));
   let workflowCount = 0;
   for (const r of repos) {
     const base = `/repos/${ORG}/${r.name}`;
     const wf = await getAllPages(get, `${base}/actions/workflows`, (j) => j?.workflows);
-    if (wf.partial) findings.push(unreadable(r.name, 'the workflow list', noteOf(wf)));
+    if (wf.partial) findings.push(unreadable(r.name, 'the workflow list', pageNote(wf)));
     workflowsByRepo[r.name] = wf.items;
     workflowCount += workflowsByRepo[r.name].length;
     const runs = await getAllPages(get, `${base}/actions/runs?status=queued`, (j) => j?.workflow_runs);
-    if (runs.partial) findings.push(unreadable(r.name, 'the queued runs', noteOf(runs)));
+    if (runs.partial) findings.push(unreadable(r.name, 'the queued runs', pageNote(runs)));
     runsByRepo[r.name] = runs.items;
     const gb1 = await get(`${base}/contents/.gitbook.yaml`);
     const gb2 = gb1.status === 200 ? { status: 404 } : await get(`${base}/contents/gitbook-docs.yaml`);

@@ -18,6 +18,8 @@
 // Zero-dependency (Phoenix #2); fail-loud CLI (scripts-quality.md §1).
 import fs from 'node:fs';
 import { GATE_CHECK_SOURCE, gateCheckSourceVerdicts, gateCheckSourceBody, rulesetCoversRules } from './lib/ruleset-match.mjs';
+import { getAllPages, pageNote } from './lib/paginate.mjs';
+import { readRulesetDetails } from './lib/ruleset-read.mjs';
 
 const API = 'https://api.github.com';
 
@@ -55,13 +57,9 @@ async function gatesOf(token, org, repo) {
   const info = await req(token, 'GET', `/repos/${org}/${repo}`);
   if (!info.ok) throw new Error(`GET /repos/${org}/${repo} -> HTTP ${info.status}`);
   const defaultBranch = info.json.default_branch;
-  const list = await req(token, 'GET', `/repos/${org}/${repo}/rulesets`);
-  if (!list.ok || !Array.isArray(list.json)) throw new Error(`GET /repos/${org}/${repo}/rulesets -> HTTP ${list.status}`);
-  const details = [];
-  for (const c of list.json) {
-    const d = await req(token, 'GET', `/repos/${org}/${repo}/rulesets/${c.id}`);
-    if (d.ok) details.push(d.json);
-  }
+  // the repository's OWN rulesets, every page, every detail or a named error: an inherited organization ruleset cannot be written through this endpoint, and a detail that failed to read
+  // used to be dropped, so a gate could vanish and the repo read as "no gate" (UMB3-006)
+  const details = await readRulesetDetails((p) => req(token, 'GET', p), `/repos/${org}/${repo}`, { includeParents: false });
   return { defaultBranch, details, gates: details.filter((rs) => rulesetCoversRules(rs, ['required_status_checks'], defaultBranch)) };
 }
 
@@ -97,7 +95,12 @@ async function main() {
     if (!args.repo) throw new Error('--apply needs --repo <name>: one repo per run, on the owner\'s word for that repo');
     if (!process.env.GITHUB_TOKEN) throw new Error('--apply needs GITHUB_TOKEN (the write token) in the environment; nothing was written');
   }
-  const repos = args.repo ? [args.repo] : ((await req(readToken, 'GET', `/orgs/${args.org}/repos?per_page=100&type=public`)).json ?? []).map((r) => r.name).sort();
+  let repos = [args.repo];
+  if (!args.repo) {
+    const orgRepos = await getAllPages((p) => req(readToken, 'GET', p), `/orgs/${args.org}/repos?type=public`, (j) => j);
+    if (orgRepos.partial) throw new Error(`could not list ${args.org}'s public repos (${pageNote(orgRepos)})`);
+    repos = orgRepos.items.map((r) => r.name).sort();
+  }
   if (repos.length === 0) throw new Error(`could not list ${args.org}'s public repos`);
   const bodies = {};
   let fails = 0;

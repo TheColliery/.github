@@ -252,31 +252,11 @@ test('org-health-watch.mjs: a fetch that rejects (a timeout or a network error) 
   assert.match(r.report, /public repository list \(HTTP 502\)/);
 });
 
-test('getAllPages reads every page until a short one and says when it could not: a list over 100 is whole, an HTTP failure or a full last page at the cap is partial and named (UMB3-006)', async () => {
-  const { getAllPages } = await import('./org-health-watch.mjs');
-  const fake = (total, fail = null, seen = []) => async (u) => {
-    const page = Number(new URL('https://x' + u).searchParams.get('page'));
-    seen.push(page);
-    if (fail === page) return { status: 502, json: null };
-    const from = (page - 1) * 100; const n = Math.max(0, Math.min(100, total - from));
-    return { status: 200, json: Array.from({ length: n }, (_, i) => ({ id: from + i })) };
-  };
-  for (const total of [0, 99, 100, 101, 250]) {
-    const seen = [];
-    const r = await getAllPages(fake(total, null, seen), '/x?a=1', (j) => j);
-    assert.equal(r.items.length, total, String(total));
-    assert.equal(r.partial, false, String(total));
-    assert.equal(new Set(r.items.map((x) => x.id)).size, total, 'no item twice');
-    assert.equal(seen.length, Math.floor(total / 100) + 1, `${total}: one request per page and the short or empty page that ends it`);
-  }
-  const bad = await getAllPages(fake(250, 2), '/x?a=1', (j) => j);
-  assert.equal(bad.partial, true); assert.equal(bad.status, 502); assert.equal(bad.items.length, 100, 'what was read stays');
-  const capped = await getAllPages(fake(100000), '/x', (j) => j, 3);
-  assert.equal(capped.partial, true); assert.equal(capped.capped, true); assert.equal(capped.items.length, 300);
-  const wrapped = await getAllPages(async () => ({ status: 200, json: { workflows: [{ id: 1 }] } }), '/w', (j) => j.workflows);
-  assert.deepEqual(wrapped.items, [{ id: 1 }]);
-  const notList = await getAllPages(async () => ({ status: 200, json: { message: 'x' } }), '/w', (j) => j.workflows);
-  assert.equal(notList.partial, true);
+// the pager itself is tested in scripts/paginate.test.mjs; here the CLI is held to it (the queued-runs test below) and to the re-export
+test('org-health-watch.mjs still exports getAllPages (the shared pager of scripts/lib/paginate.mjs)', async () => {
+  const m = await import('./org-health-watch.mjs');
+  const p = await import('./lib/paginate.mjs');
+  assert.equal(m.getAllPages, p.getAllPages);
 });
 
 test('org-health-watch.mjs: a queued run on the SECOND page of the runs list is found (the first hundred were all fresh) -- RED while only page one was read (UMB3-006)', () => {
