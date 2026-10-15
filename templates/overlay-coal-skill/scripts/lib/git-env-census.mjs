@@ -67,9 +67,9 @@
 //   4. a helper's returned expression is read, not its callers: a helper that returns a clean literal and is then
 //      handed to code that mutates it by another route (a closure, a getter, a Proxy) is not seen;
 //   5. only spawnSync/execFileSync called with the literal command 'git', 'git.exe' or a template holding just git are
-//      spawns: a command held in a variable, spawn(), execFile(), exec(), a spawn reached by `const run = spawnSync`
-//      or by member access on a module object (cp['spawnSync']) are not counted (an import or a destructure under
-//      another name IS a finding, X3); neither is a spawner whose NAME is written with a unicode escape sequence (a
+//      spawns: a command held in a variable, spawn(), execFile(), exec(), a spawn reached
+//      by member access on a module object (cp['spawnSync']) are not counted (an import or a destructure under
+//      another name, or `const run = spawnSync`, IS a finding, X3, B8); neither is a spawner whose NAME is written with a unicode escape sequence (a
 //      backslash, u and four hex digits standing for one of its letters): the lexer reads the name as it is written, so it is
 //      not spawnSync to the census although it is to the engine, and the spawn runs with whatever env it is given (X4);
 //   6. eval, new Function, a `with` block and a Proxy over process.env are not seen;

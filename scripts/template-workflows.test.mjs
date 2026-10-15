@@ -1590,3 +1590,38 @@ test('a fixed vulnerability is announced as a GitHub security advisory: DOC-PATT
   const org = fs.readFileSync(path.join(ROOT, '.github', 'SECURITY.md'), 'utf8').replace(/\r\n/g, '\n');
   assert.match(org, /disclosed once a fix ships as a GitHub security advisory/, 'the org default file');
 });
+
+// 15h item 2(b), CWK2-020 (1) across the flock (the CoalWorks chief's 14a return D2, D3 item 2; CoalWash v1.12.2 measured the cure, CoalMine v3.23.2 measured the Antigravity twin): a hook entry in a Coal* repo's
+// `hooks/hooks.json` is the EXEC form (the program in `command`, the script in `args`, no shell), because a command STRING runs under the host's shell, and on Windows without Git for Windows that shell is PowerShell, where
+// `${CLAUDE_PLUGIN_ROOT}` comes out empty and the hook fails (closed, from Claude Code 2.1.299, for a guard). The Antigravity `plugin/hooks.json` KEEPS the shell string: the exec form did not fire on agy 1.3.2 (0 of 3,
+// measured by CoalMine's head) and AG's `args` schema is unmeasured. The canon names both forms, so a new sibling inherits them.
+test('SKILL-REPO-PATTERN.md Layer 2 states the hook wiring in both forms: the exec form for hooks/hooks.json, the shell string kept for the Antigravity plugin/hooks.json, each with its reason -- RED before 15h (2b)', () => {
+  const bullet = PATTERN.split('\n').find((l) => l.startsWith('- `hooks/hooks.json` wires'));
+  assert.ok(bullet, 'the Layer 2 hooks.json bullet exists');
+  assert.match(bullet, /EXEC FORM/);
+  assert.match(bullet, /"command": "node", "args": \["\$\{CLAUDE_PLUGIN_ROOT\}\/hooks\/<file>\.js"\]/, 'the shape of one entry');
+  assert.match(bullet, /no `shell`/);
+  assert.match(bullet, /PowerShell/);
+  assert.match(bullet, /Git for Windows/);
+  assert.match(bullet, /2\.1\.299/, 'the host version that made the string form fail closed');
+  assert.match(bullet, /2\.1\.139/, 'the floor CoalWash names for the exec form');
+  assert.match(bullet, /Antigravity `plugin\/hooks\.json`/);
+  assert.match(bullet, /KEEPS the shell string/);
+  assert.match(bullet, /agy 1\.3\.2/);
+  assert.match(bullet, /0 of 3/);
+  assert.match(bullet, /`verify\.mjs` checks `type === 'command'`/, 'the wiring gate reads the type as well as the command and args');
+});
+
+// 15h item 2(b), CoalHearth's t90 #3 (the CoalWorks chief's 14a return D3 item 1): the census header's ceiling item 5 listed `const run = spawnSync` among the shapes that "are not counted", but the census reports a spawner
+// named other than as a call as a FINDING, an alias included (vector B8's family; witness: calls 0, findings 1, with a clean env too). A header that calls a refused shape a ceiling tells a room it may write it.
+test('the census header says that `const run = spawnSync` is a finding (X3, B8), not a shape that goes uncounted and unreported -- RED before 15h (2b)', () => {
+  const census = fs.readFileSync(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', 'git-env-census.mjs'), 'utf8').replace(/\r\n/g, '\n');
+  const flat = census.split('\n').slice(0, 90).map((l) => l.replace(/^\/\/\s*/, '')).join(' ').replace(/\s+/g, ' ');
+  assert.doesNotMatch(flat, /a spawn reached by `const run = spawnSync` or by member access/, 'the alias is not listed among the uncounted shapes');
+  assert.match(flat, /\(an import or a destructure under another name, or `const run = spawnSync`, IS a finding, X3, B8\)/);
+  for (const env of ['{ env: { ...process.env } }', "{ env: { PATH: process.env.PATH, GIT_CONFIG_NOSYSTEM: '1' } }"]) {
+    const r = scanGitSpawns([{ rel: 'scripts/x.mjs', text: `import { spawnSync } from 'node:child_process';\nconst run = spawnSync;\nrun('git', ['status'], ${env});\n` }], []);
+    assert.equal(r.calls, 0, 'the aliased spawn is not counted');
+    assert.equal(r.findings.length, 1, 'but the alias IS a finding, whatever the env');
+  }
+});
