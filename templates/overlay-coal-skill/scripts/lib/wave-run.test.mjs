@@ -257,8 +257,8 @@ test('refuses a run with no finite clock, a duplicate file or an empty roster: t
 
 // ---- the reading itself: the byte-equal core, called as a child --------------------------------------------------------------------------
 // CoalFace's machine-reading.mjs, adopted by blob id and NEVER edited here (the owner's rule, BB-87: an improvement found here goes back to CoalFace, whose head builds it in its own belt,
-// and this folder re-adopts by blob id). Source: CoalFace commit 62184163c80c543d497732c0611e43ab9084533c, plugin/skills/coalface/scripts/machine-reading.mjs.
-const MACHINE_READING_BLOB = '1c550b6605125aebda5a2552294eaeb9a5d488ba';
+// and this folder re-adopts by blob id). Source: CoalFace commit 82f8eaf (the file at skills/coalface/scripts/machine-reading.mjs, its plugin/ twin the same blob).
+const MACHINE_READING_BLOB = '5f861a3427e0c06ee677e0e3fe59c912237a86ab'; // re-pinned 2026-10-15 (the 15b courier): CoalFace 82f8eaf, skills/coalface/scripts/machine-reading.mjs; was 1c550b66 (62184163)
 test('machine-reading.mjs is CoalFace\'s file byte for byte (its git blob id, line endings as the repository stores them) -- RED before BB-87', () => {
   const text = fs.readFileSync(MACHINE_READING).toString('utf8').replace(/\r\n/g, '\n');
   const body = Buffer.from(text, 'utf8');
