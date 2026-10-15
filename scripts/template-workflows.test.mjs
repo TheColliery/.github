@@ -1625,3 +1625,20 @@ test('the census header says that `const run = spawnSync` is a finding (X3, B8),
     assert.equal(r.findings.length, 1, 'but the alias IS a finding, whatever the env');
   }
 });
+
+// 15h item 2(c), mark 6 of SWEEP-MARKS Event 2 for the CoalFace tags v0.14.3 and v0.14.4: the org's three copies of the CoalFace wallet claim said the swarm is "bounded by the estimated solo $-cost" with no condition. The room's
+// own README (the wallet paragraph, the source of this claim) says it fits inside the solo DOLLAR cost only when worker tiers are cheaper than main; with the default main-equivalent workers it can exceed it and no budget stop
+// exists; the room's reviewer re-checked the same correction for the About text (CoalFace 14a/about.txt). The landing says what the room's README says.
+test('the org landing, the org README and the installer blurb state CoalFace\'s dollar bound as conditional on cheaper worker tiers, as the room\'s README does -- RED before 15h (2c)', () => {
+  const profile = fs.readFileSync(path.join(ROOT, 'profile', 'README.md'), 'utf8').split('\n').find((l) => l.startsWith('| **[CoalFace]'));
+  const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8').split('\n').find((l) => l.startsWith('* **[CoalFace]'));
+  const installer = fs.readFileSync(path.join(ROOT, 'install.mjs'), 'utf8').split('\n').find((l) => l.includes("name: 'CoalFace'"));
+  for (const [name, line] of [['profile/README.md', profile], ['README.md', readme], ['install.mjs', installer]]) {
+    assert.ok(line, name + ' carries the CoalFace line');
+    assert.doesNotMatch(line, /bounded by the estimated solo \$-cost/, name + ': no unconditional bound');
+    assert.doesNotMatch(line, /solo-cost bound\b/, name + ': no unconditional bound');
+    assert.match(line, /cheaper (worker )?tiers|worker tiers are cheaper than main/, name + ': the condition is stated');
+  }
+  assert.match(profile, /can exceed it/, 'the landing names the other side');
+  assert.match(profile, /no budget stop/, 'and that nothing stops it');
+});

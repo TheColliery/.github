@@ -32,7 +32,7 @@ This repository houses the global configuration, landing page profile, central i
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalHearth?style=flat-square&logo=github)](https://github.com/TheColliery/CoalHearth/network/members)
   [![Downloads](https://img.shields.io/badge/CoalHearth_Downloads-931%2B%20%2F%2014d-orange?style=flat-square)](https://github.com/TheColliery/CoalHearth)
   [![Developers](https://img.shields.io/badge/CoalHearth_Developers-190%2B%20%2F%2014d-brightgreen?style=flat-square)](https://github.com/TheColliery/CoalHearth)
-* **[CoalFace](https://github.com/TheColliery/CoalFace)**: Fan-out discipline—scout → waves → QC → one writer, the whole swarm bounded by the estimated solo $-cost, never a token bound.
+* **[CoalFace](https://github.com/TheColliery/CoalFace)**: Fan-out discipline—scout → waves → QC → one writer, the swarm's dollar cost fits the estimated solo cost only when worker tiers are cheaper than main, and can exceed it otherwise.
   <br>
   [![Stars](https://img.shields.io/github/stars/TheColliery/CoalFace?style=flat-square&logo=github)](https://github.com/TheColliery/CoalFace/stargazers)
   [![Forks](https://img.shields.io/github/forks/TheColliery/CoalFace?style=flat-square&logo=github)](https://github.com/TheColliery/CoalFace/network/members)
