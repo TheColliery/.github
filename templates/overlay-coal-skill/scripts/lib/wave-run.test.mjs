@@ -22,6 +22,8 @@ const LIMITS = { heapMb: 512, fileTimeoutMs: 20000, deadlineMs: 60000 };
 
 // ---- the fixtures: what a test file can do, written once into the sandbox ------------------------------------------------------------------
 const FIXTURES = {
+  // records what environment a test file of the run actually sees (the 15h sandbox test below)
+  'env-probe.fixture.mjs': "import { test } from 'node:test'; import fs from 'node:fs';\ntest('probe', () => fs.writeFileSync(process.env.WAVE_PROBE_OUT, JSON.stringify({ home: process.env.HOME ?? null, profile: process.env.USERPROFILE ?? null, tmpdir: process.env.TMPDIR ?? null, secret: process.env.OPERATOR_SECRET ?? null })));\n",
   'pass.fixture.mjs': "import { test } from 'node:test'; import assert from 'node:assert/strict';\ntest('real check', () => assert.equal(1, 1));\ntest('second check', () => assert.equal(2, 2));\n",
   'pass-slow.fixture.mjs': "import { test } from 'node:test';\ntest('slow check', async () => { await new Promise((r) => setTimeout(r, 700)); });\n",
   'fail.fixture.mjs': "import { test } from 'node:test'; import assert from 'node:assert/strict';\ntest('good', () => assert.ok(true));\ntest('bad one', () => assert.equal(1, 2));\n",
@@ -303,7 +305,32 @@ test('defaultRead against the real core: one reading comes back as BREATHE or WA
 });
 
 // ---- the command line -----------------------------------------------------------------------------------------------------------------
-const cli = (args) => spawnSync(process.execPath, [WAVE_RUN, ...args], { cwd: SANDBOX, encoding: 'utf8', timeout: 90000 });
+// The environment of a child this file starts: named keys, never a copy of the process's own (15h). The sandbox stands in for the operator's HOME, profile and temp folders.
+const BASE_ENV_KEYS = ['PATH', 'Path', 'SystemRoot', 'SYSTEMROOT', 'PATHEXT', 'ComSpec'];
+const sandboxEnv = (extra = {}) => ({
+  ...Object.fromEntries(BASE_ENV_KEYS.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]])),
+  HOME: SANDBOX, USERPROFILE: SANDBOX, TEMP: SANDBOX, TMP: SANDBOX, TMPDIR: SANDBOX, GIT_CEILING_DIRECTORIES: path.dirname(SANDBOX), GIT_CONFIG_NOSYSTEM: '1',
+  ...extra,
+});
+const cli = (args, extra) => spawnSync(process.execPath, [WAVE_RUN, ...args], { cwd: SANDBOX, encoding: 'utf8', timeout: 90000, env: sandboxEnv(extra) });
+
+// 15h item 2(b), CoalHearth thread 7 (CodeRabbit on PR #19, comment 4231557209; the CoalWorks chief's 14a return D3 item 1): the cli() helper and the direct spawn of WAVE_RUN passed no `env`, so the runner and every test
+// child it started got the operator's real HOME, USERPROFILE, TEMP, TMP, TMPDIR and CLAUDE_CONFIG_DIR (and any token in the shell). Both now go through sandboxEnv(): named keys only (the program path, and SystemRoot
+// where Windows needs it), the folders of the sandbox, no GIT_ name but the two the flock allows, and whatever the case names in `extra`.
+test('a run started through the command line sees the sandbox, never the operator\'s HOME, USERPROFILE, TMPDIR or an ambient token -- RED before 15h (2b)', () => {
+  const out = path.join(SANDBOX, 'env-probe.json');
+  process.env.OPERATOR_SECRET = 'operator-secret-' + process.pid; // an ambient value the child must not receive
+  try {
+    const r = cli(['--heap-mb', '512', '--file-timeout-ms', '20000', '--deadline-ms', '60000', '--serial', '--', ...fx('env-probe')], { WAVE_PROBE_OUT: out });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+  } finally { delete process.env.OPERATOR_SECRET; }
+  const seen = JSON.parse(fs.readFileSync(out, 'utf8'));
+  assert.deepEqual(seen, { home: SANDBOX, profile: SANDBOX, tmpdir: SANDBOX, secret: null });
+  const env = sandboxEnv({ A: '1' });
+  assert.ok(!Object.keys(env).some((k) => /^GIT_/.test(k) && !['GIT_CEILING_DIRECTORIES', 'GIT_CONFIG_NOSYSTEM'].includes(k)), 'no GIT_ name beyond the two the flock allows');
+  assert.equal(env.GIT_CONFIG_NOSYSTEM, '1');
+  assert.equal(env.A, '1');
+});
 
 test('the command line: --help prints usage and exits 0, a missing clock or an unknown flag exits 64 with the usage line on stderr', () => {
   const help = cli(['--help']);
@@ -451,7 +478,7 @@ test('the file clock is optional but never loose: a value that is not a positive
 });
 
 test('the command line: a file clock that never fires does not hold the process open (the timer is cleared when its file exits)', () => {
-  const r = spawnSync(process.execPath, [WAVE_RUN, '--heap-mb', '512', '--file-timeout-ms', '20000', '--deadline-ms', '60000', '--file-clock-ms', '600000', '--serial', '--', ...fx('pass')], { cwd: SANDBOX, encoding: 'utf8', timeout: 45000 });
+  const r = spawnSync(process.execPath, [WAVE_RUN, '--heap-mb', '512', '--file-timeout-ms', '20000', '--deadline-ms', '60000', '--file-clock-ms', '600000', '--serial', '--', ...fx('pass')], { cwd: SANDBOX, encoding: 'utf8', timeout: 45000, env: sandboxEnv() });
   assert.equal(r.status, 0, 'the process ended on its own, not at the spawn timeout: ' + (r.error ? r.error.code : r.stdout));
   assert.match(r.stdout, /GREEN$/m);
 });
