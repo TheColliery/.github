@@ -426,8 +426,16 @@ test('the stdout preload switches BOTH pipes, stdout and stderr, to blocking (a 
   assert.deepEqual(JSON.parse(inherited.stdout.trim()), []);
 });
 
-test('the file clock: a file that hangs before its first test is killed at the clock of the file (FAIL naming it) and the next file still runs -- RED before the fix', async () => {
-  const r = await runWaves({ files: fx('hang-top', 'pass'), cwd: SANDBOX, env: process.env, ...LIMITS, deadlineMs: 40000, fileClockMs: 2000, serial: true, read: scripted('BREATHE') });
+// 2026-10-16 (CoalWash PR #23, run 38774701714, the Windows leg: [FAIL, FAIL] where [FAIL, PASS] was expected, 4.8 s): the clock is the wall clock of EVERY file the run starts, so a fixed 2,000 ms also killed the
+// PASSING file whenever a loaded runner took more than two seconds to start it (a node child with a heap cap and the stdout preload). Reproduced here by making every node start take 2.5 s (a preload that sleeps,
+// NODE_OPTIONS=--import=<it>): the old test read [FAIL, FAIL] in 4.7 s, the runner's own figure. The clock this test uses is now SIZED from a measured solo run of the passing file on this very machine under this very load,
+// four times it plus a second (never below the old 2,000 ms), so the hang is still killed by the clock and the passing file has four times its own measured start to spare.
+test('the file clock: a file that hangs before its first test is killed at the clock of the file (FAIL naming it) and the next file still runs, the clock sized from a measured solo run of the passing file -- RED before the fix', async () => {
+  const t0 = Date.now();
+  const solo = await runWaves({ files: fx('pass'), cwd: SANDBOX, env: process.env, ...LIMITS, serial: true, read: scripted('BREATHE') });
+  assert.deepEqual(solo.results.map((x) => x.status), [STATUS.PASS]);
+  const clock = Math.max(2000, (Date.now() - t0) * 4 + 1000);
+  const r = await runWaves({ files: fx('hang-top', 'pass'), cwd: SANDBOX, env: process.env, ...LIMITS, deadlineMs: clock * 4 + 20000, fileClockMs: clock, serial: true, read: scripted('BREATHE') });
   assert.deepEqual(r.results.map((x) => x.status), [STATUS.FAIL, STATUS.PASS]);
   assert.match(r.results[0].reason, /file clock/);
   assert.equal(r.exitCode, 1);
