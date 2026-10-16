@@ -366,6 +366,12 @@ async function main() {
     process.exitCode = 1;
     return;
   }
+  // --license is a file OR an SPDX-shaped string; a string with a path separator or a leading dot is a path, and a path that names no file is a typo, refused before anything is scaffolded (UMB3-032)
+  if (typeof args.license === 'string' && /[\\/]|^\./.test(args.license) && !(fs.existsSync(args.license) && fs.statSync(args.license).isFile())) {
+    console.error(`FAIL: --license looks like a path but no such file exists: ${JSON.stringify(args.license)}. Give an existing file, or an SPDX identifier such as Apache-2.0.`);
+    process.exitCode = 1;
+    return;
+  }
   if (!targetDir) {
     console.error('FAIL: a target directory is required.');
     process.exitCode = 1;

@@ -642,3 +642,25 @@ test('the three settings specs encode the rulesets canon: an EMPTY bypass on mai
   assert.equal(p.ruleset.status, 'n/a');
   assert.equal(p.tagRuleset.status, 'n/a');
 });
+
+// UMB3-032 (CodeRabbit L76e311763f8b): a --license that is shaped like a path but names no file is refused before anything is scaffolded
+test('new-repo.mjs: --license shaped like a path (a separator, or a leading dot) that is no existing file is refused by name BEFORE any scaffolding; ordinary identifiers and real files still work -- RED before UMB3-032', () => {
+  for (const bad of ['./no-such-licence.txt', '../MIT.txt', 'sub/dir/LICENSE', '.hidden-licence', '/no/such/file.txt']) {
+    const parent = scratchDir();
+    const target = path.join(parent, 'r');
+    const res = run(['published-code', '--name', 'x', '--license', bad, target]);
+    assert.notEqual(res.status, 0, bad);
+    assert.match(res.stderr, /--license looks like a path but no such file exists/, bad + ' :: ' + res.stderr);
+    assert.equal(fs.existsSync(target), false, 'nothing was scaffolded for ' + bad);
+    fs.rmSync(parent, { recursive: true, force: true });
+  }
+  const dirParent = scratchDir();
+  const asDir = run(['published-code', '--name', 'x', '--license', dirParent, path.join(dirParent, 'r')]);
+  assert.notEqual(asDir.status, 0, 'an existing DIRECTORY is no licence file');
+  assert.match(asDir.stderr, /--license looks like a path but no such file exists/);
+  fs.rmSync(dirParent, { recursive: true, force: true });
+  const parent = scratchDir();
+  const ok = run(['published-code', '--name', 'x', '--license', 'Apache-2.0', path.join(parent, 'r')]);
+  assert.equal(ok.status, 0, ok.stderr);
+  fs.rmSync(parent, { recursive: true, force: true });
+});
