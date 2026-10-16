@@ -10,7 +10,9 @@
 // second line and happens to look like "key: value". Neither occurs in this repository's workflows; a hit there
 // would be a false alarm, never a miss of a block-mapping duplicate.
 
-const KEY = /^("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^\s"'#\-[\]{}&*!|>%@`:][^:]*?)\s*:(?:\s+(.*))?$/;
+// A plain key may start with a hyphen when a non-space follows it (`-foo:`; a lone `-` is a sequence entry), and may hold a colon that no whitespace
+// follows (`a:b: 1` is the key `a:b`): YAML 1.2 7.3.3 (UMB3-032 Ld372219dc9e0, 16j).
+const KEY = /^("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|(?:[^\s"'#\-[\]{}&*!|>%@`:]|-(?=\S))(?:[^:]|:(?=\S))*?)\s*:(?:\s+(.*))?$/;
 // YAML 1.2 8.1.1: the indentation indicator (1-9) and the chomping indicator (+ or -) come in either order (UMB3-032).
 const BLOCK_SCALAR = /^[|>](?:[1-9][+-]?|[+-][1-9]?)?\s*(?:#.*)?$/;
 

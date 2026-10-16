@@ -105,3 +105,12 @@ test('a sequence dash that carries only a comment starts a fresh item scope too:
   assert.deepEqual(findDuplicateKeys('items:\n  - # first\n    name: a\n  - # second\n    name: b\n'), []);
   assert.deepEqual(findDuplicateKeys('-   # c\n  name: a\n  name: b\n'), [{ line: 3, key: 'name', firstLine: 2 }]);
 });
+
+// UMB3-032 (CodeRabbit Ld372219dc9e0, 16j): the plain-key shapes YAML 1.2 7.3.3 allows that the KEY pattern refused or cut short
+test('a plain key may start with a hyphen (-foo) or hold a colon no space follows (a:b): both are read whole, so their repeats are found and a:b is never read as a (RED before 16j)', () => {
+  assert.deepEqual(findDuplicateKeys('-foo: 1\n-foo: 2\n'), [{ line: 2, key: '-foo', firstLine: 1 }]);
+  assert.deepEqual(findDuplicateKeys('a:b: 1\na:b: 2\n'), [{ line: 2, key: 'a:b', firstLine: 1 }]);
+  assert.deepEqual(findDuplicateKeys('a:b: 1\na: 2\n'), [], 'a:b and a are two keys');
+  assert.deepEqual(findDuplicateKeys('url: http://x/y:8080\nurl: z\n'), [{ line: 2, key: 'url', firstLine: 1 }], 'a colon inside the VALUE is not a separator');
+  assert.deepEqual(findDuplicateKeys('- item: 1\n- item: 2\n'), [], 'a sequence dash is still a dash, not part of a key');
+});

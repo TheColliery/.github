@@ -354,6 +354,12 @@ async function main() {
       process.exitCode = 1;
       return;
     }
+    // --dry-run takes no value: `--dry-run yes` parsed to a string, read as NOT a dry run, and the apply went live (UMB3-032 L7567785f2735, 16j)
+    if (args['dry-run'] !== undefined && args['dry-run'] !== true) {
+      console.error(`FAIL: --dry-run takes no value (got ${JSON.stringify(args['dry-run'])}); a stray value would turn a dry run into a live apply`);
+      process.exitCode = 1;
+      return;
+    }
     await applySettings(kind, args.repo, args['dry-run'] === true, args.only);
     return;
   }

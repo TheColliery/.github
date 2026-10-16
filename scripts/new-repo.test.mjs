@@ -664,3 +664,11 @@ test('new-repo.mjs: --license shaped like a path (a separator, or a leading dot)
   assert.equal(ok.status, 0, ok.stderr);
   fs.rmSync(parent, { recursive: true, force: true });
 });
+
+// UMB3-032 (CodeRabbit L7567785f2735, 16j): `--dry-run yes` parsed to the string "yes", `=== true` read it as NOT a dry run, and the apply went LIVE.
+test('new-repo.mjs --apply-settings with --dry-run carrying a value refuses by name before any call: a stray value never turns a dry run into a live apply -- RED before 16j', () => {
+  const { res, calls } = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalNext', '--dry-run', 'yes'], NEW_ROOM);
+  assert.notEqual(res.status, 0, res.stdout + res.stderr);
+  assert.match(res.stderr, /--dry-run takes no value/);
+  assert.deepEqual(calls, [], 'no request at all, not even a read');
+});
