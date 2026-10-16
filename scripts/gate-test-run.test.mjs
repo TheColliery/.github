@@ -148,3 +148,87 @@ for (const [signal, number] of [['SIGTERM', 15], ['SIGINT', 2], ['SIGHUP', 1]]) 
     assert.match(r.log, /HANG-STARTED/);
   });
 }
+
+// UMB3-032 (CodeRabbit Lfdb546b18086 concurrent runs, Lb4d1ac71f502 permissions): a hook run writes its own temporary log and publishes it only when it fails
+const GATED_FAIL = `import test from 'node:test';
+import fs from 'node:fs';
+test('gated boom', async () => {
+  const until = Date.now() + 60000;
+  while (!fs.existsSync(process.env.GO_FILE) && Date.now() < until) await new Promise((r) => setTimeout(r, 50));
+  process.stderr.write('GATED-STDERR-MARKER');
+  throw new Error('gated failure');
+});
+`;
+const waitFor = async (fn, ms = 20000) => { const until = Date.now() + ms; while (!fn()) { if (Date.now() > until) throw new Error('timed out waiting'); await new Promise((r) => setTimeout(r, 50)); } };
+
+test('a failing run that is still going keeps its log when a green run starts and ends beside it: the green run removes only a log older than itself -- RED before UMB3-032', async () => {
+  const dir = scratchRepo();
+  fs.writeFileSync(path.join(dir, 'gated.test.mjs'), GATED_FAIL);
+  const go = path.join(dir, 'go');
+  const failing = spawn(process.execPath, ['--max-old-space-size=512', RUNNER, 'gated.test.mjs'], { cwd: dir, env: { ...gitEnv(), GO_FILE: go }, stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000 });
+  const exited = new Promise((resolve) => failing.on('close', resolve));
+  failing.stdout.resume(); failing.stderr.resume();
+  try {
+    await waitFor(() => fs.readdirSync(path.join(dir, '.git')).some((n) => /hook-test-last\.log/.test(n)));
+    const green = run(dir, ['good.test.mjs']);
+    assert.equal(green.status, 0, green.stderr);
+    fs.writeFileSync(go, 'go');
+    assert.equal(await exited, 1);
+  } finally { fs.writeFileSync(go, 'go'); failing.kill(); }
+  assert.ok(fs.existsSync(LOG(dir)), 'the failing run\'s log survived the green run');
+  assert.match(fs.readFileSync(LOG(dir), 'utf8'), /GATED-STDERR-MARKER/);
+  assert.deepEqual(fs.readdirSync(path.join(dir, '.git')).filter((n) => /hook-test-last\.log\./.test(n)), [], 'no temporary log is left behind');
+});
+
+test('a green run still removes an OLDER kept log, and the failing run replaces it whole (the one-log contract holds with the temporary file)', () => {
+  const dir = scratchRepo();
+  fs.writeFileSync(LOG(dir), 'an older failing run\n');
+  const old = new Date(Date.now() - 60000);
+  fs.utimesSync(LOG(dir), old, old);
+  assert.equal(run(dir, ['good.test.mjs']).status, 0);
+  assert.ok(!fs.existsSync(LOG(dir)));
+  fs.writeFileSync(LOG(dir), 'an older failing run\n');
+  fs.utimesSync(LOG(dir), old, old);
+  run(dir, ['crash.test.mjs']);
+  const log = fs.readFileSync(LOG(dir), 'utf8');
+  assert.match(log, /CRASH-STDERR-MARKER/); assert.doesNotMatch(log, /an older failing run/);
+});
+
+test('a kept log is readable by its owner only (0600) even when an older log was wider -- venue-only: permission bits are observable on POSIX volumes, so it skips visibly where they are not', (t) => {
+  const probeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gtr-mode-'));
+  made.push(probeDir);
+  const probe = path.join(probeDir, 'p');
+  fs.writeFileSync(probe, 'x'); fs.chmodSync(probe, 0o600);
+  const narrow = fs.statSync(probe).mode & 0o777; fs.chmodSync(probe, 0o644);
+  const wide = fs.statSync(probe).mode & 0o777;
+  if (narrow === wide || (narrow & 0o077) !== 0) { t.skip('this volume does not report permission bits'); return; }
+  const dir = scratchRepo();
+  fs.writeFileSync(LOG(dir), 'an older wide log\n', { mode: 0o644 }); fs.chmodSync(LOG(dir), 0o644);
+  run(dir, ['bad.test.mjs']);
+  assert.equal(fs.statSync(LOG(dir)).mode & 0o077, 0, 'no group or other bits on the kept log');
+});
+
+test('a green run that is still going when a failing run finishes and publishes does not delete that log on its own way out (the log is newer than the green run) -- RED before UMB3-032', async () => {
+  const dir = scratchRepo();
+  fs.writeFileSync(path.join(dir, 'gated-good.test.mjs'), `import test from 'node:test';
+import fs from 'node:fs';
+test('gated ok', async () => {
+  const until = Date.now() + 60000;
+  while (!fs.existsSync(process.env.GO_FILE) && Date.now() < until) await new Promise((r) => setTimeout(r, 50));
+});
+`);
+  const go = path.join(dir, 'go');
+  const green = spawn(process.execPath, ['--max-old-space-size=512', RUNNER, 'gated-good.test.mjs'], { cwd: dir, env: { ...gitEnv(), GO_FILE: go }, stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000 });
+  const exited = new Promise((resolve) => green.on('close', resolve));
+  green.stdout.resume(); green.stderr.resume();
+  try {
+    await waitFor(() => fs.readdirSync(path.join(dir, '.git')).some((n) => /hook-test-last\.log/.test(n)));
+    const failing = run(dir, ['crash.test.mjs']);
+    assert.equal(failing.status, 1);
+    assert.ok(fs.existsSync(LOG(dir)), 'the failing run published its log');
+    fs.writeFileSync(go, 'go');
+    assert.equal(await exited, 0);
+  } finally { fs.writeFileSync(go, 'go'); green.kill(); }
+  assert.ok(fs.existsSync(LOG(dir)), 'the green run\'s cleanup left the newer failing log alone');
+  assert.match(fs.readFileSync(LOG(dir), 'utf8'), /CRASH-STDERR-MARKER/);
+});

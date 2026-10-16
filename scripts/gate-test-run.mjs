@@ -10,7 +10,8 @@
 // Usage:   node scripts/gate-test-run.mjs <test file> [<test file> ...]
 // Example: node scripts/gate-test-run.mjs scripts/verify-landing.test.mjs scripts/update-readme.test.mjs
 // Exit:    the runner's own (0 green, 1 any failure) · 1 a missing test file · 64 usage error
-// Log:     <git dir>/hook-test-last.log (one file; the latest failing run replaces the last)
+// Log:     <git dir>/hook-test-last.log (one file; the latest failing run replaces the last). Each run writes its own owner-only temporary
+//          <log>.<pid>.<time>.tmp and publishes it by rename only when it fails; a green run removes only a log older than itself.
 // Report a problem: TheColliery/.github issues. Zero dependencies: node builtins only.
 import fs from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
@@ -46,8 +47,12 @@ async function main(args) {
   for (const f of args) if (!fs.existsSync(f)) { console.error(`gate-test-run: missing test file: ${f}`); return 1; }
 
   const log = logPath();
+  // Each run writes its OWN temporary log, created exclusively and owner-only, and publishes it over the kept log only when it fails, so two hook runs
+  // beside each other never share a file: a green run's cleanup cannot delete a failing run's log (UMB3-032, the rename is the node/runtime.md section 5 shape).
+  const startedAt = Date.now();
+  const tmpLog = log ? `${log}.${process.pid}.${startedAt}.tmp` : null;
   let out = null;
-  if (log) { try { out = fs.createWriteStream(log); out.on('error', () => { out = null; }); } catch { out = null; } }
+  if (tmpLog) { try { out = fs.createWriteStream(tmpLog, { flags: 'wx', mode: 0o600 }); out.on('error', () => { out = null; }); } catch { out = null; } }
 
   const child = spawn(process.execPath, [`--max-old-space-size=${HEAP_CAP_MB}`, '--test', `--test-timeout=${PER_TEST_TIMEOUT_MS}`, ...args], { stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
   let timedOut = false;
@@ -72,9 +77,18 @@ async function main(args) {
   }
   if (out) await new Promise((resolve) => out.end(resolve));
 
-  if (code === 0 && !timedOut && !interrupted) { if (log) fs.rmSync(log, { force: true }); return 0; }
-  console.error(log && out !== null
-    ? `gate-test-run: this failing run's whole output is kept at ${log}`
+  if (code === 0 && !timedOut && !interrupted) {
+    if (tmpLog) fs.rmSync(tmpLog, { force: true });
+    // an older kept log goes; a newer one belongs to a failing run that finished beside this one
+    const kept = log ? fs.statSync(log, { throwIfNoEntry: false }) : undefined;
+    if (kept && kept.mtimeMs < startedAt) fs.rmSync(log, { force: true });
+    return 0;
+  }
+  // publish: the temporary log replaces the kept one in one rename; where the rename is refused (a reader holds the target open on Windows) the temporary log itself is the kept one
+  let keptAt = null;
+  if (tmpLog && out !== null) { try { fs.renameSync(tmpLog, log); keptAt = log; } catch { keptAt = tmpLog; } }
+  console.error(keptAt
+    ? `gate-test-run: this failing run's whole output is kept at ${keptAt}`
     : 'gate-test-run: there is no git directory here, so the output was not kept');
   if (interrupted) return 128 + interrupted.num;
   return code === 0 ? 1 : code; // a killed run exits non-zero too
