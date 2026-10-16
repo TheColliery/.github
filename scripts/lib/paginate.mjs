@@ -17,9 +17,12 @@ export const MAX_PAGES = 20;
 export async function getAllPages(getFn, p, pick, maxPages = MAX_PAGES) {
   const items = [];
   for (let page = 1; page <= maxPages; page++) {
-    const r = await getFn(`${p}${p.includes('?') ? '&' : '?'}per_page=${PER_PAGE}&page=${page}`);
+    // a rejected read (a timeout, a network error) is no answer: status 0 and what was read so far (UMB3-032); a picker that cannot take the body (null json) reads as not a list
+    let r;
+    try { r = await getFn(`${p}${p.includes('?') ? '&' : '?'}per_page=${PER_PAGE}&page=${page}`); } catch { return { status: 0, items, partial: true }; }
     if (r.status !== 200) return { status: r.status, items, partial: true };
-    const got = pick(r.json);
+    let got;
+    try { got = pick(r.json); } catch { got = null; }
     if (!Array.isArray(got)) return { status: 200, items, partial: true, notList: true };
     items.push(...got);
     if (got.length < PER_PAGE) return { status: 200, items, partial: false };

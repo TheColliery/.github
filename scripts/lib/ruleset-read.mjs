@@ -19,7 +19,9 @@ export async function readRulesetDetails(getFn, base, { includeParents = true } 
     const id = c && c.id;
     if (!Number.isSafeInteger(id)) throw new Error(`GET ${base}/rulesets -> a list entry without a numeric id`);
     const d = await getFn(`${base}/rulesets/${id}`);
-    if (d.status !== 200 || !d.json || typeof d.json !== 'object') throw new Error(`GET ${base}/rulesets/${id} -> ${d.status === 200 ? 'an answer that is not a ruleset' : pageNote({ status: d.status })}`);
+    // a ruleset detail is an object with a safe integer id and a rules array (UMB3-032); an array, a bare message or a half object is not one
+    const isRuleset = d.json && typeof d.json === 'object' && !Array.isArray(d.json) && Number.isSafeInteger(d.json.id) && Array.isArray(d.json.rules);
+    if (d.status !== 200 || !isRuleset) throw new Error(`GET ${base}/rulesets/${id} -> ${d.status === 200 ? 'an answer that is not a ruleset' : pageNote({ status: d.status })}`);
     details.push(d.json);
   }
   return details;

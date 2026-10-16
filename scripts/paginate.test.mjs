@@ -70,7 +70,7 @@ const rulesetGet = (state, seen = []) => async (u) => {
 
 test('readRulesetDetails: the list and every detail come back whole, in list order, the list read through its pages', async () => {
   const seen = [];
-  const out = await readRulesetDetails(rulesetGet({ list: [{ id: 1 }, { id: 2 }], details: { 1: { status: 200, json: { id: 1, name: 'a' } }, 2: { status: 200, json: { id: 2, name: 'b' } } } }, seen), '/r');
+  const out = await readRulesetDetails(rulesetGet({ list: [{ id: 1 }, { id: 2 }], details: { 1: { status: 200, json: { id: 1, name: 'a', rules: [] } }, 2: { status: 200, json: { id: 2, name: 'b', rules: [] } } } }, seen), '/r');
   assert.deepEqual(out.map((x) => x.name), ['a', 'b']);
   assert.ok(seen[0].startsWith('/r/rulesets?per_page=100&page=1'), seen[0]);
   const none = await readRulesetDetails(rulesetGet({ list: [], details: {} }), '/r');
@@ -88,8 +88,40 @@ test('readRulesetDetails: includeParents false asks for the repository\'s own ru
 test('readRulesetDetails: a list that is unsuccessful or not a list, a detail that fails, and an entry with no numeric id each throw a named error, never a shorter picture', async () => {
   await assert.rejects(readRulesetDetails(rulesetGet({ list: { status: 500, json: null }, details: {} }), '/r'), /GET \/r\/rulesets -> HTTP 500/);
   await assert.rejects(readRulesetDetails(rulesetGet({ list: { status: 200, json: { message: 'nope' } }, details: {} }), '/r'), /GET \/r\/rulesets -> an answer that is not a list/);
-  await assert.rejects(readRulesetDetails(rulesetGet({ list: [{ id: 1 }, { id: 2 }], details: { 1: { status: 200, json: { id: 1 } }, 2: { status: 502, json: null } } }), '/r'), /GET \/r\/rulesets\/2 -> HTTP 502/);
+  await assert.rejects(readRulesetDetails(rulesetGet({ list: [{ id: 1 }, { id: 2 }], details: { 1: { status: 200, json: { id: 1, rules: [] } }, 2: { status: 502, json: null } } }), '/r'), /GET \/r\/rulesets\/2 -> HTTP 502/);
   await assert.rejects(readRulesetDetails(rulesetGet({ list: [{ id: 1 }], details: { 1: { status: 200, json: null } } }), '/r'), /GET \/r\/rulesets\/1 -> an answer that is not a ruleset/);
   await assert.rejects(readRulesetDetails(rulesetGet({ list: [{ id: '../x' }], details: {} }), '/r'), /a list entry without a numeric id/);
   await assert.rejects(readRulesetDetails(rulesetGet({ list: [{}], details: {} }), '/r'), /a list entry without a numeric id/);
+});
+
+// UMB3-032 (CodeRabbit L106f8b483b20, Lc7bf1d3ea9a9): the shared pager and the ruleset reader keep their contracts when the read itself breaks or the answer is the wrong shape.
+test('getAllPages: a read that REJECTS (a timeout, a network error) is a partial list with status 0 and the items read so far, never a throw -- RED before UMB3-032', async () => {
+  const flaky = (failAt) => async (u) => {
+    const page = pageOf(u);
+    if (page === failAt) throw new Error('fetch failed');
+    return { status: 200, json: Array.from({ length: PER_PAGE }, (_, i) => ({ id: (page - 1) * PER_PAGE + i })) };
+  };
+  const later = await getAllPages(flaky(2), '/x', (j) => j);
+  assert.equal(later.partial, true); assert.equal(later.status, 0); assert.equal(later.items.length, PER_PAGE);
+  assert.match(pageNote(later), /no answer/);
+  const first = await getAllPages(flaky(1), '/x', (j) => j);
+  assert.deepEqual([first.partial, first.status, first.items.length], [true, 0, 0]);
+});
+
+test('getAllPages: a picker that throws on an answer with no body (null json) reads as an answer that is not a list, keeping the items already read -- RED before UMB3-032', async () => {
+  const get = async (u) => (pageOf(u) === 1
+    ? { status: 200, json: { workflows: Array.from({ length: PER_PAGE }, (_, i) => ({ id: i })) } }
+    : { status: 200, json: null });
+  const r = await getAllPages(get, '/x', (j) => j.workflows);
+  assert.equal(r.partial, true); assert.equal(r.notList, true); assert.equal(r.items.length, PER_PAGE);
+  assert.match(pageNote(r), /not a list/);
+});
+
+test('readRulesetDetails: a detail that is an array, has no safe integer id or has no rules array is not a ruleset -- RED before UMB3-032', async () => {
+  const one = (json) => rulesetGet({ list: [{ id: 1 }], details: { 1: { status: 200, json } } });
+  for (const [label, json] of [['an array', [{ id: 1, rules: [] }]], ['no id', { name: 'a', rules: [] }], ['a string id', { id: '1', rules: [] }], ['an unsafe id', { id: 2 ** 60, rules: [] }], ['no rules', { id: 1, name: 'a' }], ['rules not an array', { id: 1, rules: {} }]]) {
+    await assert.rejects(readRulesetDetails(one(json), '/r'), /GET \/r\/rulesets\/1 -> an answer that is not a ruleset/, label);
+  }
+  const ok = await readRulesetDetails(one({ id: 1, rules: [] }), '/r');
+  assert.equal(ok.length, 1);
 });
