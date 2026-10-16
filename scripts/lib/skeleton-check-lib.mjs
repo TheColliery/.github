@@ -58,6 +58,8 @@ export const SKELETON_FILES = {
     // UMB-282 (a): the house secret scan. The lib and its test are byte-equal in every carrier (the umbrella's
     // scanner-parity.mjs); the gate is the caller, and the hook pair above carries the call.
     'scripts/lib/secret-scan.mjs', 'scripts/secret-scan.test.mjs', 'scripts/secret-gate.mjs', 'scripts/secret-gate.test.mjs',
+    // UMB3-035 row C9 (16i): the outward links of the front doors, checked on change and weekly; the engine and its test are copied by blob.
+    '.github/workflows/front-door-links.yml', 'scripts/front-door-links.mjs', 'scripts/lib/front-door-links.mjs', 'scripts/front-door-links.test.mjs',
   ],
   'private-working': [
     'LICENSE', '.gitignore', '.gitattributes',
