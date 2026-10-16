@@ -297,3 +297,19 @@ test('a finding built from hostile API text carries only safe text: no newline, 
   assert.equal(f1.length + f2.length + f3.length, 3, 'each hostile record is still a finding, named by the fallback');
   assert.ok(report.split('\n').every((l) => !l.startsWith('#') || l.startsWith('# ') === false), 'no heading can be injected');
 });
+
+// UMB3-032 (CodeRabbit Lcf22c1f6210c, Lee7a928ff611): what the summary links to
+test('gitbookSyncedFiles: a summary link with a quoted Markdown title (double, single or parenthesised), with or without a fragment, is a synced page -- RED before UMB3-032', () => {
+  const cfg = 'root: ./\nstructure:\n  summary: SUMMARY.md\n';
+  const summary = '* [Install](guides/install.md "Installation")\n* [B](b.md \'Single quoted\')\n* [C](c.md (Paren title))\n* [D](d.md#frag "T")\n* [E](e.md)\n';
+  const exact = gitbookSyncedFiles(cfg, summary).exact;
+  for (const p of ['guides/install.md', 'b.md', 'c.md', 'd.md', 'e.md']) assert.ok(exact.includes(p), p + ' in ' + exact.join(','));
+});
+
+test('gitbookSyncedFiles: a parent-relative summary link resolves against the summary\'s own directory, stays when it lands inside the root, and is dropped when it climbs out of it -- RED before UMB3-032', () => {
+  const inRoot = gitbookSyncedFiles('root: docs\nstructure:\n  summary: guide/SUMMARY.md\n', '* [i](../intro.md)\n* [x](../../README.md)\n* [y](sub/../a.md)\n* [z](./b.md)\n* [s](../../docs2/x.md)\n').exact;
+  for (const p of ['docs/intro.md', 'docs/guide/a.md', 'docs/guide/b.md']) assert.ok(inRoot.includes(p), p + ' in ' + inRoot.join(','));
+  assert.equal(inRoot.some((p) => p === 'README.md' || p === 'docs2/x.md' || p.split('/').includes('..')), false, 'a link out of the root is not a synced page');
+  const atRoot = gitbookSyncedFiles('root: ./\nstructure:\n  summary: SUMMARY.md\n', '* [up](../x.md)\n* [ok](a/../b.md)\n').exact;
+  assert.deepEqual(atRoot.filter((p) => !['SUMMARY.md', 'README.md'].includes(p)), ['b.md'], 'README.md and SUMMARY.md are the defaults a config with a summary names');
+});

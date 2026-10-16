@@ -77,7 +77,18 @@ const cleanPath = (p) => {
   return q && !q.split('/').includes('..') && SAFE_PATH.test(q) ? q : null;
 };
 const joinPath = (...parts) => parts.map((x) => String(x).replace(/^\.\/?$/, '')).filter(Boolean).join('/').replace(/\/+/g, '/');
-const yamlScalar = (text, key) => (new RegExp('^[ \\t-]*' + key + ':[ \\t]*(\\S[^\\r\\n#]*?)[ \\t]*(?:#.*)?$', 'm').exec(text) || [])[1];
+// A link resolved against the directory of the file that holds it: `.` and `..` segments are folded, and a path that climbs above the repository or out of the space's root is no page of the space (UMB3-032).
+function resolveInRoot(base, rel, root) {
+  const out = base ? base.split('/') : [];
+  for (const seg of String(rel).replace(/\\/g, '/').split('/')) {
+    if (seg === '' || seg === '.') continue;
+    if (seg === '..') { if (!out.length) return null; out.pop(); } else out.push(seg);
+  }
+  const p = out.join('/');
+  if (root && p !== root && !p.startsWith(root + '/')) return null;
+  return cleanPath(p);
+}
+const yamlScalar =(text, key) => (new RegExp('^[ \\t-]*' + key + ':[ \\t]*(\\S[^\\r\\n#]*?)[ \\t]*(?:#.*)?$', 'm').exec(text) || [])[1];
 
 // A `directory:` mapping as a prefix of the normalized repository filenames. The repository root (`.`, `./`) is every file, so its prefix is the empty string (UMB3-006).
 function dirPrefix(raw) {
@@ -117,9 +128,10 @@ export function gitbookSyncedFiles(configText, summaryText = '') {
       const summaryPath = joinPath(root, s);
       exact.add(summaryPath);
       const base = summaryPath.includes('/') ? summaryPath.slice(0, summaryPath.lastIndexOf('/')) : '';
-      for (const m of String(summaryText || '').matchAll(/\]\(([^)\s#]+)(?:#[^)]*)?\)/g)) {
+      // a link is `](dest)`, `](dest#fragment)` or either with a quoted or parenthesised title after it (UMB3-032)
+      for (const m of String(summaryText || '').matchAll(/\]\(([^)\s#]+)(?:#[^)\s]*)?(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\)/g)) {
         if (/^[a-z][a-z0-9+.-]*:/i.test(m[1])) continue; // a URL, not a page
-        const p = cleanPath(joinPath(base, m[1]));
+        const p = resolveInRoot(base, m[1], root);
         if (p) exact.add(p);
       }
     }
