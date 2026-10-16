@@ -157,3 +157,19 @@ test('the ruleset list asks for the repository\'s OWN rulesets (includes_parents
   const a = run(['--apply', '--repo', 'CoalMine'], { GITHUB_TOKEN: 'stub-write' });
   for (const c of a.calls.filter((x) => /\/rulesets\?/.test(x.path))) assert.match(c.path, /includes_parents=false/, c.path);
 });
+
+// UMB3-032 (CodeRabbit Lc5ad6fe7949f): a value flag takes a value, never the next flag
+test('--org, --out and --repo with no value, or with a next argument that is a flag, are refused by name, exit 1, no call made, and the next flag is not swallowed -- RED before UMB3-032', () => {
+  for (const args of [['--org'], ['--out'], ['--repo'], ['--org', '--apply'], ['--out', '--repo', 'CoalMine'], ['--apply', '--repo', '--out']]) {
+    const { res, calls, bodies } = run(args);
+    assert.equal(res.status, 1, args.join(' '));
+    assert.match(res.stderr, /needs a value: --(org|out|repo)/, args.join(' ') + ' :: ' + res.stderr);
+    assert.deepEqual(calls, [], 'no request is made: ' + args.join(' '));
+    assert.equal(bodies, null, 'no body file is written: ' + args.join(' '));
+  }
+});
+
+test('a value flag that is followed by an ordinary value still works (control)', () => {
+  const { res } = run(['--org', 'TheColliery', '--repo', 'CoalMine', '--out', 'x.json']);
+  assert.equal(res.status, 0, res.stderr);
+});

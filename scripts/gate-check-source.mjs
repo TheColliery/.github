@@ -25,12 +25,18 @@ const API = 'https://api.github.com';
 
 function parseArgs(argv) {
   const a = { org: 'TheColliery', out: 'gate-check-source-bodies.json', apply: false, repo: '' };
+  // a value flag takes the next argument as its value, and refuses a missing one or one that is itself a flag (UMB3-032)
+  const value = (k, i) => {
+    const v = argv[i + 1];
+    if (v === undefined || v.startsWith('-')) throw new Error(`${k} needs a value: ${k} <${k.slice(2)}>`);
+    return v;
+  };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     if (k === '--apply') a.apply = true;
-    else if (k === '--org') a.org = argv[++i];
-    else if (k === '--out') a.out = argv[++i];
-    else if (k === '--repo') a.repo = argv[++i];
+    else if (k === '--org') a.org = value(k, i++);
+    else if (k === '--out') a.out = value(k, i++);
+    else if (k === '--repo') a.repo = value(k, i++);
     else if (k === '-h' || k === '--help') { a.help = true; }
     else throw new Error(`unknown flag ${k}`);
   }
