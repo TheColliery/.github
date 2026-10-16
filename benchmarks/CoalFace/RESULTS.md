@@ -123,9 +123,13 @@ packing the same 6 spots into FEWER workers collapses the bill:
 A worker doing 3 functions cost **25,173 / 25,187**—statistically identical to one doing 1
 (~25,090); the 3 extra spots added ~80 tokens. So naive 1-spot-per-worker fan-out pays the ~25k
 baseline **6× for no reason**. **Token cost ≈ worker_count × 25k.** The token-optimal fan-out is the
-**COARSEST partition that still delivers the parallelism you need**—exactly what CF's **min-unit
-floor** (merge a unit smaller than the spawn overhead) and **granularity optimizer** (don't slice
-finer than ~2-4× the wave width) enforce. Naive ad-hoc UNDER-packs; CF forces the packing.
+**COARSEST partition that still delivers the parallelism you need.** CF's **min-unit floor** (merge a
+unit smaller than the spawn overhead; a job under it is done inline) bounds the partition from below.
+Through v0.14.4 CF also carried a **granularity optimizer** (don't slice finer than ~2-4× the wave
+width); v0.14.5 retired it as a cap, because it merged independent spots that clear the floor. The
+2×3 arm above is a choice of parallelism on spots far below the floor, not something CF's floor
+produces. Naive ad-hoc UNDER-packs: one spot per worker pays the ~25k baseline six times (the 6×1
+arm); CF's flat-worksite rule keeps worker count = unit count above the floor.
 
 **The real sweet spot = coarse × cheap tier:** 2×3 Haiku = **$0.25, 2× parallel**—cheaper than
 BOTH naive ad-hoc ($0.75) AND solo-Opus ($0.89), while staying parallel. That is CF's wallet,
