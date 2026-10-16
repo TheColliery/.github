@@ -152,7 +152,7 @@ The marks above sweep the enumeration surfaces so a new sibling is *listed* ever
 
 | Setting | Value | Field / where |
 |---|---|---|
-| Features: Issues · Discussions | ON | `has_issues` · `has_discussions` (bug reports · community Q&A—owner auto-watches → post notifies) |
+| Features: Issues ON · Discussions OFF | `has_issues` true · `has_discussions` false | bug reports go to Issues; org announcements live in the `.github` repo's own Discussions, the one repo with them on (owner BB-186 = (ก), 2026-10-17: closed is the intent; live read the same day: on for `.github` only, off on the other 17 org repos) |
 | Features: Projects · Wiki | OFF | `has_projects` · `has_wiki` (unused; docs live in README/references) |
 | PR: auto-delete head branch | ON | `delete_branch_on_merge` (tidy after a merged Dependabot PR) |
 | PR: auto-merge | ON | `allow_auto_merge`—REQUIRED by the Dependabot auto-merge gate below (was OFF/"human merges" until 2026-07-09; the maintainer merged every green bump by hand → days of latency, so it is now automated BEHIND a CI gate, never gateless) |
