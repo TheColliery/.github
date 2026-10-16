@@ -99,3 +99,9 @@ test('a double-quoted key is compared by the value YAML gives it: "a" and the u0
   assert.deepEqual(findDuplicateKeys("'it''s': 1\n'it''s': 2\n").map((d) => d.line), [2], 'single-quoted keys are unchanged');
   assert.deepEqual(findDuplicateKeys('"\\U00110000": 1\n"\\U00110000": 2\n').map((d) => d.line), [2], 'an out of range code point does not throw');
 });
+
+// rot-canary QUICK after order 15h: a standalone dash followed only by a comment is still a standalone dash
+test('a sequence dash that carries only a comment starts a fresh item scope too: two such items with the same keys are not duplicates -- RED before the rot-canary fix', () => {
+  assert.deepEqual(findDuplicateKeys('items:\n  - # first\n    name: a\n  - # second\n    name: b\n'), []);
+  assert.deepEqual(findDuplicateKeys('-   # c\n  name: a\n  name: b\n'), [{ line: 3, key: 'name', firstLine: 2 }]);
+});

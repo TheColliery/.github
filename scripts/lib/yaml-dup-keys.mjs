@@ -48,7 +48,7 @@ export function findDuplicateKeys(text) {
     }
     const m = rest.match(KEY);
     // a dash that stands alone opens an item whose mapping starts on a later line: close the previous item's scope now (UMB3-032)
-    if (!m) { if (newItem && !rest.trim()) while (stack.length && stack[stack.length - 1].col > indent) stack.pop(); continue; }
+    if (!m) { if (newItem && /^(?:#.*)?$/.test(rest.trim())) while (stack.length && stack[stack.length - 1].col > indent) stack.pop(); continue; }
     while (stack.length && (newItem ? stack[stack.length - 1].col >= col : stack[stack.length - 1].col > col)) stack.pop();
     if (!stack.length || stack[stack.length - 1].col < col) stack.push({ col, keys: new Map() });
     const key = unquote(m[1]);
