@@ -76,7 +76,19 @@ function run(dir, args = [], input = '', extraEnv = {}) {
   return { code: r.status, out: r.stdout || '', err: r.stderr || '' };
 }
 
-test.after(() => { for (const d of [...made, SANDBOX]) fs.rmSync(d, { recursive: true, force: true }); });
+// Teardown of a tree git children just used: on Windows a git.exe that outlives its launcher by a few seconds still holds the tree, and one plain rmSync
+// answers EBUSY, EPERM or ENOTEMPTY, failing the test for a reason that is not the test's (CoalWash e63, measured: a loop of fresh calls clears it, the
+// retry options of one call do not; order 16i item 6). A tree still held past the budget throws: a real leak stays loud.
+function removeTree(dir, budgetMs = 30000) {
+  const until = Date.now() + budgetMs;
+  for (;;) {
+    try { fs.rmSync(dir, { recursive: true, force: true }); return; } catch (e) {
+      if (!['EBUSY', 'EPERM', 'ENOTEMPTY'].includes(e && e.code) || Date.now() >= until) throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+    }
+  }
+}
+test.after(() => { for (const d of [...made, SANDBOX]) removeTree(d); });
 
 test('a clean tree passes: exit 0 and a PASS SECRETS line naming the files scanned', () => {
   const r = run(repo([{ 'README.md': 'hello\n' }]));
