@@ -53,3 +53,15 @@ test('pinOnlyDifference: a same-tag/different-commit pin and an unorderable tag 
   const line = pinLine(pinOnlyDifference(wf(A, 'v2.4.4'), wf(B, 'v2.4.3')).diffs);
   assert.match(line, /^PINS ONLY: 1 action pin differs from the canon, structure identical \(ossf\/scorecard-action v2\.4\.3 vs canon v2\.4\.4: room behind\)$/);
 });
+
+// UMB3-032 (CodeRabbit Lab4b113dd9ee): the 40 hex digits are a pin only when nothing but whitespace, a comment or the line end follows them.
+test('a ref that only STARTS with 40 hex digits is no pin: a longer hex ref, a sha plus a suffix and a dotted ref compare as they stand; a bare pin at the line end and a tab-comment pin still are pins -- RED before UMB3-032', () => {
+  for (const ref of ['a'.repeat(41), A + '-fix', A + 'zz', A + '.1']) {
+    const t = `jobs:\n  j:\n    steps:\n      - uses: actions/checkout@${ref}\n`;
+    assert.deepEqual(pinsOf(t), [], ref);
+    assert.equal(normalizePins(t), t, ref);
+  }
+  assert.equal(pinsOf(`      - uses: actions/checkout@${A}\n`).length, 1, 'a pin with no comment, at the line end');
+  assert.equal(pinsOf(`      - uses: actions/checkout@${A}`).length, 1, 'a pin at the end of the text');
+  assert.deepEqual(pinsOf(`      - uses: actions/checkout@${A}\t# v4\n`).map((p) => p.tag), ['v4'], 'a tab before the comment');
+});

@@ -8,7 +8,7 @@
 //
 // A pin is a `uses:` value whose ref is a full 40-hex commit id. A local action (`./...`), a docker reference, or a ref that is a tag or
 // a branch is not a pin and is compared as it stands. Zero dependencies: node builtins only.
-const PIN = /^([ \t]*(?:-[ \t]+)?uses:[ \t]+)([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_./-]+)?)@([0-9a-f]{40})(?:[ \t]+#[ \t]*([^\r\n]*))?/gm;
+const PIN = /^([ \t]*(?:-[ \t]+)?uses:[ \t]+)([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_./-]+)?)@([0-9a-f]{40})(?!\S)(?:[ \t]+#[ \t]*([^\r\n]*))?/gm;
 
 const lf = (text) => String(text).replace(/\r\n/g, '\n');
 
