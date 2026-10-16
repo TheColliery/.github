@@ -68,7 +68,9 @@ const PRERELEASE_TAG = /^v?\d+\.\d+\.\d+-[0-9A-Za-z.-]+/;
 export function launchFormTag(releases) {
   const published = (releases ?? []).filter((r) => r && !r.draft);
   if (published.length === 0) return null;
-  const oldest = published.reduce((a, b) => (Date.parse(b.created_at) < Date.parse(a.created_at) ? b : a));
+  // published earliest, by published_at: created_at is when the draft was made (measured 2026-10-16 on public Releases: minutes after the tag commit, not the commit date), so a draft published later would order wrongly (UMB3-032)
+  const at = (r) => Date.parse(r.published_at ?? r.created_at);
+  const oldest = published.reduce((a, b) => (at(b) < at(a) ? b : a));
   return oldest.prerelease === true ? oldest.tag_name : null;
 }
 
@@ -100,7 +102,10 @@ export function checkRelease(release, repoName, ctx = {}) {
       findings.push(`title '${title}' carries a repo-name prefix (bare vX.Y.Z only)`);
     }
     const sep = separatorClass(title);
-    if (sep === 'em-dash') {
+    // a title that opens with no version at all breaks the shape `vX.Y.Z - summary` (UMB3-032); a repo-prefixed title already has its own finding above
+    if (sep === 'none' && !hasRepoPrefix(title, repoName)) {
+      findings.push(`title '${title}' does not open with a version (the shape is vX.Y.Z - summary)`);
+    } else if (sep === 'em-dash') {
       findings.push(`title '${title}' uses an em-dash separator (spaced hyphen '-' required)`);
     } else if (sep === 'other') {
       findings.push(`title '${title}' uses a non-hyphen separator after the version`);

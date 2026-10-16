@@ -303,3 +303,26 @@ test('release-conform CLI: a second prerelease Release beside the launch one is 
   assert.match(res.stderr, /v0\.1\.0-beta\.2.*not the repo's launch-form Release/);
   assert.doesNotMatch(res.stderr, /v0\.1\.0-beta\.1:/);
 });
+
+// UMB3-032 (CodeRabbit L0a91333754ba, L9c51d1791c00)
+test('checkRelease: a title that opens with no version at all is a finding (the full shape is vX.Y.Z, a spaced hyphen, a summary); a repo-prefixed title keeps its own finding and a conformant one stays clean -- RED before UMB3-032', () => {
+  const rel = (name) => ({ tag_name: 'v1.1.0', name, body: 'y', prerelease: false, draft: false });
+  for (const name of ['Release notes', 'Summer update', 'fidelity gate hardening']) {
+    assert.match(checkRelease(rel(name), 'CoalWash').join('\n'), /does not open with a version/, name);
+  }
+  const prefixed = checkRelease(rel('CoalWash v1.1.0 - x'), 'CoalWash');
+  assert.equal(prefixed.some((f) => /does not open with a version/.test(f)), false, 'the prefix finding is the one for this shape');
+  assert.equal(prefixed.some((f) => /repo-name prefix/.test(f)), true);
+  assert.deepEqual(checkRelease(rel('v1.1.0 - x'), 'CoalWash'), []);
+  assert.deepEqual(checkRelease(rel('1.1.0 - x'), 'CoalWash'), [], 'a version without the v is still a version');
+});
+
+test('launchFormTag: the oldest PUBLISHED Release is the one published earliest (published_at), not the one whose draft was created first; with no published_at it falls back to created_at -- RED before UMB3-032', () => {
+  const stableDraftedFirst = { tag_name: 'v1.0.0', prerelease: false, draft: false, created_at: '2026-01-01T00:00:00Z', published_at: '2026-03-01T00:00:00Z' };
+  const betaPublishedFirst = { tag_name: 'v1.0.0-beta.1', prerelease: true, draft: false, created_at: '2026-02-01T00:00:00Z', published_at: '2026-02-02T00:00:00Z' };
+  assert.equal(launchFormTag([stableDraftedFirst, betaPublishedFirst]), 'v1.0.0-beta.1');
+  assert.equal(launchFormTag([betaPublishedFirst, stableDraftedFirst]), 'v1.0.0-beta.1');
+  const rc = { tag_name: 'v2.0.0-rc.1', prerelease: true, draft: false, created_at: '2026-01-01T00:00:00Z' };
+  const stable = { tag_name: 'v2.0.0', prerelease: false, draft: false, created_at: '2026-02-01T00:00:00Z' };
+  assert.equal(launchFormTag([stable, rc]), 'v2.0.0-rc.1', 'created_at stands in when published_at is absent');
+});
