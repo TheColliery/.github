@@ -4,7 +4,7 @@ One maintainer decides. Every TheColliery repository is maintained by one person
 
 ## How a change is accepted
 
-A change reaches the default branch only after the repository's own gates pass: the CI workflow (the test suite on every supported platform), CodeQL, markdownlint and, for a skill repository, the build-and-verify scripts that keep the shipped distribution identical to its source. Branch rulesets forbid force-pushes and deletions on the default branch and require those checks. Dependabot's patch and minor updates merge on green checks through a separate workflow that no other author can trigger; a major update waits for the maintainer.
+A change reaches the default branch after the repository's own gates pass: the CI workflow (the test suite on every supported platform), CodeQL and, for a skill repository, the build-and-verify scripts that keep the shipped distribution identical to its source; markdownlint runs on every change and reports without blocking. Branch rulesets forbid force-pushes and deletions on the default branch and require those checks on every pull request; the maintainer's own direct pushes run the same gates locally and in CI, with the ruleset's administrator bypass as the named exception. Dependabot's patch and minor updates merge on green checks through a separate workflow that no other author can trigger; a major update waits for the maintainer.
 
 ## Who writes the changes
 

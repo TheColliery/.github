@@ -53,10 +53,10 @@ Two live precedents, both ruled OURS on 2026-08-01:
 
 | Their rule | Our position | Ruling |
 |---|---|---|
-| `Minimum coverage: 80%` (ECC `AGENTS.md`, four places) | Retired by name in [`RULES-RETIRED.md`](https://github.com/TheColliery/.github) as `IMPRACTICAL`—no instrument could enforce it, and a mandate nothing can enforce teaches that mandates are decorative | **OURS.** Not resurrected without the owner's explicit override |
+| `Minimum coverage: 80%` (ECC `AGENTS.md`, four places) | Retired by name in `RULES-RETIRED.md` (the umbrella's local-only ledger, not published) as `IMPRACTICAL`—no instrument could enforce it, and a mandate nothing can enforce teaches that mandates are decorative | **OURS.** Not resurrected without the owner's explicit override |
 | `200-400 lines typical, 800 max` as a hard cap | `coding-style.md` amended 800 into a review SIGNAL with a declared-over-run mechanism | **OURS** |
 
-The order of operations, and it is not optional: **grep [`RULES-RETIRED.md`](https://github.com/TheColliery/.github) for the subject BEFORE writing any adopted rule.** A rule retired with a reason is not resurrected because a second house happens to hold it.
+The order of operations, and it is not optional: **grep `RULES-RETIRED.md` (the umbrella's local-only ledger, not published) for the subject BEFORE writing any adopted rule.** A rule retired with a reason is not resurrected because a second house happens to hold it.
 
 ## 6. Before it ships
 

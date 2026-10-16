@@ -1609,7 +1609,8 @@ test('SKILL-REPO-PATTERN.md Layer 2 states the hook wiring in both forms: the ex
   assert.match(bullet, /KEEPS the shell string/);
   assert.match(bullet, /agy 1\.3\.2/);
   assert.match(bullet, /0 of 3/);
-  assert.match(bullet, /`verify\.mjs` checks `type === 'command'`/, 'the wiring gate reads the type as well as the command and args');
+  assert.match(bullet, /`verify\.mjs`, or a test the gate runs, checks `type === 'command'`/, 'the wiring gate reads the type as well as the command and args (16j: a room may hold the check in a test)');
+  assert.doesNotMatch(bullet, /CoalFace and CoalMine lack that check/, 'the stale sentence (both rooms shipped the check before 16j)');
 });
 
 // 15h item 2(b), CoalHearth's t90 #3 (the CoalWorks chief's 14a return D3 item 1): the census header's ceiling item 5 listed `const run = spawnSync` among the shapes that "are not counted", but the census reports a spawner

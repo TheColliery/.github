@@ -50,13 +50,13 @@ function installCoalFace() {
 }
 function installCoalWash() {
   // CoalWash ships as a Claude Code plugin (beta) — see its README; other agents
-  // install by copying skills/coalwash (+ scripts/lib engine) into the agent's skills root.
+  // install by copying plugin/skills/coalwash (the shipped, self-contained copy) into the agent's skills root.
   return run('claude', ['plugin', 'marketplace', 'add', 'TheColliery/CoalWash'])
     && run('claude', ['plugin', 'install', 'coalwash@coalwash']);
 }
 function installCoalLedger() {
   // CoalLedger ships as a Claude Code plugin (beta) — see its README; other agents
-  // install by copying skills/* (+ scripts/lib engine) into the agent's skills root.
+  // install by copying plugin/skills/<skill> (each self-contained; doc-structure carries its engine in its own lib/) into the agent's skills root.
   return run('claude', ['plugin', 'marketplace', 'add', 'TheColliery/CoalLedger'])
     && run('claude', ['plugin', 'install', 'coalledger@coalledger']);
 }

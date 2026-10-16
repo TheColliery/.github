@@ -180,7 +180,7 @@ export const TEMPLATE_DIR_FOR_KIND = {
 
 // UMB-226: a workflow runs only from the root of a repo that has a remote. For a no-remote
 // change-request article (Articles/GachaRateDesignDatum: a folder inside the umbrella repo,
-// which has zero remotes by rule) these two cells would demand files that can never execute,
+// which has zero remotes by rule) these three cells (create-release.yml joined them in BB-19) would demand files that can never execute,
 // and placing them would turn an honest ABSENT into a green cell for a workflow that never runs.
 export const NO_REMOTE_NA_FILES = {
   'article (change-request)': ['.github/workflows/check.yml', '.github/workflows/watch-sources.yml', '.github/workflows/create-release.yml'],

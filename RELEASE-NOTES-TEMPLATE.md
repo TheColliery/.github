@@ -277,10 +277,14 @@ Naming these so nobody reads the skeleton as covering more ground than it does:
   pin, the repo About description, the org landing suite table, a README status line). That
   checklist is scripts-quality.md §3's own, runs at the same time as a release, and is not
   restated here—filling this skeleton does not substitute for running that sweep.
-- **It does not mechanically enforce itself.** No gate script in any room's `scripts/`
-  checks a Release title or body against this shape today—this is a fourth-tense gap
-  (named, not covered): a Release that violates §1's shape currently ships without any
-  script noticing. §5 below is live evidence of exactly that.
+- **It is enforced by three scripts, and the rest stays a named gap.** `release-notes.mjs`
+  (the overlay) refuses a CHANGELOG entry without its heading, summary or matching tag; the
+  tag-push workflows derive the title and body from it and `verify-release-shape.mjs`
+  re-reads the published Release byte for byte against them; `scripts/release-conform.mjs`
+  (the canon repo) audits every published Release for the title shape, the prerelease flag,
+  an empty body and an emoji heading. Still unchecked by any script (the fourth-tense gap):
+  Parts 3 to 5 of the body (What you need to do · Gate · Provenance), the Lead's register, and
+  CHANGELOG 1:1 fidelity. §5 below is live evidence from before the first of the three existed.
 - **It did not resolve the conflicts found while drafting it, on its own** (§5). They were
   reported to main rather than silently absorbed—a skeleton that quietly picks a side in
   an unresolved disagreement would misrepresent it as already settled. As of 2026-08-09,

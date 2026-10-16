@@ -1,5 +1,7 @@
 # 🗂️ TheColliery—Global Configuration & Landing Page (.github)
 
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/TheColliery/.github?utm_source=oss&utm_medium=github&utm_campaign=TheColliery%2F.github&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+
 This repository houses the global configuration, landing page profile, central installation scripts, and shared developer doctrines for **[TheColliery](https://github.com/TheColliery)** organization.
 
 📖 **Full documentation:** [thecolliery.org/docs](https://thecolliery.org/docs)
