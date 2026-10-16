@@ -74,3 +74,28 @@ test('no YAML file under templates/ or .github/workflows/ repeats a key inside o
   const bad = FILES.flatMap((f) => findDuplicateKeys(fs.readFileSync(path.join(ROOT, f), 'utf8')).map((d) => `${f}:${d.line} repeats "${d.key}" (first at line ${d.firstLine})`));
   assert.deepEqual(bad, []);
 });
+
+// UMB3-032 (CodeRabbit on yaml-dup-keys, three claims, each read against the YAML 1.2 spec and the scanner before it was fixed).
+test('a block scalar header with the indentation indicator before OR after the chomping indicator still hides its body (|2- , |-2 , |+ , >2): shell lines in it are not keys -- RED before UMB3-032 for |2-', () => {
+  for (const head of ['|2-', '|-2', '|+', '>2', '|', '>-', '|1+ # note']) {
+    const text = `steps:\n  - run: ${head}\n      echo: one\n      echo: one\n    name: x\n`;
+    assert.deepEqual(findDuplicateKeys(text), [], head);
+  }
+  assert.deepEqual(findDuplicateKeys('a:\n  run: |2-\n      x: 1\n  run: y\n').map((d) => d.key), ['run'], 'the key after the body is still judged');
+});
+
+test('a sequence item whose dash stands alone starts a fresh mapping scope: two such items with the same keys are not duplicates, a repeat inside ONE such item still is -- RED before UMB3-032 for the first half', () => {
+  assert.deepEqual(findDuplicateKeys('items:\n  -\n    name: a\n    id: 1\n  -\n    name: b\n    id: 2\n'), []);
+  assert.deepEqual(findDuplicateKeys('-\n  name: a\n  name: b\n'), [{ line: 3, key: 'name', firstLine: 2 }]);
+  assert.deepEqual(findDuplicateKeys('jobs:\n  j:\n    steps:\n    -\n      name: a\n    -\n      name: b\n'), [], 'a sequence at the same indent as its parent key');
+  assert.deepEqual(findDuplicateKeys('j:\n  steps:\n  -\n    name: a\n  steps: 2\n'), [{ line: 5, key: 'steps', firstLine: 2 }], 'the dash closes the item, never its parent mapping');
+});
+
+test('a double-quoted key is compared by the value YAML gives it: "a" and the u0061 and x61 escapes are one key, the n escape is a newline and not the letter n -- RED before UMB3-032', () => {
+  assert.deepEqual(findDuplicateKeys('"a": 1\n"\\u0061": 2\n'), [{ line: 2, key: 'a', firstLine: 1 }]);
+  assert.deepEqual(findDuplicateKeys('"a": 1\n"\\x61": 2\n"\\U00000061": 3\n').map((d) => d.line), [2, 3]);
+  assert.deepEqual(findDuplicateKeys('"\\n": 1\nn: 2\n'), [], 'a newline key and the key n differ');
+  assert.deepEqual(findDuplicateKeys('"q\\"x": 1\n"q\\"x": 2\n').map((d) => d.line), [2], 'the escaped quote still pairs');
+  assert.deepEqual(findDuplicateKeys("'it''s': 1\n'it''s': 2\n").map((d) => d.line), [2], 'single-quoted keys are unchanged');
+  assert.deepEqual(findDuplicateKeys('"\\U00110000": 1\n"\\U00110000": 2\n').map((d) => d.line), [2], 'an out of range code point does not throw');
+});

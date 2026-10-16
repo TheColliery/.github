@@ -11,9 +11,17 @@
 // would be a false alarm, never a miss of a block-mapping duplicate.
 
 const KEY = /^("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^\s"'#\-[\]{}&*!|>%@`:][^:]*?)\s*:(?:\s+(.*))?$/;
-const BLOCK_SCALAR = /^[|>][+-]?\d*\s*(?:#.*)?$/;
+// YAML 1.2 8.1.1: the indentation indicator (1-9) and the chomping indicator (+ or -) come in either order (UMB3-032).
+const BLOCK_SCALAR = /^[|>](?:[1-9][+-]?|[+-][1-9]?)?\s*(?:#.*)?$/;
 
-const unquote = (k) => (k[0] === '"' ? k.slice(1, -1).replace(/\\(.)/g, '$1') : k[0] === "'" ? k.slice(1, -1).replace(/''/g, "'") : k.trim());
+// YAML 1.2 5.7 escapes of a double-quoted scalar, so "a" and the u0061 spelling of it compare as one key (UMB3-032). An unknown escape keeps the old reading (the character itself).
+const ESCAPES = { 0: '\0', a: '\x07', b: '\b', t: '\t', '\t': '\t', n: '\n', v: '\v', f: '\f', r: '\r', e: '\x1b', ' ': ' ', '"': '"', '/': '/', '\\': '\\', N: '\x85', _: '\xa0', L: String.fromCharCode(0x2028), P: String.fromCharCode(0x2029) };
+const unescapeDouble = (s) => s.replace(/\\(?:x([0-9a-fA-F]{2})|u([0-9a-fA-F]{4})|U([0-9a-fA-F]{8})|(.))/g, (m, x, u, U, c) => {
+  const hex = x || u || U;
+  if (hex) { const cp = parseInt(hex, 16); return cp <= 0x10ffff ? String.fromCodePoint(cp) : m; }
+  return Object.hasOwn(ESCAPES, c) ? ESCAPES[c] : c;
+});
+const unquote = (k) => (k[0] === '"' ? unescapeDouble(k.slice(1, -1)) : k[0] === "'" ? k.slice(1, -1).replace(/''/g, "'") : k.trim());
 
 /** @returns {{line:number,key:string,firstLine:number}[]} one entry per repeated key, 1-based line numbers */
 export function findDuplicateKeys(text) {
@@ -39,7 +47,8 @@ export function findDuplicateKeys(text) {
       newItem = true;
     }
     const m = rest.match(KEY);
-    if (!m) continue;
+    // a dash that stands alone opens an item whose mapping starts on a later line: close the previous item's scope now (UMB3-032)
+    if (!m) { if (newItem && !rest.trim()) while (stack.length && stack[stack.length - 1].col > indent) stack.pop(); continue; }
     while (stack.length && (newItem ? stack[stack.length - 1].col >= col : stack[stack.length - 1].col > col)) stack.pop();
     if (!stack.length || stack[stack.length - 1].col < col) stack.push({ col, keys: new Map() });
     const key = unquote(m[1]);
