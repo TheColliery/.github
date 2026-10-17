@@ -65,9 +65,9 @@ jobs:
       # The front doors that exist here, the same list the paths: filters above name. An empty list is a failure, never a green run that read nothing.
       - name: Front-door links answer at the page they name
         run: |
-          files=""
+          files=()
           for f in README.md profile/README.md .github/SECURITY.md .github/CONTRIBUTING.md .github/CODE_OF_CONDUCT.md .github/GOVERNANCE.md .github/ACCESSIBILITY.md .github/SUPPORT.md; do
-            if [ -f "$f" ]; then files="$files $f"; fi
+            if [ -f "$f" ]; then files+=("$f"); fi
           done
-          if [ -z "$files" ]; then echo "::error::no front door found, nothing was checked"; exit 1; fi
-          node scripts/front-door-links.mjs $files || exit 1
+          if [ "${#files[@]}" -eq 0 ]; then echo "::error::no front door found, nothing was checked"; exit 1; fi
+          node scripts/front-door-links.mjs "${files[@]}" || exit 1

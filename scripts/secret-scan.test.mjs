@@ -528,8 +528,8 @@ const ZERO40 = '0'.repeat(40);
 // a fixture call. The named-keys environment below closes the inherited-environment half; the sandbox closes the configuration half.
 const SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'secret-scan-sandbox-'));
 // Teardown of a tree git children just used: on Windows a git.exe that outlives its launcher by a few seconds still holds the tree, and one plain rmSync
-// answers EBUSY, EPERM or ENOTEMPTY, failing the test for a reason that is not the test's (CoalWash e63, measured: a loop of fresh calls clears it, the
-// retry options of one call do not; order 16i item 6). A tree still held past the budget throws: a real leak stays loud.
+// answers EBUSY, EPERM or ENOTEMPTY, failing the test for a reason that is not the test's (measured on Windows: a loop of fresh calls clears it, the
+// retry options of a single call do not). A tree still held past the budget throws: a real leak stays loud.
 function removeTree(dir, budgetMs = 30000) {
   const until = Date.now() + budgetMs;
   for (;;) {
@@ -558,7 +558,7 @@ const gitEnv = () => ({
 });
 // The same sandbox environment for a call whose exit status is the answer (execFileSync throws on a non-zero exit, so gitAt cannot give it).
 const gitStatus = (cwd, args) => spawnSync('git', args, { cwd, encoding: 'utf8', timeout: 30000, env: gitEnv() });
-// A spawn that never ran answers status null, and null is not 0, so "non-zero" proved nothing (CoalHearth t121, order 16i item 3). The decoy checks below
+// A spawn that never ran answers status null, and null is not 0, so "non-zero" proved nothing: an assertion on status alone passes when the call never ran. The decoy checks below
 // require the exact answer of `git rev-parse --verify -q HEAD` in an empty repository, exit 1 (measured on Windows and POSIX), from a call that completed.
 const assertEmptyHead = (r, why) => {
   assert.strictEqual(r.error, undefined, `${why}: the git call did not run (${r.error && r.error.code})`);
@@ -720,6 +720,8 @@ test('shortForm: a failed cmd call throws, and is not the null that means "no 8.
   if (process.platform !== 'win32') { t.skip('shortForm only asks cmd.exe on Windows; elsewhere it answers null by design'); return; }
   assert.throws(() => shortForm(SANDBOX, path.join(SANDBOX, 'no-such-cmd.exe')), /shortForm/, 'a cmd program that cannot start is a spawn error');
   assert.throws(() => shortForm(SANDBOX, process.execPath), /shortForm/, 'a cmd program that exits non-zero is a failed call (node refuses the cmd flags with a non-zero status)');
+  // a wildcard that matches no file makes the real cmd loop run zero times: it exits 0 and prints nothing, the empty answer that must throw, not read as "no short name"
+  assert.throws(() => shortForm(path.join(SANDBOX, 'no-such-file-*')), /shortForm: the cmd call printed nothing/, 'a cmd call that exits 0 and prints nothing is a failed call');
   const live = shortForm(SANDBOX);
   assert.ok(live === null || (typeof live === 'string' && live.includes('~')), 'control: the real cmd call answers a short name or null, and does not throw');
 });

@@ -57,6 +57,8 @@ export default {
     { id: 'cursor-changelog', name: 'Cursor · changelog', url: 'https://cursor.com/changelog/rss.xml', kind: 'rss', everyHours: 6 },
     { id: 'github-copilot', name: 'GitHub · Copilot changelog label', url: 'https://github.blog/changelog/label/copilot/feed/', kind: 'rss', everyHours: 2 },
     { id: 'paddle-changelog', name: 'Paddle · developer changelog', url: 'https://developer.paddle.com/changelog.xml', kind: 'rss', everyHours: 6 },
+    // antenna-beat-2026-10.md row 45 (8c7c51ce, 17c): the Baseline monthly digest, the Kolwen head's web-feature news (LWK2-064, UMB3-049)
+    { id: 'webdev-baseline-digest', name: 'web.dev · blog feed (Baseline monthly digest)', url: 'https://web.dev/blog/feed.xml', kind: 'rss', everyHours: 12 },
     // BB-56 (owner 2026-10-06): two status watches beside the e-mail subscription; the owner keeps one channel once both have carried the same events.
     // The incident HISTORY, read by id (kind incidents): an incident that opens and closes between two hourly reads still moves the key, which the unresolved list (this row's
     // first version) never saw: an 11-minute CDN incident of 2026-10-02 fell through it (Issue 39). Not history.atom: Cloudflare's history feed holds scheduled maintenance dated in the future.

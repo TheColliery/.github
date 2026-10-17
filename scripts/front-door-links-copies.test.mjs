@@ -23,7 +23,7 @@ test('the engine, the CLI and the test are byte-equal in the org repo and in the
 const shape = (text) => {
   const paths = [...text.matchAll(/^\s+- '([^']+)'$/gm)].map((m) => m[1]);
   const loop = /for f in ([^;]+); do/.exec(text);
-  return { paths: new Set(paths), listed: loop ? loop[1].trim().split(/\s+/) : [], cron: (/cron: '([^']+)'/.exec(text) || [])[1], dispatch: /^\s+workflow_dispatch:\s*$/m.test(text), call: text.includes('node scripts/front-door-links.mjs $files || exit 1'), guard: text.includes('if [ -z "$files" ]') };
+  return { paths: new Set(paths), listed: loop ? loop[1].trim().split(/\s+/) : [], cron: (/cron: '([^']+)'/.exec(text) || [])[1], dispatch: /^\s+workflow_dispatch:\s*$/m.test(text), call: text.includes('node scripts/front-door-links.mjs "${files[@]}" || exit 1'), guard: text.includes('if [ "${#files[@]}" -eq 0 ]') }; // a bash array, never a space-joined string expanded unquoted (CoalHearth t154, 17c)
 };
 
 test('both workflows run the same engine over the front doors they name, on change and on the same weekly clock, and refuse an empty list', () => {

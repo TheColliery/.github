@@ -503,10 +503,10 @@ test('thecolliery.mjs: GitHub\'s own changelog label feeds sit after the 25 plat
   assert.deepStrictEqual(idsOf(c).slice(0, 25), ['claude-code', 'codex', 'gemini-cli', 'antigravity', 'copilot-cli', 'copilot-changelog', 'cursor', 'cline', 'windsurf', 'devin', 'kiro', 'augment', 'goose', 'amp', 'opencode', 'roo-code', 'kilo-code', 'continue', 'aider', 'qwen-code', 'openhands', 'mistral-vibe', 'crush', 'zed', 'jules'], 'the first 25 keep their slots');
 });
 
-test('kolwen.mjs: the five kept rows keep their slots, the beat\'s 44 rows follow, the two status watches follow them -- RED before UMB-460 (1) and BB-56', async () => {
+test('kolwen.mjs: the five kept rows keep their slots, the beat\'s 45 rows follow, the two status watches follow them -- RED before UMB-460 (1) and BB-56', async () => {
   const c = await load('kolwen.mjs');
   assert.deepStrictEqual(idsOf(c).slice(0, 5), ['claude-code', 'cloudflare-changelog', 'github-changelog', 'cloudflare-blog', 'coderabbit-changelog']);
-  assert.strictEqual(c.sources.length, 5 + 44 + 2 + 12);
+  assert.strictEqual(c.sources.length, 5 + 45 + 2 + 12);
   const byId = Object.fromEntries(c.sources.map((s) => [s.id, s]));
   for (const id of ['anthropic-api-notes', 'anthropic-pricing', 'openai-status', 'gemini-api-changelog', 'groq-changelog', 'cloudflare-workers-ai', 'github-copilot', 'paddle-changelog', 'deepseek-updates', 'xai-news']) assert.ok(byId[id], id);
   assert.strictEqual(byId['paddle-changelog'].url, 'https://developer.paddle.com/changelog.xml');
@@ -519,7 +519,7 @@ test('kolwen.mjs: the five kept rows keep their slots, the beat\'s 44 rows follo
     assert.strictEqual(s.kind, 'raw'); assert.strictEqual(s.everyHours, 12);
   }
   assert.strictEqual(new Set(hf.map((s) => s.url)).size, 13);
-  const tail = c.sources.slice(5 + 44, 5 + 44 + 2);
+  const tail = c.sources.slice(5 + 45, 5 + 45 + 2);
   assert.deepStrictEqual(tail.map((s) => [s.id, s.kind, s.url]), [
     ['cloudflare-status', 'incidents', 'https://www.cloudflarestatus.com/api/v2/incidents.json'],
     ['groq-status', 'raw', 'https://groqstatus.com/api/v2/incidents.json'],
@@ -666,7 +666,7 @@ test('validateConfig accepts the incidents kind', () => {
 test('kolwen.mjs, BB-112 / Issues 41-42: the status row reads the incident history; the One Client feed, the four GitHub release feeds and the seven pages of Free-plan facts close the list, in that order', async () => {
   const c = await load('kolwen.mjs');
   const i = idsOf(c).indexOf('cloudflare-status');
-  assert.strictEqual(i, 5 + 44, 'the slots before it did not move');
+  assert.strictEqual(i, 5 + 45, 'the slots before it did not move');
   assert.deepStrictEqual([c.sources[i].kind, c.sources[i].url, c.sources[i].everyHours], ['incidents', 'https://www.cloudflarestatus.com/api/v2/incidents.json', 1]);
   assert.strictEqual(c.sources[i + 1].id, 'groq-status');
   assert.strictEqual(c.sources[i + 1].kind, 'raw', 'Groq lists its history newest first and was never blind to a closed incident: left as it was');
@@ -681,7 +681,7 @@ test('kolwen.mjs, BB-112 / Issues 41-42: the status row reads the incident histo
   const docs = c.sources.filter((s) => s.id.startsWith('cloudflare-doc-'));
   assert.strictEqual(docs.length, 7);
   for (const s of docs) { assert.match(s.url, /^https:\/\/developers\.cloudflare\.com\/[a-z0-9\/-]+\/index\.md$/, s.id); assert.strictEqual(s.kind, 'raw'); assert.strictEqual(s.everyHours, 24); }
-  assert.strictEqual(c.sources.length, 5 + 44 + 2 + 12);
+  assert.strictEqual(c.sources.length, 5 + 45 + 2 + 12);
 });
 
 test('kolwen.mjs: the monorepo release feeds are filtered to the package the hub runs, and pre-releases are quiet', async () => {
