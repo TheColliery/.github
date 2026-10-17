@@ -1089,7 +1089,7 @@ const FROM_14H = [
     `${HEAD}const env = ${MK};\nexport function run() { return spawnSync('git', ['status'], { env }); }\n`,
     `${HEAD}export const mk = (dir) => (${MK});\nspawnSync('git', ['status'], { env: mk(d) });\n`,
   ] },
-  // 14h (item 14, courier 4), CoalMine's three census couriers of 09a, measured against the canon (scratchpad r09a/shim/disagree.jsonl rows 12-14). Row 12 was a hole and is a finding now;
+  // 14h (item 14, courier 4), CoalMine's three census couriers of 09a, measured against the canon (rows 12-14 of CoalMine's 09a disagreement log, kept in the umbrella's scratchpad, not in any room). Row 12 was a hole and is a finding now;
   // rows 13 and 14 pass BY DESIGN (a pure read of the binding, a loop over the keys of process.env that writes nowhere), so they are pinned as controls beside the variants that stay refused.
   { id: 'CM-12', src: 'CoalMine 09a row 12', expect: 'fail', texts: [
     `${HEAD}function mk() { if (a) return ${MK}; return { PATH: process.env.PATH }; }\nspawnSync('git', ['x'], { env: mk() });\n`,

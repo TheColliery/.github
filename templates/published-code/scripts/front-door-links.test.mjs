@@ -38,7 +38,9 @@ before(async () => {
   base = `http://127.0.0.1:${server.address().port}`;
 });
 after(() => { server.closeAllConnections?.(); server.close(); });
-const fast = { timeoutMs: 300, retryMs: 10 };
+// 3 s per request: a loopback answer on a loaded windows runner took longer than 300 ms once (CoalMine run 64c3ffb, 17b); only the probe of the route that never answers uses a short clock.
+const fast = { timeoutMs: 3000, retryMs: 10 };
+const quick = { timeoutMs: 300, retryMs: 10 };
 
 test('extractLinks: markdown links, autolinks and HTML hrefs are read with their line; fenced blocks, inline code, relative paths, mailto and titled links behave', () => {
   const text = [
@@ -56,7 +58,7 @@ test('probe: follows a chain by hand and reports the final status and URL; a loo
   assert.deepEqual(await probe(fetch, `${base}/missing`, fast), { status: 404, finalUrl: `${base}/missing`, hops: 0 });
   const loop = await probe(fetch, `${base}/loop`, fast);
   assert.match(loop.error, /more than 5 redirects/);
-  const slow = await probe(fetch, `${base}/slow`, fast);
+  const slow = await probe(fetch, `${base}/slow`, quick);
   assert.equal(slow.status, 0); assert.equal(slow.error, 'timeout');
   const dead = await probe(fetch, 'http://127.0.0.1:1/x', fast);
   assert.equal(dead.status, 0); assert.ok(dead.error, 'a refused connection names its error');
@@ -103,8 +105,16 @@ test('checkFiles: one fetch per distinct URL, a transient answer gets ONE retry,
 
 // The child is awaited, never spawnSync: the server it fetches from lives in THIS process, and a synchronous wait would starve it (measured: every
 // request timed out). The spawn carries its own timeout, as every spawn in a test must.
+// The child's environment is named keys and a sandbox for HOME and the temp folders, never a copy of the operator's own (CoalGob t147, 17b).
+const CHILD_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'fdl-home-'));
+after(() => fs.rmSync(CHILD_HOME, { recursive: true, force: true }));
+const childEnv = (extra = {}) => ({
+  ...Object.fromEntries(['PATH', 'Path', 'SystemRoot', 'SYSTEMROOT', 'PATHEXT', 'ComSpec'].filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]])),
+  HOME: CHILD_HOME, USERPROFILE: CHILD_HOME, TEMP: CHILD_HOME, TMP: CHILD_HOME, TMPDIR: CHILD_HOME,
+  FRONT_DOOR_LINKS_TIMEOUT_MS: '3000', FRONT_DOOR_LINKS_RETRY_MS: '10', ...extra,
+});
 const run = (args, env = {}) => new Promise((resolve) => {
-  const child = spawn(process.execPath, ['--max-old-space-size=512', CLI, ...args], { timeout: 60000, env: { ...process.env, FRONT_DOOR_LINKS_TIMEOUT_MS: '3000', FRONT_DOOR_LINKS_RETRY_MS: '10', ...env } });
+  const child = spawn(process.execPath, ['--max-old-space-size=512', CLI, ...args], { timeout: 60000, env: childEnv(env) });
   let stdout = ''; let stderr = '';
   child.stdout.on('data', (d) => { stdout += d; }); child.stderr.on('data', (d) => { stderr += d; });
   child.on('close', (status) => resolve({ status, stdout, stderr }));
