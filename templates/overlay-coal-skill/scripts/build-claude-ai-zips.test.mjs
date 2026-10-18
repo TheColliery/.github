@@ -15,6 +15,15 @@ const WORKFLOW = path.join(HERE, '..', '.github', 'workflows', 'claude-ai-zips.y
 const EPOCH = 1700000000; // 2023-11-14T22:13:20Z
 const SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'zips-test-'));
 test.after(() => fs.rmSync(SANDBOX, { recursive: true, force: true }));
+// Every child runs under named keys and a sandboxed HOME and temp: never the operator's own (a bare spawn inherits them whole) and never Node's
+// fallbacks to them when the keys are absent (os.homedir() reads the account's home, os.tmpdir() the system temp) (CoalFace t188, order 18c; the
+// front-door-links test's shape).
+const CHILD_HOME = path.join(SANDBOX, 'home');
+fs.mkdirSync(CHILD_HOME);
+const childEnv = (extra = {}) => ({
+  ...Object.fromEntries(['PATH', 'Path', 'SystemRoot', 'SYSTEMROOT', 'PATHEXT', 'ComSpec'].filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]])),
+  HOME: CHILD_HOME, USERPROFILE: CHILD_HOME, TEMP: CHILD_HOME, TMP: CHILD_HOME, TMPDIR: CHILD_HOME, ...extra,
+});
 
 // The two libs the staging script imports are the room's own; these stubs keep this test self-contained.
 const STUB_CAP = "export const frontmatterField = (text, k) => { const m = new RegExp('^' + k + ': (.*)$', 'm').exec(text); return m ? m[1].replace(/^\"|\"$/g, '') : null; };\n";
@@ -39,7 +48,7 @@ function repo(skills, extra = () => {}) {
 }
 function stage(root, env = {}) {
   const r = spawnSync(process.execPath, ['--max-old-space-size=256', path.join(root, 'scripts', 'build-claude-ai-zips.mjs')], {
-    cwd: root, encoding: 'utf8', timeout: 60000, env: { PATH: process.env.PATH || '', SystemRoot: process.env.SystemRoot || '', ...env },
+    cwd: root, encoding: 'utf8', timeout: 60000, env: childEnv(env),
   });
   return r;
 }
@@ -140,14 +149,14 @@ test('M1/M3: the zip step zips a SORTED list with -X -D, under TZ=UTC, with the 
 });
 
 test('M1 on a runner: two builds of the same tree at different times give byte-identical ZIPs (skipped visibly where zip is absent: the flags are cleared by a runner)', (t) => {
-  const probe = spawnSync('zip', ['-v'], { encoding: 'utf8', timeout: 15000 });
+  const probe = spawnSync('zip', ['-v'], { encoding: 'utf8', timeout: 15000, env: childEnv() });
   if (probe.error || probe.status !== 0) { t.skip('no zip on this machine: ubuntu and macOS runners clear this'); return; }
-  const bash = spawnSync('bash', ['-c', 'echo ok'], { encoding: 'utf8', timeout: 15000 });
+  const bash = spawnSync('bash', ['-c', 'echo ok'], { encoding: 'utf8', timeout: 15000, env: childEnv() });
   if (bash.error || bash.status !== 0) { t.skip('no bash on this machine'); return; }
   const script = zipStep().split('\n').slice(zipStep().split('\n').findIndex((l) => /^\s*run: \|/.test(l)) + 1).map((l) => l.replace(/^ {10}/, '')).join('\n');
   const build = (root) => {
     assert.equal(stage(root, { SOURCE_DATE_EPOCH: String(EPOCH) }).status, 0);
-    const r = spawnSync('bash', ['-c', script], { cwd: root, encoding: 'utf8', timeout: 60000, env: { PATH: process.env.PATH || '', TZ: 'UTC' } });
+    const r = spawnSync('bash', ['-c', script], { cwd: root, encoding: 'utf8', timeout: 60000, env: childEnv({ TZ: 'UTC' }) });
     assert.equal(r.status, 0, r.stdout + r.stderr);
     return fs.readFileSync(path.join(root, 'dist-claude-ai', 'alpha.zip'));
   };
@@ -156,6 +165,6 @@ test('M1 on a runner: two builds of the same tree at different times give byte-i
   assert.ok(first.equals(later), 'same bytes');
   const file = path.join(SANDBOX, 'built-alpha.zip');
   fs.writeFileSync(file, first);
-  const entries = spawnSync('unzip', ['-Z1', file], { encoding: 'utf8', timeout: 15000 }).stdout.split('\n').filter(Boolean);
+  const entries = spawnSync('unzip', ['-Z1', file], { encoding: 'utf8', timeout: 15000, env: childEnv() }).stdout.split('\n').filter(Boolean);
   assert.deepEqual(entries, ['alpha/SKILL.md', 'alpha/references/a.md'], 'sorted by byte value, no folder entries, no dotfile');
 });
