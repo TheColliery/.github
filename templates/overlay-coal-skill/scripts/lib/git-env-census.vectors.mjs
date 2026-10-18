@@ -1,3 +1,4 @@
+// ponytail: 1139 lines at declaration -- one witness list as data: every vector a room's reviewer found is a row of the one file the rooms copy by blob, so splitting it would split the list a room adopts whole.
 // THE WITNESS LIST AS DATA (08d, merged into the canon 2026-10-09): the union of what seven rooms' reviewers found against their git-spawn censuses, rounds 1 to 3
 // (a list kept by the CoalWorks chief at order 08d, a file only the umbrella holds, so this file is the list now: F1-F60 a git spawn whose env must be a finding, R1-R5 a spawn the census must COUNT, P1-P7 an env it must pass
 // with no pin). One entry per vector; `texts` are whole fixture files, so a vector that declares `const env` carries BOTH call forms (the shorthand `{ env }` and
@@ -1119,4 +1120,20 @@ const FROM_14H = [
     `${HEAD}const env = ${MK};\nconst o = {};\nfor (const k in process.env) o[k] = process.env[k];\n${SHORT}\n`,
   ] },
 ];
-export const VECTORS = [...FROM_TIPPLE, ...ROUND3, ...FROM_FACE, ...FROM_09F, ...FROM_14H];
+// 18a (CoalFace INSPECT t163, census-vec.mjs): a helper with one covered return and one bare {} lent its cover to the spread beside process.env.PATH, while the {} path
+// spawns git on the system config. The cover of a helper is the cover of EVERY return; the controls show a helper every return of which covers, and a spread the
+// caller itself covers, still pass.
+const FROM_18A = [
+  { id: 'CF-18a', src: 'CoalFace 18a t163', expect: 'fail', texts: [
+    `${HEAD}function h(x) { if (x) return { GIT_CONFIG_NOSYSTEM: '1' }; return {}; }\nspawnSync('git', ['status'], { env: { ...h(flag), PATH: process.env.PATH } });\n`,
+    `${HEAD}function h(x) { if (x) return {}; return { GIT_CONFIG_NOSYSTEM: '1' }; }\nspawnSync('git', ['status'], { env: { ...h(flag), PATH: process.env.PATH } });\n`,
+    `${HEAD}const h = (x) => { if (x) { return { GIT_CONFIG_NOSYSTEM: '1' }; } return { FOO: '1' }; };\nspawnSync('git', ['status'], { env: { ...h(flag), PATH: process.env.PATH } });\n`,
+    `${HEAD}${IMPORT_HELPER}function h(d) { if (a) return gitEnv(d); return {}; }\nspawnSync('git', ['status'], { env: { ...h(d), PATH: process.env.PATH } });\n`,
+    `${HEAD}function h(x) { if (x) return { GIT_CONFIG_NOSYSTEM: '1' }; return {}; }\nconst env = { ...h(flag), PATH: process.env.PATH };\n${SHORT}\n`,
+  ] },
+  { id: 'P-CF-18a', src: 'CoalFace 18a t163', expect: 'pass', texts: [
+    `${HEAD}function h(x) { if (x) return { GIT_CONFIG_NOSYSTEM: '1' }; return { GIT_CONFIG_NOSYSTEM: '1' }; }\nspawnSync('git', ['status'], { env: { ...h(flag), PATH: process.env.PATH } });\n`,
+    `${HEAD}function h(x) { if (x) return { GIT_CONFIG_NOSYSTEM: '1' }; return {}; }\nspawnSync('git', ['status'], { env: { ...h(flag), PATH: process.env.PATH, GIT_CONFIG_NOSYSTEM: '1' } });\n`,
+  ] },
+];
+export const VECTORS = [...FROM_TIPPLE, ...ROUND3, ...FROM_FACE, ...FROM_09F, ...FROM_14H, ...FROM_18A];
