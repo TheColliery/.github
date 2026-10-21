@@ -329,7 +329,24 @@ test('.coderabbit.yaml knowledge_base: the public kinds keep Learnings repositor
     assert.deepEqual(c.slice(at, at + 4), ['knowledge_base:', '  learnings:', '    scope: local', '    approval_delay: 30']);
     assert.ok(!c.some((l) => /opt_out/.test(l)), p + ': the switch is the owner\'s dashboard click, a repository file never flips it');
   }
-  assert.deepEqual(CR_CODE(CR_PRIVATE), ['inheritance: true', 'knowledge_base:', '  opt_out: true']);
+  assert.deepEqual(CR_CODE(CR_PRIVATE), ['inheritance: true', 'knowledge_base:', '  opt_out: true', '  code_guidelines:', '    enabled: false']);
+});
+
+// UMB3-066 (2), the owner's "ทำ 2 ข้อ" of 2026-10-21: the code guidelines are off in every kind (the product under review must not become the reviewer's own rule, the owner's law of
+// 2026-10-08) and the key sits INSIDE the one knowledge_base block, never a second top-level key. The block is byte-equal across the canon, the article kind and this repo's own file.
+test('.coderabbit.yaml, every kind: knowledge_base.code_guidelines.enabled is false inside the one knowledge_base block, and the block is byte-equal across the kinds -- RED before UMB3-066 (2)', () => {
+  const block = (ls) => { const at = ls.indexOf('  code_guidelines:'); assert.ok(at > 0); return ls.slice(at, ls.indexOf('    enabled: false', at) + 1).join('\n'); };
+  const canon = block(crLines(CR_TEMPLATE));
+  for (const p of [CR_TEMPLATE, CR_OWN, CR_ARTICLE, CR_PRIVATE]) {
+    const ls = crLines(p);
+    const c = CR_CODE(p);
+    assert.equal(c.filter((l) => /^knowledge_base:/.test(l)).length, 1, p + ': one knowledge_base key');
+    const at = c.indexOf('  code_guidelines:');
+    assert.ok(at > c.indexOf('knowledge_base:'), p + ': nested under knowledge_base');
+    assert.equal(c[at + 1], '    enabled: false', p);
+    assert.equal(c.filter((l) => /^\S/.test(l) && l.split(':')[0] !== 'inheritance' && l.split(':')[0] !== 'knowledge_base' && l.split(':')[0] !== 'reviews').length, 0, p + ': no stray top-level key');
+    assert.equal(block(ls), canon, p + ': the block is the canon\'s');
+  }
 });
 
 test('.coderabbit.yaml article kind: derived from the canon -- no hooks or scripts block, the doc, workflow and scanner blocks byte-equal to the canon\'s, the same knowledge_base block -- RED before BB-82', () => {

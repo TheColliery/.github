@@ -10,3 +10,9 @@
 inheritance: true
 knowledge_base:
   opt_out: true
+  code_guidelines:
+    # Off, on the owner's law of 2026-10-08 (the header above): since 2026-10-05 CodeRabbit reads a SKILL.md at skills/<name>/
+    # in the repository root as an Agent Skill code guideline, so the product under review becomes the reviewer's own rule
+    # (14 pull requests in the org list one, UMB3-066). filePatterns can only add patterns, never drop a default, so this
+    # switch is the only way to stop it (docs.coderabbit.ai/knowledge-base/code-guidelines, read 2026-10-21).
+    enabled: false
