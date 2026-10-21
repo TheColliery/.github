@@ -54,6 +54,44 @@ test('new-repo.mjs article: the scaffold ships the pages its own CONTRIBUTING + 
   fs.rmSync(path.dirname(target), { recursive: true, force: true });
 });
 
+// BB-221 (a), the owner's "(ก) แนะนำ" of 2026-10-21: the article scaffold's CODE (scripts/, .githooks/, .github/workflows/) is Apache-2.0 and its DOCUMENT stays CC BY-NC-ND 4.0, one LICENSE per
+// part (DESIGNER-CONTRACT.md, the licence portfolio MUST). The code part carries the FULL Apache-2.0 text (never a name or a URL alone), byte-equal to the canon's published-code LICENSE, under a
+// header that names what it covers and where the document's terms are; the root LICENSE and licence.md are untouched; and a --license FILE that replaces the root body never reaches it.
+const APACHE_CANON = path.join(path.dirname(SCRIPT), '..', 'templates', 'published-code', 'LICENSE');
+test('new-repo.mjs article: scripts/LICENSE is the Apache-2.0 code-part licence, full text byte-equal to the canon, the document LICENSE untouched, both filled (BB-221 (a))', () => {
+  const root = scratchDir();
+  const target = path.join(root, 'r');
+  const res = run(['article', '--name', 'x', '--holder', 'Example Holder', '--year', '2026', target]);
+  assert.equal(res.status, 0, res.stderr);
+  const code = fs.readFileSync(path.join(target, 'scripts', 'LICENSE'), 'utf8').replace(/\r\n/g, '\n');
+  // the canon text is itself a template: its appendix notice line holds the two placeholders, filled the way every published-code repo's is
+  const apache = fs.readFileSync(APACHE_CANON, 'utf8').replace(/\r\n/g, '\n').split('{{YEAR}}').join('2026').split('{{COPYRIGHT_HOLDER}}').join('Example Holder');
+  assert.ok(code.endsWith(apache), 'the full Apache-2.0 text, verbatim, is the tail of the file');
+  const header = code.slice(0, code.length - apache.length);
+  assert.match(header, /^Apache License, Version 2\.0\n\nCopyright 2026 Example Holder\n/, 'the holder and year are filled');
+  assert.match(header, /`scripts\/`, `\.githooks\/` and `\.github\/workflows\/`/, 'it names the paths it covers');
+  assert.match(header, /NOT under this licence; see\n\.\.\/LICENSE/, 'it points at the document licence');
+  assert.ok(!/\{\{[A-Z_]+\}\}/.test(code), 'no placeholder left');
+  const doc = fs.readFileSync(path.join(target, 'LICENSE'), 'utf8');
+  assert.match(doc, /Creative Commons Attribution-NonCommercial-NoDerivatives 4\.0/, 'the document licence stays CC BY-NC-ND 4.0');
+  assert.ok(!/Apache License/.test(doc.split('legalcode')[0]), 'the document LICENSE does not become Apache');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('new-repo.mjs article, --license <a body file>: the document LICENSE is replaced and scripts/LICENSE stays Apache-2.0 (the code part is its own licence, BB-221 (a))', () => {
+  const root = scratchDir();
+  const licenseFile = path.join(root, 'CCBY.txt');
+  fs.writeFileSync(licenseFile, ['MIT License', '', 'Copyright (c) 2026 Example', '', 'Permission is hereby granted, free of charge, to any person obtaining a copy', 'of this software, subject to the following conditions:', '', 'THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.', ''].join('\n'));
+  const target = path.join(root, 'r');
+  const res = run(['article', '--name', 'x', '--license', licenseFile, target]);
+  assert.equal(res.status, 0, res.stderr);
+  assert.match(fs.readFileSync(path.join(target, 'LICENSE'), 'utf8'), /^MIT License/);
+  const noticeLine = (t) => t.replace(/\r\n/g, '\n').replace(/^ *Copyright [^\n]*$/gm, '<notice>');
+  const tail = noticeLine(fs.readFileSync(path.join(target, 'scripts', 'LICENSE'), 'utf8'));
+  assert.ok(tail.endsWith(noticeLine(fs.readFileSync(APACHE_CANON, 'utf8'))), 'still the full Apache-2.0 text');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
 // UMB-112 residue (4): SUMMARY.md listed README / SOURCES / GOVERNANCE / the standard file and the
 // scaffold shipped none of them, so a fresh article repo's table of contents was four dead links. The
 // property is general -- EVERY relative link in the scaffold's SUMMARY.md must land on a file the

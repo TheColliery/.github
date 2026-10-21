@@ -67,7 +67,7 @@ export const SKELETON_FILES = {
     '.github/workflows/gate.yml',
   ],
   article: [
-    'LICENSE', 'CONTRIBUTING.md', 'CHANGELOG.md', '.gitbook.yaml', '.gitignore',
+    'LICENSE', 'scripts/LICENSE', 'CONTRIBUTING.md', 'CHANGELOG.md', '.gitbook.yaml', '.gitignore',
     '.github/workflows/check.yml', '.github/workflows/watch-sources.yml',
     '.github/PULL_REQUEST_TEMPLATE.md',
     'ACCESSIBILITY.md', // GitHub's Accessibility tab; an org default (ORG_DEFAULT_FILES), so a live room without one inherits it
@@ -106,7 +106,7 @@ export const SKELETON_FILES = {
   // staleness-watching, so their absence is a real, actionable gap for that room to
   // close, never an instrument artifact to silence.
   'article (change-request)': [
-    'LICENSE', 'CONTRIBUTING.md', 'CHANGELOG.md', '.gitignore',
+    'LICENSE', 'scripts/LICENSE', 'CONTRIBUTING.md', 'CHANGELOG.md', '.gitignore',
     '.github/workflows/check.yml', '.github/workflows/watch-sources.yml',
     '.github/PULL_REQUEST_TEMPLATE.md',
     'ACCESSIBILITY.md', // GitHub's Accessibility tab; an org default (ORG_DEFAULT_FILES), so a live room without one inherits it
