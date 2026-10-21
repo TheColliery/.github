@@ -199,6 +199,37 @@ test('every checkout in a workflow that pushes nothing sets persist-credentials:
   assert.deepEqual(bad, []);
 });
 
+// 21a item 1 (the Chotmeter head's canon proposal (a)): the test above reads a checkout only in the two block forms it matches, so a step written in a form it cannot read
+// (flow style, a quoted uses:) was skipped, never judged, and a persisting checkout in that form passed. A non-comment line that names actions/checkout@ and is not one of
+// the two readable forms is now a FAIL, the same rule the Chotmeter room's gate.mjs holds. The limit stays stated: a line scan.
+const checkoutScan = (text) => {
+  const code = text.split(/\r?\n/).filter((l) => !/^\s*#/.test(l));
+  const mentions = code.filter((l) => /actions\/checkout@/i.test(l)).length;
+  const read = code.filter((l) => /^\s*(?:- )?uses: actions\/checkout@/.test(l)).length;
+  return { mentions, read, unreadable: mentions - read };
+};
+test('a checkout written in a form the line scan cannot read is a FAIL, never a skip: flow style and a quoted uses: are caught, a comment is not (the Chotmeter proposal (a), 21a)', () => {
+  const unread = ALL_WORKFLOWS().map((f) => [rel(f), checkoutScan(fs.readFileSync(f, 'utf8')).unreadable]).filter(([, n]) => n !== 0);
+  assert.deepEqual(unread, [], 'every workflow\'s checkout is a block step the persist-credentials test reads');
+  assert.equal(checkoutScan('steps:\n  - {uses: actions/checkout@abc, with: {persist-credentials: true}}\n').unreadable, 1, 'flow style');
+  assert.equal(checkoutScan('steps:\n  - uses: "actions/checkout@abc"\n').unreadable, 1, 'quoted');
+  assert.equal(checkoutScan('steps:\n  # - uses: actions/checkout@abc\n  - uses: actions/checkout@abc\n').unreadable, 0, 'a comment is not a step, a block step is read');
+  assert.equal(checkoutScan('steps:\n  - name: x\n    uses: actions/checkout@abc\n').unreadable, 0, 'the key under a named step is read');
+});
+
+// 21a item 1 (proposal (b)): the private-working gate workflow must still RUN the gate and its test file. The template's two steps are guarded by hashFiles (a bare "Use this template" click
+// stays green until the room's own gate lands), so the guard is allowed; a deleted or commented-out run: line is not. Limit, stated: a line scan, a step that is present but disabled
+// (if: false, continue-on-error: true, || true) is not seen.
+const runLineMissing = (text, cmds) => cmds.filter((c) => !text.split(/\r?\n/).some((l) => !/^\s*#/.test(l) && /^\s*(?:- )?run:/.test(l) && l.includes(c)));
+test('the private-working gate.yml keeps a non-comment run: line for the gate and for its test file; a deleted or commented-out line is caught (the Chotmeter proposal (b), 21a)', () => {
+  const y = fs.readFileSync(path.join(TEMPLATES, 'private-working', '.github', 'workflows', 'gate.yml'), 'utf8');
+  const CMDS = ['node --test scripts/gate.test.mjs', 'node scripts/gate.mjs'];
+  assert.deepEqual(runLineMissing(y, CMDS), []);
+  assert.deepEqual(runLineMissing(y.replace(/^(\s*)run: node scripts\/gate\.mjs/m, '$1# run: node scripts/gate.mjs'), CMDS), ['node scripts/gate.mjs'], 'commented out');
+  assert.deepEqual(runLineMissing(y.replace(/^\s*run: node --test scripts\/gate\.test\.mjs\r?\n/m, ''), CMDS), ['node --test scripts/gate.test.mjs'], 'deleted');
+  assert.deepEqual(runLineMissing(y.replace(/run: node scripts\/gate\.mjs --verbose/, 'run: echo ok'), CMDS), ['node scripts/gate.mjs'], 'a run that no longer names it');
+});
+
 test('dependabot-auto-merge (template and this repo\'s copy): the PR URL reaches gh through env PR_URL, never interpolated into run: (RED before UMB-216 (c))', () => {
   for (const f of [path.join(TEMPLATES, 'published-code', '.github', 'workflows', 'dependabot-auto-merge.yml'), path.join(OWN_WF, 'dependabot-auto-merge.yml')]) {
     const y = fs.readFileSync(f, 'utf8');
