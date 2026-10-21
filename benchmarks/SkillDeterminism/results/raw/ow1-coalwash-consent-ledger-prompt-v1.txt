@@ -1,0 +1,18 @@
+You are reading one instruction file for an AI agent skill. Do not run anything the file describes, do not spawn anything, and do not read any other file. Read ONLY this file, in full:
+
+<path to the SKILL.md under test>
+
+Then REPORT, as the agent that must follow it, what the file tells you to do. Answer from the file alone. Reply with ONE JSON object and nothing else:
+
+{
+  "q1_consent_gates": {
+    "count": <integer: how many distinct human-decision points (consent gates) the file defines>,
+    "list": [ { "name": "<short name>", "trigger": "<when it fires, in the file's own terms>" } ]
+  },
+  "q2_coalface_offer_trigger": "<every condition that must hold before the agent offers the CoalFace hand-off, as the file states them>",
+  "q3_scenario_no_coalface": "<Wizard choice 4; layer 3 of it has grown past both the size gate and the count gate; the CoalFace plugin is NOT installed. What exactly does the agent do next about workers and about any /coalface offer?>",
+  "q4_scenario_coalface_installed": "<Same as q3, but CoalFace IS installed. What exactly does the agent do?>",
+  "q5_hookless_platform": "<The skill was installed by copying files onto a platform with NO lifecycle hooks. Which ways of activating CoalWash actually work there today, and which are only designed?>",
+  "q6_standing_consent_count": <integer: how many standing-consent items (not gates, no ask) the file names>,
+  "unsure": "<anything in the file you found ambiguous for these questions, or 'none'>"
+}

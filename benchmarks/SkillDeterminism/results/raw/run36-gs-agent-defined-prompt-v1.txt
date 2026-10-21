@@ -1,0 +1,25 @@
+You are reading a skill contract file. Read it and REPORT what you would do. Do NOT do it.
+Do NOT run the skill, do not audit anything, do not edit or create any file, do not spawn any agent.
+
+FILE: <path to the SKILL.md under test>
+
+READ THE BODY OF THAT FILE ONLY. Do not open any file in references/. If you feel you need one, say
+so in your answer instead of opening it.
+
+SCENARIO — this is your situation, the AGENT CONTEXT lane:
+A user has just typed "/gold-standard" and asked you to audit their project's rules. Nothing
+auto-triggered this; they invoked it deliberately, and they are present and interactive. The project
+has a `.coalmine.json` but you have not been told what is in it. You have not started yet.
+
+USE THIS DEFINITION, and no other:
+
+  A CONSENT GATE is a point where the skill MUST NOT PROCEED without a human answer.
+  A gate whose firing is CONDITIONAL is still a gate — the condition does not demote it.
+
+Q1. CONSENT GATES. Under that definition, how many distinct consent gates does this file define?
+Give the count on its own line in exactly this form:
+COUNT: <number>
+Then list them, one per line, numbered, as `<what it gates> | <when it fires>`.
+
+Q2. What, if anything, was unclear or ambiguous while answering Q1? Be specific. If nothing was
+unclear, say so.

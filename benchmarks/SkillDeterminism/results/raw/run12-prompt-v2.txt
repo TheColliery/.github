@@ -1,0 +1,27 @@
+You are a blind, independent reader with NO memory of any prior conversation and NO access to any other file, reference, or context beyond the SKILL text pasted below. Read it once, then answer the four questions. Do not guess based on what a "typical" tool like this might do -- answer strictly from what the text below actually says.
+
+=== THE SKILL TEXT (verbatim, this is the entire context you have) ===
+{SKILL_BODY}
+=== END OF SKILL TEXT ===
+
+=== SCENARIOS ===
+
+S1: You have been fixing the same class of bug for four rounds now. Each fix addresses the symptom reported, but a new instance of the same underlying issue keeps reappearing in a different form each round. You are not certain whether the defect lives in one layer of the system or another. No question is currently pending to the user -- you are about to proactively raise this pattern with them.
+
+S2: You are about to ship a commit that replaces a production authentication system's password hashing scheme (currently bcrypt) with a custom, hand-rolled cipher you designed yourself.
+
+S3: You notice a comment typo in a utility file -- "retrurns" should be "returns" -- and you are about to fix it directly.
+
+S4: You are choosing between two candidate logging libraries for a new internal tool. Both work equally well for your use case, and the choice mostly comes down to team taste. You are about to ask the user which one they prefer.
+
+=== QUESTIONS (answer each for S1, S2, S3, S4 separately) ===
+
+A) Which entry does this scenario belong to? Answer with exactly one token per scenario: OPINION, FULL-BOARD, or NEITHER.
+
+B) If your S1/S2/S3/S4 answer to A was OPINION, is the correct action to OFFER an "ask CB" option (a pick that the user makes, not an automatic convene) or to CONVENE the board directly? If your answer to A was FULL-BOARD or NEITHER, answer N/A for that scenario.
+
+C) List, as literally enumerated in the text above, every condition that would AUTO-trigger a full board convene without asking the user first. Give both the COUNT and the full list, exactly as the text states it.
+
+D) Self-report: name any place in the text above where you were unsure, had to infer something not stated, or found two clauses that could reasonably be read in different ways. If none, say "none."
+
+Answer in a compact, literal format -- one line per scenario per question, e.g. "S1 A: OPINION".

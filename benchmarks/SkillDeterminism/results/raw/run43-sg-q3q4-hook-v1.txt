@@ -1,0 +1,29 @@
+You are reading a skill contract file. Read it and REPORT what you would do. Do NOT do it.
+Do NOT run the skill, do not verify anything, do not edit or create any file, do not spawn any agent.
+
+FILE: <path to the SKILL.md under test>
+
+READ THE BODY OF THAT FILE ONLY. Do not open any file in references/. If you feel you need one, say
+so in your answer instead of opening it.
+
+SCENARIO — this is your situation, the HOOK CONTEXT lane:
+A platform hook has automatically triggered this skill during a session, because the work touched
+version-sensitive claims. You did not choose to run it and the user did not ask for it; it fired on
+its own. A user IS present and interactive. You have not started yet.
+
+ANSWER SCOPE: answer each question **for THIS lane and THIS scenario**. If the file defines something
+that does NOT apply in this lane, say so explicitly and say why — and do NOT include it in the count.
+
+For EACH question, give the count on its own line in EXACTLY this form, then the numbered list:
+COUNT-Q3: <number>
+COUNT-Q4: <number>
+
+Q3. OUTPUT LOCATIONS. How many distinct places does this file tell you to put output, and where?
+List them.
+
+Q4. FAIL / DEGRADE PATHS. How many distinct unhappy-path or degrade branches does this file define
+(what to do when something is absent, unsupported, unfetchable, or goes wrong)? List them.
+
+Then, last:
+Q5. What, if anything, was unclear or ambiguous while answering? Be specific. If nothing was unclear,
+say so.

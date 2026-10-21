@@ -1,0 +1,38 @@
+You are reading a skill contract file. Read it and REPORT what you would do. Do NOT do it.
+Do NOT run the skill, do not scan any code, do not edit or create any file, do not spawn any agent.
+
+FILE: <path to the SKILL.md under test>
+
+SCENARIO (assume this is your situation):
+A coding session is ending. A platform Stop hook has just fired the rot-canary auto-scan on the
+files touched this session. A user IS present and interactive. The project has a `.coalmine.json`
+but you have not been told what is in it. Three findings come back: one HIGH, two MEDIUM.
+
+Answer these five questions about the file, as literally and completely as you can. Numbers matter
+more than prose — I am comparing your counts against other readers'.
+
+Q1. CONSENT GATES. How many distinct points does this file require you to ASK the user and WAIT for
+their answer before proceeding? Give the COUNT, then LIST each one in a few words.
+
+Q2. PROHIBITIONS. How many distinct things does this file forbid you from doing? Give the COUNT,
+then LIST each one in a few words.
+
+Q3. OUTPUT LOCATIONS. How many distinct places does this file tell you to put output, and where?
+Give the COUNT, then LIST them.
+
+Q4. FAIL / DEGRADE PATHS. How many distinct unhappy-path or degrade branches does this file define
+(what to do when something is absent, unsupported, unverifiable, or goes wrong)? Give the COUNT,
+then LIST them.
+
+Q5. CONFIG SET. Which `.coalmine.json` keys does this file name? Give the COUNT, then LIST each key
+with its recognized values and default AS STATED IN THE FILE. Say explicitly if a key's values or
+default are NOT stated.
+
+Then, last:
+Q6. In THIS scenario, what would you actually do first, and would you present a menu? One short
+paragraph.
+Q7. What, if anything, was unclear or ambiguous while answering? Be specific. If nothing was
+unclear, say so.
+
+If you choose to open any other file (a reference, a config), say WHICH and WHY at the top of your
+answer. If you answer from the file above alone, say "body only".

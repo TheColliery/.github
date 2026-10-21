@@ -1,0 +1,27 @@
+You are reading a skill contract file. Read it and REPORT what you would do. Do NOT do it.
+Do NOT run the skill, do not scan any code, do not edit or create any file, do not spawn any agent.
+
+FILE: <path to the SKILL.md under test>
+
+READ THE BODY OF THAT FILE ONLY. Do not open any file in references/. If you feel you need one, say
+so in your answer instead of opening it.
+
+SCENARIO — this is your situation, and it is the AGENT CONTEXT lane:
+A user has just typed "/rot-canary" and asked you to scan their project. Nothing auto-triggered this;
+they invoked it deliberately, and they are present and interactive. You have not started yet.
+
+Answer these, as literally and completely as you can. Numbers matter more than prose — I am comparing
+your answer against other readers'.
+
+Q1. CONSENT GATES IN THIS LANE. In THIS scenario (user-invoked), how many distinct points does this
+file require you to ASK the user and WAIT for their answer before proceeding?
+Give the COUNT on its own line in exactly this form:
+COUNT: <number>
+Then LIST each gate, one per line, numbered, in a few words each.
+If the file defines a gate that does NOT apply in this lane, say so explicitly and say why — and do
+NOT include it in the COUNT.
+
+Q2. What would you actually do first in this scenario? Two or three sentences.
+
+Q3. What, if anything, was unclear or ambiguous while answering Q1? Be specific. If nothing was
+unclear, say so.

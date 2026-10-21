@@ -1,0 +1,44 @@
+You are reading a skill contract file. Read it and REPORT what you would do. Do NOT do it.
+Do NOT run the skill, do not verify anything, do not edit or create any file, do not spawn any agent.
+
+FILE: <path to the SKILL.md under test>
+
+READ THE BODY OF THAT FILE ONLY. Do not open any file in references/. If you feel you need one, say
+so in your answer instead of opening it.
+
+SCENARIO — this is your situation, the HOOK CONTEXT lane:
+A platform hook has automatically triggered this skill during a session, because the work touched
+version-sensitive claims. You did not choose to run it and the user did not ask for it; it fired on
+its own. A user IS present and interactive. The project has a `.coalmine.json` but you have not been
+told what is in it. You have not started yet.
+
+ANSWER SCOPE: answer each question **for THIS lane and THIS scenario**. If the file defines something
+that does NOT apply in this lane, say so explicitly and say why — and do NOT include it in the count.
+
+For EACH question, give the count on its own line in EXACTLY this form (note the question number is
+part of the marker), then the numbered list:
+COUNT-Q1: <number>
+COUNT-Q2: <number>
+COUNT-Q3: <number>
+COUNT-Q4: <number>
+COUNT-Q5: <number>
+
+Q1. CONSENT GATES. Use this definition and no other: a CONSENT GATE is a point where the skill MUST
+NOT PROCEED without a human answer; a gate whose firing is CONDITIONAL is still a gate — the
+condition does not demote it. How many are there? List each as `<what it gates> | <when it fires>`.
+
+Q2. PROHIBITIONS. How many distinct things does this file forbid you from doing? List each briefly.
+
+Q3. OUTPUT LOCATIONS. How many distinct places does this file tell you to put output, and where?
+List them.
+
+Q4. FAIL / DEGRADE PATHS. How many distinct unhappy-path or degrade branches does this file define
+(what to do when something is absent, unsupported, unfetchable, or goes wrong)? List them.
+
+Q5. CONFIG SET. Which `.coalmine.json` keys does this file name? List each with its recognized values
+and default AS STATED IN THE FILE. Say explicitly if a key's values or default are NOT stated.
+
+Then, last:
+Q6. In THIS scenario, what would you actually do first? Two or three sentences.
+Q7. What, if anything, was unclear or ambiguous while answering? Be specific. If nothing was unclear,
+say so.

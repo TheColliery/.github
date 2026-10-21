@@ -1,6 +1,8 @@
 # Frozen walker instruments
 
-Four instrument shapes. Each is reproducible against the named blob; none is pooled with another.
+Six instrument shapes (Shapes 1–4 as first published on 2026-08-03; Shape 5, Shape 6 and the added
+Shape 2 variants below Shape 4, added 2026-10-22). Each is reproducible against the named blob; none is
+pooled with another.
 
 ## Shape 1—lane EXECUTION (Run 11's EN frame)
 
@@ -95,6 +97,58 @@ clean test of whether the walker COMPUTES the branch rather than guessing it.
 - Target walked: installed `coalmine@coalmine 3.14.0` `skills/rot-canary/SKILL.md`, blob
   `57406d5a42f55474672bbbed3d31a62a86cadd59`.
 
+## Instruments added 2026-10-22 (Runs 21–46 and two later walks)
+
+Per-run blobs, keys and tier compositions: [`results/2026-10-22-skill-determinism-walks-21-46.md`](results/2026-10-22-skill-determinism-walks-21-46.md)
+§Master stamp. Every published prompt below is a copy of the dispatched file with **one line replaced**:
+the line naming the local path of the file under test became `FILE: <path to the SKILL.md under test>`
+(Run 12's template has no such line and is byte-identical). Anyone can reproduce the dispatched bytes by
+putting a path back on that line and checking the dispatched blob.
+
+**Shape 2, template `run12-v2`** (lane SELECTION; Runs 21, 22, 44, 45, 46): four scenarios answered with
+one token each, an offer-vs-convene answer, an enumeration of the auto-trigger conditions, a self-report.
+Runs 21 and 22 substituted the skill body into the prompt (`{SKILL_BODY}`); Runs 44–46 had the walker Read
+the file by path (a declared deviation). The template is a reconstruction of the Run 12 instrument, which
+was never frozen.
+
+**Shape 2, disposition `v1`** (Runs 25, 26, 28): four scenarios, each answered ACT or ESCALATE after a
+board verdict, plus a count of the escalation conditions. Prompt text **not retained as a file**; the
+record holds its hash (sha256/12 `3830ec8365c4`, 2,321 B) and the scenario descriptions in the detail
+record. Not byte-reproducible.
+
+**Shape 5, enumerated-rail count** (Runs 24, 27, 29, 30, 31, 34–43): the walker reads one `SKILL.md`,
+answers for a stated scenario, and gives a **count and a list** for each of: consent gates, prohibitions,
+output locations, fail/degrade paths, config keys. Dispatch rules that changed during the series:
+a bare `COUNT:` line (Run 35), then numbered `COUNT-Q<n>:` markers and a lane-scoped question (Run 39
+onward); a supplied definition of a consent gate (Runs 36 arm 2, 39–43); load layer pinned to the body
+(Run 35 onward). Prompts for Runs 24 and 27 are quoted in the detail record (Run 27's is abridged there);
+Runs 29 and 30 reuse Run 27's; Run 31's was not retained (scenario described in the detail record).
+
+**Shape 6, categorical rail reading** (OW-1, OW-2): the walker reads the edited rows and returns one JSON
+object answering named questions; the key is a table of expected answers written before any walker runs.
+
+### Published prompt files
+
+| File (in `results/raw/`) | Used by | Dispatched blob (bytes) | Published blob (bytes) |
+|---|---|---|---|
+| `run12-prompt-v2.txt` | Runs 21, 22, 44, 45, 46 | `7114936a620d` (2,369) | same, byte-identical |
+| `run34-rotcanary-prompt-v1.txt` | Run 34 | `d5aef97b2bbb` (2,058) | `0b1cd2ac5813` (2,009) |
+| `run35-agent-prompt-v1.txt` | Run 35, agent lane | `269be0363251` (1,471) | `da452b1ec520` (1,422) |
+| `run35-hook-prompt-v1.txt` | Run 35, hook lane | `07f66f26797c` (1,540) | `3cc50490a4c2` (1,491) |
+| `run36-gs-agent-prompt-v1.txt` | Run 36 arm 1; Run 38, agent lane | `673f68db8fbb` (2,022) | `86439bb06a0d` (1,970) |
+| `run36-gs-agent-defined-prompt-v1.txt` | Run 36 arm 2 | `c6095d64d353` (1,348) | `08518db018d2` (1,296) |
+| `run36-gs-hook-prompt-v1.txt` | Runs 37, 38, hook lane | `36b4284b60df` (2,119) | `91b1254fde6d` (2,067) |
+| `run39-sg-agent-prompt-v1.txt` | Runs 39, 40, 41, 42, agent lane | `941049a622fe` (2,351) | `e21d4bf5130e` (2,296) |
+| `run39-sg-hook-prompt-v1.txt` | Runs 39, 40, 41, 42, hook lane | `0c51cf02a197` (2,383) | `a254aae34a30` (2,328) |
+| `run43-sg-q3q4-agent-v1.txt` | Run 43, agent lane | `286859b96a72` (1,493) | `48e4ac9f5015` (1,438) |
+| `run43-sg-q3q4-hook-v1.txt` | Run 43, hook lane | `386cd3ca88d7` (1,525) | `135b60e7087e` (1,470) |
+| `ow1-coalwash-consent-ledger-prompt-v1.txt` | OW-1 | `0d30a6f4d95d` (1,541) | `ac576c978d5d` (1,491) |
+| `ow2-coalwash-keeps-row-prompt-v1.txt` | OW-2 | `2a17146a7b5a` (1,523) | `b3ecb6dd6949` (1,464) |
+
+Blob = git blob id of the file's bytes (`git hash-object <file>`), 12 hex characters. The target blobs the
+prompts were run against are in the detail record's master stamp; where a stamp is a plain `sha1sum` of a
+CRLF checkout (Runs 44, 46), the detail record gives the re-derivation command.
+
 ## Reproducing a run
 
 1. Fetch the target blob at the pinned hash (the installed plugin cache, or `git cat-file blob <hash>`
@@ -118,3 +172,19 @@ replacement scorer is **format-agnostic** (order-of-appearance, not line anchors
 print an aggregate unless all N walkers yield exactly the expected number of answers per rail** —
 a parse failure fails loud instead of silently shrinking the denominator. Use the replacement for
 any re-run; do not revert to line-anchoring for convenience.
+
+### Scorer rules added 2026-10-22 (from Runs 34, 36 and 39)
+
+- **The extractor is part of the instrument.** Before any number reaches a table, read at least one
+  answer per tier by eye. Run 34's first pass read 6 of 9 counts as unparsed; Run 36's read each count
+  from the wrong question, because walkers put the `COUNT:` line before the heading or emitted no
+  headings.
+- **Extract by ordinal, mark by number.** The Nth `COUNT` in document order is question N; from Run 39
+  the prompt requires `COUNT-Q<n>:` markers so position is never inferred. 18 of 18 answers parsed on the
+  first pass in each of Runs 39–43.
+- **Score count and membership.** A rail's count can be identical across a tier while the sets differ
+  (Run 34, weak tier 2 / 2 / 2).
+- **Report the divergence and the modal answer for every cell.** They are two measurements (Run 41).
+- **Write the key before the first walker; amend it only because the walked text changed, and record the
+  amendment before the next walker runs.**
+- **A prompt, its scorer and its key change between skills, never between one skill's before and after.**

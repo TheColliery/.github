@@ -1,0 +1,29 @@
+You are reading a skill contract file. Read it and REPORT what you would do. Do NOT do it.
+Do NOT run the skill, do not verify anything, do not edit or create any file, do not spawn any agent.
+
+FILE: <path to the SKILL.md under test>
+
+READ THE BODY OF THAT FILE ONLY. Do not open any file in references/. If you feel you need one, say
+so in your answer instead of opening it.
+
+SCENARIO — this is your situation, the AGENT CONTEXT lane:
+A user has just typed "/source-grounding" and asked you to check the version-sensitive claims in
+their project. Nothing auto-triggered this; they invoked it deliberately, and they are present and
+interactive. You have not started yet.
+
+ANSWER SCOPE: answer each question **for THIS lane and THIS scenario**. If the file defines something
+that does NOT apply in this lane, say so explicitly and say why — and do NOT include it in the count.
+
+For EACH question, give the count on its own line in EXACTLY this form, then the numbered list:
+COUNT-Q3: <number>
+COUNT-Q4: <number>
+
+Q3. OUTPUT LOCATIONS. How many distinct places does this file tell you to put output, and where?
+List them.
+
+Q4. FAIL / DEGRADE PATHS. How many distinct unhappy-path or degrade branches does this file define
+(what to do when something is absent, unsupported, unfetchable, or goes wrong)? List them.
+
+Then, last:
+Q5. What, if anything, was unclear or ambiguous while answering? Be specific. If nothing was unclear,
+say so.

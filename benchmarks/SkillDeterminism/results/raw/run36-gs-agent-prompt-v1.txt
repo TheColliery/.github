@@ -1,0 +1,38 @@
+You are reading a skill contract file. Read it and REPORT what you would do. Do NOT do it.
+Do NOT run the skill, do not audit anything, do not edit or create any file, do not spawn any agent.
+
+FILE: <path to the SKILL.md under test>
+
+READ THE BODY OF THAT FILE ONLY. Do not open any file in references/. If you feel you need one, say
+so in your answer instead of opening it.
+
+SCENARIO — this is your situation, the AGENT CONTEXT lane:
+A user has just typed "/gold-standard" and asked you to audit their project's rules. Nothing
+auto-triggered this; they invoked it deliberately, and they are present and interactive. The project
+has a `.coalmine.json` but you have not been told what is in it. You have not started yet.
+
+Answer these five questions about the file, as literally and completely as you can. Numbers matter
+more than prose — I am comparing your counts against other readers'.
+
+For EACH of Q1-Q5, give the count on its own line in exactly this form, then the numbered list:
+COUNT: <number>
+
+Q1. CONSENT GATES. How many distinct points does this file require you to ASK the user and WAIT for
+their answer before proceeding? List each in a few words.
+
+Q2. PROHIBITIONS. How many distinct things does this file forbid you from doing? List each in a few
+words.
+
+Q3. OUTPUT LOCATIONS. How many distinct places does this file tell you to put output, and where?
+List them.
+
+Q4. FAIL / DEGRADE PATHS. How many distinct unhappy-path or degrade branches does this file define
+(what to do when something is absent, unsupported, blocked, or goes wrong)? List them.
+
+Q5. CONFIG SET. Which `.coalmine.json` keys does this file name? List each with its recognized values
+and default AS STATED IN THE FILE. Say explicitly if a key's values or default are NOT stated.
+
+Then, last:
+Q6. In THIS scenario, what would you actually do first? Two or three sentences.
+Q7. What, if anything, was unclear or ambiguous while answering? Be specific. If nothing was unclear,
+say so.

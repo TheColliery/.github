@@ -1,0 +1,15 @@
+You are reading one instruction file for an AI agent skill. Do not run anything the file describes, do not spawn anything, and do not read any other file. Read ONLY this file, in full:
+
+<path to the SKILL.md under test>
+
+Then REPORT, as the agent that must follow it, what the file tells you to do. Answer from the file alone. Reply with ONE JSON object and nothing else:
+
+{
+  "q1_keep_success_test": "<how do you tell whether a keep write to keeps.json succeeded?>",
+  "q2_no_error": "<a keep write returns { ok: false, anchorDropped: false, anchorStored: false } and no error field. Does the wash stop? What became of the keep, and what happens on the next run?>",
+  "q3_error_record_again": "<a keep write returns ok: false with error 'keeps lock: another recorder holds X (busy); nothing was written - record the keep again'. What exactly do you do and tell the user?>",
+  "q4_error_fix_first": "<a keep write returns ok: false with error 'keeps lock: X could not be taken (EACCES); that is not another recorder and waiting will not change it, so nothing was written - fix the folder or the lock file, then record the keep'. What exactly do you do?>",
+  "q5_write_denial_shapes": <integer: how many distinct write-denial shapes the Grants & denials table's write row names>,
+  "q6_applyplan_denial": "<applyPlan's write is denied. What lands, and what do you report?>",
+  "unsure": "<anything in the file you found ambiguous for these questions, or 'none'>"
+}
