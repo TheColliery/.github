@@ -176,6 +176,9 @@ test('SERIES-CANON.md carries the Accessibility statement row with its mechanism
   assert.match(row, /`\.github`, the repository root and `docs`, in that order/);
   assert.match(row, /inherit/);
   assert.match(row, /no conformance level/);
-  assert.ok(row.includes('https://www.w3.org/WAI/planning/statements/'), 'the W3C WAI page is the second source'); // a plain substring of our own doc row: no input is validated here, so no URL pattern (CodeQL js/regex/missing-regexp-anchor, alert 28)
+  // The W3C WAI page is the second source: the row's URLs are parsed out and one must EQUAL it. A substring check let a longer URL that starts with
+  // this one pass, and CodeQL read it as URL sanitizing (js/incomplete-url-substring-sanitization, alert 29, opened by alert 28's fix; UMB3-079).
+  const urls = row.match(/https?:\/\/[^\s|,)<>`]+/g) || [];
+  assert.ok(urls.some((u) => u === 'https://www.w3.org/WAI/planning/statements/'), 'the W3C WAI page is the second source: ' + JSON.stringify(urls));
   assert.equal(row.split('|').length, 6, 'one cell per column');
 });
