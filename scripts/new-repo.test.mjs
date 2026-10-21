@@ -482,7 +482,7 @@ const S = JSON.parse(process.env.STUB_STATE);
 globalThis.fetch = async (url, init = {}) => {
   const p = String(url).replace('https://api.github.com', '');
   const method = init.method || 'GET';
-  fs.appendFileSync(process.env.STUB_LOG, JSON.stringify({ method, path: p }) + '\\n');
+  fs.appendFileSync(process.env.STUB_LOG, JSON.stringify({ method, path: p, body: init.body ? JSON.parse(init.body) : undefined }) + '\\n');
   const reply = (status, obj) => new Response(status === 204 ? null : JSON.stringify(obj), { status });
   if (method === 'GET' && p === '/repos/TheColliery/' + S.repo.name) return reply(200, S.repo);
   if (method === 'GET' && p === '/orgs/TheColliery/teams/coal') return reply(200, { description: S.description });
@@ -503,6 +503,13 @@ globalThis.fetch = async (url, init = {}) => {
     S.teamRepos = [...S.teamRepos.filter((r) => r.name !== S.repo.name), { ...S.repo, role_name: 'read' }];
     return reply(204);
   }
+  // the org custom properties (2026-10-21): a PATCH stores the values (or is refused), a GET of the repo's values reads them back
+  if (method === 'PATCH' && p === '/orgs/TheColliery/properties/values') {
+    if (S.refuseProps) return reply(422, { message: 'Validation Failed' });
+    S.props = JSON.parse(init.body).properties;
+    return reply(204);
+  }
+  if (method === 'GET' && p === '/repos/TheColliery/' + S.repo.name + '/properties/values') return reply(200, S.props || []);
   if (method === 'PATCH' && p === '/orgs/TheColliery/teams/coal') {
     S.description = JSON.parse(init.body).description;
     return reply(200, { description: S.description });
@@ -542,7 +549,7 @@ function runWithTeamStub(args, repo, extra = {}) {
 const NEW_ROOM = { name: 'CoalNext', id: 1300000000, private: false };
 
 test('new-repo.mjs --apply-settings published-code --dry-run (a NEW Coal* room): sends ZERO writes anywhere -- not the team calls, not the repo PATCH/PUTs -- and names what it would do (UMB-127)', () => {
-  const { res, calls } = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalNext', '--dry-run'], NEW_ROOM);
+  const { res, calls } = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalNext', '--zone', 'CoalWorks', '--dry-run'], NEW_ROOM);
   assert.equal(res.status, 0, res.stdout + res.stderr);
   assert.deepEqual(calls.filter((c) => c.method !== 'GET'), [], 'dry-run must make no write call');
   assert.match(res.stdout, /coalTeam: DRY-RUN .*PUT \/orgs\/TheColliery\/teams\/coal\/repos\/TheColliery\/CoalNext/);
@@ -550,16 +557,16 @@ test('new-repo.mjs --apply-settings published-code --dry-run (a NEW Coal* room):
 });
 
 test('new-repo.mjs --apply-settings published-code --dry-run (a room already on the team, the LIVE canon): coalTeam IN-SYNC, zero writes (UMB-127)', () => {
-  const { res, calls } = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalMine', '--dry-run'], { name: 'CoalMine', id: 1259836955, private: false });
+  const { res, calls } = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalMine', '--zone', 'CoalWorks', '--dry-run'], { name: 'CoalMine', id: 1259836955, private: false });
   assert.equal(res.status, 0, res.stdout + res.stderr);
   assert.deepEqual(calls.filter((c) => c.method !== 'GET'), []);
   assert.match(res.stdout, /coalTeam: IN-SYNC .*equals the live one \(304 chars\)/);
 });
 
 test('new-repo.mjs --apply-settings published-code (LIVE, a NEW Coal* room): PUT the team membership, then PATCH the description, then the read-back passes (UMB-127)', () => {
-  const { res, calls } = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalNext'], NEW_ROOM);
+  const { res, calls } = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalNext', '--zone', 'CoalWorks'], NEW_ROOM);
   assert.equal(res.status, 0, res.stdout + res.stderr);
-  const teamWrites = calls.filter((c) => c.method !== 'GET' && c.path.startsWith('/orgs/'));
+  const teamWrites = calls.filter((c) => c.method !== 'GET' && c.path.startsWith('/orgs/TheColliery/teams/'));
   assert.deepEqual(teamWrites.map((c) => `${c.method} ${c.path}`), [
     'PUT /orgs/TheColliery/teams/coal/repos/TheColliery/CoalNext',
     'PATCH /orgs/TheColliery/teams/coal',
@@ -568,11 +575,11 @@ test('new-repo.mjs --apply-settings published-code (LIVE, a NEW Coal* room): PUT
 });
 
 test('new-repo.mjs --apply-settings published-code on a NON-Coal repo, and any other kind on a Coal name: no team call at all (UMB-127)', () => {
-  const a = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/Kolwen', '--dry-run'], { name: 'Kolwen', id: 5, private: false });
+  const a = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/Kolwen', '--zone', 'LLMWorks', '--dry-run'], { name: 'Kolwen', id: 5, private: false });
   assert.equal(a.res.status, 0, a.res.stdout + a.res.stderr);
   assert.deepEqual(a.calls.filter((c) => c.path.includes('/teams/')), []);
   assert.match(a.res.stdout, /coalTeam: N\/A/);
-  const b = runWithTeamStub(['--apply-settings', 'article', '--repo', 'TheColliery/CoalNext', '--dry-run'], NEW_ROOM);
+  const b = runWithTeamStub(['--apply-settings', 'article', '--repo', 'TheColliery/CoalNext', '--zone', 'Articles', '--dry-run'], NEW_ROOM);
   assert.equal(b.res.status, 0, b.res.stdout + b.res.stderr);
   assert.deepEqual(b.calls.filter((c) => c.path.includes('/teams/')), []);
   assert.doesNotMatch(b.res.stdout, /coalTeam/);
@@ -709,4 +716,37 @@ test('new-repo.mjs --apply-settings with --dry-run carrying a value refuses by n
   assert.notEqual(res.status, 0, res.stdout + res.stderr);
   assert.match(res.stderr, /--dry-run takes no value/);
   assert.deepEqual(calls, [], 'no request at all, not even a read');
+});
+
+// 2026-10-21 (main's 18:1x block): the org custom properties repo-kind and zone are required on every repository, so a full apply sets both and reads them back.
+test('new-repo.mjs --apply-settings (LIVE): PATCHes the org custom properties repo-kind = <kind> and zone = <zone> for this one repo, then reads them back -- RED before 21a', () => {
+  const { res, calls } = runWithTeamStub(['--apply-settings', 'article', '--repo', 'TheColliery/CoalNext', '--zone', 'Articles'], NEW_ROOM);
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  const w = calls.filter((c) => c.method === 'PATCH' && c.path === '/orgs/TheColliery/properties/values');
+  assert.equal(w.length, 1, 'one property write');
+  assert.deepEqual(w[0].body, { repository_names: ['CoalNext'], properties: [{ property_name: 'repo-kind', value: 'article' }, { property_name: 'zone', value: 'Articles' }] });
+  assert.ok(calls.some((c) => c.method === 'GET' && c.path === '/repos/TheColliery/CoalNext/properties/values'), 'the read-back');
+  assert.match(res.stdout, /customProperties: ok \(HTTP 204, repo-kind=article zone=Articles, read back identical\)/);
+});
+
+test('new-repo.mjs --apply-settings --dry-run names the property write and sends none; a refused write is a FAIL -- RED before 21a', () => {
+  const d = runWithTeamStub(['--apply-settings', 'private-working', '--repo', 'TheColliery/CoalNext', '--zone', 'org', '--dry-run'], NEW_ROOM);
+  assert.equal(d.res.status, 0, d.res.stdout + d.res.stderr);
+  assert.deepEqual(d.calls.filter((c) => c.method !== 'GET'), []);
+  assert.match(d.res.stdout, /customProperties: DRY-RUN \(would set repo-kind=private-working zone=org\)/);
+  const r = runWithTeamStub(['--apply-settings', 'private-working', '--repo', 'TheColliery/CoalNext', '--zone', 'org'], NEW_ROOM, { refuseProps: true });
+  assert.notEqual(r.res.status, 0);
+  assert.match(r.res.stdout, /customProperties: FAIL \(HTTP 422, PATCH \/orgs\/TheColliery\/properties\/values refused: Validation Failed\)/);
+});
+
+test('new-repo.mjs --apply-settings refuses a full apply with no --zone or an unknown one before any request; --only rulesets needs none and touches no property -- RED before 21a', () => {
+  for (const zone of [[], ['--zone', 'Coalworks'], ['--zone']]) {
+    const { res, calls } = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalNext', ...zone, '--dry-run'], NEW_ROOM);
+    assert.notEqual(res.status, 0, JSON.stringify(zone));
+    assert.match(res.stderr, /needs --zone <CoalWorks\|LLMWorks\|Articles\|org>/);
+    assert.deepEqual(calls, [], 'no request at all: ' + JSON.stringify(zone));
+  }
+  const { res, calls } = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalNext', '--only', 'rulesets', '--dry-run'], NEW_ROOM);
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  assert.ok(!calls.some((c) => c.path.includes('/properties/')), 'no property call on a rulesets-only run');
 });

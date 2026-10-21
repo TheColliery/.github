@@ -12,6 +12,8 @@
 
 A Coal* room is a `published-code` repo (L1) carrying the 5 Standard Systems (L2) on top. An LLM-deploy repo or an article repo is L1 only, with its own species overlay where one exists (`templates/overlay-llm-deploy/`). **Nothing below is invented**: where the docs were silent, the majority shape found by measurement is written down here, WITH its deriving command, so the next measurement can check whether it has rotted.
 
+**The kind is a property of the repository, not only of this file (2026-10-21).** Two organization custom properties, both single-select and required: `repo-kind` (the three kinds below, plus `org-hub`) and `zone` (`CoalWorks` · `LLMWorks` · `Articles` · `org`). `org-hub` is this repository's own kind, the owner's ruling (it holds the landing, the canon, the templates and the org's tools, so `published-code` alone does not describe it); it has no template, because the org has one. `org` is the zone of a repository that serves every zone (`tool-yard`). A new repository is born with the properties' defaults (`private-working`, `org`), so `node scripts/new-repo.mjs --apply-settings <kind> --repo <owner>/<name> --zone <zone>` sets the real values and reads them back. Re-derive every repository's values: `GET /orgs/TheColliery/properties/values`.
+
 ## L1 by repo kind
 
 | | `published-code` | `private-working` | `article` |

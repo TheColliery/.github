@@ -26,7 +26,13 @@
 //     --name <repo> --license <spdx-or-a-file-path> [--license-id <spdx-or-name>] \
 //     [--org TheColliery] [--holder "Name"] [--year 2026] <target-dir>
 //
-//   node scripts/new-repo.mjs --apply-settings <kind> --repo <owner>/<name> [--dry-run] [--only rulesets]
+//   node scripts/new-repo.mjs --apply-settings <kind> --repo <owner>/<name> --zone <zone> [--dry-run] [--only rulesets]
+//
+// --zone (2026-10-21, the org custom properties): a full apply also sets the repository's two org
+// custom properties, repo-kind = <kind> and zone = <zone> (CoalWorks | LLMWorks | Articles | org),
+// through PATCH /orgs/{org}/properties/values, and reads them back. Both properties are required with
+// a default, so a repo created without them carries private-working / org until this run sets the
+// real values; a full apply without --zone, or with an unknown one, refuses before any request.
 //
 // --only rulesets (rulesets canon, 2026-09-24) applies ONLY the ruleset surfaces (main-guard,
 // tag-immutable, the leftover deletion) to an EXISTING repo, leaving its repo settings, security
@@ -65,6 +71,8 @@ import { syncCoalTeam } from './lib/coal-team.mjs';
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const templatesRoot = path.join(scriptDir, '..', 'templates');
 const KINDS = ['published-code', 'private-working', 'article'];
+// The org custom property zone's allowed values (main created them 2026-10-21; re-derive: GET /orgs/TheColliery/properties/schema).
+const ZONES = ['CoalWorks', 'LLMWorks', 'Articles', 'org'];
 const OVERLAYS = ['coal-skill', 'llm-deploy'];
 const GITHUB_API = 'https://api.github.com';
 
@@ -158,7 +166,7 @@ async function ghRequest(token, method, urlPath, body) {
 // endpoint (private_vulnerability_reporting on a private repo, a ruleset without a paid
 // org plan) is an EXPECTED outcome for some kinds, per repo-settings.<kind>.json's own
 // "n/a" entries, and must read as a named skip, never as a script crash.
-async function applySettings(kind, ownerRepo, dry, only) {
+async function applySettings(kind, ownerRepo, dry, only, zone) {
   const token = process.env.GITHUB_TOKEN;
   if (!token) {
     console.error('FAIL: GITHUB_TOKEN is not set in the environment.');
@@ -239,6 +247,22 @@ async function applySettings(kind, ownerRepo, dry, only) {
   if (settings.actionsWorkflowToken) {
     const r = await req('PUT', `${base}/actions/permissions/workflow`, settings.actionsWorkflowToken);
     results.push({ surface: 'actionsWorkflowToken', ok: r.ok, status: r.status });
+  }
+
+  // The org custom properties (2026-10-21): written for this one repository, then read back whole; a 2xx is not the artefact (UMB-050).
+  {
+    const want = { 'repo-kind': kind, zone };
+    const w = await req('PATCH', `/orgs/${owner}/properties/values`, { repository_names: [repo], properties: Object.entries(want).map(([property_name, value]) => ({ property_name, value })) });
+    if (w.status === 'DRY-RUN') {
+      results.push({ surface: 'customProperties', ok: true, status: 'DRY-RUN', reason: `would set repo-kind=${kind} zone=${zone}` });
+    } else if (!w.ok) {
+      results.push({ surface: 'customProperties', ok: false, status: w.status, reason: `PATCH /orgs/${owner}/properties/values refused: ${w.json?.message || 'no message'}` });
+    } else {
+      const rb = await req('GET', `${base}/properties/values`);
+      const got = Object.fromEntries((Array.isArray(rb.json) ? rb.json : []).map((p) => [p.property_name, p.value]));
+      const held = rb.ok && Object.entries(want).every(([k, v]) => got[k] === v);
+      results.push({ surface: 'customProperties', ok: held, status: w.status, note: held ? `repo-kind=${kind} zone=${zone}, read back identical` : `sent, but the read-back holds ${JSON.stringify(got)}` });
+    }
   }
 
   }
@@ -360,7 +384,13 @@ async function main() {
       process.exitCode = 1;
       return;
     }
-    await applySettings(kind, args.repo, args['dry-run'] === true, args.only);
+    // the two org custom properties are required on every repository, so a full apply names the zone; a rulesets-only run touches no property
+    if (args.only !== 'rulesets' && !ZONES.includes(args.zone)) {
+      console.error(`FAIL: --apply-settings needs --zone <${ZONES.join('|')}> (got ${JSON.stringify(args.zone)}); it sets the org custom property zone beside repo-kind`);
+      process.exitCode = 1;
+      return;
+    }
+    await applySettings(kind, args.repo, args['dry-run'] === true, args.only, args.zone);
     return;
   }
 
