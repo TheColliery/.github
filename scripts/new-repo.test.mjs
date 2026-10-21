@@ -80,7 +80,7 @@ test('new-repo.mjs article: scripts/LICENSE is the Apache-2.0 code-part licence,
 
 test('new-repo.mjs article, --license <a body file>: the document LICENSE is replaced and scripts/LICENSE stays Apache-2.0 (the code part is its own licence, BB-221 (a))', () => {
   const root = scratchDir();
-  const licenseFile = path.join(root, 'CCBY.txt');
+  const licenseFile = path.join(root, 'MIT.txt');
   fs.writeFileSync(licenseFile, ['MIT License', '', 'Copyright (c) 2026 Example', '', 'Permission is hereby granted, free of charge, to any person obtaining a copy', 'of this software, subject to the following conditions:', '', 'THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.', ''].join('\n'));
   const target = path.join(root, 'r');
   const res = run(['article', '--name', 'x', '--license', licenseFile, target]);
