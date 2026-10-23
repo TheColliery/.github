@@ -197,8 +197,8 @@ test('a scan that cannot run fails: a missing scanner and a directory that is no
 
 test('a git that runs and refuses is reported with its own first line, never as git missing from PATH (found 2026-10-23 while testing the one-wording classifier class)', () => {
   // a .git FILE naming a directory that is gone: git 2.56 answers "gitfile does not point to a valid repository", exit 128.
-  // RED before the fix: the gate printed the cause "is git on PATH?" although git ran. The no-repository branch stays keyed
-  // on the bare phrase: gitEnv() strips GIT_DIR, the one route to git's other "not a git repository: <path>" wording.
+  // RED before the fix: the gate printed the cause "is git on PATH?" although git ran (git 2.56), or, on the ubuntu runner's
+  // older git, which answers "not a git repository: <path>", the wrong cause "not inside a git repository" (CI, 2026-10-23).
   const dir = fs.mkdtempSync(path.join(SANDBOX, 'secret-gate-brokenlink-'));
   made.push(dir);
   fs.mkdirSync(path.join(dir, 'scripts', 'lib'), { recursive: true });

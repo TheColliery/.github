@@ -87,9 +87,10 @@ async function main() {
     });
   } catch (e) {
     const err = String((e && e.stderr) || '');
-    // the bare phrase is safe here: gitEnv() strips GIT_DIR, the one route to git's "not a git repository: <path>" wording,
-    // so both wordings it can still meet mean no repository (the upward walk reached the root, or a mount boundary)
-    const noRepo = /not a git repository/i.test(err);
+    // git words "no repository above here" two ways, each with a parenthetical (the upward walk reached the root, or stopped
+    // at a mount boundary); "not a git repository: '<path>'" with none is a BROKEN repository, not an absent one: older git
+    // prints it for a .git link to a missing directory (the ubuntu runner, 2026-10-23), and the bare phrase misread it
+    const noRepo = /not a git repository \(or any (?:of the parent directories\)|parent up to mount point )/.test(err);
     // a git that ran and refused (a broken .git link, a dubious-ownership refusal) names its own cause; PATH is only the guess
     // when git printed nothing at all
     const first = (err.split('\n').find((l) => l.trim()) || '').trim();
