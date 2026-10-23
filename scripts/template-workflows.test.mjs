@@ -1524,7 +1524,7 @@ const readText = (rel) => fs.readFileSync(path.join(ROOT, ...rel.split('/')), 'u
 // The canon secret gate keeps GIT_INDEX_FILE BY DESIGN (commit mode reads the commit's own index, which a hook names through that variable), and GIT_INDEX_FILE is outside the three
 // GIT_ names the rule allows, so its two git spawns are findings the census is right to give. It is the ONE pinned carrier, at this blob; any edit spends the pin. The Bankfire source test was
 // the second until Bankfire returned gitEnv()'s literal alone (bd328f2e, 2026-10-09): it now passes the census with no pin, like the gate test.
-const GATE_PIN = { rel: 'scripts/secret-gate.mjs', blob: '856956a1cca6f716e5507f6c23ac90ed34cbbe5f', why: 'canon secret gate: keeps GIT_INDEX_FILE and GIT_CEILING_DIRECTORIES by design (its gitEnv() copies process.env minus the other GIT_ names); the two spawns are the findings' };
+const GATE_PIN = { rel: 'scripts/secret-gate.mjs', blob: 'a96c2c57344469f5dd3bd74927cf3bf63c198725', why: 'canon secret gate: keeps GIT_INDEX_FILE and GIT_CEILING_DIRECTORIES by design (its gitEnv() copies process.env minus the other GIT_ names); the two spawns are the findings' };
 
 test('the canon secret-gate test passes the canon census with no pin: it builds every git environment from named keys, in all three places it lives -- RED before 08d D3', () => {
   for (const dir of CARRIER_DIRS) {

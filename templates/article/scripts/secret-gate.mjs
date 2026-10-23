@@ -86,8 +86,14 @@ async function main() {
       return { mode: m[1], sha: m[2], name: m[4] };
     });
   } catch (e) {
-    const noRepo = /not a git repository/i.test(String((e && e.stderr) || ''));
-    console.log(`FAIL SECRETS: ${noRepo ? 'this directory is not inside a git repository' : 'git could not list the tracked files (is git on PATH?)'}; the scan did NOT run`);
+    const err = String((e && e.stderr) || '');
+    // the bare phrase is safe here: gitEnv() strips GIT_DIR, the one route to git's "not a git repository: <path>" wording,
+    // so both wordings it can still meet mean no repository (the upward walk reached the root, or a mount boundary)
+    const noRepo = /not a git repository/i.test(err);
+    // a git that ran and refused (a broken .git link, a dubious-ownership refusal) names its own cause; PATH is only the guess
+    // when git printed nothing at all
+    const first = (err.split('\n').find((l) => l.trim()) || '').trim();
+    console.log(`FAIL SECRETS: ${noRepo ? 'this directory is not inside a git repository' : `git could not list the tracked files (${first || 'is git on PATH?'})`}; the scan did NOT run`);
     process.exitCode = 1;
     return;
   }
