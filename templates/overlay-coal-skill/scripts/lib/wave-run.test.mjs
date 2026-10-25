@@ -386,6 +386,23 @@ const MANY = 300;
 fs.writeFileSync(path.join(SANDBOX, 'many.fixture.mjs'), "import { test } from 'node:test';" + String.fromCharCode(10) + 'for (let i = 0; i < ' + MANY + "; i++) test('t' + i, () => {});" + String.fromCharCode(10));
 // a hang BEFORE the first test: --test-timeout never applies to it, only a clock on the file itself can end it
 fs.writeFileSync(path.join(SANDBOX, 'hang-top.fixture.mjs'), "import { test } from 'node:test';" + String.fromCharCode(10) + 'setInterval(() => {}, 1000);' + String.fromCharCode(10) + 'await new Promise(() => {});' + String.fromCharCode(10));
+
+// THE FILE CLOCK OF A TEST IS SIZED FROM A MEASURED SOLO RUN, NEVER A FIXED NUMBER (the class behind c5199ed and the CoalWorks chief's 25a flake, 2026-10-25). The clock is the wall clock of EVERY file
+// the run starts, so a fixed figure also kills the PASSING file whenever a loaded runner takes longer than it to start a node child (CoalWash PR #23, run 38774701714: [FAIL, FAIL] where [FAIL, PASS] was
+// expected; the chief's 25a run: the same shape under load, n = 1). Four times the measured solo run of the passing file plus a second, never below 2,000 ms, kills the hang and leaves the passing file four
+// times its own start to spare. Every test that hands wave-run a file clock takes it from here.
+const sizedFileClock = (soloMs) => Math.max(2000, soloMs * 4 + 1000);
+// A loaded runner stood in for: a preload that makes EVERY node of the tree (the runner's children included) sleep before it runs, handed on NODE_OPTIONS, which the runner carries into each child.
+const SLOW_START_MS = 2500;
+fs.writeFileSync(path.join(SANDBOX, 'slow-start.preload.mjs'), 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ' + SLOW_START_MS + ');' + String.fromCharCode(10));
+const SLOW_START_ENV = { NODE_OPTIONS: '--import ' + pathToFileURL(path.join(SANDBOX, 'slow-start.preload.mjs')).href };
+// A solo command-line run of the passing file under `extra`, timed: the measurement a command-line test sizes its clock from.
+const soloCliMs = (extra) => {
+  const t0 = Date.now();
+  const solo = cli(['--heap-mb', '512', '--file-timeout-ms', '20000', '--deadline-ms', '60000', '--serial', '--', ...fx('pass')], extra);
+  assert.equal(solo.status, 0, 'the solo run of the passing file must pass: ' + solo.stdout + solo.stderr);
+  return Date.now() - t0;
+};
 const STDOUT_SYNC_URL = pathToFileURL(path.join(HERE, 'stdout-sync.mjs')).href;
 
 test('the simulation is faithful: with no preload a force-exited file of 300 tests loses the end of its TAP and reads VACUOUS (the control for the fix below)', () => {
@@ -464,7 +481,7 @@ test('the file clock: a file that hangs before its first test is killed at the c
   const t0 = Date.now();
   const solo = await runWaves({ files: fx('pass'), cwd: SANDBOX, env: SANDBOX_ENV, ...LIMITS, serial: true, read: scripted('BREATHE') });
   assert.deepEqual(solo.results.map((x) => x.status), [STATUS.PASS]);
-  const clock = Math.max(2000, (Date.now() - t0) * 4 + 1000);
+  const clock = sizedFileClock(Date.now() - t0);
   const r = await runWaves({ files: fx('hang-top', 'pass'), cwd: SANDBOX, env: SANDBOX_ENV, ...LIMITS, deadlineMs: clock * 4 + 20000, fileClockMs: clock, serial: true, read: scripted('BREATHE') });
   assert.deepEqual(r.results.map((x) => x.status), [STATUS.FAIL, STATUS.PASS]);
   assert.match(r.results[0].reason, /file clock/);
@@ -491,10 +508,26 @@ test('the command line: --file-clock-ms is accepted, shown in the usage, and kil
   const bad = cli(['--file-clock-ms', 'soon']);
   assert.equal(bad.status, 64);
   assert.match(bad.stderr, /--file-clock-ms needs a whole number/);
-  const r = cli(['--heap-mb', '512', '--file-timeout-ms', '20000', '--deadline-ms', '40000', '--file-clock-ms', '2000', '--serial', '--', ...fx('hang-top', 'pass')]);
+  const clock = sizedFileClock(soloCliMs());
+  const r = cli(['--heap-mb', '512', '--file-timeout-ms', '20000', '--deadline-ms', String(clock * 4 + 20000), '--file-clock-ms', String(clock), '--serial', '--', ...fx('hang-top', 'pass')]);
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.match(r.stdout, /^FAIL .*hang-top\.fixture\.mjs: killed at the file clock/m);
   assert.match(r.stdout, /pass 1 · fail 1 \(hang-top\.fixture\.mjs\) · vacuous 0 · skipped 0 · not-run 0 · reconciled 2 of 2 — RED$/m);
+});
+
+// The CoalWorks chief's 25a flake, made deterministic (RED before this fix: the command-line test above hard-coded --file-clock-ms 2000, and under this slow start it read [FAIL, FAIL]). First the
+// witness that the slow start reaches the runner's children: a fixed 2,000 ms clock under a 2,500 ms node start kills the PASSING file too. Then the sized clock, measured under the same slow start,
+// kills the hang and lets the passing file through.
+test('the command line under a slow node start: a fixed 2,000 ms file clock kills the passing file too (the flake), a clock sized from a solo run under the same load does not -- RED before the fix', () => {
+  const fixed = cli(['--heap-mb', '512', '--file-timeout-ms', '20000', '--deadline-ms', '40000', '--file-clock-ms', '2000', '--serial', '--', ...fx('hang-top', 'pass')], SLOW_START_ENV);
+  assert.equal(fixed.status, 1, fixed.stdout + fixed.stderr);
+  assert.match(fixed.stdout, /^FAIL .*pass\.fixture\.mjs: killed at the file clock \(2000 ms\)/m, 'the slow start did not reach the children, so this witness proves nothing: ' + fixed.stdout);
+  const clock = sizedFileClock(soloCliMs(SLOW_START_ENV));
+  const sized = cli(['--heap-mb', '512', '--file-timeout-ms', '20000', '--deadline-ms', String(clock * 4 + 20000), '--file-clock-ms', String(clock), '--serial', '--', ...fx('hang-top', 'pass')], SLOW_START_ENV);
+  assert.equal(sized.status, 1, sized.stdout + sized.stderr);
+  assert.match(sized.stdout, /^FAIL .*hang-top\.fixture\.mjs: killed at the file clock/m);
+  assert.doesNotMatch(sized.stdout, /^FAIL .*pass\.fixture\.mjs/m, sized.stdout);
+  assert.match(sized.stdout, /pass 1 · fail 1 \(hang-top\.fixture\.mjs\) · vacuous 0 · skipped 0 · not-run 0 · reconciled 2 of 2 — RED$/m);
 });
 
 // ---- item 11 of order 09f (2026-10-09): the three defects the flock's first POSIX runs found --------------------------------------------------------
