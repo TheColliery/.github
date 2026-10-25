@@ -523,7 +523,10 @@ test('the command line under a slow node start: a fixed 2,000 ms file clock kill
   assert.equal(fixed.status, 1, fixed.stdout + fixed.stderr);
   assert.match(fixed.stdout, /^FAIL .*pass\.fixture\.mjs: killed at the file clock \(2000 ms\)/m, 'the slow start did not reach the children, so this witness proves nothing: ' + fixed.stdout);
   const clock = sizedFileClock(soloCliMs(SLOW_START_ENV));
-  const sized = cli(['--heap-mb', '512', '--file-timeout-ms', '20000', '--deadline-ms', String(clock * 4 + 20000), '--file-clock-ms', String(clock), '--serial', '--', ...fx('hang-top', 'pass')], SLOW_START_ENV);
+  // --file-timeout-ms (node's --test-timeout) sits ABOVE the sized clock here: under this slow start the clock runs past 20 s, and Node 22.23 cancels a file hung in a
+  // top-level await at --test-timeout ("not ok ...; cancelled 1", verify-landing run 40180296253 on all three runners) where Node 24.22 lets it hang until the file clock,
+  // so with the test timeout below the clock the hang's REASON depended on the node version. The clock must be the first thing that ends the hang on every version.
+  const sized = cli(['--heap-mb', '512', '--file-timeout-ms', String(clock * 2), '--deadline-ms', String(clock * 4 + 20000), '--file-clock-ms', String(clock), '--serial', '--', ...fx('hang-top', 'pass')], SLOW_START_ENV);
   assert.equal(sized.status, 1, sized.stdout + sized.stderr);
   assert.match(sized.stdout, /^FAIL .*hang-top\.fixture\.mjs: killed at the file clock/m);
   assert.doesNotMatch(sized.stdout, /^FAIL .*pass\.fixture\.mjs/m, sized.stdout);
