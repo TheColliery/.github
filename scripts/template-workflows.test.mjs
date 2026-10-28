@@ -1639,6 +1639,21 @@ test('a fixed vulnerability is announced as a GitHub security advisory: DOC-PATT
   assert.match(org, /disclosed once a fix ships as a GitHub security advisory/, 'the org default file');
 });
 
+// UMB3-131 (card BB-316 (4), the owner 2026-10-28: "เราเลือก GHSA ที่ใช้โจมตีได้จะดีกว่าไหมอ่ะ" then "ตามนี้"): which finding is announced as an advisory. The stamped template carries the signed line as its own section,
+// so a room states the same bar its reviewers triage against.
+test('the published-code SECURITY.md template carries "What counts as a vulnerability": an outsider-exploitable finding through input they control, whatever its level; a path only the user feeds does not count; an unsure finding counts and goes to CoalBoard -- RED before UMB3-131', () => {
+  const tpl = fs.readFileSync(path.join(ROOT, 'templates', 'published-code', 'SECURITY.md'), 'utf8').replace(/\r\n/g, '\n');
+  const at = tpl.indexOf('\n## What counts as a vulnerability\n');
+  assert.ok(at >= 0, 'the section exists');
+  const rest = tpl.slice(at + 1);
+  const body = rest.slice(0, rest.indexOf('\n## ', 4) < 0 ? undefined : rest.indexOf('\n## ', 4));
+  assert.match(body, /advisory is published only for a finding an outsider can exploit through input they control, whatever its level/);
+  assert.match(body, /path only the user feeds/);
+  assert.match(body, /does not count/);
+  assert.match(body, /unsure finding counts and goes to CoalBoard/);
+  assert.ok(tpl.indexOf('## Reporting a Vulnerability') < at && at < tpl.indexOf('## Commit & Tag Signatures'), 'it sits between the reporting section and the signatures');
+});
+
 // 15h item 2(b), CWK2-020 (1) across the flock (the CoalWorks chief's 14a return D2, D3 item 2; CoalWash v1.12.2 measured the cure, CoalMine v3.23.2 measured the Antigravity twin): a hook entry in a Coal* repo's
 // `hooks/hooks.json` is the EXEC form (the program in `command`, the script in `args`, no shell), because a command STRING runs under the host's shell, and on Windows without Git for Windows that shell is PowerShell, where
 // `${CLAUDE_PLUGIN_ROOT}` comes out empty and the hook fails (closed, from Claude Code 2.1.299, for a guard). The Antigravity `plugin/hooks.json` KEEPS the shell string: the exec form did not fire on agy 1.3.2 (0 of 3,

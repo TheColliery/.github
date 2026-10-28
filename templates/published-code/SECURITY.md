@@ -6,6 +6,10 @@
 
 Report a security issue in this repo through GitHub's private vulnerability reporting — [Security → Report a vulnerability](https://github.com/{{ORG}}/{{REPO_NAME}}/security/advisories/new) — never a public issue; enabled and verified live at press. In scope: {{IN_SCOPE_SUMMARY}}. This is a one-person-maintained project: expect the report to be read and acknowledged, triaged against the scope above, and disclosed once a fix ships as a GitHub security advisory (this file keeps one line per published advisory, linking to it), with no fixed response-time SLA. A public GitHub issue remains the right channel for an ordinary, non-security bug.
 
+## What counts as a vulnerability
+
+An advisory is published only for a finding an outsider can exploit through input they control, whatever its level: a repository the user cloned, a file sent to them, a reply from the network. A path only the user feeds (their own config, a command they type) does not count. An unsure finding counts and goes to CoalBoard to decide.
+
 ## Commit & Tag Signatures
 
 Release tags and maintainer commits are SSH-signed (`gpg.format=ssh`); GitHub shows the Verified badge on them. Automated Dependabot / CI commits are unsigned by design (they carry no maintainer key), so verify a signed release tag — the artifact a release consumer trusts:
