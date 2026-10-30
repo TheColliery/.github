@@ -1641,16 +1641,20 @@ test('a fixed vulnerability is announced as a GitHub security advisory: DOC-PATT
 
 // UMB3-131 (card BB-316 (4), the owner 2026-10-28: "เราเลือก GHSA ที่ใช้โจมตีได้จะดีกว่าไหมอ่ะ" then "ตามนี้"): which finding is announced as an advisory. The stamped template carries the signed line as its own section,
 // so a room states the same bar its reviewers triage against.
-test('the published-code SECURITY.md template carries "What counts as a vulnerability": an outsider-exploitable finding through input they control, whatever its level; a path only the user feeds does not count; an unsure finding counts and goes to CoalBoard -- RED before UMB3-131', () => {
+test('the published-code SECURITY.md template carries "What counts as a vulnerability": the shipped code and the maintainer tooling are both in scope, an advisory needs an outsider-reachable input, and an unsure flaw counts as reachable -- RED before UMB3-131 (29c)', () => {
   const tpl = fs.readFileSync(path.join(ROOT, 'templates', 'published-code', 'SECURITY.md'), 'utf8').replace(/\r\n/g, '\n');
   const at = tpl.indexOf('\n## What counts as a vulnerability\n');
   assert.ok(at >= 0, 'the section exists');
   const rest = tpl.slice(at + 1);
   const body = rest.slice(0, rest.indexOf('\n## ', 4) < 0 ? undefined : rest.indexOf('\n## ', 4));
-  assert.match(body, /advisory is published only for a finding an outsider can exploit through input they control, whatever its level/);
-  assert.match(body, /path only the user feeds/);
-  assert.match(body, /does not count/);
-  assert.match(body, /unsure finding counts and goes to CoalBoard/);
+  assert.match(body, /The shipped code is in scope/);
+  assert.match(body, /maintainer's checkout/);
+  assert.match(body, /fixed as hardening/);
+  assert.match(body, /published advisory only when an outsider can reach the flaw through input they control/);
+  assert.match(body, /a pull request from a fork/);
+  assert.match(body, /only the maintainer or the user feeds does not get one/);
+  assert.match(body, /counts as reachable until the maintainers have decided/);
+  assert.doesNotMatch(body, /CoalBoard|UMB3|BB-3/, 'no house jargon in the shipped text');
   assert.ok(tpl.indexOf('## Reporting a Vulnerability') < at && at < tpl.indexOf('## Commit & Tag Signatures'), 'it sits between the reporting section and the signatures');
 });
 
