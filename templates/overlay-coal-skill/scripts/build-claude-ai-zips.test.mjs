@@ -151,6 +151,7 @@ test('a dot folder directly under plugin/skills is not staged, as a dotfile is n
   const staged = listAll(path.join(root, 'dist-claude-ai')).map((p) => rel(root, p));
   assert.ok(!staged.some((f) => f.split('/').some((seg) => seg.startsWith('.'))), 'no dot entry staged');
   assert.ok(staged.includes('alpha/SKILL.md'), 'the real skill staged');
+  assert.match(r.stdout, /^skipped \.hidden$/m, 'the skip is named on the output, on a line of its own');
 });
 
 // ---- the workflow's zip step: the text holds the flags; a real build holds the result where `zip` exists ---------------------------------------------------

@@ -102,11 +102,11 @@ async function main() {
   }
   fs.rmSync(outDir, { recursive: true, force: true });
   // Each entry of plugin/skills is read by lstat, never by its Dirent alone: a junction reads as a link, so a filter on isDirectory() drops it with exit 0.
-  // A dot name is not a skill (not staged, as at any depth); a plain file is not a skill; a folder is one; a symlink, junction or special entry is
-  // refused by name below, never skipped and never followed.
+  // A dot name is not a skill: it is not staged, and the run names it on a `skipped <name>` line; a plain file is not a skill; a folder is one; a symlink,
+  // junction or special entry is refused by name below, never skipped and never followed.
   const skills = [];
   for (const entry of fs.readdirSync(pluginSkills, { withFileTypes: true }).sort(byCodeUnit)) {
-    if (entry.name.startsWith('.')) continue;
+    if (entry.name.startsWith('.')) { console.log(`skipped ${entry.name}`); continue; } // named, never silent: a dot folder is not a skill
     const st = fs.lstatSync(path.join(pluginSkills, entry.name));
     if (st.isDirectory()) skills.push({ name: entry.name, refused: false });
     else if (st.isSymbolicLink() || !st.isFile()) skills.push({ name: entry.name, refused: true });
