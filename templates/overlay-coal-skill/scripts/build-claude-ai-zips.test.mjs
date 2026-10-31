@@ -130,6 +130,29 @@ test('M2: a name with a control character is refused (probed: skipped visibly wh
   assert.match(r.stderr, /FAIL alpha: .*control character/);
 });
 
+// 29e (a), CoalLedger INSPECT r34 L1: the skills listing filtered on Dirent.isDirectory(), which is false for a junction, so a linked skill was dropped with exit 0 and no word.
+test('a junction or symlink directly under plugin/skills is REFUSED by name, exit 1, never skipped or followed -- RED before 29e (a)', (t) => {
+  const root = repo(['alpha']);
+  try { fs.symlinkSync(path.join(root, 'plugin', 'skills', 'alpha'), path.join(root, 'plugin', 'skills', 'linked'), process.platform === 'win32' ? 'junction' : 'dir'); } catch { t.skip('this account cannot make a junction or symlink here'); return; }
+  const r = stage(root);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stderr, /FAIL linked: .*neither a regular file nor a folder/);
+  const staged = listAll(path.join(root, 'dist-claude-ai')).map((p) => rel(root, p));
+  assert.ok(!staged.some((f) => f.startsWith('linked')), 'the link was neither followed nor staged');
+  assert.ok(staged.includes('alpha/SKILL.md'), 'the real skill staged');
+});
+
+test('a dot folder directly under plugin/skills is not staged, as a dotfile is not at any depth -- RED before 29e (a)', () => {
+  const root = repo(['alpha']);
+  fs.mkdirSync(path.join(root, 'plugin', 'skills', '.hidden'));
+  fs.writeFileSync(path.join(root, 'plugin', 'skills', '.hidden', 'SKILL.md'), '---\nname: hidden\ndescription: "x"\n---\nbody\n');
+  const r = stage(root);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const staged = listAll(path.join(root, 'dist-claude-ai')).map((p) => rel(root, p));
+  assert.ok(!staged.some((f) => f.split('/').some((seg) => seg.startsWith('.'))), 'no dot entry staged');
+  assert.ok(staged.includes('alpha/SKILL.md'), 'the real skill staged');
+});
+
 // ---- the workflow's zip step: the text holds the flags; a real build holds the result where `zip` exists ---------------------------------------------------
 const zipStep = () => {
   const lines = fs.readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n').split('\n');
