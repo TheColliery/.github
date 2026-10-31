@@ -39,11 +39,26 @@
 
 **Option A, gated on P1 and P2.** It adds one shape to the rooms, needs no new credential and no new repository. If P1 shows AG cannot select a branch, take C (cheaper than B, and it removes the bloat). Take B only if the owner accepts seven repositories and a cross-repo credential for the cleanest clone.
 
-## Open questions (probes, not builds)
+## Measured (2026-10-31, local only)
 
-- **P1:** does `agy plugin install` accept a branch selector for a git source, and in what form? Test in a clean HOME against a throwaway local bare repository with a branch (no push).
-- **P2:** with the plugin contents at a repository root and no `.git` branch tricks, does AG load all its components (`plugin.json` and `hooks.json` at the root)? CoalLedger M2 and CoalFace M4-after say yes for the root layout.
-- **P3:** does an install from a branch clone every ref (so `.git` still carries main's history), or only the selected branch? This decides how much of the bloat A removes.
+Setup: agy 1.4.12 (`agy --version`), git 2.56.0. A throwaway bare repository under the Windows temp folder (`ag-probe-29e/bare.git`): branch `main` holds the whole-repository shape (README, CHANGELOG, `plugin/` = CoalHearth's shipped plugin folder); branch `ag-plugin` holds the same plugin contents at its root. Every agy run used a clean HOME (`HOME`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA` set to a sandbox folder). No push, no network. The sandbox was removed by a narrow delete.
+
+**P1, branch selector: not decided locally.** agy's git source is GitHub-only. Every candidate was refused before any clone:
+- `agy plugin install file:///…/bare.git#ag-plugin` → exit 1, `install target must be a directory: file:///…/bare.git#ag-plugin`. The same error for `@ag-plugin`, `/tree/ag-plugin`, a plain path with `#ag-plugin`, and the bare URL with no selector.
+- `agy plugin install https://127.0.0.1:9/bare.git#ag-plugin` (and `@ag-plugin`, `/tree/ag-plugin`, `http://`) → exit 1, `failed to parse GitHub URL: currently only supports github.com: 127.0.0.1:9`.
+- `agy plugin install git@127.0.0.1:bare.git#ag-plugin` → exit 1, `unknown marketplace`.
+The help text names no branch option: `install <target>  Install a plugin (supports plugin[@marketplace])`. A selector on a github.com URL is unmeasured; testing it needs a network read of GitHub, which this local-only probe does not do.
+
+**P2, plugin contents at the root: yes, for the directory form (the only local form).** Install from a clone whose root holds the plugin contents: exit 0; `hooks 1 installed (coalhearth)`; `commands: 2 installed (converted to skills)`; `agy plugin list --json` shows it enabled, version 2.8.8, source antigravity. `agy plugin validate` on the source and on the installed root: exit 0, warnings `commands: never loaded` and `hooks/hooks.json: never loaded: plugin hooks are read only from hooks.json at the plugin root` (the root `hooks.json` is the one read). Validate counts `hooks 1` and `skills 0`, so its count disagrees with the install report on the two converted commands; not resolved here.
+- The whole-repository shape by directory: `validate` on the source exits 1 (`no plugin.json found at the plugin root`), but `install` exits 0 with `Found bulk plugins directory … Installing plugin "plugin"`. A directory install takes the `plugin/` subfolder and leaves the rest. The GitHub-URL install (M4) took the whole repository, so the two install paths differ.
+
+**P3, refs held: not measured on the GitHub path; measured for the directory form.** agy copied the source clone's `.git` unchanged. A `git clone --branch ag-plugin` (git's default, all branches fetched) gave an installed `.git` of 207 KB holding `refs/heads/ag-plugin`, `refs/remotes/origin/main` and `refs/remotes/origin/ag-plugin`. A single-branch clone would hold one ref. What agy's own GitHub clone fetches stays open.
+
+## Open questions
+
+- **P1 (open):** the branch selector on a github.com URL, measured by a read install in a clean HOME, owed before option A is built.
+- **P2 (answered for the directory form):** the root layout loads its hooks and converts its commands. The GitHub-URL path is unmeasured here.
+- **P3 (open on the GitHub path):** which refs agy's GitHub clone holds.
 - **P4:** the AG marketplace manifest format (option D), not measured.
 
 Ruled by main: the choice of option, and whether P1 to P3 run before any build unit is opened.
