@@ -152,3 +152,65 @@ test('CLI: FAIL lines name file, line, url and why, the summary line always prin
     const h = await run(['-h']); assert.equal(h.status, 0); assert.match(h.stdout, /^usage:/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+// ---- 29e (b), CoalTipple 29d: the autolink alternative of the link regex was quadratic on a repeated <https:// run with no closing >. The
+// witness counts the work the reader does (one count per position it visits and per character a run scan reads): no clock.
+const OLD_extractLinks = (text) => {
+  const out = [];
+  let fenced = false;
+  const lines = String(text).split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    if (/^\s*(```|~~~)/.test(raw)) { fenced = !fenced; continue; }
+    if (fenced) continue;
+    const line = raw.replace(/`[^`]*`/g, '`');
+    for (const m of line.matchAll(/\]\((https?:\/\/[^\s)>]+)|<(https?:\/\/[^\s>]+)>|href=["'](https?:\/\/[^"']+)["']/g)) out.push({ url: m[1] || m[2] || m[3], line: i + 1, lineText: raw });
+  }
+  return out;
+};
+const simplify = (links) => links.map((l) => [l.url, l.line]);
+
+test('the link reader does linear work on the repeated <https:// shapes: steps per character stay bounded, and doubling the text at most doubles the steps -- RED before 29e (b)', () => {
+  const shapes = { repeatedAutolink: (n) => '<https://x'.repeat(n), openAutolink: (n) => '<https://' + 'a'.repeat(n) };
+  for (const [name, make] of Object.entries(shapes)) {
+    const at = (n) => { const c = { steps: 0 }; const text = make(n); extractLinks(text, c); return { chars: text.length, steps: c.steps }; };
+    const small = at(1000), big = at(2000);
+    assert.ok(big.steps > 0, `${name}: the reader counts its work`);
+    assert.ok(big.steps / big.chars <= 6, `${name}: steps per character ${big.steps / big.chars}`);
+    assert.ok(big.steps / small.steps <= 2.2, `${name}: doubling the text took ${big.steps / small.steps} times the steps`);
+  }
+});
+
+test('positive control: a counted stand-in that rescans from every < is quadratic on the same shape, so the count tells the two apart', () => {
+  const naive = (text) => {
+    let steps = 0;
+    for (let p = 0; p < text.length; p++) {
+      if (text[p] !== '<') continue;
+      let e = p + 1;
+      while (e < text.length && !/[\s>]/.test(text[e])) { e++; steps++; }
+    }
+    return steps;
+  };
+  const a = naive('<https://x'.repeat(1000)), b = naive('<https://x'.repeat(2000));
+  assert.ok(b / a >= 3, `doubling took ${b / a} times the steps`);
+});
+
+test('the one-pass reader returns the same links as the old alternation on every markdown file in this tree and on 3000 seeded texts -- the differential for 29e (b)', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const md = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.name.startsWith('.') || e.name === 'node_modules' ? [] : e.isDirectory() ? md(path.join(dir, e.name)) : e.name.endsWith('.md') ? [path.join(dir, e.name)] : []));
+  const files = md(root);
+  assert.ok(files.length > 0, 'the walk found the markdown');
+  for (const f of files) {
+    const text = fs.readFileSync(f, 'utf8');
+    assert.deepEqual(simplify(extractLinks(text)), simplify(OLD_extractLinks(text)), f);
+  }
+  let seed = 7;
+  const rnd = () => { seed = (Math.imul(seed, 1103515245) + 12345) >>> 0; return seed / 4294967296; };
+  const pieces = ['<', '>', 'https://', 'http://', 'x', ' ', '](', ')', 'href="', "href='", '"', "'", '`', '\n', '\t', '<https://a.b/c>', '](https://d.e)'];
+  for (let i = 0; i < 3000; i++) {
+    let s = '';
+    const n = Math.floor(rnd() * 40);
+    for (let j = 0; j < n; j++) s += pieces[Math.floor(rnd() * pieces.length)];
+    assert.deepEqual(simplify(extractLinks(s)), simplify(OLD_extractLinks(s)), JSON.stringify(s));
+  }
+});

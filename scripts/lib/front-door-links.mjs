@@ -22,8 +22,9 @@ const SOON = /\b(?:publishing|coming)\s+soon\b/i;
 
 const segments = (u) => u.pathname.split('/').filter(Boolean).map((s) => { try { return decodeURIComponent(s).toLowerCase(); } catch { return s.toLowerCase(); } });
 
-/** The outward links of a markdown text: [{ url, line, lineText }], fenced blocks and inline code spans skipped, fragments kept on `url` for the report. */
-export function extractLinks(text) {
+/** The outward links of a markdown text: [{ url, line, lineText }], fenced blocks and inline code spans skipped, fragments kept on `url` for the report.
+ * `counter`, when given, receives `steps`: one per position the reader visits and one per character an autolink run reads (the work, not a clock). */
+export function extractLinks(text, counter) {
   const out = [];
   let fenced = false;
   const lines = String(text).split(/\r?\n/);
@@ -33,11 +34,44 @@ export function extractLinks(text) {
     if (fenced) continue;
     const line = raw.replace(/`[^`]*`/g, '`');
     // a markdown link or image destination, an autolink, an HTML href: the three shapes a front door uses
-    for (const m of line.matchAll(/\]\((https?:\/\/[^\s)>]+)|<(https?:\/\/[^\s>]+)>|href=["'](https?:\/\/[^"']+)["']/g)) {
-      out.push({ url: m[1] || m[2] || m[3], line: i + 1, lineText: raw });
-    }
+    for (const url of linkUrls(line, counter)) out.push({ url, line: i + 1, lineText: raw });
   }
   return out;
+}
+
+const MARKDOWN_DEST = /\]\((https?:\/\/[^\s)>]+)/y;
+const HREF_DEST = /href=["'](https?:\/\/[^"']+)["']/y;
+const isStop = (c) => c === undefined || c === '>' || /\s/.test(c);
+
+/** The URLs of one line's three shapes, read left to right in one pass; a failed autolink run is skipped, because a < inside it stops at the same character. */
+export function linkUrls(line, counter) {
+  const urls = [];
+  let skipAutolinkUntil = -1;
+  let p = 0;
+  while (p < line.length) {
+    if (counter) counter.steps++;
+    let hit = null;
+    if (line[p] === ']') {
+      MARKDOWN_DEST.lastIndex = p;
+      const m = MARKDOWN_DEST.exec(line);
+      if (m) hit = { url: m[1], end: p + m[0].length };
+    } else if (line[p] === 'h') {
+      HREF_DEST.lastIndex = p;
+      const m = HREF_DEST.exec(line);
+      if (m) hit = { url: m[1], end: p + m[0].length };
+    } else if (line[p] === '<' && p >= skipAutolinkUntil) {
+      const prefix = line.startsWith('https://', p + 1) ? 8 : line.startsWith('http://', p + 1) ? 7 : 0;
+      if (prefix) {
+        const from = p + 1 + prefix;
+        let e = from;
+        while (e < line.length && !isStop(line[e])) { e++; if (counter) counter.steps++; }
+        if (e > from && line[e] === '>') hit = { url: line.slice(p + 1, e), end: e + 1 };
+        else skipAutolinkUntil = e;
+      }
+    }
+    if (hit) { urls.push(hit.url); p = hit.end; } else p++;
+  }
+  return urls;
 }
 
 /** Follow the chain by hand: { status, finalUrl, hops } or { status: 0, error, finalUrl } when nothing answered. Never throws. */
