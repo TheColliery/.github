@@ -1658,6 +1658,24 @@ test('the published-code SECURITY.md template carries "What counts as a vulnerab
   assert.ok(tpl.indexOf('## Reporting a Vulnerability') < at && at < tpl.indexOf('## Commit & Tag Signatures'), 'it sits between the reporting section and the signatures');
 });
 
+
+function sectionOf(text) {
+  const at = text.indexOf('\n## What counts as a vulnerability\n');
+  if (at < 0) return null;
+  const rest = text.slice(at + 1);
+  const next = rest.indexOf('\n## ', 4);
+  return (next < 0 ? rest : rest.slice(0, next + 1)).trimEnd();
+}
+
+// 29d (a), ONE FLOCK ONE COLOR: the org default SECURITY.md (served for every org repo that ships none of its own) carries the same scope section as the template, word for word.
+test('the org default SECURITY.md carries the same "What counts as a vulnerability" section as the published-code template, word for word -- RED before 29d (a)', () => {
+  const tpl = sectionOf(fs.readFileSync(path.join(ROOT, 'templates', 'published-code', 'SECURITY.md'), 'utf8').replace(/\r\n/g, '\n'));
+  const org = sectionOf(fs.readFileSync(path.join(ROOT, '.github', 'SECURITY.md'), 'utf8').replace(/\r\n/g, '\n'));
+  assert.ok(tpl, 'the template has the section');
+  assert.ok(org, 'the org default has the section');
+  assert.equal(org, tpl, 'the section text is the same in both files');
+});
+
 // 15h item 2(b), CWK2-020 (1) across the flock (the CoalWorks chief's 14a return D2, D3 item 2; CoalWash v1.12.2 measured the cure, CoalMine v3.23.2 measured the Antigravity twin): a hook entry in a Coal* repo's
 // `hooks/hooks.json` is the EXEC form (the program in `command`, the script in `args`, no shell), because a command STRING runs under the host's shell, and on Windows without Git for Windows that shell is PowerShell, where
 // `${CLAUDE_PLUGIN_ROOT}` comes out empty and the hook fails (closed, from Claude Code 2.1.299, for a guard). The Antigravity `plugin/hooks.json` KEEPS the shell string: the exec form did not fire on agy 1.3.2 (0 of 3,
