@@ -392,8 +392,9 @@ fs.writeFileSync(path.join(SANDBOX, 'hang-top.fixture.mjs'), "import { test } fr
 // expected; the chief's 25a run: the same shape under load, n = 1). Four times the measured solo run of the passing file plus a second, never below 2,000 ms, kills the hang and leaves the passing file four
 // times its own start to spare. Every test that hands wave-run a file clock takes it from here.
 const sizedFileClock = (soloMs) => Math.max(2000, soloMs * 4 + 1000);
-// QUARANTINE (testing.md Determinism): load-sensitive on Windows Node 22, CoalLedger CI run 41331643210 attempt 1. Fixed in the next commit of order 2026-11-02a (b).
-const QUARANTINE = 'FLAKY run-41331643210 2026-11-02: the file clock is sized past the fixed 20 s test timeout under load, and Node 22 then ends the hang by the wrong clock';
+// The limits that go with a file clock (2026-11-02a (b), CoalLedger CI run 41331643210): node's --test-timeout at twice the clock, never the fixed 20 s, so under load the
+// sized clock cannot pass it and leave Node 22 to cancel the hang by the wrong clock; the whole-run deadline four clocks and 20 s.
+const clockedLimits = (clock) => ({ ...LIMITS, fileTimeoutMs: clock * 2, deadlineMs: clock * 4 + 20000, fileClockMs: clock });
 // A loaded runner stood in for: a preload that makes EVERY node of the tree (the runner's children included) sleep before it runs, handed on NODE_OPTIONS, which the runner carries into each child.
 const SLOW_START_MS = 2500;
 fs.writeFileSync(path.join(SANDBOX, 'slow-start.preload.mjs'), 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ' + SLOW_START_MS + ');' + String.fromCharCode(10));
@@ -479,15 +480,29 @@ test('the stdout preload switches BOTH pipes, stdout and stderr, to blocking (a 
 // PASSING file whenever a loaded runner took more than two seconds to start it (a node child with a heap cap and the stdout preload). Reproduced here by making every node start take 2.5 s (a preload that sleeps,
 // NODE_OPTIONS=--import=<it>): the old test read [FAIL, FAIL] in 4.7 s, the runner's own figure. The clock this test uses is now SIZED from a measured solo run of the passing file on this very machine under this very load,
 // four times it plus a second (never below the old 2,000 ms), so the hang is still killed by the clock and the passing file has four times its own measured start to spare.
-test('the file clock: a file that hangs before its first test is killed at the clock of the file (FAIL naming it) and the next file still runs, the clock sized from a measured solo run of the passing file -- RED before the fix', { skip: QUARANTINE }, async () => {
+test('the file clock: a file that hangs before its first test is killed at the clock of the file (FAIL naming it) and the next file still runs, the clock sized from a measured solo run of the passing file -- RED before the fix', async () => {
   const t0 = Date.now();
   const solo = await runWaves({ files: fx('pass'), cwd: SANDBOX, env: SANDBOX_ENV, ...LIMITS, serial: true, read: scripted('BREATHE') });
   assert.deepEqual(solo.results.map((x) => x.status), [STATUS.PASS]);
   const clock = sizedFileClock(Date.now() - t0);
-  const r = await runWaves({ files: fx('hang-top', 'pass'), cwd: SANDBOX, env: SANDBOX_ENV, ...LIMITS, deadlineMs: clock * 4 + 20000, fileClockMs: clock, serial: true, read: scripted('BREATHE') });
+  const r = await runWaves({ files: fx('hang-top', 'pass'), cwd: SANDBOX, env: SANDBOX_ENV, ...clockedLimits(clock), serial: true, read: scripted('BREATHE') });
   assert.deepEqual(r.results.map((x) => x.status), [STATUS.FAIL, STATUS.PASS]);
   assert.match(r.results[0].reason, /file clock/);
   assert.equal(r.exitCode, 1);
+});
+
+// 2026-11-02a (b): a test that hands the runner a file clock also hands node's --test-timeout at twice it, so the clock is what ends a hang on every node version
+// (Node 22 cancels a top-level-await hang at --test-timeout, Node 24 lets it run to the clock). Read from this file's own text; the names are built so this test does not match itself.
+test('every test here that hands the runner a file clock hands it a test timeout of twice the clock, through one helper -- RED before 2026-11-02a (b)', () => {
+  const lines = fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split(/\r?\n/);
+  const viaObject = new RegExp('fileClock' + 'Ms: clock\\b');
+  const viaFlag = new RegExp("'--file-clock" + "-ms', String\\(clock\\)");
+  const bad = [];
+  lines.forEach((l, i) => {
+    if (viaObject.test(l) && !l.includes('clocked' + 'Limits = ')) bad.push(i + 1);
+    if (viaFlag.test(l) && !l.includes("'--file-timeout-ms', String(clock" + ' * 2)')) bad.push(i + 1);
+  });
+  assert.deepEqual(bad, [], 'lines that hand a file clock without its test timeout');
 });
 
 test('the file clock is optional but never loose: a value that is not a positive whole number is refused, and without it the whole-run deadline still ends a hang', async () => {
@@ -505,13 +520,13 @@ test('the command line: a file clock that never fires does not hold the process 
   assert.match(r.stdout, /GREEN$/m);
 });
 
-test('the command line: --file-clock-ms is accepted, shown in the usage, and kills a hang before the first test without stopping the run', { skip: QUARANTINE }, () => {
+test('the command line: --file-clock-ms is accepted, shown in the usage, and kills a hang before the first test without stopping the run', () => {
   assert.match(cli(['--help']).stdout, /--file-clock-ms N {4}wall clock of ONE file/);
   const bad = cli(['--file-clock-ms', 'soon']);
   assert.equal(bad.status, 64);
   assert.match(bad.stderr, /--file-clock-ms needs a whole number/);
   const clock = sizedFileClock(soloCliMs());
-  const r = cli(['--heap-mb', '512', '--file-timeout-ms', '20000', '--deadline-ms', String(clock * 4 + 20000), '--file-clock-ms', String(clock), '--serial', '--', ...fx('hang-top', 'pass')]);
+  const r = cli(['--heap-mb', '512', '--file-timeout-ms', String(clock * 2), '--deadline-ms', String(clock * 4 + 20000), '--file-clock-ms', String(clock), '--serial', '--', ...fx('hang-top', 'pass')]);
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.match(r.stdout, /^FAIL .*hang-top\.fixture\.mjs: killed at the file clock/m);
   assert.match(r.stdout, /pass 1 · fail 1 \(hang-top\.fixture\.mjs\) · vacuous 0 · skipped 0 · not-run 0 · reconciled 2 of 2 — RED$/m);
