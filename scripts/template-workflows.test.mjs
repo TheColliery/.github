@@ -1643,6 +1643,17 @@ test('every action this repository\'s workflows and the canon templates use is o
   assert.deepEqual(bad, []);
 });
 
+// 2026-11-02b (AR-71 (b) VM-01.01, the owner's 2026-09-29 signature, and the absence line of BB-386 (d)): the response-time sentence, word for word, in every file that
+// states the security response line; the fixed-SLA wording is gone from all of them.
+test('the response-time sentence (AR-71 (b) VM-01.01) is word for word in the org default SECURITY.md, the published-code SECURITY.md and DOC-PATTERN row 2, and no fixed-SLA wording remains there -- RED before 2026-11-02b', () => {
+  const SENT = "We acknowledge a report within 5 days, send an assessment within 10 days, and disclose publicly once the fix ships, or at 90 days at most. During an absence announced on the maintainer's GitHub profile, the 5 days count from the first day back.";
+  for (const rel of [path.join('.github', 'SECURITY.md'), path.join('templates', 'published-code', 'SECURITY.md'), 'DOC-PATTERN.md']) {
+    const t = fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
+    assert.ok(t.includes(SENT), rel + ' carries the sentence word for word');
+    assert.doesNotMatch(t, /fixed[ -]SLA|fixed response[ -]time/i, rel + ' keeps no fixed-SLA wording');
+  }
+});
+
 // 14h3, UMB3-020 (card BB-162 (ก), the owner 2026-10-14: "ต่อจากนี้ให้โพสต์ช่อง GHSA"): where a fixed vulnerability is announced. One rule, stated where a room reads it (the SECURITY.md row of DOC-PATTERN.md),
 // carried into the template a new repo is stamped from and the org default file, so the pattern and what ships say the same thing.
 test('a fixed vulnerability is announced as a GitHub security advisory: DOC-PATTERN.md row 2 states it (the room drafts, the owner publishes and requests the CVE, SECURITY.md keeps one line per advisory), and the published-code template and the org SECURITY.md say it too -- RED before 14h3 (UMB3-020)', () => {
@@ -1651,7 +1662,7 @@ test('a fixed vulnerability is announced as a GitHub security advisory: DOC-PATT
   assert.ok(row, 'row 2 of the SECURITY.md table exists');
   assert.match(row, /announced as a GitHub repository security advisory \(GHSA\)/);
   assert.match(row, /room DRAFTS it/);
-  assert.match(row, /OWNER publishes it and requests its CVE/);
+  assert.match(row, /main publishes it through REST and reads it back/); // 2026-11-02b: the owner's publish line, BB-162 (was: OWNER publishes it and requests its CVE)
   assert.match(row, /ONE LINE per published advisory, linking to it/);
   assert.match(row, /never the advisory's full text/);
   const tpl = fs.readFileSync(path.join(ROOT, 'templates', 'published-code', 'SECURITY.md'), 'utf8').replace(/\r\n/g, '\n');
