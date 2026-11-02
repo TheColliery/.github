@@ -2,7 +2,7 @@
 // builds on. DATA ONLY: no function, no credential. The same watcher code as TheColliery's instance; only this list differs. Deployed on the Kolwen account
 // by the LLM chief with `node scripts/watcher/deploy-payload.mjs kolwen --from <sender>` (see README.md).
 // Order is the stagger: a source with everyHours=n is due when (hour + its index) % n === 0, so adding to the END keeps every earlier slot.
-// 63 sources; the busiest hour of the week asks for the number the test prints in its failure message, against maxPerRun and the Free plan's 50 subrequests.
+// 68 sources; the busiest hour of the week asks for the number the test prints in its failure message, against maxPerRun and the Free plan's 50 subrequests.
 export default {
   instance: 'kolwen',
   maxPerRun: 24,
@@ -81,5 +81,13 @@ export default {
     { id: 'cloudflare-doc-observability-pricing', name: 'Cloudflare docs · Observability pricing', url: 'https://developers.cloudflare.com/observability/pricing/index.md', kind: 'raw', everyHours: 24 },
     { id: 'cloudflare-doc-r2-pricing', name: 'Cloudflare docs · R2 pricing', url: 'https://developers.cloudflare.com/r2/pricing/index.md', kind: 'raw', everyHours: 24 },
     { id: 'cloudflare-doc-email-service-limits', name: 'Cloudflare docs · Email Service limits', url: 'https://developers.cloudflare.com/email-service/platform/limits/index.md', kind: 'raw', everyHours: 24 },
+    // UMB3-155, the Article 50 interop beat (the owner 2026-11-02: "เพิ่มเข้า watcher ได้เลย"): the EU Code of Practice on Transparency of AI-Generated Content asks its
+    // signatories for interoperable detection by 2 February 2027, and Kolwen's detector (UMB3-156) must plug into what follows. Read at source 2026-11-02, each its most stable
+    // signal, every 24 hours. The Commission's page has no feed: its HTML is hashed (the timeline and its "Last update" line sit inside the first 64 KB, two reads gave the same
+    // bytes). The C2PA specification and its reference implementation publish GitHub releases; c2pa-rs tags each crate, so only the main crate's (c2pa-v...) count.
+    { id: 'eu-code-ai-generated-content', name: 'European Commission · Code of Practice on Transparency of AI-generated Content', url: 'https://digital-strategy.ec.europa.eu/en/policies/code-practice-ai-generated-content', kind: 'raw', everyHours: 24 },
+    { id: 'c2pa-specification', name: 'C2PA · specification releases', url: 'https://github.com/c2pa-org/specifications/releases.atom', kind: 'atom', everyHours: 24 },
+    { id: 'c2pa-rs', name: 'C2PA · c2pa-rs reference implementation releases', url: 'https://github.com/contentauth/c2pa-rs/releases.atom', kind: 'atom', everyHours: 24, ignoreTitle: '^(?!c2pa-v)' },
+    { id: 'synthid-text', name: 'Google DeepMind · SynthID Text releases', url: 'https://github.com/google-deepmind/synthid-text/releases.atom', kind: 'atom', everyHours: 24 },
   ],
 };

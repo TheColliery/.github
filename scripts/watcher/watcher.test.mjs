@@ -506,7 +506,7 @@ test('thecolliery.mjs: GitHub\'s own changelog label feeds sit after the 25 plat
 test('kolwen.mjs: the five kept rows keep their slots, the beat\'s 45 rows follow, the two status watches follow them -- RED before UMB-460 (1) and BB-56', async () => {
   const c = await load('kolwen.mjs');
   assert.deepStrictEqual(idsOf(c).slice(0, 5), ['claude-code', 'cloudflare-changelog', 'github-changelog', 'cloudflare-blog', 'coderabbit-changelog']);
-  assert.strictEqual(c.sources.length, 5 + 45 + 2 + 12);
+  assert.ok(c.sources.length >= 5 + 45 + 2 + 12, 'later rows follow at the END (BB-112, UMB3-155)');
   const byId = Object.fromEntries(c.sources.map((s) => [s.id, s]));
   for (const id of ['anthropic-api-notes', 'anthropic-pricing', 'openai-status', 'gemini-api-changelog', 'groq-changelog', 'cloudflare-workers-ai', 'github-copilot', 'paddle-changelog', 'deepseek-updates', 'xai-news']) assert.ok(byId[id], id);
   assert.strictEqual(byId['paddle-changelog'].url, 'https://developer.paddle.com/changelog.xml');
@@ -670,7 +670,7 @@ test('kolwen.mjs, BB-112 / Issues 41-42: the status row reads the incident histo
   assert.deepStrictEqual([c.sources[i].kind, c.sources[i].url, c.sources[i].everyHours], ['incidents', 'https://www.cloudflarestatus.com/api/v2/incidents.json', 1]);
   assert.strictEqual(c.sources[i + 1].id, 'groq-status');
   assert.strictEqual(c.sources[i + 1].kind, 'raw', 'Groq lists its history newest first and was never blind to a closed incident: left as it was');
-  assert.deepStrictEqual(idsOf(c).slice(i + 2), [
+  assert.deepStrictEqual(idsOf(c).slice(i + 2, i + 14), [
     'cloudflare-one-client', 'cloudflare-wrangler', 'cloudflare-mcp-servers', 'cloudflare-agents-sdk', 'cloudflare-sandbox-sdk',
     'cloudflare-doc-workers-limits', 'cloudflare-doc-workers-pricing', 'cloudflare-doc-kv-limits', 'cloudflare-doc-kv-pricing',
     'cloudflare-doc-observability-pricing', 'cloudflare-doc-r2-pricing', 'cloudflare-doc-email-service-limits',
@@ -681,7 +681,31 @@ test('kolwen.mjs, BB-112 / Issues 41-42: the status row reads the incident histo
   const docs = c.sources.filter((s) => s.id.startsWith('cloudflare-doc-'));
   assert.strictEqual(docs.length, 7);
   for (const s of docs) { assert.match(s.url, /^https:\/\/developers\.cloudflare\.com\/[a-z0-9\/-]+\/index\.md$/, s.id); assert.strictEqual(s.kind, 'raw'); assert.strictEqual(s.everyHours, 24); }
-  assert.strictEqual(c.sources.length, 5 + 45 + 2 + 12);
+  assert.ok(c.sources.length >= 5 + 45 + 2 + 12, 'later rows follow at the END (UMB3-155)');
+});
+
+// UMB3-155, the Article 50 interop beat: four sources appended at the END, every 24 hours; a new version in a fixture feed raises the change, the same feed does not.
+test('kolwen.mjs, UMB3-155: the Article 50 interop beat closes the list (the Commission page, the C2PA specification, c2pa-rs, SynthID Text), daily, and a new version is a change -- RED before UMB3-155', async () => {
+  const c = await load('kolwen.mjs');
+  const ids = idsOf(c);
+  const want = ['eu-code-ai-generated-content', 'c2pa-specification', 'c2pa-rs', 'synthid-text'];
+  assert.deepStrictEqual(ids.slice(-want.length), want, 'appended at the END, so every earlier slot keeps its hour');
+  const byId = Object.fromEntries(c.sources.map((s) => [s.id, s]));
+  assert.deepStrictEqual(want.map((id) => [byId[id].kind, byId[id].everyHours]), [['raw', 24], ['atom', 24], ['atom', 24], ['atom', 24]]);
+  assert.strictEqual(byId['eu-code-ai-generated-content'].url, 'https://digital-strategy.ec.europa.eu/en/policies/code-practice-ai-generated-content');
+  for (const id of want.slice(1)) assert.ok(byId[id].url.startsWith('https://github.com/') && byId[id].url.endsWith('/releases.atom'), id);
+  const pick = (id, ...titles) => parseFeed(atom(...titles), { ignoreTitle: byId[id].ignoreTitle })?.title;
+  assert.strictEqual(pick('c2pa-rs', 'c2pa-c-ffi-v0.92.0', 'c2pa-v0.91.7'), 'c2pa-v0.91.7', 'a sibling crate is quiet');
+  const v = (id, x) => (id === 'c2pa-rs' ? 'c2pa-v0.9' : 'v') + x;
+  for (const id of want.slice(1)) {
+    const prev = (await keyFor(byId[id], atom(v(id, '1'), v(id, '0')))).key;
+    assert.strictEqual((await keyFor(byId[id], atom(v(id, '1'), v(id, '0')))).key, prev, id + ': the same feed reads the same key');
+    assert.notStrictEqual((await keyFor(byId[id], atom(v(id, '2'), v(id, '1')))).key, prev, id + ': a new version moves the key');
+  }
+  const a = await keyFor(byId['eu-code-ai-generated-content'], '<h2>Timeline</h2><p>Last update 1 November 2026</p>');
+  const b = await keyFor(byId['eu-code-ai-generated-content'], '<h2>Timeline</h2><p>Last update 2 February 2027</p>');
+  assert.notStrictEqual(a.key, b.key, 'a changed page moves the hash');
+  assert.strictEqual((await keyFor(byId['eu-code-ai-generated-content'], '<h2>Timeline</h2><p>Last update 1 November 2026</p>')).key, a.key, 'an unchanged page does not');
 });
 
 test('kolwen.mjs: the monorepo release feeds are filtered to the package the hub runs, and pre-releases are quiet', async () => {
