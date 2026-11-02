@@ -10,7 +10,7 @@
 // lost; a one-segment link may land on a site root, the shape of a stable entry link) · a "publishing soon" or "coming soon" note on the line of a link
 // whose page answers.
 // NOT a finding: a link inside a fenced code block or an inline code span (an example, not a claim) · a mailto:, a relative path, a bare anchor (the
-// room's own link check) · a host on the caller's skip list (a placeholder or a host that refuses robots) · a redirect to a sign-in page whose query
+// room's own link check) · a host on the caller's skip list (a placeholder or a host that refuses robots), whether the link names it or a redirect leads into it · a redirect to a sign-in page whose query
 // names the asked page (GitHub's /login?return_to=<the page>: a wall in front of the page, not a page that is gone).
 // Zero dependencies (Phoenix #2): global fetch. Requests run one at a time with a timeout each, and ONE retry after a pause when the answer was
 // transient (no answer, or a 5xx), so a weekly run never hammers a docs host. Every link is fetched once per run, however many lines name it.
@@ -74,8 +74,10 @@ export function linkUrls(line, counter) {
   return urls;
 }
 
-/** Follow the chain by hand: { status, finalUrl, hops } or { status: 0, error, finalUrl } when nothing answered. Never throws. */
-export async function probe(fetchFn, url, { timeoutMs = DEFAULT_TIMEOUT_MS, maxHops = MAX_HOPS } = {}) {
+/** Follow the chain by hand: { status, finalUrl, hops } or { status: 0, error, finalUrl } when nothing answered. Never throws.
+ * A hop into a host on `skipHosts` (lower-case) is not fetched: the chain stops there with { skippedHost, finalUrl }, because the caller's skip list
+ * names hosts this check must never ask, and a redirect is the asked server's choice, not the caller's. */
+export async function probe(fetchFn, url, { timeoutMs = DEFAULT_TIMEOUT_MS, maxHops = MAX_HOPS, skipHosts = [] } = {}) {
   let u = url;
   for (let hops = 0; ; hops++) {
     let r;
@@ -88,7 +90,10 @@ export async function probe(fetchFn, url, { timeoutMs = DEFAULT_TIMEOUT_MS, maxH
     const location = r.status >= 300 && r.status < 400 ? r.headers.get('location') : null;
     if (!location) return { status: r.status, finalUrl: u, hops };
     if (hops >= maxHops) return { status: r.status, error: `more than ${maxHops} redirects`, finalUrl: u, hops };
-    try { u = new URL(location, u).href; } catch { return { status: r.status, error: `a redirect to an unreadable location (${location})`, finalUrl: u, hops }; }
+    let next;
+    try { next = new URL(location, u); } catch { return { status: r.status, error: `a redirect to an unreadable location (${location})`, finalUrl: u, hops }; }
+    if (skipHosts.includes(next.hostname.toLowerCase())) return { status: r.status, skippedHost: next.hostname.toLowerCase(), finalUrl: next.href, hops: hops + 1 };
+    u = next.href;
   }
 }
 
@@ -132,10 +137,11 @@ export async function checkFiles(files, { fetchFn = globalThis.fetch, timeoutMs 
       if (skipHosts.includes(target.hostname.toLowerCase())) { skipped.push(link.url); continue; }
       let result = seen.get(target.href);
       if (!result) {
-        result = await probe(fetchFn, target.href, { timeoutMs, maxHops });
-        if (transient(result)) { await sleep(retryMs); result = await probe(fetchFn, target.href, { timeoutMs, maxHops }); }
+        result = await probe(fetchFn, target.href, { timeoutMs, maxHops, skipHosts });
+        if (transient(result)) { await sleep(retryMs); result = await probe(fetchFn, target.href, { timeoutMs, maxHops, skipHosts }); }
         seen.set(target.href, result);
       }
+      if (result.skippedHost) { skipped.push(link.url); continue; }
       const message = judge(link, result);
       if (message) findings.push({ file: name, line: link.line, url: link.url, message });
     }

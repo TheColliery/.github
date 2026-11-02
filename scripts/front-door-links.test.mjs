@@ -214,3 +214,50 @@ test('the one-pass reader returns the same links as the old alternation on every
     assert.deepEqual(simplify(extractLinks(s)), simplify(OLD_extractLinks(s)), JSON.stringify(s));
   }
 });
+
+// ---- 2026-11-03a: the redirect chain honours the skip list, a control character never reaches a FAIL line raw, and a named file is read only as a
+// regular file under a byte bound. Each was RED on the code before it.
+test('checkFiles: a redirect into a skipped host is not followed -- that host is never fetched and the link counts as skipped -- RED before 2026-11-03a', async () => {
+  const asked = [];
+  const fake = async (u) => {
+    const host = new URL(u).hostname;
+    asked.push(host);
+    return host === 'start.example' ? new Response(null, { status: 302, headers: { location: 'https://SKIP.example/landing' } }) : new Response('page', { status: 200 });
+  };
+  const r = await checkFiles([{ name: 'README.md', text: '[a](https://start.example/x)' }], { ...LONG, fetchFn: fake, skipHosts: ['skip.example'] });
+  assert.deepEqual(asked, ['start.example'], 'the skipped host was never asked');
+  assert.deepEqual(r.findings, []);
+  assert.deepEqual(r.skipped, ['https://start.example/x']);
+});
+
+const CONTROL = (s) => Array.from(s).filter((ch) => { const c = ch.codePointAt(0); return (c < 0x20 && c !== 0x0a && c !== 0x0d) || (c >= 0x7f && c <= 0x9f) || c === 0x2028 || c === 0x2029; });
+
+test('CLI: a control character in a link is written as its code point on the FAIL line, so no line can be forged or erased -- RED before 2026-11-03a', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fdl-'));
+  try {
+    const f = path.join(dir, 'README.md');
+    // ESC [2K erases the terminal line, CSI (C1) does the same in one byte: both are built from code points, so no escape travels through a tool.
+    fs.writeFileSync(f, `[a](${base}/missing${String.fromCharCode(0x1b)}[2K${String.fromCharCode(0x9b)}forged)\n`);
+    const r = await run([f]);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.deepEqual(CONTROL(r.stdout), [], 'no raw control character on stdout');
+    const bs = String.fromCharCode(92);
+    assert.ok(r.stdout.includes(`${bs}u{1b}[2K${bs}u{9b}forged`), r.stdout);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('CLI: a named file past the byte bound, or one that is not a regular file, is a FAIL line, never read -- RED before 2026-11-03a', async () => {
+  const bound = Number(/^const MAX_FILE_BYTES = ([0-9]+);/m.exec(fs.readFileSync(CLI, 'utf8'))?.[1]);
+  assert.ok(bound > 0, 'the CLI states its byte bound');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fdl-'));
+  try {
+    const big = path.join(dir, 'README.md');
+    fs.writeFileSync(big, 'x'.repeat(bound + 1));
+    const r = await run([big, dir]);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    const lines = r.stdout.split(/\r?\n/);
+    assert.ok(lines.some((l) => l.startsWith('FAIL ') && l.endsWith(`README.md: cannot be read (${bound + 1} bytes, past the byte bound of ${bound})`)), r.stdout);
+    assert.match(r.stdout, /^FAIL .*: cannot be read \((not a regular file|EISDIR)\)$/m);
+    assert.match(r.stdout, /^2 finding\(s\)/m);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
