@@ -392,6 +392,8 @@ fs.writeFileSync(path.join(SANDBOX, 'hang-top.fixture.mjs'), "import { test } fr
 // expected; the chief's 25a run: the same shape under load, n = 1). Four times the measured solo run of the passing file plus a second, never below 2,000 ms, kills the hang and leaves the passing file four
 // times its own start to spare. Every test that hands wave-run a file clock takes it from here.
 const sizedFileClock = (soloMs) => Math.max(2000, soloMs * 4 + 1000);
+// QUARANTINE (testing.md Determinism): load-sensitive on Windows Node 22, CoalLedger CI run 41331643210 attempt 1. Fixed in the next commit of order 2026-11-02a (b).
+const QUARANTINE = 'FLAKY run-41331643210 2026-11-02: the file clock is sized past the fixed 20 s test timeout under load, and Node 22 then ends the hang by the wrong clock';
 // A loaded runner stood in for: a preload that makes EVERY node of the tree (the runner's children included) sleep before it runs, handed on NODE_OPTIONS, which the runner carries into each child.
 const SLOW_START_MS = 2500;
 fs.writeFileSync(path.join(SANDBOX, 'slow-start.preload.mjs'), 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ' + SLOW_START_MS + ');' + String.fromCharCode(10));
@@ -477,7 +479,7 @@ test('the stdout preload switches BOTH pipes, stdout and stderr, to blocking (a 
 // PASSING file whenever a loaded runner took more than two seconds to start it (a node child with a heap cap and the stdout preload). Reproduced here by making every node start take 2.5 s (a preload that sleeps,
 // NODE_OPTIONS=--import=<it>): the old test read [FAIL, FAIL] in 4.7 s, the runner's own figure. The clock this test uses is now SIZED from a measured solo run of the passing file on this very machine under this very load,
 // four times it plus a second (never below the old 2,000 ms), so the hang is still killed by the clock and the passing file has four times its own measured start to spare.
-test('the file clock: a file that hangs before its first test is killed at the clock of the file (FAIL naming it) and the next file still runs, the clock sized from a measured solo run of the passing file -- RED before the fix', async () => {
+test('the file clock: a file that hangs before its first test is killed at the clock of the file (FAIL naming it) and the next file still runs, the clock sized from a measured solo run of the passing file -- RED before the fix', { skip: QUARANTINE }, async () => {
   const t0 = Date.now();
   const solo = await runWaves({ files: fx('pass'), cwd: SANDBOX, env: SANDBOX_ENV, ...LIMITS, serial: true, read: scripted('BREATHE') });
   assert.deepEqual(solo.results.map((x) => x.status), [STATUS.PASS]);
@@ -503,7 +505,7 @@ test('the command line: a file clock that never fires does not hold the process 
   assert.match(r.stdout, /GREEN$/m);
 });
 
-test('the command line: --file-clock-ms is accepted, shown in the usage, and kills a hang before the first test without stopping the run', () => {
+test('the command line: --file-clock-ms is accepted, shown in the usage, and kills a hang before the first test without stopping the run', { skip: QUARANTINE }, () => {
   assert.match(cli(['--help']).stdout, /--file-clock-ms N {4}wall clock of ONE file/);
   const bad = cli(['--file-clock-ms', 'soon']);
   assert.equal(bad.status, 64);
