@@ -437,14 +437,14 @@ test('the stdout preload is silent and harmless: with stdout a pipe, a file or n
   const out = path.join(SANDBOX, 'preload-out.txt');
   const fd = fs.openSync(out, 'w+'); // read back through this descriptor, never through the path again
   try {
-    const piped = spawnSync(process.execPath, ['--import', STDOUT_SYNC_URL, '-e', "process.stdout.write('hello'); process.stderr.write('')"], { encoding: 'utf8', timeout: 30000 });
+    const piped = spawnSync(process.execPath, ['--import', STDOUT_SYNC_URL, '-e', "process.stdout.write('hello'); process.stderr.write('')"], { encoding: 'utf8', timeout: 30000, env: sandboxEnv() });
     assert.equal(piped.status, 0);
     assert.equal(piped.stdout, 'hello');
     assert.equal(piped.stderr, '');
-    const toFile = spawnSync(process.execPath, ['--import', STDOUT_SYNC_URL, '-e', "process.stdout.write('hello')"], { stdio: ['ignore', fd, 'pipe'], encoding: 'utf8', timeout: 30000 });
+    const toFile = spawnSync(process.execPath, ['--import', STDOUT_SYNC_URL, '-e', "process.stdout.write('hello')"], { stdio: ['ignore', fd, 'pipe'], encoding: 'utf8', timeout: 30000, env: sandboxEnv() });
     assert.equal(toFile.status, 0);
     assert.equal(toFile.stderr, '');
-    const none = spawnSync(process.execPath, ['--import', STDOUT_SYNC_URL, '-e', '1'], { stdio: 'ignore', timeout: 30000 });
+    const none = spawnSync(process.execPath, ['--import', STDOUT_SYNC_URL, '-e', '1'], { stdio: 'ignore', timeout: 30000, env: sandboxEnv() });
     assert.equal(none.status, 0);
     const got = Buffer.alloc(16);
     assert.equal(got.toString('utf8', 0, fs.readSync(fd, got, 0, got.length, 0)), 'hello', 'the output of the child reached the file');

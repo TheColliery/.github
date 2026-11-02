@@ -858,6 +858,28 @@ test('every spawn in a test file passes a timeout, and a node child in this repo
   assert.deepEqual(missingHeap, [], 'node children with no heap cap: ' + missingHeap.join(', '));
 });
 
+// 2026-11-02a (c), the CoalLedger head's T-19 courier (its nine canon-copied tests): a child a template's test spawns is handed an explicit environment (each file's own
+// sandbox: HOME, USERPROFILE, TEMP, TMP and TMPDIR in its scratch folder), never the parent's whole one, which carries the developer's real home and temp folders.
+test('every spawn in a template test file hands the child an explicit env, never the parent\'s whole one -- RED before 2026-11-02a (c)', () => {
+  const missing = [];
+  const walk = (d) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) { walk(p); continue; }
+      if (!e.name.endsWith('.test.mjs')) continue;
+      const t = fs.readFileSync(p, 'utf8');
+      const rel = path.relative(ROOT, p).replace(/\\/g, '/');
+      for (const m of t.matchAll(/\b(spawnSync|execFileSync|execSync|spawn|execFile|fork)\(/g)) {
+        let depth = 1; let i = m.index + m[0].length;
+        for (; i < t.length && depth > 0; i++) { if (t[i] === '(') depth++; else if (t[i] === ')') depth--; }
+        if (!/\benv\b/.test(t.slice(m.index, i))) missing.push(rel + ':' + t.slice(0, m.index).split('\n').length);
+      }
+    }
+  };
+  walk(path.join(ROOT, 'templates'));
+  assert.deepEqual(missing, [], 'spawn calls that hand the child the parent\'s whole environment: ' + missing.join(', '));
+});
+
 // AX-3 (owner-signed 2026-10-03): the article template's CI fails a push to the default branch that carries a commit made by
 // GitBook (a subject starting GITBOOK-), so the rule GOVERNANCE.md states in prose is a check. Behaviour, not text: the guard
 // step's own bash runs against a throwaway repository for every case.
