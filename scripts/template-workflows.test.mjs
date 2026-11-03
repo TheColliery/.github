@@ -1546,7 +1546,7 @@ const readText = (rel) => fs.readFileSync(path.join(ROOT, ...rel.split('/')), 'u
 // The canon secret gate keeps GIT_INDEX_FILE BY DESIGN (commit mode reads the commit's own index, which a hook names through that variable), and GIT_INDEX_FILE is outside the three
 // GIT_ names the rule allows, so its two git spawns are findings the census is right to give. It is the ONE pinned carrier, at this blob; any edit spends the pin. The Bankfire source test was
 // the second until Bankfire returned gitEnv()'s literal alone (bd328f2e, 2026-10-09): it now passes the census with no pin, like the gate test.
-const GATE_PIN = { rel: 'scripts/secret-gate.mjs', blob: '6b452f2f8667805876cc2f33a74123bb6f0acf45', why: 'canon secret gate: keeps GIT_INDEX_FILE and GIT_CEILING_DIRECTORIES by design (its gitEnv() copies process.env minus the other GIT_ names); the two spawns are the findings' };
+const GATE_PIN = { rel: 'scripts/secret-gate.mjs', blob: '4bf977178dffc6045af9ff2bae4ed78273fcc80c', why: 'canon secret gate: keeps GIT_INDEX_FILE and GIT_CEILING_DIRECTORIES by design (its gitEnv() copies process.env minus the other GIT_ names); the two spawns are the findings' };
 
 test('the canon secret-gate test passes the canon census with no pin: it builds every git environment from named keys, in all three places it lives -- RED before 08d D3', () => {
   for (const dir of CARRIER_DIRS) {
@@ -1592,12 +1592,12 @@ test('the canon release-notes.mjs and its test (the list\'s P1 and P2) read clea
   }
 });
 
-test('the three places a secret-scan or secret-gate file lives hold the same bytes, and the secret-scan test is the Bankfire source\'s (blob 677b9f55, Bankfire d5d14c4): the scanner parity contract -- RED before 08d D3', () => {
+test('the three places a secret-scan or secret-gate file lives hold the same bytes, and the secret-scan test is the Bankfire source\'s (blob 521eb488, Bankfire d17ffd0): the scanner parity contract -- RED before 08d D3', () => {
   for (const name of ['secret-scan.test.mjs', 'secret-gate.test.mjs', 'secret-gate.mjs']) {
     const blobs = CARRIER_DIRS.map((d) => gitBlobId(readText(`${d}/${name}`)));
     assert.equal(new Set(blobs).size, 1, `${name} differs between the three places: ${blobs.join(' ')}`);
   }
-  assert.ok(gitBlobId(readText('scripts/secret-scan.test.mjs')).startsWith('677b9f55'), 'the Bankfire source test moved: re-copy it byte for byte into the three places (scripts/scanner-parity.mjs reads it)');
+  assert.ok(gitBlobId(readText('scripts/secret-scan.test.mjs')).startsWith('521eb488'), 'the Bankfire source test moved: re-copy it byte for byte into the three places (scripts/scanner-parity.mjs reads it)');
 });
 
 test('the public hooks say what the secret scan does NOT catch, including a token header with a scheme word: the answer to CoalMine LOW-1 -- the scan-limit sentence', () => {
