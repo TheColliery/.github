@@ -1667,7 +1667,6 @@ test('a fixed vulnerability is announced as a GitHub security advisory: DOC-PATT
   assert.match(row, /main publishes it through REST and reads it back/); // 2026-11-02b: the owner's publish line, BB-162 (was: OWNER publishes it and requests its CVE)
   assert.ok(row.includes('ONE LINE in all, linking the repository\'s Security Advisories tab (`<repo-url>/security/advisories`)'), 'row 2: one link to the tab');
   assert.ok(row.includes('never one line per advisory and never an advisory\'s write-up'), 'row 2: no per-advisory line, no write-up');
-  assert.ok(row.includes('gets no advisory and no place in `SECURITY.md`: it is a `CHANGELOG.md` entry'), 'row 2: a fix an outsider cannot trigger lives in the CHANGELOG');
   assert.ok(!/ONE LINE per published advisory/i.test(row), 'row 2 keeps no per-advisory line');
   const tpl = fs.readFileSync(path.join(ROOT, 'templates', 'published-code', 'SECURITY.md'), 'utf8').replace(/\r\n/g, '\n');
   assert.match(tpl, /disclosed once a fix ships as a GitHub security advisory/, 'the stamped template');
@@ -1689,11 +1688,31 @@ test('a fixed vulnerability is announced as a GitHub security advisory: DOC-PATT
   // room's entry past 25,000 characters; the file keeps one line per finding CLASS, and the per-finding reasons live in the commit that records the scan.
   assert.ok(row5.includes('each finding CLASS (a rule and its count) with ONE line of reason, nothing per finding'), 'row 5: one line per class');
   assert.ok(row5.includes('the count of real findings'), 'row 5: the entry states how many findings are real');
-  assert.ok(row5.includes('in the body of the commit that records the scan in `SECURITY.md`'), 'row 5: where the per-finding reasons live');
   assert.ok(!row5.includes('Every finding gets a per-finding false-positive reason'), 'row 5 no longer asks for a reason per finding in the file');
-  assert.ok(ev3.includes('the per-finding reasons go in that commit\'s body'), 'SWEEP-MARKS Event 3 mark 1 names the same place');
   const marker = tpl.slice(tpl.indexOf('<!-- version-transition: SkillSpector scan'), tpl.indexOf('## Independent Scanning'));
   assert.ok(marker.includes('one line per finding class') && marker.includes('commit body'), 'the template marker says the entry is lean');
+  // 2026-11-06c (main's five rulings on the umbrella auditor's read of the six rooms that shipped under these rows): the same five facts in the pattern, at the
+  // re-scan event and in the stamped template.
+  const sec = doc.slice(doc.indexOf('\n## SECURITY.md\n'), doc.indexOf('\n## CONTRIBUTING.md\n'));
+  // (1) the size signal
+  assert.ok(sec.includes('about 12,000 characters for the whole file and about 2,000 for the scan entry') && sec.includes('a SIGNAL, never a cap') && sec.includes('states the reason in its commit body'), 'the pattern states the size signal');
+  assert.ok(ev3.includes('about 2,000 characters') && ev3.includes('signal'), 'SWEEP-MARKS Event 3 mark 1 states the entry\'s size signal');
+  assert.ok(marker.includes('about 2,000 characters') && marker.includes('about 12,000') && marker.includes('a signal, not a cap'), 'the template marker states the size signal');
+  // (2) the unpublished case
+  assert.ok(row.includes('While its advisory is still a draft, the write-up of a fix stays in `SECURITY.md` under ONE heading') && row.includes('leaves in the commit that follows the publish'), 'row 2: where a write-up waits while its advisory is a draft');
+  assert.ok(row.includes('has no advisory and no write-up, only its `CHANGELOG.md` line'), 'row 2: a fix screened as not attackable');
+  const tplReport = tpl.slice(tpl.indexOf('## Reporting a Vulnerability'), tpl.indexOf('## What counts as a vulnerability'));
+  assert.ok(tplReport.includes('<!--') && tplReport.includes('until its advisory is published'), 'the template says where a write-up waits');
+  // (3) per finding, or per class with every location
+  assert.ok(row5.includes('one reason per finding, or one per class where one cause produced many findings, provided every finding\'s file and line is listed under its class') && row5.includes('Reasons by class with no locations do not meet this row'), 'row 5: the per-class form needs every location');
+  // (4) every commit that changes the entry
+  assert.ok(row5.includes('in the body of EVERY commit that changes the scan entry in `SECURITY.md`') && row5.includes('not only the first'), 'row 5: every commit that changes the entry carries its reasons');
+  assert.ok(!row5.includes('in the body of the commit that records the scan in `SECURITY.md`'), 'row 5 no longer names one commit');
+  assert.ok(ev3.includes('every commit that changes the entry') && ev3.includes('file and line'), 'SWEEP-MARKS Event 3 mark 1 names the same place and form');
+  assert.ok(marker.includes('every commit that changes this entry') && marker.includes('file and line'), 'the template marker names the same place and form');
+  // (5) the coverage line
+  assert.ok(row5.includes('the coverage (files scanned out of the total, a line a trim keeps)'), 'row 5: the coverage line');
+  assert.ok(ev3.includes('coverage') && marker.includes('files scanned out of the total'), 'the coverage line at the event and in the template');
 });
 
 // UMB3-131 (card BB-316 (4), the owner 2026-10-28: "เราเลือก GHSA ที่ใช้โจมตีได้จะดีกว่าไหมอ่ะ" then "ตามนี้"): which finding is announced as an advisory. The stamped template carries the signed line as its own section,
