@@ -1656,20 +1656,35 @@ test('the response-time sentence (AR-71 (b) VM-01.01) is word for word in the or
 
 // 14h3, UMB3-020 (card BB-162 (ก), the owner 2026-10-14: "ต่อจากนี้ให้โพสต์ช่อง GHSA"): where a fixed vulnerability is announced. One rule, stated where a room reads it (the SECURITY.md row of DOC-PATTERN.md),
 // carried into the template a new repo is stamped from and the org default file, so the pattern and what ships say the same thing.
-test('a fixed vulnerability is announced as a GitHub security advisory: DOC-PATTERN.md row 2 states it (the room drafts, the owner publishes and requests the CVE, SECURITY.md keeps one line per advisory), and the published-code template and the org SECURITY.md say it too -- RED before 14h3 (UMB3-020)', () => {
+// 2026-11-06a (UMB3-175, the owner the same day: SECURITY.md had grown past reading in every room, and the Advisories tab already shows each advisory): the file links the tab
+// ONCE and holds the LATEST scan only. The per-advisory line of 14h3 and every accumulated scan are gone from the pattern, the template and the org default.
+test('a fixed vulnerability is announced as a GitHub security advisory: DOC-PATTERN.md row 2 states it (the room drafts, main publishes, SECURITY.md links the Advisories tab once), and the published-code template and the org SECURITY.md say it too -- RED before 14h3 (UMB3-020), the one-link shape RED before 2026-11-06a', () => {
   const doc = fs.readFileSync(path.join(ROOT, 'DOC-PATTERN.md'), 'utf8').replace(/\r\n/g, '\n');
   const row = doc.split('\n').find((l) => l.startsWith('| 2 | Reporting a Vulnerability |'));
   assert.ok(row, 'row 2 of the SECURITY.md table exists');
   assert.match(row, /announced as a GitHub repository security advisory \(GHSA\)/);
   assert.match(row, /room DRAFTS it/);
   assert.match(row, /main publishes it through REST and reads it back/); // 2026-11-02b: the owner's publish line, BB-162 (was: OWNER publishes it and requests its CVE)
-  assert.match(row, /ONE LINE per published advisory, linking to it/);
-  assert.match(row, /never the advisory's full text/);
+  assert.ok(row.includes('ONE LINE in all, linking the repository\'s Security Advisories tab (`<repo-url>/security/advisories`)'), 'row 2: one link to the tab');
+  assert.ok(row.includes('never one line per advisory and never an advisory\'s write-up'), 'row 2: no per-advisory line, no write-up');
+  assert.ok(row.includes('gets no advisory and no place in `SECURITY.md`: it is a `CHANGELOG.md` entry'), 'row 2: a fix an outsider cannot trigger lives in the CHANGELOG');
+  assert.ok(!/ONE LINE per published advisory/i.test(row), 'row 2 keeps no per-advisory line');
   const tpl = fs.readFileSync(path.join(ROOT, 'templates', 'published-code', 'SECURITY.md'), 'utf8').replace(/\r\n/g, '\n');
   assert.match(tpl, /disclosed once a fix ships as a GitHub security advisory/, 'the stamped template');
-  assert.match(tpl, /one line per published advisory/, 'the template says the file keeps one line each');
+  assert.ok(tpl.includes('(https://github.com/{{ORG}}/{{REPO_NAME}}/security/advisories)'), 'the template links the Advisories tab');
+  assert.ok(!/one line per published advisory/i.test(tpl), 'the template keeps no per-advisory line');
   const org = fs.readFileSync(path.join(ROOT, '.github', 'SECURITY.md'), 'utf8').replace(/\r\n/g, '\n');
   assert.match(org, /disclosed once a fix ships as a GitHub security advisory/, 'the org default file');
+  assert.ok(org.includes('under Advisories'), 'the org default says where published advisories are listed');
+  // the scan section: the latest scan only, in the pattern, at the re-scan event and in the stamped template
+  const row5 = doc.split('\n').find((l) => l.startsWith('| 5 | Independent Scanning'));
+  assert.ok(row5 && row5.includes('the LATEST scan only') && row5.includes('REPLACES the previous scan\'s text') && row5.includes('never an accumulating history'), 'row 5: latest scan only');
+  const marks = fs.readFileSync(path.join(ROOT, 'SWEEP-MARKS.md'), 'utf8').replace(/\r\n/g, '\n');
+  const ev3 = marks.slice(marks.indexOf('## Event 3'), marks.indexOf('## Event 4'));
+  assert.ok(ev3.includes('REPLACES the previous scan\'s text'), 'SWEEP-MARKS Event 3 mark 1: a re-scan replaces, never appends');
+  const scan = tpl.slice(tpl.indexOf('## Independent Scanning'), tpl.indexOf('## Structural Safety'));
+  assert.ok(scan.includes('Earlier scans are in this file\'s git history'), 'the template says where earlier scans live');
+  assert.equal((scan.match(/^Last scan:/gm) || []).length, 1, 'the template holds one scan');
 });
 
 // UMB3-131 (card BB-316 (4), the owner 2026-10-28: "เราเลือก GHSA ที่ใช้โจมตีได้จะดีกว่าไหมอ่ะ" then "ตามนี้"): which finding is announced as an advisory. The stamped template carries the signed line as its own section,

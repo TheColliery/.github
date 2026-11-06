@@ -98,7 +98,7 @@ nobody TOUCHES it.
 
 | # | Mark | Where | Owner |
 |---|---|---|---|
-| 1 | SECURITY.md scan pin: scanner version + score + verified finding classes | every scanned repo's `SECURITY.md` (×7—CoalMine, CoalTipple, CoalBoard, CoalHearth, CoalFace, CoalWash, CoalLedger) | skillspector deputy; each room's reviewer verifies its OWN repo's edit |
+| 1 | SECURITY.md scan pin: scanner version + score + verified finding classes. The new scan REPLACES the previous scan's text; the section holds the latest scan only, and the earlier ones stay in the file's git history ([`DOC-PATTERN.md`](./DOC-PATTERN.md) §SECURITY.md row 5) | every scanned repo's `SECURITY.md` (×7—CoalMine, CoalTipple, CoalBoard, CoalHearth, CoalFace, CoalWash, CoalLedger) | skillspector deputy; each room's reviewer verifies its OWN repo's edit |
 | 2 | Scan reports stay local | `skillspector-*.json` gitignored, never committed | skillspector deputy |
 | 3 | The scan record (dated, per-repo scores, FP verdicts) | machine-local registry/memory | skillspector deputy |
 
