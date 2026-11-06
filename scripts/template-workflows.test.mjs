@@ -1685,6 +1685,15 @@ test('a fixed vulnerability is announced as a GitHub security advisory: DOC-PATT
   const scan = tpl.slice(tpl.indexOf('## Independent Scanning'), tpl.indexOf('## Structural Safety'));
   assert.ok(scan.includes('Earlier scans are in this file\'s git history'), 'the template says where earlier scans live');
   assert.equal((scan.match(/^Last scan:/gm) || []).length, 1, 'the template holds one scan');
+  // 2026-11-06b (the owner on the scan entry: the new replaces the old, the water cut and the meat kept): the one entry is lean. A reason per finding is what grew a
+  // room's entry past 25,000 characters; the file keeps one line per finding CLASS, and the per-finding reasons live in the commit that records the scan.
+  assert.ok(row5.includes('each finding CLASS (a rule and its count) with ONE line of reason, nothing per finding'), 'row 5: one line per class');
+  assert.ok(row5.includes('the count of real findings'), 'row 5: the entry states how many findings are real');
+  assert.ok(row5.includes('in the body of the commit that records the scan in `SECURITY.md`'), 'row 5: where the per-finding reasons live');
+  assert.ok(!row5.includes('Every finding gets a per-finding false-positive reason'), 'row 5 no longer asks for a reason per finding in the file');
+  assert.ok(ev3.includes('the per-finding reasons go in that commit\'s body'), 'SWEEP-MARKS Event 3 mark 1 names the same place');
+  const marker = tpl.slice(tpl.indexOf('<!-- version-transition: SkillSpector scan'), tpl.indexOf('## Independent Scanning'));
+  assert.ok(marker.includes('one line per finding class') && marker.includes('commit body'), 'the template marker says the entry is lean');
 });
 
 // UMB3-131 (card BB-316 (4), the owner 2026-10-28: "เราเลือก GHSA ที่ใช้โจมตีได้จะดีกว่าไหมอ่ะ" then "ตามนี้"): which finding is announced as an advisory. The stamped template carries the signed line as its own section,
