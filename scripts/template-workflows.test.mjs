@@ -1804,3 +1804,17 @@ test('the org landing, the org README and the installer blurb state CoalFace\'s 
   assert.match(profile, /can exceed it/, 'the landing names the other side');
   assert.match(profile, /no budget stop/, 'and that nothing stops it');
 });
+
+// 2026-11-06d (the umbrella's foreign-box install check, lane record `ma-install-check-2026-11-06`, each point re-read at source by the deputy): the claude.ai install page
+// must say what was measured. The plain `sha256sum -c` fails on a folder holding one ZIP; the Releases carry no attestation; the latest CoalMine and CoalFace ZIPs
+// already hold `<skill>/SKILL.md`; and the two 2026-10-09 uploads are the only ones on record.
+test('CLAUDE-AI-INSTALL.md states the measured install facts: the one-ZIP checksum form, no attestation on the Releases, the ZIP layout as shipped, and the two recorded uploads -- RED before 2026-11-06d', () => {
+  const t = fs.readFileSync(path.join(ROOT, 'CLAUDE-AI-INSTALL.md'), 'utf8').replace(/\r\n/g, '\n');
+  assert.ok(!t.includes('not yet run end-to-end on claude.ai'), 'no blanket "not yet run" claim survives beside the recorded uploads');
+  assert.ok(t.includes('Only the two ZIPs named in the box above have had a real upload end-to-end'), 'the honest frame names the two uploads');
+  assert.ok(!/\(`sha256sum -c SHA256SUMS\.txt` or your OS/.test(t), 'the plain -c form is no longer the one-ZIP instruction');
+  assert.ok(t.includes('sha256sum --ignore-missing -c SHA256SUMS.txt') && t.includes('grep " <name>.zip$" SHA256SUMS.txt | sha256sum -c -'), 'both forms are named');
+  assert.ok(t.includes('carry no build attestation, so no attestation check applies yet'), 'the attestation status is stated');
+  assert.ok(!t.includes('the corrected ZIPs arrive with each room\'s next Release'), 'the stale ZIP-layout caveat is gone');
+  assert.ok(t.includes('already hold `<skill-name>/SKILL.md`'), 'the layout is stated as shipped');
+});
