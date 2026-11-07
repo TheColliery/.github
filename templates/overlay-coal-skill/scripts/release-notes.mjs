@@ -33,12 +33,15 @@ const USAGE = 'usage: node scripts/release-notes.mjs            (derive mode: th
 // Both checks can only refuse, never pick another file. shortcut: a filesystem that reports ino 0 gives both sides 0 and cannot tell files apart there.
 const MAX_CHANGELOG_BYTES = 8388608;
 const OPEN_FLAGS = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0);
+// What an O_NOFOLLOW open of a link fails with: ELOOP (POSIX, Linux, macOS), EMLINK (FreeBSD open(2): "O_NOFOLLOW was specified and the target is a symbolic
+// link"), EFTYPE (NetBSD open(2): "O_NOFOLLOW was specified, but the last path component is a symlink"). Each is the link message; any other error is itself.
+const LINK_OPEN_ERRORS = new Set(['ELOOP', 'EMLINK', 'EFTYPE']);
 function readChangelog() {
   const name = 'CHANGELOG.md';
   const notRegular = 'is not a regular file (a link or a device is refused, never followed)';
   const refuse = (why) => { throw new Error(`${name} ${why}`); };
   let fd;
-  try { fd = fs.openSync(name, OPEN_FLAGS); } catch (e) { if (e && e.code === 'ELOOP') refuse(notRegular); throw e; }
+  try { fd = fs.openSync(name, OPEN_FLAGS); } catch (e) { if (e && LINK_OPEN_ERRORS.has(e.code)) refuse(notRegular); throw e; }
   try {
     const open = fs.fstatSync(fd, { bigint: true });
     const named = fs.lstatSync(name, { bigint: true });

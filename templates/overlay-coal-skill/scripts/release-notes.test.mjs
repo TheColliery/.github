@@ -525,3 +525,37 @@ test('release-notes.mjs: a CHANGELOG.md that grows after the size check to exact
   assert.equal(fs.readFileSync(path.join(dir, 'release-title.txt'), 'utf8'), 'v1.2.0 - a test-only CLI wiring proof');
 });
 
+
+// order 2026-11-07b (2): an O_NOFOLLOW open of a link fails ELOOP on Linux and macOS, EMLINK on FreeBSD and EFTYPE on NetBSD (their open(2) pages); each is the link
+// message. The seam is a preload whose open of CHANGELOG.md throws that code, since this box raises none of the three; any other open error still reaches the reader as itself.
+const openErrorProbe = (dir, code) => {
+  const preload = path.join(dir, `open-error-${code}.mjs`);
+  fs.writeFileSync(preload, [
+    "import fs from 'node:fs';",
+    "import { syncBuiltinESMExports } from 'node:module';",
+    'const open = fs.openSync;',
+    `fs.openSync = function (p, ...rest) { if (typeof p === 'string' && p.endsWith('CHANGELOG.md')) throw Object.assign(new Error('${code}: probe'), { code: '${code}' }); return open.call(this, p, ...rest); };`,
+    'syncBuiltinESMExports();',
+  ].join('\n'));
+  return preload;
+};
+
+for (const [code, where] of [['ELOOP', 'Linux and macOS, so this box tests it too'], ['EMLINK', 'FreeBSD'], ['EFTYPE', 'NetBSD']]) {
+  test(`release-notes.mjs: an open that fails ${code} (a no-follow open of a link on ${where}) is refused with the link message, exit 1${code === 'ELOOP' ? '' : ' -- RED before 2026-11-07b'}`, () => {
+    const dir = scratchWithLib();
+    fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), ENTRY);
+    const res = spawnIn(dir, SCRIPT, [], { env: { GITHUB_REF_NAME: 'v1.2.0', NODE_OPTIONS: `--import=${pathToFileURL(openErrorProbe(dir, code)).href}` } });
+    assert.equal(res.status, 1, res.stdout + res.stderr);
+    assert.match(res.stderr, /CHANGELOG\.md is not a regular file \(a link or a device is refused, never followed\)/);
+    assert.doesNotMatch(res.stderr, new RegExp(code));
+  });
+}
+
+test('release-notes.mjs: any other open error (EACCES) still reaches the reader as itself, never dressed as the link message', () => {
+  const dir = scratchWithLib();
+  fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), ENTRY);
+  const res = spawnIn(dir, SCRIPT, [], { env: { GITHUB_REF_NAME: 'v1.2.0', NODE_OPTIONS: `--import=${pathToFileURL(openErrorProbe(dir, 'EACCES')).href}` } });
+  assert.equal(res.status, 1, res.stdout + res.stderr);
+  assert.match(res.stderr, /could not read CHANGELOG\.md: EACCES: probe/);
+  assert.doesNotMatch(res.stderr, /not a regular file/);
+});
