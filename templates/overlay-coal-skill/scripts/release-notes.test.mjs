@@ -483,3 +483,45 @@ test('release-notes.mjs: an untouched regular CHANGELOG.md still derives (the de
   assert.equal(res.status, 0, res.stdout + res.stderr);
   assert.equal(fs.readFileSync(path.join(dir, 'release-title.txt'), 'utf8'), 'v1.2.0 - a test-only CLI wiring proof');
 });
+
+// order 2026-11-07b (1): the size check reads the descriptor at its fstat, so a CHANGELOG.md that grows after it must still be read only up to the bound. The seam is a
+// preload: right after the script's own fstat of the open descriptor returns, it appends to the file, the growth a race would make; the script's code is never changed.
+const BOUND = 8388608;
+const growProbe = (dir) => {
+  const preload = path.join(dir, 'grow-probe.mjs');
+  fs.writeFileSync(preload, [
+    "import fs from 'node:fs';",
+    "import { syncBuiltinESMExports } from 'node:module';",
+    'const open = fs.openSync;',
+    'const fstat = fs.fstatSync;',
+    'let fd = null;',
+    'let grown = false;',
+    "fs.openSync = function (p, ...rest) { const r = open.call(this, p, ...rest); if (fd === null && typeof p === 'string' && p.endsWith('CHANGELOG.md')) fd = r; return r; };",
+    'fs.fstatSync = function (f, ...rest) {',
+    '  const r = fstat.call(this, f, ...rest);',
+    '  if (!grown && f === fd) { grown = true; fs.appendFileSync(process.env.GROW_PATH, Buffer.alloc(Number(process.env.GROW_BYTES), 0x78)); }',
+    '  return r;',
+    '};',
+    'syncBuiltinESMExports();',
+  ].join('\n'));
+  return preload;
+};
+const growEnv = (dir, preload, bytes) => ({ GITHUB_REF_NAME: 'v1.2.0', NODE_OPTIONS: `--import=${pathToFileURL(preload).href}`, GROW_PATH: path.join(dir, 'CHANGELOG.md'), GROW_BYTES: String(bytes) });
+
+test('release-notes.mjs: a CHANGELOG.md that grows past the byte bound after the size check is refused by the read, exit 1, no release files -- RED before 2026-11-07b', () => {
+  const dir = scratchWithLib();
+  fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), ENTRY);
+  const res = spawnIn(dir, SCRIPT, [], { env: growEnv(dir, growProbe(dir), BOUND) });
+  assert.equal(res.status, 1, res.stdout + res.stderr.slice(0, 2000));
+  assert.match(res.stderr, new RegExp(`CHANGELOG\\.md is more than ${BOUND} bytes by the read \\(it grew after the size check\\), past the byte bound of ${BOUND}: refused before it is used`));
+  assert.equal(fs.existsSync(path.join(dir, 'release-title.txt')), false, 'no release file is written from a CHANGELOG read past its bound');
+});
+
+test('release-notes.mjs: a CHANGELOG.md that grows after the size check to exactly the byte bound is still read and derives -- the bound is inclusive', () => {
+  const dir = scratchWithLib();
+  fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), ENTRY);
+  const res = spawnIn(dir, SCRIPT, [], { env: growEnv(dir, growProbe(dir), BOUND - Buffer.byteLength(ENTRY)) });
+  assert.equal(res.status, 0, res.stdout + res.stderr.slice(0, 2000));
+  assert.equal(fs.readFileSync(path.join(dir, 'release-title.txt'), 'utf8'), 'v1.2.0 - a test-only CLI wiring proof');
+});
+

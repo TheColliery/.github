@@ -45,7 +45,16 @@ function readChangelog() {
     if (!open.isFile() || named.isSymbolicLink()) refuse(notRegular);
     if (named.dev !== open.dev || named.ino !== open.ino) refuse('changed between the check and the read: refused, never read');
     if (open.size > MAX_CHANGELOG_BYTES) refuse(`is ${open.size} bytes, past the byte bound of ${MAX_CHANGELOG_BYTES}: refused before it is read`);
-    return fs.readFileSync(fd, 'utf8');
+    // The size above is the size AT the fstat: a file that grows after it would be read to its new end, so the read itself stops at the bound plus one byte.
+    const chunks = [];
+    let total = 0;
+    const chunk = Buffer.alloc(65536);
+    for (let n; (n = fs.readSync(fd, chunk, 0, Math.min(chunk.length, MAX_CHANGELOG_BYTES + 1 - total), null)) > 0;) {
+      chunks.push(Buffer.from(chunk.subarray(0, n)));
+      total += n;
+      if (total > MAX_CHANGELOG_BYTES) refuse(`is more than ${MAX_CHANGELOG_BYTES} bytes by the read (it grew after the size check), past the byte bound of ${MAX_CHANGELOG_BYTES}: refused before it is used`);
+    }
+    return Buffer.concat(chunks).toString('utf8');
   } finally { fs.closeSync(fd); }
 }
 
