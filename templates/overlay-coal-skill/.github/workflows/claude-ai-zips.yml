@@ -171,7 +171,7 @@ jobs:
           persist-credentials: false
           ref: refs/tags/${{ steps.gate.outputs.tag }}
           path: tag-src
-          fetch-depth: 0 # the heading-continuity check needs the previous stable tag (git describe)
+          fetch-depth: 0 # the heading-continuity check needs the previous stable tag (a walk over the reachable tags)
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: steps.gate.outputs.post == 'true'
@@ -202,12 +202,17 @@ jobs:
           set -uo pipefail
           prev=''
           if [[ "${POST_LAUNCH}" != "true" ]]; then
-            if [[ -n "${POST_PKG}" ]]; then
-              # UMB3-193: the previous stable tag of the SAME package line (after the prefix, a hyphen is the pre-release marker)
-              prev=$(git describe --tags --abbrev=0 --match="${POST_PKG}-v*" --exclude="${POST_PKG}-v*-*" "${POST_TAG}^" 2>/dev/null || true)
-            else
-              prev=$(git describe --tags --abbrev=0 --exclude='*-*' "${POST_TAG}^" 2>/dev/null || true)
-            fi
+            # The previous stable tag is the nearest tag reachable from this tag's parent that matches the STRICT stable grammar of its line
+            # (`<pkg>-vX.Y.Z` in a multi-package repository, else bare `vX.Y.Z`; nothing after the patch), whatever other tags sit between: a pre-release,
+            # a `.dev1`, a lightweight test tag (UMB3-193 round 2). One topological walk, the tags of each commit, first match wins; no tag is ever retagged for it.
+            stable_re="^${POST_PKG:+${POST_PKG}-}v[0-9]+\.[0-9]+\.[0-9]+$"
+            while IFS= read -r decorations; do
+              IFS=',' read -ra names <<< "${decorations}"
+              for name in "${names[@]}"; do
+                name="${name# }"; name="${name#tag: }"
+                if [[ "${name}" =~ ${stable_re} ]]; then prev="${name}"; break 2; fi
+              done
+            done < <(git log --decorate-refs='refs/tags/*' --format=%D "${POST_TAG}^" 2>/dev/null || true)
           fi
           if latest=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name 2>latest-err.txt); then :
           elif grep -q 'HTTP 404' latest-err.txt; then latest=''

@@ -326,3 +326,20 @@ test('launchFormTag: the oldest PUBLISHED Release is the one published earliest 
   const stable = { tag_name: 'v2.0.0', prerelease: false, draft: false, created_at: '2026-02-01T00:00:00Z' };
   assert.equal(launchFormTag([stable, rc]), 'v2.0.0-rc.1', 'created_at stands in when published_at is absent');
 });
+
+// UMB3-193 round 2 (2026-11-09): a multi-package repository's Release title opens `<pkg> vX.Y.Z` and its tag `<pkg>-vX.Y.Z` (RELEASE-PATTERN.md,
+// "The multi-package form"); the census reads both. A capitalised first word is still a repo-name prefix, never a package.
+test('separatorClass and isBareVersionTitle read a package prefix: "py v0.0.1 - x" is a hyphen title, "py v0.0.1" alone is bare; a capitalised word is still none -- RED before UMB3-193 round 2', () => {
+  assert.equal(separatorClass('py v0.0.1 - the Python package publishes its first client'), 'hyphen');
+  assert.equal(separatorClass('npm v0.0.2 — x'), 'em-dash');
+  assert.equal(isBareVersionTitle('py v0.0.1'), true);
+  assert.equal(isBareVersionTitle('py v0.0.1 - x'), false);
+  assert.equal(separatorClass('Kolwen v0.0.1 - x'), 'none');
+  assert.equal(separatorClass('CoalWash release notes'), 'none');
+});
+
+test('checkRelease: a multi-package Release (py v0.0.1 - ..., tag py-v0.0.1) is clean, its launch form (py-v0.1.0-beta.1) carries a pre-release identifier, and a bare "py v0.0.1" is still bare -- RED before UMB3-193 round 2', () => {
+  assert.deepEqual(checkRelease({ name: 'py v0.0.1 - the Python package publishes its first client', tag_name: 'py-v0.0.1', body: 'x', prerelease: false }, 'Kolwen'), []);
+  assert.deepEqual(checkRelease({ name: 'py v0.1.0-beta.1 - a first look', tag_name: 'py-v0.1.0-beta.1', body: 'x', prerelease: true }, 'Kolwen', { launchTag: 'py-v0.1.0-beta.1' }), []);
+  assert.deepEqual(checkRelease({ name: 'py v0.0.1', tag_name: 'py-v0.0.1', body: 'x', prerelease: false }, 'Kolwen'), ["title 'py v0.0.1' is a bare version with no summary"]);
+});

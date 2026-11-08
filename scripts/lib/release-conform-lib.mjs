@@ -11,7 +11,10 @@ const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/u
 // A bare `vX.Y.Z` with nothing after it (the banned "version alone, no summary" shape) -- a
 // trailing separator with NO summary behind it counts too: "v2.1.2 -" is the titleless release
 // RELEASE-NOTES-TEMPLATE's issue 1 records (UMB-112 row 20, CodeRabbit).
-const BARE_VERSION = /^v?\d+\.\d+\.\d+\s*(?:[-\u2013\u2014:]\s*)?$/;
+// A multi-package repository's title opens with its package, `<pkg> vX.Y.Z` (RELEASE-PATTERN.md "The multi-package form", UMB3-193): lower-case letters
+// and digits opening with a letter, then one space; a capitalised word in that place is a repo-name prefix, never a package.
+const PKG_TITLE = '(?:[a-z][a-z0-9]* )?';
+const BARE_VERSION = new RegExp(`^${PKG_TITLE}v?\\d+\\.\\d+\\.\\d+\\s*(?:[-\\u2013\\u2014:]\\s*)?$`);
 
 /** Does `title` open with `repoName` as a literal prefix (the banned repo-name-prefix)? */
 export function hasRepoPrefix(title, repoName) {
@@ -30,7 +33,7 @@ export function isBareVersionTitle(title) {
 /** Separator class right after the version: 'hyphen' | 'em-dash' | 'other' | 'none' (no version match). */
 export function separatorClass(title) {
   if (!title) return 'none';
-  const m = title.trim().match(/^v?\d+\.\d+\.\d+\s*(.)/);
+  const m = title.trim().match(new RegExp(`^${PKG_TITLE}v?\\d+\\.\\d+\\.\\d+\\s*(.)`));
   if (!m) return 'none';
   if (m[1] === '-') return 'hyphen';
   if (m[1] === EM_DASH) return 'em-dash';
@@ -55,8 +58,8 @@ export function hasPsObjectLeak(body) {
   return PS_LEAK_MARKERS.some((marker) => body.includes(marker));
 }
 
-// A SemVer pre-release identifier: a hyphen right after MAJOR.MINOR.PATCH (v0.1.0-beta.1, v2.0.0-rc.1).
-const PRERELEASE_TAG = /^v?\d+\.\d+\.\d+-[0-9A-Za-z.-]+/;
+// A SemVer pre-release identifier: a hyphen right after MAJOR.MINOR.PATCH (v0.1.0-beta.1, v2.0.0-rc.1), after a `<pkg>-` prefix in a multi-package repository.
+const PRERELEASE_TAG = /^(?:[a-z][a-z0-9]*-)?v?\d+\.\d+\.\d+-[0-9A-Za-z.-]+/;
 
 /**
  * THE LAUNCH FORM (owner 2026-09-21, RELEASE-PATTERN.md "Which tags get a Release"): a repo whose FIRST public version is a pre-release form gets ONE

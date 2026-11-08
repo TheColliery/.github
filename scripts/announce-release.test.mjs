@@ -392,3 +392,13 @@ test('an overflowing Release that is already announced reads "already announced"
   assert.deepEqual(sweep, { posted: 0, 'would-post': 0, already: 1, failed: 0, held: 0 });
   assert.equal(exitCodeFor(sweep), 0);
 });
+
+// UMB3-193 round 2 (2026-11-09): a multi-package repository tags `<pkg>-vX.Y.Z` (RELEASE-PATTERN.md, "The multi-package form"); the announcer accepts the tag and
+// mirrors its title whole, "<Repo> <pkg> vX.Y.Z - <summary>".
+test('checkTag accepts a multi-package tag <pkg>-vX.Y.Z and its -label form, refuses a package name outside the grammar, and the announcement title opens with the package -- RED before UMB3-193 round 2', () => {
+  assert.equal(checkTag('py-v0.0.1'), 'py-v0.0.1'); assert.equal(checkTag('npm-v0.0.2-beta.1'), 'npm-v0.0.2-beta.1');
+  for (const bad of ['Py-v0.0.1', 'my_pkg-v1.0.0', 'my-pkg-v1.0.0', 'py-v0.0.1.dev1', 'py-0.0.1']) assert.throws(() => checkTag(bad), /not a vX\.Y\.Z tag/, bad);
+  const rel = { tag_name: 'py-v0.0.1', name: 'py v0.0.1 - the Python package publishes its first client', body: 'x', html_url: 'https://github.com/TheColliery/Kolwen/releases/tag/py-v0.0.1' };
+  assert.equal(buildAnnouncement('Kolwen', rel, 'https://github.com/TheColliery/Kolwen').title, 'Kolwen py v0.0.1 - the Python package publishes its first client');
+  assert.ok(buildAnnouncement('Kolwen', rel, 'u').body.endsWith(marker('Kolwen', 'py-v0.0.1')));
+});

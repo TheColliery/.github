@@ -36,7 +36,8 @@ export const SCHEDULE_WINDOW_HOURS = Math.ceil((SCHEDULE_DROPPED_SLOTS + 1) * SC
 export const SCAN_PAGES = 5; // 250 discussions back when looking for an existing marker
 
 const REPO_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-const TAG_RE = /^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+// A bare vX.Y.Z, or `<pkg>-vX.Y.Z` in a multi-package repository (RELEASE-PATTERN.md "The multi-package form", UMB3-193), each with an optional pre-release label.
+const TAG_RE = /^(?:[a-z][a-z0-9]*-)?v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const CALL_TIMEOUT_MS = 30000;
 
 export const marker = (repo, tag) => `<!-- release-announcement: ${ORG}/${repo}@${tag} -->`;
@@ -46,7 +47,7 @@ export function checkRepo(repo) {
   return repo;
 }
 export function checkTag(tag) {
-  if (typeof tag !== 'string' || !TAG_RE.test(tag) || tag.length > 100) throw new Error(`tag ${JSON.stringify(tag)} is not a vX.Y.Z tag`);
+  if (typeof tag !== 'string' || !TAG_RE.test(tag) || tag.length > 100) throw new Error(`tag ${JSON.stringify(tag)} is not a vX.Y.Z tag (or <pkg>-vX.Y.Z in a multi-package repository)`);
   return tag;
 }
 

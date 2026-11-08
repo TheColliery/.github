@@ -414,8 +414,8 @@ test('create-release.yml exists in the overlay and carries every UMB-182 part --
   const text = wfLines('create-release.yml').join('\n');
   assert.match(text, /^ {6}- 'v\*'$/m, 'tag-push trigger');
   assert.match(text, /^ {2}cancel-in-progress: false$/m, 'a job that writes a Release is never cancelled');
-  assert.match(text, /^ {10}fetch-depth: 0 /m, 'git describe needs the full history for the heading-continuity check (C-2)');
-  assert.match(text, /--exclude='\*-\*'/, 'the previous tag is the previous STABLE tag');
+  assert.match(text, /^ {10}fetch-depth: 0 /m, 'the walk over the tags needs the full history for the heading-continuity check (C-2)');
+  assert.ok(text.includes("--decorate-refs='refs/tags/*' --format=%D"), 'the previous tag is the previous STABLE tag of the line, found by one walk over the reachable tags (UMB3-193 round 2), never a glob');
   assert.match(text, /releases\/latest/, 'the current Latest is read before create (default-Latest)');
   const code = wfLines('create-release.yml').filter((l) => !l.trim().startsWith('#')).join('\n');
   assert.doesNotMatch(code, /\bzip\b|gh release upload|SHA256SUMS/, 'no packaging, no assets in the bare workflow');
@@ -1833,8 +1833,8 @@ test('UMB3-193: both canon workflows trigger on a `<pkg>-v*` tag push beside `v*
     assert.ok(gate.includes('out "pkg=${pkg}"'), `${name}: the package is a gate output`);
     const prev = stepBlock(lines, 'Read the previous stable tag and the current Latest release');
     assert.ok(prev.includes('POST_PKG: ${{ steps.gate.outputs.pkg }}'), `${name}: the package reaches the previous-stable read through env`);
-    assert.ok(prev.includes(`--match="\${POST_PKG}-v*" --exclude="\${POST_PKG}-v*-*"`), `${name}: the previous stable tag is the same package line's`);
-    assert.ok(prev.includes(`--exclude='*-*'`), `${name}: the single-package read is unchanged`);
+    assert.ok(prev.includes('stable_re="^${POST_PKG:+${POST_PKG}-}v[0-9]+\\.[0-9]+\\.[0-9]+$"'), `${name}: the previous stable tag is the same package line's, in the strict stable grammar (round 2)`);
+    assert.ok(prev.includes("--decorate-refs='refs/tags/*' --format=%D \"${POST_TAG}^\""), `${name}: one topological walk over the reachable tags`);
   }
 });
 
@@ -1887,4 +1887,44 @@ test('RELEASE-PATTERN.md names the multi-package form: the tag and heading gramm
   assert.match(rp, /`<pkg> vX\.Y\.Z - <summary>`/);
   assert.match(rp, /`\^\[a-z\]\[a-z0-9\]\*\$`/, 'the package-name grammar is written down');
   assert.match(rp, /Latest[^.]*moves only within/i);
+});
+
+// UMB3-193 round 2 (2026-11-09): the previous stable tag is the nearest tag reachable from the tag's parent that matches the STRICT stable grammar of its
+// line (`<pkg>-vX.Y.Z`, or bare `vX.Y.Z`, nothing after the patch), whatever other tags sit between: Kolwen's `py-v0.0.1.dev1` (PEP 440 dev form) and its
+// lightweight `py-v0.0.0-lightweight-gate-test` are passed over, never retagged. A glob (`git describe --match/--exclude`) cannot say "nothing after the patch".
+const PREV_NAME = 'Read the previous stable tag and the current Latest release';
+const PREV_GH = ['gh() {', '  case "$*" in', '    *releases/latest*) echo "HTTP 404: Not Found" >&2; return 1 ;;', '    *) echo "unexpected gh call: $*" >&2; return 99 ;;', '  esac', '}'].join('\n');
+function prevStableRepo() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'prev-stable-'));
+  const g = (...a) => { const r = gitIn(dir, '-c', 'commit.gpgsign=false', '-c', 'tag.gpgsign=false', ...a); assert.equal(r.status, 0, a.join(' ') + ': ' + r.stderr); };
+  g('init', '-q');
+  const commit = (m) => g('commit', '-q', '--allow-empty', '-m', m);
+  const tag = (name, annotated = true) => (annotated ? g('tag', '-a', name, '-m', name) : g('tag', name));
+  commit('c1'); tag('py-v0.0.0-lightweight-gate-test', false); tag('v1.2.3');
+  commit('c2'); tag('py-v0.0.1.dev1'); tag('v1.2.3.dev1');
+  commit('c3'); tag('npm-v0.0.1');
+  commit('c4'); tag('py-v0.0.1'); tag('v1.2.4');
+  commit('c5'); tag('npm-v0.0.2');
+  return dir;
+}
+function runPrevStable(dir, env) {
+  const body = runBody(stepBySubstr(wfLines('create-release.yml'), PREV_NAME));
+  const envFile = path.join(dir, 'github-env.txt');
+  fs.writeFileSync(envFile, '');
+  const r = spawnSync('bash', ['-c', `${PREV_GH}\n${body}`], { encoding: 'utf8', timeout: 60000, cwd: dir, env: { ...process.env, GITHUB_ENV: envFile, GITHUB_REPOSITORY: 'TheColliery/Example', POST_LAUNCH: 'false', POST_PKG: '', ...env } });
+  return { code: r.status, env: fs.readFileSync(envFile, 'utf8'), err: r.stderr + r.stdout };
+}
+
+test('prev-stable step behaviour (UMB3-193 round 2): the nearest reachable tag in the strict stable grammar of the line; a .dev1 tag, a lightweight test tag and another line\'s tags are passed over, and the launch form has none -- RED before the round', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  const dir = prevStableRepo();
+  try {
+    let r = runPrevStable(dir, { POST_TAG: 'py-v0.0.1', POST_PKG: 'py' });
+    assert.equal(r.code, 0, r.err); assert.match(r.env, /^PREVIOUS_STABLE_TAG=$/m, 'py-v0.0.1 has no previous stable tag: ' + r.env); assert.match(r.env, /^LATEST_TAG=$/m);
+    r = runPrevStable(dir, { POST_TAG: 'npm-v0.0.2', POST_PKG: 'npm' });
+    assert.equal(r.code, 0, r.err); assert.match(r.env, /^PREVIOUS_STABLE_TAG=npm-v0\.0\.1$/m, r.env);
+    r = runPrevStable(dir, { POST_TAG: 'v1.2.4' });
+    assert.equal(r.code, 0, r.err); assert.match(r.env, /^PREVIOUS_STABLE_TAG=v1\.2\.3$/m, 'the bare line passes over v1.2.3.dev1: ' + r.env);
+    r = runPrevStable(dir, { POST_TAG: 'py-v0.0.1', POST_PKG: 'py', POST_LAUNCH: 'true' });
+    assert.equal(r.code, 0, r.err); assert.match(r.env, /^PREVIOUS_STABLE_TAG=$/m, 'the launch form has no previous stable tag');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
