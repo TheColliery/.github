@@ -12,7 +12,8 @@ name: create-release
 #      is the path for a tag cut before its room carried this file (a dispatch run uses the workflow file as it
 #      stands on the branch it is run from, so the default branch's copy runs, not the tag's). The tag's own
 #      CHANGELOG and tree are checked out beside the default branch's scripts; the Release is derived from the
-#      tag, never from the branch. `launch_form` posts ONE pre-release tag as the repository's launch-form Release
+#      tag, never from the branch (one exception: a tag cut before its CHANGELOG entry existed has that version's
+#      entry read from the default branch's CHANGELOG, said in the log; see the derive step). `launch_form` posts ONE pre-release tag as the repository's launch-form Release
 #      (prerelease: true, never Latest), and only while the repository has no stable
 #      Release. A newer pre-release tag re-points that ONE Release (draft, empty its assets, move its tag) instead of staying tag-only.
 # A person never POSTs a Release by hand: a Release that is missing for an existing tag is posted by this machine.
@@ -190,7 +191,7 @@ jobs:
                 name="${name# }"; name="${name#tag: }"
                 if [[ "${name}" =~ ${stable_re} ]]; then prev="${name}"; break 2; fi
               done
-            done < <(git log --decorate-refs='refs/tags/*' --format=%D "${POST_TAG}^" 2>/dev/null || true)
+            done < <(git log --topo-order --decorate-refs='refs/tags/*' --format=%D "${POST_TAG}^" 2>/dev/null || true)
           fi
           if latest=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name 2>latest-err.txt); then :
           elif grep -q 'HTTP 404' latest-err.txt; then latest=''
@@ -201,9 +202,14 @@ jobs:
           echo "LATEST_TAG=${latest}" >> "$GITHUB_ENV"
           echo "previous stable tag: ${prev:-none} · current Latest: ${latest:-none}"
 
+      # UMB3-193 round 3: the tag's own CHANGELOG is read first. A tag cut BEFORE its entry existed has no heading for its version, and on a DISPATCH only the script
+      # then reads that version's entry from the default branch's CHANGELOG (`canon` is the dispatch's own commit) and says so in the log; a push has no fallback.
+      # Assets and the tree are the tag's own either way.
       - name: Derive the canon Release title + body from CHANGELOG.md
         if: steps.gate.outputs.post == 'true'
         working-directory: tag-src
+        env:
+          CHANGELOG_FALLBACK: ${{ github.event_name == 'workflow_dispatch' && '../canon/CHANGELOG.md' || '' }}
         run: node ../canon/scripts/release-notes.mjs
 
       # A room that adopted this workflow without the script it runs, or kept an older copy of that script, reaches the Release step

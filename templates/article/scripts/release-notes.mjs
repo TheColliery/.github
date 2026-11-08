@@ -9,7 +9,8 @@ import fs from 'node:fs';
 // first stable release) and LATEST_TAG (the repo's current Latest, '' when there is none). Unset
 // behaves as '' -- the heading check is then skipped and says so -- so the canon workflow always sets both.
 import { spawnSync } from 'node:child_process';
-import { extractChangelogEntry, buildReleaseTitle, buildReleaseBody, makeLatestFlag, titleBandWarning, mirroredTitleOverflow, parseReleaseTag, tagOf, ChangelogShapeError, ReleaseRefError } from './lib/release-shape.mjs';
+import { fileURLToPath } from 'node:url';
+import { extractChangelogEntry, hasEntryHeading,buildReleaseTitle, buildReleaseBody, makeLatestFlag, titleBandWarning, mirroredTitleOverflow, parseReleaseTag, tagOf, ChangelogShapeError, ReleaseRefError } from './lib/release-shape.mjs';
 
 const BARE = /^v\d+\.\d+\.\d+$/;
 // The tag forms are read by parseReleaseTag (release-shape.mjs): a bare vX.Y.Z, or `<pkg>-vX.Y.Z` in a multi-package repository (UMB3-193), each with an
@@ -37,8 +38,7 @@ const OPEN_FLAGS = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.
 // What an O_NOFOLLOW open of a link fails with: ELOOP (POSIX, Linux, macOS), EMLINK (FreeBSD open(2): "O_NOFOLLOW was specified and the target is a symbolic
 // link"), EFTYPE (NetBSD open(2): "O_NOFOLLOW was specified, but the last path component is a symlink"). Each is the link message; any other error is itself.
 const LINK_OPEN_ERRORS = new Set(['ELOOP', 'EMLINK', 'EFTYPE']);
-function readChangelog() {
-  const name = 'CHANGELOG.md';
+function readChangelog(name = 'CHANGELOG.md') {
   const notRegular = 'is not a regular file (a link or a device is refused, never followed)';
   const refuse = (why) => { throw new Error(`${name} ${why}`); };
   let fd;
@@ -149,17 +149,37 @@ function main() {
   }
   const prevVersion = prev ? parseReleaseTag(prev).version : '';
 
-  let changelog;
+  // The tag's own CHANGELOG.md is read first and used whenever it HAS the heading for exactly this version (and package). A tag cut BEFORE its entry
+  // existed has none; the DISPATCH path (and only it: the workflow sets CHANGELOG_FALLBACK on a dispatch, never on a push) then reads that version's entry
+  // from the default branch's CHANGELOG at the dispatch commit, found by its exact label. The log says which source was used (UMB3-193 round 3).
+  let changelog = null;
+  let fromFallback = false;
+  const fallbackPath = process.env.CHANGELOG_FALLBACK || '';
+  let reading = 'CHANGELOG.md';
   try {
-    changelog = readChangelog();
+    try {
+      changelog = readChangelog();
+    } catch (e) {
+      if (!(fallbackPath && e && e.code === 'ENOENT')) throw e; // a missing file is "no heading"; a link, a device or an oversize file is refused as ever
+    }
+    if (fallbackPath && (changelog === null || !hasEntryHeading(changelog, tagVersion, pkg))) {
+      reading = fallbackPath;
+      changelog = readChangelog(fallbackPath);
+      fromFallback = true;
+      if (!hasEntryHeading(changelog, tagVersion, pkg)) {
+        console.error(`release-notes: neither the tag's own CHANGELOG.md nor the default branch's has a [${pkg ? pkg + ' ' : ''}${tagVersion}] heading -- refusing to guess a title/body`);
+        process.exitCode = 1;
+        return;
+      }
+    }
   } catch (e) {
-    console.error(`release-notes: could not read CHANGELOG.md: ${e.message}`);
+    console.error(`release-notes: could not read ${reading}: ${e.message}`);
     process.exitCode = 1;
     return;
   }
 
   try {
-    const { summary, lead, sectionsBody } = extractChangelogEntry(changelog, tagVersion, { previousStable: prevVersion, pkg });
+    const { summary, lead, sectionsBody } = extractChangelogEntry(changelog, tagVersion, { previousStable: prevVersion, pkg, exact: fromFallback });
     // A pre-release is never Latest, even when the repo has no Latest yet.
     const latestFlag = launch ? 'false' : makeLatestFlag(tagVersion, latest, pkg);
     const label = pkg ? `${pkg} ` : '';
@@ -168,6 +188,9 @@ function main() {
     writeOutput('release-latest.txt', latestFlag);
     writeOutput('release-prerelease.txt', launch ? 'true' : 'false');
     console.log(`release-notes: derived the Release title + body for ${ref} from CHANGELOG.md's [${label}${tagVersion}] entry`);
+    console.log(fromFallback
+      ? `release-notes: source: the default branch's CHANGELOG.md at the dispatch commit (the tag's own CHANGELOG.md has no [${label}${tagVersion}] heading)`
+      : "release-notes: source: the tag's own CHANGELOG.md");
     console.log(prev ? `release-notes: the entry is followed by the previous stable tag's heading [${label}${prevVersion}]` : 'release-notes: no previous stable tag -- the heading-continuity check is skipped');
     console.log(`release-notes: make_latest=${latestFlag} (current Latest: ${latest || 'none'})`);
     // After the tag the Release is still made: an announcement overflow is a warning here, and the pre-tag --check is where it fails.
@@ -183,4 +206,10 @@ function main() {
   }
 }
 
-main();
+// Runs only as the entry point, never on import (UMB3-193 round 3): a test or a tool can import this file and nothing runs. Both sides go through realpath.native
+// (node/runtime.md section 4: a Windows 8.3 name or a symlinked folder spells one file two ways). If either cannot be resolved the file runs, as it always did:
+// a silent no-op of a release deriver is worse than an unwanted run, and the workflow's four-file check would blame a stale script.
+const isEntry = () => {
+  try { return fs.realpathSync.native(process.argv[1]) === fs.realpathSync.native(fileURLToPath(import.meta.url)); } catch { return true; }
+};
+if (process.argv[1] && isEntry()) main();

@@ -1928,3 +1928,60 @@ test('prev-stable step behaviour (UMB3-193 round 2): the nearest reachable tag i
     assert.equal(r.code, 0, r.err); assert.match(r.env, /^PREVIOUS_STABLE_TAG=$/m, 'the launch form has no previous stable tag');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+// UMB3-193 round 3 (2026-11-09), item 2: the previous-stable walk is topological, so the answer depends on the graph and never on committer dates (clock
+// skew, or a merged side branch whose commits are newer). Without --topo-order git log shows the newer date first, and the same graph reads two answers.
+function dated(dir, when, ...a) {
+  const env = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.invalid', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.invalid', GIT_AUTHOR_DATE: when, GIT_COMMITTER_DATE: when };
+  const r = spawnSync('git', ['-C', dir, '-c', 'commit.gpgsign=false', '-c', 'tag.gpgsign=false', ...a], { encoding: 'utf8', timeout: 30000, env });
+  assert.equal(r.status, 0, a.join(' ') + ': ' + r.stderr);
+  return r.stdout.trim();
+}
+function mergedRepo(sideWhen, mainWhen) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'topo-order-'));
+  dated(dir, '2020-01-01T00:00:00Z', 'init', '-q', '-b', 'main');
+  dated(dir, '2020-01-01T00:00:00Z', 'commit', '-q', '--allow-empty', '-m', 'A');
+  dated(dir, '2020-01-02T00:00:00Z', 'checkout', '-q', '-b', 'side');
+  dated(dir, sideWhen, 'commit', '-q', '--allow-empty', '-m', 'S'); dated(dir, sideWhen, 'tag', '-a', 'v1.1.0', '-m', 'v1.1.0');
+  dated(dir, '2020-01-02T00:00:00Z', 'checkout', '-q', 'main');
+  dated(dir, mainWhen, 'commit', '-q', '--allow-empty', '-m', 'B'); dated(dir, mainWhen, 'tag', '-a', 'v1.0.1', '-m', 'v1.0.1');
+  dated(dir, '2020-06-01T00:00:00Z', 'merge', '-q', '--no-ff', '-m', 'M', 'side');
+  dated(dir, '2020-06-02T00:00:00Z', 'commit', '-q', '--allow-empty', '-m', 'release'); dated(dir, '2020-06-02T00:00:00Z', 'tag', '-a', 'v1.2.0', '-m', 'v1.2.0');
+  return dir;
+}
+
+test('prev-stable step behaviour (UMB3-193 round 3): with a merged side branch the answer does not depend on committer dates -- RED before --topo-order', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  const answers = [];
+  for (const [sideWhen, mainWhen] of [['2020-03-01T00:00:00Z', '2020-02-01T00:00:00Z'], ['2020-02-01T00:00:00Z', '2020-03-01T00:00:00Z']]) {
+    const dir = mergedRepo(sideWhen, mainWhen);
+    try {
+      const r = runPrevStable(dir, { POST_TAG: 'v1.2.0' });
+      assert.equal(r.code, 0, r.err);
+      answers.push(/^PREVIOUS_STABLE_TAG=(.*)$/m.exec(r.env)?.[1]);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }
+  assert.ok(answers[0] && answers[0].startsWith('v1.'), 'a previous stable tag is found: ' + answers.join(' / '));
+  assert.equal(answers[0], answers[1], 'the same graph gives the same answer whichever side branch commit is newer: ' + answers.join(' / '));
+});
+
+// UMB3-193 round 3, item 1: the back-fill of a tag cut before its entry. Only the dispatch run gets the default branch's CHANGELOG as a fallback, and only the
+// derive step carries it; the push path has none, so a tag whose tree has no entry still stops there. The assets and the tag's tree are untouched.
+test('UMB3-193 round 3: both canon workflows give the derive step CHANGELOG_FALLBACK on a dispatch only, pointing at the canon checkout (the workflow\'s own commit), through env', () => {
+  for (const name of BOTH) {
+    const lines = wfLines(name);
+    const step = stepBySubstr(lines, 'Derive the canon Release title + body from CHANGELOG.md');
+    assert.ok(step, `${name}: the derive step exists`);
+    const s = step.join('\n');
+    assert.ok(s.includes("CHANGELOG_FALLBACK: ${{ github.event_name == 'workflow_dispatch' && '../canon/CHANGELOG.md' || '' }}"), `${name}: the fallback is set on a dispatch only`);
+    assert.ok(s.includes('working-directory: tag-src') && s.includes('run: node ../canon/scripts/release-notes.mjs'), `${name}: still derived in the tag's tree by the canon script`);
+    assert.ok(!lines.filter((l) => !l.trim().startsWith('#')).some((l) => /CHANGELOG_FALLBACK/.test(l) && !step.includes(l)), `${name}: no other step sets it`);
+  }
+});
+
+test('RELEASE-PATTERN.md says a dispatch for a tag cut before its entry reads that version\'s entry from the default branch, names the source in the log, and never on a push -- RED before UMB3-193 round 3', () => {
+  const rp = lfRead(path.join(ROOT, 'RELEASE-PATTERN.md'));
+  assert.match(rp, /A tag cut BEFORE its CHANGELOG entry existed is posted from the default branch's entry/);
+  assert.match(rp, /the dispatch's own commit/);
+  assert.match(rp, /The push path never falls back/);
+  assert.match(rp, /assets still come from the tag's own tree/);
+});

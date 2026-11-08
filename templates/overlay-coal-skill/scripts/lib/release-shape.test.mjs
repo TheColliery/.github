@@ -346,3 +346,29 @@ test('mirroredTitle: a Release title that opens with its package and version ("p
   assert.equal(mirroredTitle('Kolwen', 'py-v0.0.1', 'odd name'), 'Kolwen py-v0.0.1 - odd name');
   assert.equal(mirroredTitle('Kolwen', 'py-v0.0.1', 'py v0.0.10 - x'), 'Kolwen py-v0.0.1 - py v0.0.10 - x', 'only at a boundary');
 });
+
+// UMB3-193 round 3 (2026-11-09): the back-fill of a tag cut BEFORE its CHANGELOG entry existed reads that version's entry from the default branch's CHANGELOG, which
+// has newer entries above it, so the entry is found by its exact label, not as the first heading.
+test('hasEntryHeading: true only for the exact label of the version (and package), anywhere in the file -- RED before UMB3-193 round 3', async () => {
+  const { hasEntryHeading } = await import('./release-shape.mjs');
+  assert.equal(hasEntryHeading('## [1.3.0] - 2026-10-02\n\nx\n\n## [1.2.0] - 2026-09-01\n\ny\n', '1.2.0'), true);
+  assert.equal(hasEntryHeading('## [1.3.0] - 2026-10-02\n\nx\n', '1.2.0'), false);
+  assert.equal(hasEntryHeading('## [1.2.0-beta.1] - 2026-10-02\n\nx\n', '1.2.0'), false, 'a pre-release heading is not the stable version');
+  assert.equal(hasEntryHeading('## [py 0.0.1] - 2026-11-02\n\nx\n', '0.0.1', 'py'), true);
+  assert.equal(hasEntryHeading('## [py 0.0.1] - 2026-11-02\n\nx\n', '0.0.1', 'npm'), false);
+  assert.equal(hasEntryHeading('## [py 0.0.1] - 2026-11-02\n\nx\n', '0.0.1'), false, 'a bare tag does not read a package heading');
+  assert.equal(hasEntryHeading('', '1.0.0'), false);
+});
+
+test('extractChangelogEntry exact: the entry of THAT version is read from below newer entries, for a bare tag and for a package; absent is a named refusal -- RED before UMB3-193 round 3', () => {
+  const bare = '## [1.3.0] - 2026-10-02\n\nNewest.\n\n### Added\n- n\n\n## [1.2.0] - 2026-09-01\n\nThe one asked for.\n\n### Fixed\n- f\n\n## [1.1.0] - 2026-08-01\n\nOlder.\n';
+  const e = extractChangelogEntry(bare, '1.2.0', { exact: true });
+  assert.equal(e.summary, 'The one asked for.'); assert.equal(e.sectionsBody, '### Fixed\n- f');
+  assert.throws(() => extractChangelogEntry(bare, '1.2.0'), /top entry is \[1\.3\.0\] but the pushed tag is v1\.2\.0/, 'without exact the top entry still must match');
+  assert.doesNotThrow(() => extractChangelogEntry(bare, '1.2.0', { exact: true, previousStable: '1.1.0' }));
+  assert.throws(() => extractChangelogEntry(bare, '1.2.0', { exact: true, previousStable: '1.0.0' }), /followed by \[1\.1\.0\], but the previous stable tag is v1\.0\.0/);
+  assert.throws(() => extractChangelogEntry(bare, '1.9.0', { exact: true }), /CHANGELOG\.md has no \[1\.9\.0\] heading/);
+  const two = '## [py 0.0.3] - 2026-11-05\n\nNewer py.\n\n## [npm 0.0.2] - 2026-11-03\n\nnpm.\n\n## [py 0.0.1] - 2026-11-02\n\nThe py one.\n';
+  assert.equal(extractChangelogEntry(two, '0.0.1', { exact: true, pkg: 'py' }).summary, 'The py one.');
+  assert.throws(() => extractChangelogEntry(two, '0.0.1', { pkg: 'py' }), /first \[py\] entry is \[py 0\.0\.3\] but the pushed tag is py-v0\.0\.1/);
+});

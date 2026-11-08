@@ -1,5 +1,5 @@
 // UMB-162 (a) — "WRITE ONCE, DERIVE EVERYTHING" (owner-proposed, main-confirmed 2026-09-21).
-// Parses a CHANGELOG.md's TOP version entry into the pieces a GitHub Release's title and body
+// Parses a CHANGELOG.md's version entry (the top one; with a package, that package's first; with `exact`, the heading of one named version) into the pieces a GitHub Release's title and body
 // are DERIVED from, per RELEASE-PATTERN.md "The title" / "The body": the entry's own ONE-LINE
 // SUMMARY -- the line immediately below the version heading, before any Keep-a-Changelog
 // `### ` subsection -- becomes both the title's `<summary>` segment and the body's Part 1
@@ -24,7 +24,7 @@ const BARE_TAG = /^v(\d+)\.(\d+)\.(\d+)$/;
 
 // UMB3-193 (2026-11-09): the multi-package form (RELEASE-PATTERN.md, "The multi-package form"). A repository that ships more than one package on
 // independent version lines tags each line `<pkg>-vX.Y.Z` and heads each entry `## [<pkg> X.Y.Z] - YYYY-MM-DD`. The package name is lower-case letters
-// and digits opening with a letter: a hyphen inside it would read as the pre-release marker (the gate's `*-*`, git describe's `--exclude`), a capital,
+// and digits opening with a letter: a hyphen inside it would read as the pre-release marker (the gate's `*-*`, the previous-stable walk's strict grammar), a capital,
 // a dot or an underscore would let one package be spelled two ways between its tag and its heading. A single-package repository's tags are bare, pkg ''.
 const TAG_FORM = /^(?:([a-z][a-z0-9]*)-)?v(\d+\.\d+\.\d+)(-[0-9A-Za-z][0-9A-Za-z.-]*)?$/;
 // { pkg, version, pre } for a tag of the form (pre '' on a stable tag), null for anything else: the one grammar every caller reads a tag by.
@@ -68,19 +68,30 @@ export function makeLatestFlag(tagVersion, latestTag, pkg = '') {
 // must stop the release, not ship a Release titled from a fallback.
 //
 // UMB-182 / courier C-2: `previousStable` ('X.Y.Z', or '' for a first stable release) is the version
-// of the previous stable tag (`git describe --exclude='*-*'`). When given, the first STABLE
+// of the previous stable tag (the nearest reachable tag in the strict stable grammar of the line, found by the workflow's walk). When given, the first STABLE
 // `## [X.Y.Z]` heading after the released entry must be that version -- pre-release headings in
 // between are skipped. This catches the class the byte re-read cannot see: a heading REPLACED instead
 // of inserted above, which silently publishes the older entry's sections as the new release's notes.
 //
 // UMB3-193: with `pkg` (the multi-package form) the entry is the FIRST heading of THAT package (`## [<pkg> ...]`), other packages' entries above it are
 // skipped, the label compared is `<pkg> X.Y.Z`, and the continuity check reads the next stable heading of the same package only.
-export function extractChangelogEntry(changelogText, tagVersion, { previousStable = '', pkg = '' } = {}) {
+// UMB3-193 round 3: with `exact` the entry is found by its own label wherever it sits (the back-fill of a tag cut before its entry reads the default
+// branch's CHANGELOG, which has newer entries above that version); without it the top (or the package's first) entry must be the one.
+const headingLabel = (line) => line.match(/^##\s*\[([^\]]+)\]/)?.[1];
+
+// true when the file has a heading for exactly this version (and package): the test that decides whether the tag's own tree can be read.
+export function hasEntryHeading(changelogText, tagVersion, pkg = '') {
+  const label = labelOf(pkg, tagVersion);
+  return String(changelogText).split(/\r?\n/).some((l) => headingLabel(l) === label);
+}
+
+export function extractChangelogEntry(changelogText, tagVersion, { previousStable = '', pkg = '', exact = false } = {}) {
   const lines = changelogText.split(/\r?\n/);
   const label = labelOf(pkg, tagVersion);
   const headingRe = pkg ? new RegExp(`^##\\s*\\[${pkg} `) : /^##\s*\[/;
-  const headingIdx = lines.findIndex((l) => headingRe.test(l));
+  const headingIdx = exact ? lines.findIndex((l) => headingLabel(l) === label) : lines.findIndex((l) => headingRe.test(l));
   if (headingIdx === -1) {
+    if (exact) throw new ChangelogShapeError(`CHANGELOG.md has no [${label}] heading ("## [${label}] - YYYY-MM-DD")`);
     throw new ChangelogShapeError(pkg ? `CHANGELOG.md has no [${pkg} X.Y.Z] heading ("## [${pkg} X.Y.Z] - YYYY-MM-DD")` : 'CHANGELOG.md has no version heading ("## [X.Y.Z] - YYYY-MM-DD")');
   }
 
