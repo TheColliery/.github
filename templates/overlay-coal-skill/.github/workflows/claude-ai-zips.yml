@@ -76,6 +76,7 @@ jobs:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           INPUT_TAG: ${{ inputs.tag }}
           INPUT_LAUNCH: ${{ inputs.launch_form }}
+          REQUIRE_SIGNED: ${{ vars.RELEASE_REQUIRE_SIGNED_TAG }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -uo pipefail
@@ -148,6 +149,35 @@ jobs:
               fi
             elif [[ "${launch}" == "true" ]]; then
               echo "::error::launch_form is for a pre-release tag; ${tag} is stable"; exit 1
+            fi
+          fi
+          # UMB3-193 round 4: a Release is posted only for an ANNOTATED tag, on a push and on a dispatch alike. A lightweight tag is a bare pointer to a commit (no tagger,
+          # no message, no signature of its own), and a registry that publishes only from a signed annotated tag could be outrun by a Release for one. The kind is
+          # read from the API by the tag's EXACT ref name (a longer tag that only starts with the name is not it), and only for a name in the vX.Y.Z form, so the name is
+          # safe in the URL; a pushed tag outside the form is left to the derive step, which refuses it by name. A kind that cannot be read stops the run.
+          # The switch (RELEASE_REQUIRE_SIGNED_TAG, a repository variable a room sets in its settings, default off; only the value `true` turns it on) also asks GitHub
+          # whether the tag object's signature is verified. Off, no signature is read.
+          if [[ "${ver}" =~ ${ver_re} ]]; then
+            if ! kinds=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/${tag}" --jq '.[] | "\(.ref) \(.object.type) \(.object.sha)"' 2>/dev/null); then
+              echo "::error::could not read whether ${tag} is an annotated or a lightweight tag from the GitHub API; nothing was posted -- run it again"; exit 1
+            fi
+            kind=''; objsha=''
+            while read -r ref type sha; do
+              if [[ "${ref}" == "refs/tags/${tag}" ]]; then kind="${type}"; objsha="${sha}"; fi
+            done <<< "${kinds}"
+            if [[ "${kind}" == "commit" ]]; then
+              echo "::error::${tag} is a lightweight tag (a pointer to a commit, with no tagger, message or signature of its own); a Release is posted only for an annotated tag, so cut the tag with git tag -a (git tag -s where the repository requires a signature) and run again"; exit 1
+            elif [[ "${kind}" != "tag" ]]; then
+              echo "::error::could not tell whether ${tag} is an annotated or a lightweight tag (the API answered '${kind:-nothing}'); nothing was posted -- run it again"; exit 1
+            fi
+            if [[ "${REQUIRE_SIGNED:-}" == "true" ]]; then
+              sha_re='^[0-9a-f]{40,64}$'
+              if ! [[ "${objsha}" =~ ${sha_re} ]] || ! verdict=$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${objsha}" --jq '"\(.verification.verified) \(.verification.reason)"' 2>/dev/null); then
+                echo "::error::could not read the signature verification of ${tag} from the GitHub API; nothing was posted -- run it again"; exit 1
+              fi
+              if [[ "${verdict%% *}" != "true" ]]; then
+                echo "::error::${tag} is not signed: GitHub reports its signature as '${verdict#* }'; the repository variable RELEASE_REQUIRE_SIGNED_TAG is true, so a Release is posted only for a tag whose signature GitHub verifies"; exit 1
+              fi
             fi
           fi
           out "post=true"; out "tag=${tag}"; out "launch=${launch}"; out "repoint=${repoint}"; out "pkg=${pkg}"

@@ -558,6 +558,9 @@ const GH_STUB = [
   'gh() {',
   '  case "$*" in',
   '    *git/ref/tags/*) a="$*"; name="${a##*git/ref/tags/}"; name="${name%% *}"; for t in ${FAKE_TAGS-v2.6.0 v1.0.0 v0.1.0-beta.1}; do [[ "$t" == "$name"* ]] && return 0; done; return 1 ;;', // GitHub: 200 on a prefix match
+  // the kind read (UMB3-193 round 4): "<ref> <object type> <object sha>" per tag the name starts; type "tag" is annotated, "commit" is lightweight (FAKE_LIGHT names the lightweight ones)
+  '    *git/matching-refs/tags/*"object.type"*) [[ "${FAKE_KIND_FAIL:-no}" == "yes" ]] && return 1; a="$*"; name="${a##*git/matching-refs/tags/}"; name="${name%% *}"; for t in ${FAKE_TAGS-v2.6.0 v1.0.0 v0.1.0-beta.1}; do [[ "$t" == "$name"* ]] || continue; k=tag; for l in ${FAKE_LIGHT-}; do [[ "$l" == "$t" ]] && k=commit; done; echo "refs/tags/$t $k 0123456789abcdef0123456789abcdef01234567"; done; return 0 ;;',
+  '    *git/tags/*) [[ "${FAKE_SIG_FAIL:-no}" == "yes" ]] && return 1; echo "${FAKE_SIG-true valid}"; return 0 ;;', // the tag object\'s verification: "<verified> <reason>"
   '    *git/matching-refs/tags/*) [[ "${FAKE_API_FAIL:-no}" == "yes" ]] && return 1; a="$*"; name="${a##*git/matching-refs/tags/}"; name="${name%% *}"; for t in ${FAKE_TAGS-v2.6.0 v1.0.0 v0.1.0-beta.1}; do [[ "$t" == "$name"* ]] && echo "refs/tags/$t"; done; return 0 ;;',
   '    *"releases?per_page=100"*) [[ "${FAKE_LIST_FAIL:-no}" == "yes" ]] && return 1; for t in ${FAKE_RELEASES-}; do echo "$t"; done; return 0 ;;', // the tag names of the repository\'s Releases, drafts included
   '    *compare/*) echo "${FAKE_COMPARE-ahead}"; return 0 ;;', // the compare API\'s status of NEW against OLD
@@ -570,7 +573,11 @@ function runGate(env) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-run-'));
   const outFile = path.join(dir, 'output.txt');
   fs.writeFileSync(outFile, '');
-  const r = spawnSync('bash', ['-c', `${GH_STUB}\n${body}`], {
+  // The script goes to bash as a FILE, not as `-c <text>`: the gate step passed Git Bash's 8,186-character limit on one argument (AGENTS.md, Hard-won lessons), and a cut
+  // argument reads as "unexpected end of file" on a line that is innocent. The runner executes the same text from a file as well.
+  const scriptFile = path.join(dir, 'gate.sh');
+  fs.writeFileSync(scriptFile, `${GH_STUB}\n${body}\n`);
+  const r = spawnSync('bash', [scriptFile], {
     encoding: 'utf8', timeout: 30000, cwd: dir,
     env: { ...process.env, GITHUB_OUTPUT: outFile, GITHUB_REPOSITORY: 'TheColliery/Example', DEFAULT_BRANCH: 'main', EVENT: 'workflow_dispatch', REF_TYPE: 'branch', REF_NAME: 'main', INPUT_TAG: '', INPUT_LAUNCH: 'false', ...env },
   });
@@ -580,7 +587,8 @@ function runGate(env) {
 }
 
 test('gate behaviour: a stable tag push posts; a pre-release tag push and a branch push do not; nothing is written to the repository', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
-  let r = runGate({ EVENT: 'push', REF_TYPE: 'tag', REF_NAME: 'v1.2.3' });
+  // a pushed tag exists in the repository, and the gate reads its kind from the API (UMB3-193 round 4), so the fake repository holds it
+  let r = runGate({ EVENT: 'push', REF_TYPE: 'tag', REF_NAME: 'v1.2.3', FAKE_TAGS: 'v1.2.3' });
   assert.equal(r.code, 0); assert.match(r.out, /post=true\ntag=v1\.2\.3\nlaunch=false/);
   r = runGate({ EVENT: 'push', REF_TYPE: 'tag', REF_NAME: 'v1.2.3-beta.1' });
   assert.equal(r.code, 0); assert.match(r.out, /post=false/); assert.ok(!r.out.includes('post=true'));
@@ -1839,9 +1847,9 @@ test('UMB3-193: both canon workflows trigger on a `<pkg>-v*` tag push beside `v*
 });
 
 test('gate behaviour (UMB3-193): a <pkg>-vX.Y.Z push posts with its package; a <pkg>-vX.Y.Z-label push does not; a hyphenated tag outside the form stays a quiet notice', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
-  let r = runGate({ EVENT: 'push', REF_TYPE: 'tag', REF_NAME: 'py-v0.0.1' });
+  let r = runGate({ EVENT: 'push', REF_TYPE: 'tag', REF_NAME: 'py-v0.0.1', FAKE_TAGS: 'py-v0.0.1' });
   assert.equal(r.code, 0, r.err); assert.match(r.out, /post=true\ntag=py-v0\.0\.1\nlaunch=false\nrepoint=\npkg=py\n/);
-  r = runGate({ EVENT: 'push', REF_TYPE: 'tag', REF_NAME: 'v1.2.3' });
+  r = runGate({ EVENT: 'push', REF_TYPE: 'tag', REF_NAME: 'v1.2.3', FAKE_TAGS: 'v1.2.3' });
   assert.equal(r.code, 0, r.err); assert.match(r.out, /post=true\ntag=v1\.2\.3\nlaunch=false\nrepoint=\npkg=\n/, 'a bare tag carries an empty package');
   r = runGate({ EVENT: 'push', REF_TYPE: 'tag', REF_NAME: 'py-v0.0.1-beta.1' });
   assert.equal(r.code, 0, r.err); assert.match(r.out, /post=false/); assert.ok(!r.out.includes('post=true')); assert.match(r.err, /pre-release tag/);
@@ -1984,4 +1992,83 @@ test('RELEASE-PATTERN.md says a dispatch for a tag cut before its entry reads th
   assert.match(rp, /the dispatch's own commit/);
   assert.match(rp, /The push path never falls back/);
   assert.match(rp, /assets still come from the tag's own tree/);
+});
+
+// UMB3-193 round 4 (2026-11-09), item 1: a Release is posted only for an ANNOTATED tag, canon-wide, on the push path and the dispatch path alike. A lightweight
+// tag is a bare pointer to a commit (no tagger, no message, no signature of its own); a registry that publishes only from a signed annotated tag could be outrun
+// by a Release for one (Kolwen issue 156). The kind is read from the API by the tag's exact ref name, never from the tag's text.
+test('gate behaviour (UMB3-193 round 4): a lightweight tag is refused by name on the push path and the dispatch path, bare and prefixed, stable and launch form; an annotated tag beside it still posts -- RED before the round', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  let r = runGate({ EVENT: 'push', REF_TYPE: 'tag', REF_NAME: 'v1.2.3', FAKE_TAGS: 'v1.2.3', FAKE_LIGHT: 'v1.2.3' });
+  assert.equal(r.code, 1, r.err); assert.match(r.err, /::error::v1\.2\.3 is a lightweight tag/); assert.ok(!r.out.includes('post=true'));
+  r = runGate({ EVENT: 'push', REF_TYPE: 'tag', REF_NAME: 'py-v0.0.1', FAKE_TAGS: 'py-v0.0.1', FAKE_LIGHT: 'py-v0.0.1' });
+  assert.equal(r.code, 1, r.err); assert.match(r.err, /py-v0\.0\.1 is a lightweight tag/);
+  r = runGate({ INPUT_TAG: 'v2.6.0', FAKE_LIGHT: 'v2.6.0' });
+  assert.equal(r.code, 1, r.err); assert.match(r.err, /v2\.6\.0 is a lightweight tag/); assert.ok(!r.out.includes('post=true'));
+  r = runGate({ INPUT_TAG: 'v0.1.0-beta.1', INPUT_LAUNCH: 'true', FAKE_RELEASES: '', FAKE_LIGHT: 'v0.1.0-beta.1' });
+  assert.equal(r.code, 1, r.err); assert.match(r.err, /v0\.1\.0-beta\.1 is a lightweight tag/, 'the launch form needs an annotated tag too');
+  r = runGate({ EVENT: 'push', REF_TYPE: 'tag', REF_NAME: 'v1.2.3', FAKE_TAGS: 'v1.2.30 v1.2.3', FAKE_LIGHT: 'v1.2.30' });
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /post=true\ntag=v1\.2\.3\n/, 'the longer lightweight tag that only starts with the name is not the tag');
+  r = runGate({ INPUT_TAG: 'v2.6.0' });
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /post=true\ntag=v2\.6\.0\n/, 'an annotated tag posts as before');
+});
+
+test('gate behaviour (UMB3-193 round 4): a kind that cannot be read stops the run (fail closed, run it again); a pushed tag outside the form is not looked up', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  let r = runGate({ EVENT: 'push', REF_TYPE: 'tag', REF_NAME: 'v1.2.3', FAKE_TAGS: 'v1.2.3', FAKE_KIND_FAIL: 'yes' });
+  assert.equal(r.code, 1, r.err); assert.match(r.err, /could not read whether v1\.2\.3 is an annotated or a lightweight tag.*run it again/); assert.ok(!r.out.includes('post=true'));
+  r = runGate({ INPUT_TAG: 'v2.6.0', FAKE_KIND_FAIL: 'yes' });
+  assert.equal(r.code, 1, r.err); assert.match(r.err, /run it again/);
+  r = runGate({ EVENT: 'push', REF_TYPE: 'tag', REF_NAME: 'vfoo', FAKE_KIND_FAIL: 'yes' });
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /post=true\ntag=vfoo\n/, 'no API call for a tag that is not vX.Y.Z (the derive step refuses it by name)');
+});
+
+// UMB3-193 round 4, item 2: the signature as a per-repo switch, default OFF. The switch is the repository variable RELEASE_REQUIRE_SIGNED_TAG (a variable, not a
+// workflow input: it works on the push path too, and a room sets it in its repository settings, so the workflow file stays the canon's byte-identical copy).
+// Only the value `true` turns it on. On, a tag whose signature GitHub does not report as verified is refused by name. Off, nothing about the tag's signature is read.
+test('gate behaviour (UMB3-193 round 4): with the switch on, a tag GitHub does not report as verified is refused naming the reason; a verified one posts; off (unset, false, any other value) reads nothing and posts as today -- RED before the round', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  let r = runGate({ EVENT: 'push', REF_TYPE: 'tag', REF_NAME: 'py-v0.0.1', FAKE_TAGS: 'py-v0.0.1', REQUIRE_SIGNED: 'true', FAKE_SIG: 'false unsigned' });
+  assert.equal(r.code, 1, r.err); assert.match(r.err, /::error::py-v0\.0\.1 is not signed: GitHub reports its signature as 'unsigned'.*RELEASE_REQUIRE_SIGNED_TAG/); assert.ok(!r.out.includes('post=true'));
+  r = runGate({ INPUT_TAG: 'v2.6.0', REQUIRE_SIGNED: 'true', FAKE_SIG: 'false unknown_key' });
+  assert.equal(r.code, 1, r.err); assert.match(r.err, /as 'unknown_key'/);
+  r = runGate({ INPUT_TAG: 'v2.6.0', REQUIRE_SIGNED: 'true', FAKE_SIG: 'true valid' });
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /post=true\ntag=v2\.6\.0\n/);
+  for (const off of ['', 'false', 'yes', 'TRUE', '1']) {
+    r = runGate({ INPUT_TAG: 'v2.6.0', REQUIRE_SIGNED: off, FAKE_SIG: 'false unsigned', FAKE_SIG_FAIL: 'yes' });
+    assert.equal(r.code, 0, JSON.stringify(off) + ': ' + r.err); assert.match(r.out, /post=true\ntag=v2\.6\.0\n/, 'off reads no signature at all (even a failing read changes nothing): ' + JSON.stringify(off));
+  }
+  r = runGate({ INPUT_TAG: 'v2.6.0', REQUIRE_SIGNED: 'true', FAKE_SIG_FAIL: 'yes' });
+  assert.equal(r.code, 1, r.err); assert.match(r.err, /could not read the signature verification of v2\.6\.0.*run it again/);
+  r = runGate({ INPUT_TAG: 'v2.6.0', REQUIRE_SIGNED: 'true', FAKE_LIGHT: 'v2.6.0' });
+  assert.equal(r.code, 1, r.err); assert.match(r.err, /lightweight tag/, 'lightweight is refused before any signature is read');
+});
+
+test('UMB3-193 round 4: both canon workflows read the switch from the repository variable RELEASE_REQUIRE_SIGNED_TAG into the gate step through env only, and the gate\'s run block holds no expression', () => {
+  for (const name of BOTH) {
+    const step = stepBySubstr(wfLines(name), GATE_NAME);
+    const s = step.join('\n');
+    assert.ok(s.includes('REQUIRE_SIGNED: ${{ vars.RELEASE_REQUIRE_SIGNED_TAG }}'), `${name}: the variable reaches the gate through env`);
+    assert.ok(runBody(step).includes('"${REQUIRE_SIGNED:-}" == "true"'), `${name}: only the value true turns it on`);
+    assert.ok(!runBody(step).includes('${{'), `${name}: no expression inside the run block`);
+  }
+});
+
+test('RELEASE-PATTERN.md names the annotated-tag rule and the signature switch: its name, where a room sets it, why a variable, and that off changes nothing -- RED before UMB3-193 round 4', () => {
+  const rp = lfRead(path.join(ROOT, 'RELEASE-PATTERN.md'));
+  assert.match(rp, /A Release is posted only for an ANNOTATED tag/);
+  assert.match(rp, /lightweight tag/);
+  assert.match(rp, /`RELEASE_REQUIRE_SIGNED_TAG`/);
+  assert.match(rp, /repository variable/);
+  assert.match(rp, /default is off/i);
+  assert.match(rp, /not a workflow input/);
+});
+
+// UMB3-193 round 4, item 3: the org's claude.ai install page tells a claude.ai user which ZIP to start with, level with CoalMine's README (Option A3 and its
+// claude.ai row, commit 7953b7d), the figures verbatim.
+test('CLAUDE-AI-INSTALL.md says which ZIP a claude.ai user starts with: rot-canary.zip, why, and what is and is not tested, level with CoalMine\'s Option A3 -- RED before UMB3-193 round 4', () => {
+  const t = lfRead(path.join(ROOT, 'CLAUDE-AI-INSTALL.md'));
+  assert.match(t, /^### Which ZIP to start with$/m);
+  assert.ok(t.includes('start with `rot-canary.zip`, the general code-health scan and the ZIP confirmed by upload'), 'CoalMine\'s own words for the starting ZIP');
+  assert.ok(t.includes('Each ZIP is named after its canary (`rot-canary.zip` holds `rot-canary`)'), 'the naming rule');
+  assert.ok(t.includes('`rot-canary.zip` (the v3.22.2 asset, one of nine ZIPs built the same way)') && t.includes('in two accounts: accepted, security scan passed, listed under "Created by you"'), 'the recorded upload, verbatim');
+  assert.ok(t.includes('Not tested: a lower-case `skill.md`, the 201-byte description case (`telemetry-canary`), and the other eight ZIPs'), 'the untested cases, verbatim');
+  assert.ok(t.includes('Manual invocation only') && t.includes('https://github.com/TheColliery/CoalMine/releases'), 'manual invocation and where the ZIP is');
 });
