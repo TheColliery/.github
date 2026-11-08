@@ -2072,3 +2072,39 @@ test('CLAUDE-AI-INSTALL.md says which ZIP a claude.ai user starts with: rot-cana
   assert.ok(t.includes('Not tested: a lower-case `skill.md`, the 201-byte description case (`telemetry-canary`), and the other eight ZIPs'), 'the untested cases, verbatim');
   assert.ok(t.includes('Manual invocation only') && t.includes('https://github.com/TheColliery/CoalMine/releases'), 'manual invocation and where the ZIP is');
 });
+
+// UMB3-193 round 3 follow-up (2026-11-09, the macOS leg of run 42535764327): the previous-stable walk runs under `set -u`, and a commit with no tag gives an empty
+// decoration line, so `read -ra names` leaves an EMPTY array. A bare "${names[@]}" on it is "unbound variable" in bash 3.2 (macOS /bin/bash) and before 4.4, and fine
+// in bash 4.4 and later (the Windows and Linux legs). The step must not depend on a bash version. This box has bash 5, so the behaviour cannot go red here: the text
+// pin below is the witness that fails on the old form, and the repo test runs the walk over a tag-less stretch so the macOS leg proves the behaviour.
+test('the gate and previous-stable steps of both canon workflows never expand an array bare under set -u: every "${x[@]}" sits inside the ${x[@]+"${x[@]}"} form, and the walk skips an empty decoration line -- RED before the macOS fix', () => {
+  for (const name of BOTH) {
+    for (const stepName of [GATE_NAME, 'Read the previous stable tag and the current Latest release']) {
+      const body = runBody(stepBySubstr(wfLines(name), stepName));
+      assert.ok(/^set -u/m.test(body), `${name}: ${stepName.slice(0, 20)} runs under set -u`);
+      // an expansion "${x[@]}" not preceded by `+` (the guarded form's own second half is) is bare
+      const code = body.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n'); // a comment may quote the bad form in prose
+      const bare = [...code.matchAll(/(?<!\+)"\$\{(\w+)\[@\]\}"/g)].map((m) => m[1]);
+      assert.deepEqual(bare, [], `${name}: a bare "\${x[@]}" expansion under set -u (unbound for an empty array in bash 3.2)`);
+    }
+    const prev = runBody(stepBySubstr(wfLines(name), 'Read the previous stable tag and the current Latest release'));
+    assert.ok(prev.includes('for name in ${names[@]+"${names[@]}"}; do'), `${name}: the walk expands names in the form bash 3.2 accepts`);
+    assert.ok(prev.includes('[[ -z "${decorations}" ]] && continue'), `${name}: the walk skips a commit with no tag before splitting its line`);
+  }
+});
+
+test('prev-stable step behaviour (UMB3-193): a stretch of tag-less commits between two stable tags is walked past, and a tag-less parent of the tag is no error (the macOS leg proves it on bash 3.2) -- regression witness', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tagless-'));
+  try {
+    const g = (...a) => { const r = gitIn(dir, '-c', 'commit.gpgsign=false', '-c', 'tag.gpgsign=false', ...a); assert.equal(r.status, 0, a.join(' ') + ': ' + r.stderr); };
+    g('init', '-q');
+    g('commit', '-q', '--allow-empty', '-m', 'c1'); g('tag', '-a', 'v1.0.0', '-m', 'v1.0.0');
+    for (const m of ['c2', 'c3', 'c4']) g('commit', '-q', '--allow-empty', '-m', m);
+    g('commit', '-q', '--allow-empty', '-m', 'release'); g('tag', '-a', 'v1.1.0', '-m', 'v1.1.0');
+    const r = runPrevStable(dir, { POST_TAG: 'v1.1.0' });
+    assert.equal(r.code, 0, r.err); assert.match(r.env, /^PREVIOUS_STABLE_TAG=v1\.0\.0$/m, r.env);
+    const first = runPrevStable(dir, { POST_TAG: 'v1.0.0' });
+    assert.equal(first.code, 0, first.err);
+    assert.match(first.env, /^PREVIOUS_STABLE_TAG=$/m, 'the first stable tag has none (its parent does not exist, so the walk is empty)');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

@@ -216,8 +216,10 @@ jobs:
             # a `.dev1`, a lightweight test tag (UMB3-193 round 2). One topological walk, the tags of each commit, first match wins; no tag is ever retagged for it.
             stable_re="^${POST_PKG:+${POST_PKG}-}v[0-9]+\.[0-9]+\.[0-9]+$"
             while IFS= read -r decorations; do
+              [[ -z "${decorations}" ]] && continue # a commit with no tag prints an empty line
               IFS=',' read -ra names <<< "${decorations}"
-              for name in "${names[@]}"; do
+              # ${names[@]+"${names[@]}"}, never a bare "${names[@]}": an empty array is "unbound" under set -u in bash 3.2 (macOS /bin/bash) and before 4.4
+              for name in ${names[@]+"${names[@]}"}; do
                 name="${name# }"; name="${name#tag: }"
                 if [[ "${name}" =~ ${stable_re} ]]; then prev="${name}"; break 2; fi
               done
