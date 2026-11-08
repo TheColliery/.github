@@ -1818,3 +1818,73 @@ test('CLAUDE-AI-INSTALL.md states the measured install facts: the one-ZIP checks
   assert.ok(!t.includes('the corrected ZIPs arrive with each room\'s next Release'), 'the stale ZIP-layout caveat is gone');
   assert.ok(t.includes('already hold `<skill-name>/SKILL.md`'), 'the layout is stated as shipped');
 });
+
+// UMB3-193 (2026-11-09): the multi-package form in both canon workflows. A repository that ships more than one package on independent version lines
+// (Kolwen: PyPI and npm) tags each line `<pkg>-vX.Y.Z`; the gate reads the package off the tag, judges stable against pre-release and the launch
+// form per package line, and the previous-stable read describes within the line. The single-package path is the same lines, judged by the tests above.
+test('UMB3-193: both canon workflows trigger on a `<pkg>-v*` tag push beside `v*`, the dispatch input names the form, the gate hands the package on, and the previous-stable read describes within the package line', () => {
+  for (const name of BOTH) {
+    const lines = wfLines(name);
+    const t = lines.join('\n');
+    assert.match(t, /^ {6}- 'v\*'\n {6}- '\*-v\*'$/m, `${name}: the two tag-push patterns`);
+    assert.match(t, /description: "An EXISTING tag \(vX\.Y\.Z, or <pkg>-vX\.Y\.Z in a multi-package repository\)/, `${name}: the tag input names the form`);
+    const gate = runBody(stepBySubstr(lines, GATE_NAME));
+    assert.ok(gate.includes('^([a-z][a-z0-9]*)-(v.+)$'), `${name}: the package prefix is read off the tag by one grammar`);
+    assert.ok(gate.includes('out "pkg=${pkg}"'), `${name}: the package is a gate output`);
+    const prev = stepBlock(lines, 'Read the previous stable tag and the current Latest release');
+    assert.ok(prev.includes('POST_PKG: ${{ steps.gate.outputs.pkg }}'), `${name}: the package reaches the previous-stable read through env`);
+    assert.ok(prev.includes(`--match="\${POST_PKG}-v*" --exclude="\${POST_PKG}-v*-*"`), `${name}: the previous stable tag is the same package line's`);
+    assert.ok(prev.includes(`--exclude='*-*'`), `${name}: the single-package read is unchanged`);
+  }
+});
+
+test('gate behaviour (UMB3-193): a <pkg>-vX.Y.Z push posts with its package; a <pkg>-vX.Y.Z-label push does not; a hyphenated tag outside the form stays a quiet notice', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  let r = runGate({ EVENT: 'push', REF_TYPE: 'tag', REF_NAME: 'py-v0.0.1' });
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /post=true\ntag=py-v0\.0\.1\nlaunch=false\nrepoint=\npkg=py\n/);
+  r = runGate({ EVENT: 'push', REF_TYPE: 'tag', REF_NAME: 'v1.2.3' });
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /post=true\ntag=v1\.2\.3\nlaunch=false\nrepoint=\npkg=\n/, 'a bare tag carries an empty package');
+  r = runGate({ EVENT: 'push', REF_TYPE: 'tag', REF_NAME: 'py-v0.0.1-beta.1' });
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /post=false/); assert.ok(!r.out.includes('post=true')); assert.match(r.err, /pre-release tag/);
+  for (const odd of ['release-v1', 'py-v0.0.1.dev1', 'Py-v0.0.1']) {
+    r = runGate({ EVENT: 'push', REF_TYPE: 'tag', REF_NAME: odd });
+    assert.equal(r.code, 0, odd + ': ' + r.err); assert.match(r.out, /post=false/, odd); assert.ok(!r.out.includes('post=true'), odd);
+  }
+});
+
+test('gate behaviour (UMB3-193): a dispatch for an existing <pkg>-vX.Y.Z tag posts it with its package; one that only prefixes a longer tag is refused; a package name outside the grammar is refused as not a tag of the form', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  const tags = 'py-v0.0.1 npm-v0.0.2 py-v0.0.1.dev1 py-v0.0.0-lightweight-gate-test';
+  let r = runGate({ INPUT_TAG: 'py-v0.0.1', FAKE_TAGS: tags });
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /post=true\ntag=py-v0\.0\.1\nlaunch=false\nrepoint=\npkg=py\n/);
+  r = runGate({ INPUT_TAG: 'npm-v0.0.2', FAKE_TAGS: tags });
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /post=true\ntag=npm-v0\.0\.2\nlaunch=false\nrepoint=\npkg=npm\n/);
+  r = runGate({ INPUT_TAG: 'py-v0.0.1', FAKE_TAGS: 'py-v0.0.10 py-v0.0.1.dev1' });
+  assert.equal(r.code, 1, r.err); assert.match(r.err, /not a tag of this repository/); assert.ok(!r.out.includes('post=true'));
+  for (const bad of ['Py-v0.0.1', 'my_pkg-v1.0.0', 'my-pkg-v1.0.0', 'py-v0.0.1.dev1', 'py-0.0.1', 'py-v0.0.1; echo pwned']) {
+    r = runGate({ INPUT_TAG: bad, FAKE_TAGS: tags + ' ' + bad.split(';')[0] });
+    assert.equal(r.code, 1, JSON.stringify(bad)); assert.match(r.err, /not a vX\.Y\.Z/, JSON.stringify(bad)); assert.ok(!r.out.includes('post=true'), JSON.stringify(bad));
+  }
+});
+
+test('gate behaviour (UMB3-193): the launch form is judged per package line: another line\'s stable Release does not close it, the same line\'s does, and a re-point stays within the line', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  const tags = 'py-v0.1.0-beta.1 py-v0.1.0-beta.2 npm-v0.0.2 py-v0.0.1';
+  let r = runGate({ INPUT_TAG: 'py-v0.1.0-beta.2', INPUT_LAUNCH: 'true', FAKE_TAGS: tags, FAKE_RELEASES: 'npm-v0.0.2' });
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /post=true\ntag=py-v0\.1\.0-beta\.2\nlaunch=true\nrepoint=\npkg=py\n/);
+  r = runGate({ INPUT_TAG: 'py-v0.1.0-beta.2', INPUT_LAUNCH: 'true', FAKE_TAGS: tags, FAKE_RELEASES: 'npm-v0.0.2 py-v0.0.1' });
+  assert.equal(r.code, 1, r.err); assert.match(r.err, /stable Release exists/); assert.ok(!r.out.includes('post=true'));
+  r = runGate({ INPUT_TAG: 'py-v0.1.0-beta.2', INPUT_LAUNCH: 'true', FAKE_TAGS: tags, FAKE_RELEASES: 'npm-v0.0.2 py-v0.1.0-beta.1', FAKE_COMPARE: 'ahead' });
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /post=true\ntag=py-v0\.1\.0-beta\.2\nlaunch=true\nrepoint=py-v0\.1\.0-beta\.1\npkg=py\n/);
+  r = runGate({ INPUT_TAG: 'py-v0.1.0-beta.2', INPUT_LAUNCH: 'true', FAKE_TAGS: tags, FAKE_RELEASES: 'npm-v0.1.0-beta.1', FAKE_COMPARE: 'behind' });
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /repoint=\npkg=py\n/, 'another line\'s launch Release is never re-pointed');
+  r = runGate({ INPUT_TAG: 'py-v0.1.0-beta.2', FAKE_TAGS: tags });
+  assert.equal(r.code, 1, r.err); assert.match(r.err, /launch_form/);
+});
+
+test('RELEASE-PATTERN.md names the multi-package form: the tag and heading grammar, the title, per-line stable and Latest, and which repository kinds may use it -- RED before UMB3-193', () => {
+  const rp = lfRead(path.join(ROOT, 'RELEASE-PATTERN.md'));
+  assert.match(rp, /^## The multi-package form$/m);
+  assert.match(rp, /`<pkg>-vX\.Y\.Z`/);
+  assert.match(rp, /`## \[<pkg> X\.Y\.Z\] - YYYY-MM-DD`/);
+  assert.match(rp, /`<pkg> vX\.Y\.Z - <summary>`/);
+  assert.match(rp, /`\^\[a-z\]\[a-z0-9\]\*\$`/, 'the package-name grammar is written down');
+  assert.match(rp, /Latest[^.]*moves only within/i);
+});

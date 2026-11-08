@@ -9,15 +9,16 @@ import fs from 'node:fs';
 // first stable release) and LATEST_TAG (the repo's current Latest, '' when there is none). Unset
 // behaves as '' -- the heading check is then skipped and says so -- so the canon workflow always sets both.
 import { spawnSync } from 'node:child_process';
-import { extractChangelogEntry, buildReleaseTitle, buildReleaseBody, makeLatestFlag, titleBandWarning, mirroredTitleOverflow, ChangelogShapeError, ReleaseRefError } from './lib/release-shape.mjs';
+import { extractChangelogEntry, buildReleaseTitle, buildReleaseBody, makeLatestFlag, titleBandWarning, mirroredTitleOverflow, parseReleaseTag, tagOf, ChangelogShapeError, ReleaseRefError } from './lib/release-shape.mjs';
 
 const BARE = /^v\d+\.\d+\.\d+$/;
-// The launch form (RELEASE-PATTERN.md): ONE pre-release tag, posted as a pre-release Release, only when the
-// workflow says so out loud (LAUNCH_FORM=true) and only for a hyphenated tag.
-const PRE = /^v\d+\.\d+\.\d+-[0-9A-Za-z][0-9A-Za-z.-]*$/;
+// The tag forms are read by parseReleaseTag (release-shape.mjs): a bare vX.Y.Z, or `<pkg>-vX.Y.Z` in a multi-package repository (UMB3-193), each with an
+// optional pre-release label. The launch form (RELEASE-PATTERN.md): ONE pre-release tag, posted as a pre-release Release, only when the workflow says
+// so out loud (LAUNCH_FORM=true) and only for a tag carrying the label.
 
 const USAGE = 'usage: node scripts/release-notes.mjs            (derive mode: the workflow sets RELEASE_TAG or GITHUB_REF_NAME)\n'
   + '       node scripts/release-notes.mjs --check [--repo <name>] | -h\n'
+  + '  a multi-package repository tags each package line <pkg>-vX.Y.Z and heads its entries "## [<pkg> X.Y.Z] - YYYY-MM-DD" (RELEASE-PATTERN.md, "The multi-package form")\n'
   + '  --check reads the TOP CHANGELOG.md entry, writes nothing, and fails a summary whose announcement title ("<Repo> <Release title>")\n'
   + '  would overflow GitHub\'s 200-character title ceiling; run it BEFORE the tag. The repository name: --repo, else GITHUB_REPOSITORY,\n'
   + '  else the origin remote.\n'
@@ -91,11 +92,12 @@ function check(args) {
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(repo)) { console.error('release-notes --check: cannot tell the repository name; pass --repo <name>'); process.exitCode = 1; return; }
   let changelog;
   try { changelog = readChangelog(); } catch (e) { console.error('release-notes --check: could not read CHANGELOG.md: ' + e.message); process.exitCode = 1; return; }
-  const version = /^##\s*\[([^\]]+)\]/m.exec(changelog)?.[1] ?? '';
+  // the top label is "X.Y.Z", or "<pkg> X.Y.Z" in a multi-package repository (UMB3-193): the package rides into the tag and the title
+  const [, pkg = '', version = ''] = /^(?:([a-z][a-z0-9]*) )?(.*)$/.exec(/^##\s*\[([^\]]+)\]/m.exec(changelog)?.[1] ?? '');
   try {
-    const { summary } = extractChangelogEntry(changelog, version);
-    const title = buildReleaseTitle(version, summary);
-    const tag = 'v' + version;
+    const { summary } = extractChangelogEntry(changelog, version, { pkg });
+    const title = buildReleaseTitle(version, summary, pkg);
+    const tag = tagOf(pkg, version);
     const cap = mirroredTitleOverflow(repo, tag, title);
     if (cap) { console.error('release-notes --check: ' + cap); process.exitCode = 1; return; }
     const band = titleBandWarning(title);
@@ -120,23 +122,32 @@ function main() {
   // arrives as RELEASE_TAG, validated by the workflow and checked again here (the input is untrusted text).
   const ref = process.env.RELEASE_TAG || process.env.GITHUB_REF_NAME;
   const launch = process.env.LAUNCH_FORM === 'true';
-  if (launch ? !(ref && PRE.test(ref)) : !(ref && BARE.test(ref))) {
+  const parsed = parseReleaseTag(ref);
+  if (!parsed || (launch ? !parsed.pre : parsed.pre)) {
     console.error(launch
       ? `release-notes: the launch form is ONE pre-release tag (vX.Y.Z-label), got "${ref}" -- refusing to guess a title/body`
-      : `release-notes: ${process.env.RELEASE_TAG ? 'RELEASE_TAG' : 'GITHUB_REF_NAME'} "${ref}" is not a bare vX.Y.Z tag${ref && PRE.test(ref) ? ' (a pre-release tag is posted only as the launch form, LAUNCH_FORM=true)' : ''} -- refusing to guess a title/body`);
+      : `release-notes: ${process.env.RELEASE_TAG ? 'RELEASE_TAG' : 'GITHUB_REF_NAME'} "${ref}" is not a bare vX.Y.Z tag (or <pkg>-vX.Y.Z in a multi-package repository)${parsed && parsed.pre ? ' (a pre-release tag is posted only as the launch form, LAUNCH_FORM=true)' : ''} -- refusing to guess a title/body`);
     process.exitCode = 1;
     return;
   }
-  const tagVersion = ref.slice(1);
+  // the entry's label carries the pre-release label too (a launch form's heading is `## [0.1.0-beta.1]`)
+  const { pkg } = parsed;
+  const tagVersion = parsed.version + parsed.pre;
   const prev = process.env.PREVIOUS_STABLE_TAG || '';
   const latest = process.env.LATEST_TAG || '';
+  // The previous stable tag is the SAME package line's; the current Latest may sit on another line (makeLatestFlag then leaves it standing, UMB3-193).
   for (const [name, value] of [['PREVIOUS_STABLE_TAG', prev], ['LATEST_TAG', latest]]) {
-    if (value && !BARE.test(value)) {
-      console.error(`release-notes: ${name} "${value}" is not a bare vX.Y.Z tag -- refusing to guess`);
+    if (!value) continue;
+    const p = parseReleaseTag(value);
+    const ok = pkg ? p && !p.pre && (name === 'LATEST_TAG' || p.pkg === pkg) : BARE.test(value);
+    if (!ok) {
+      const form = !pkg ? 'vX.Y.Z tag' : name === 'LATEST_TAG' ? 'vX.Y.Z tag (or <pkg>-vX.Y.Z)' : `${pkg}-vX.Y.Z tag of the same package line`;
+      console.error(`release-notes: ${name} "${value}" is not a bare ${form} -- refusing to guess`);
       process.exitCode = 1;
       return;
     }
   }
+  const prevVersion = prev ? parseReleaseTag(prev).version : '';
 
   let changelog;
   try {
@@ -148,18 +159,19 @@ function main() {
   }
 
   try {
-    const { summary, lead, sectionsBody } = extractChangelogEntry(changelog, tagVersion, { previousStable: prev.slice(1) });
+    const { summary, lead, sectionsBody } = extractChangelogEntry(changelog, tagVersion, { previousStable: prevVersion, pkg });
     // A pre-release is never Latest, even when the repo has no Latest yet.
-    const latestFlag = launch ? 'false' : makeLatestFlag(tagVersion, latest);
-    writeOutput('release-title.txt', buildReleaseTitle(tagVersion, summary));
+    const latestFlag = launch ? 'false' : makeLatestFlag(tagVersion, latest, pkg);
+    const label = pkg ? `${pkg} ` : '';
+    writeOutput('release-title.txt', buildReleaseTitle(tagVersion, summary, pkg));
     writeOutput('release-body.md', buildReleaseBody(summary, sectionsBody, lead));
     writeOutput('release-latest.txt', latestFlag);
     writeOutput('release-prerelease.txt', launch ? 'true' : 'false');
-    console.log(`release-notes: derived the Release title + body for ${ref} from CHANGELOG.md's [${tagVersion}] entry`);
-    console.log(prev ? `release-notes: the entry is followed by the previous stable tag's heading [${prev.slice(1)}]` : 'release-notes: no previous stable tag -- the heading-continuity check is skipped');
+    console.log(`release-notes: derived the Release title + body for ${ref} from CHANGELOG.md's [${label}${tagVersion}] entry`);
+    console.log(prev ? `release-notes: the entry is followed by the previous stable tag's heading [${label}${prevVersion}]` : 'release-notes: no previous stable tag -- the heading-continuity check is skipped');
     console.log(`release-notes: make_latest=${latestFlag} (current Latest: ${latest || 'none'})`);
     // After the tag the Release is still made: an announcement overflow is a warning here, and the pre-tag --check is where it fails.
-    const cap = process.env.GITHUB_REPOSITORY ? mirroredTitleOverflow(process.env.GITHUB_REPOSITORY.split('/').pop(), 'v' + tagVersion, buildReleaseTitle(tagVersion, summary)) : null;
+    const cap = process.env.GITHUB_REPOSITORY ? mirroredTitleOverflow(process.env.GITHUB_REPOSITORY.split('/').pop(), tagOf(pkg, tagVersion), buildReleaseTitle(tagVersion, summary, pkg)) : null;
     if (cap) console.log(`${process.env.GITHUB_ACTIONS ? '::warning title=release-title-cap::' : ''}release-notes: WARNING ${cap}`);
   } catch (e) {
     if (e instanceof ChangelogShapeError || e instanceof ReleaseRefError) {

@@ -559,3 +559,59 @@ test('release-notes.mjs: any other open error (EACCES) still reaches the reader 
   assert.match(res.stderr, /could not read CHANGELOG\.md: EACCES: probe/);
   assert.doesNotMatch(res.stderr, /not a regular file/);
 });
+
+// UMB3-193 (2026-11-09): the multi-package form, end to end through the CLI. The CHANGELOG is shaped as Kolwen's: two package lines interleaved.
+const TWO_LINES = '## [npm 0.0.2] - 2026-11-03\n\nThe npm package publishes its first client.\n\n### Added\n- n\n\n## [py 0.0.1] - 2026-11-02\n\nThe Python package publishes its first client.\n\n### Added\n- p\n\n## [npm 0.0.1] - 2026-11-01\n\nThe first npm shell.\n\n### Added\n- shell\n';
+
+test('release-notes.mjs: a <pkg>-vX.Y.Z tag derives from the first [<pkg> X.Y.Z] entry: the title carries the package, the body is that entry, Latest stays on another package\'s line -- RED before UMB3-193', () => {
+  const dir = scratchWithLib();
+  fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), TWO_LINES);
+  const res = run(dir, { RELEASE_TAG: 'py-v0.0.1', GITHUB_REF_NAME: 'main', PREVIOUS_STABLE_TAG: '', LATEST_TAG: 'npm-v0.0.2' });
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  assert.equal(fs.readFileSync(path.join(dir, 'release-title.txt'), 'utf8'), 'py v0.0.1 - the Python package publishes its first client');
+  assert.equal(fs.readFileSync(path.join(dir, 'release-body.md'), 'utf8'), 'The Python package publishes its first client.\n\n### Added\n- p\n');
+  assert.equal(fs.readFileSync(path.join(dir, 'release-latest.txt'), 'utf8'), 'false');
+  assert.equal(fs.readFileSync(path.join(dir, 'release-prerelease.txt'), 'utf8'), 'false');
+  assert.match(res.stdout, /derived the Release title \+ body for py-v0\.0\.1 from CHANGELOG\.md's \[py 0\.0\.1\] entry/);
+  const npm = run(dir, { GITHUB_REF_NAME: 'npm-v0.0.2', PREVIOUS_STABLE_TAG: 'npm-v0.0.1', LATEST_TAG: 'npm-v0.0.1' });
+  assert.equal(npm.status, 0, npm.stdout + npm.stderr);
+  assert.equal(fs.readFileSync(path.join(dir, 'release-title.txt'), 'utf8'), 'npm v0.0.2 - the npm package publishes its first client');
+  assert.equal(fs.readFileSync(path.join(dir, 'release-latest.txt'), 'utf8'), 'true');
+  assert.match(npm.stdout, /followed by the previous stable tag's heading \[npm 0\.0\.1\]/);
+});
+
+test('release-notes.mjs: a package with no [<pkg> X.Y.Z] heading is refused by name, exit 1, no files; a PREVIOUS_STABLE_TAG from another package line is refused -- RED before UMB3-193', () => {
+  const dir = scratchWithLib();
+  fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), TWO_LINES);
+  let res = run(dir, { GITHUB_REF_NAME: 'rs-v1.0.0' });
+  assert.equal(res.status, 1, res.stdout + res.stderr);
+  assert.match(res.stderr, /release-notes: CHANGELOG\.md has no \[rs X\.Y\.Z\] heading/);
+  assert.equal(fs.existsSync(path.join(dir, 'release-title.txt')), false);
+  res = run(dir, { GITHUB_REF_NAME: 'npm-v0.0.2', PREVIOUS_STABLE_TAG: 'py-v0.0.1' });
+  assert.equal(res.status, 1, res.stdout + res.stderr);
+  assert.match(res.stderr, /PREVIOUS_STABLE_TAG "py-v0\.0\.1" is not a bare npm-vX\.Y\.Z tag of the same package line -- refusing to guess/);
+  assert.equal(fs.existsSync(path.join(dir, 'release-title.txt')), false);
+});
+
+test('release-notes.mjs: a tag whose package name is outside the grammar, or whose version part is no vX.Y.Z, is refused as before -- RED before UMB3-193', () => {
+  const dir = scratchWithLib();
+  fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), TWO_LINES);
+  for (const bad of ['Py-v0.0.1', 'my_pkg-v1.0.0', 'py-v0.0.1.dev1', 'py-0.0.1']) {
+    const res = run(dir, { GITHUB_REF_NAME: bad });
+    assert.equal(res.status, 1, bad + ': ' + res.stdout + res.stderr);
+    assert.match(res.stderr, /is not a bare vX\.Y\.Z tag \(or <pkg>-vX\.Y\.Z in a multi-package repository\)/, bad);
+    assert.equal(fs.existsSync(path.join(dir, 'release-title.txt')), false, bad);
+  }
+  const pre = run(dir, { GITHUB_REF_NAME: 'py-v0.0.1-beta.1' });
+  assert.equal(pre.status, 1); assert.match(pre.stderr, /a pre-release tag is posted only as the launch form/);
+  const launch = run(dir, { GITHUB_REF_NAME: 'py-v0.0.1-beta.1', LAUNCH_FORM: 'true' });
+  assert.equal(launch.status, 1, launch.stderr); assert.match(launch.stderr, /first \[py\] entry is \[py 0\.0\.1\] but the pushed tag is py-v0\.0\.1-beta\.1/);
+});
+
+test('release-notes.mjs --check on a multi-package CHANGELOG: the top entry\'s package rides into the tag and the announcement title ("<Repo> <pkg> vX.Y.Z - ...") -- RED before UMB3-193', () => {
+  const dir = scratchWithLib();
+  fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), TWO_LINES);
+  const res = run(dir, {}, ['--check', '--repo', 'Kolwen']);
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  assert.match(res.stdout, /release-notes --check: npm-v0\.0\.2, announcement title "Kolwen npm v0\.0\.2 - the npm package publishes its first client" fits GitHub's 200-character ceiling/);
+});

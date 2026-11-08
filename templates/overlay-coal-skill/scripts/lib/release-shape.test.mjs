@@ -281,3 +281,68 @@ test('extractChangelogEntry: a summary line carrying a control character is refu
   const ok = extractChangelogEntry('## [1.2.3] - 2026-11-03\n\nสรุป: a summary \u2014 fine.\n\n### Fixed\n- x.\n', '1.2.3');
   assert.equal(ok.summary, 'สรุป: a summary \u2014 fine.');
 });
+
+// UMB3-193 (2026-11-09): the multi-package form. A repository that ships more than one package on independent version lines tags each line
+// `<pkg>-vX.Y.Z` and heads each entry `## [<pkg> X.Y.Z] - YYYY-MM-DD`; the title carries the package. The single-package form is unchanged.
+const KOLWEN_SHAPED = '## [npm 0.0.2] - 2026-11-03\n\nThe npm package publishes its first client.\n\n### Added\n- n\n\n## [py 0.0.1] - 2026-11-02\n\nThe Python package publishes its first client.\n\n### Added\n- p\n\n## [npm 0.0.1] - 2026-11-01\n\nThe first npm shell.\n\n### Added\n- shell\n';
+
+test('parseReleaseTag: a bare vX.Y.Z tag has no package; <pkg>-vX.Y.Z names its package; a pre-release label rides on either; every other shape is null -- RED before UMB3-193', async () => {
+  const { parseReleaseTag } = await import('./release-shape.mjs');
+  assert.deepEqual(parseReleaseTag('v1.2.3'), { pkg: '', version: '1.2.3', pre: '' });
+  assert.deepEqual(parseReleaseTag('v1.2.3-beta.1'), { pkg: '', version: '1.2.3', pre: '-beta.1' });
+  assert.deepEqual(parseReleaseTag('py-v0.0.1'), { pkg: 'py', version: '0.0.1', pre: '' });
+  assert.deepEqual(parseReleaseTag('npm-v0.0.2'), { pkg: 'npm', version: '0.0.2', pre: '' });
+  assert.deepEqual(parseReleaseTag('npm-v0.0.2-beta.1'), { pkg: 'npm', version: '0.0.2', pre: '-beta.1' });
+  assert.deepEqual(parseReleaseTag('py2-v1.0.0'), { pkg: 'py2', version: '1.0.0', pre: '' });
+  // the package name is lower-case letters and digits, opening with a letter: a hyphen inside it would read as the pre-release marker, a capital or a dot
+  // would spell one package two ways between the tag and the heading
+  for (const bad of ['Py-v0.0.1', 'my_pkg-v1.0.0', 'my-pkg-v1.0.0', 'py.ext-v1.0.0', '2py-v1.0.0', 'py-1.0.0', 'py--v1.0.0', 'py-v0.0.1.dev1', 'v1.2', 'release-v1', '', 'py-v1.0.0 ']) {
+    assert.equal(parseReleaseTag(bad), null, JSON.stringify(bad));
+  }
+});
+
+test('extractChangelogEntry with a package: the entry is the FIRST heading of that package, other packages\' entries above it are skipped, and the label is "<pkg> X.Y.Z" -- RED before UMB3-193', () => {
+  const py = extractChangelogEntry(KOLWEN_SHAPED, '0.0.1', { pkg: 'py' });
+  assert.equal(py.version, '0.0.1');
+  assert.equal(py.summary, 'The Python package publishes its first client.');
+  assert.match(py.sectionsBody, /^### Added\n- p$/);
+  const npm = extractChangelogEntry(KOLWEN_SHAPED, '0.0.2', { pkg: 'npm' });
+  assert.equal(npm.summary, 'The npm package publishes its first client.');
+  assert.match(npm.sectionsBody, /^### Added\n- n$/, 'the entry ends at the next heading of ANY package');
+});
+
+test('extractChangelogEntry with a package: no heading of that package is refused by name; the single-package read of a multi-package CHANGELOG is refused as before (the top label is not the version) -- RED before UMB3-193', () => {
+  assert.throws(() => extractChangelogEntry(KOLWEN_SHAPED, '1.0.0', { pkg: 'rs' }), /CHANGELOG\.md has no \[rs X\.Y\.Z\] heading \("## \[rs X\.Y\.Z\] - YYYY-MM-DD"\)/);
+  assert.throws(() => extractChangelogEntry(KOLWEN_SHAPED, '0.0.2', { pkg: 'py' }), /first \[py\] entry is \[py 0\.0\.1\] but the pushed tag is py-v0\.0\.2/);
+  assert.throws(() => extractChangelogEntry(KOLWEN_SHAPED, '0.0.2'), /top entry is \[npm 0\.0\.2\] but the pushed tag is v0\.0\.2/);
+  assert.throws(() => extractChangelogEntry('## [py Unreleased] - 2026-11-02\n\nx\n', '0.0.1', { pkg: 'py' }), /\[Unreleased\]/);
+});
+
+test('extractChangelogEntry with a package (C-2): the previous stable tag is matched against the next stable heading of the SAME package; another package\'s headings in between are skipped -- RED before UMB3-193', () => {
+  assert.doesNotThrow(() => extractChangelogEntry(KOLWEN_SHAPED, '0.0.2', { pkg: 'npm', previousStable: '0.0.1' }));
+  assert.throws(() => extractChangelogEntry(KOLWEN_SHAPED, '0.0.2', { pkg: 'npm', previousStable: '0.0.0' }), /followed by \[npm 0\.0\.1\], but the previous stable tag is npm-v0\.0\.0/);
+  assert.throws(() => extractChangelogEntry(KOLWEN_SHAPED, '0.0.1', { pkg: 'py', previousStable: '0.0.0' }), /followed by no stable heading, but the previous stable tag is py-v0\.0\.0/);
+});
+
+test('buildReleaseTitle with a package: "<pkg> vX.Y.Z - <summary>"; without one the title is unchanged -- RED before UMB3-193', () => {
+  assert.equal(buildReleaseTitle('0.0.1', 'The Python package publishes its first client.', 'py'), 'py v0.0.1 - the Python package publishes its first client');
+  assert.equal(buildReleaseTitle('0.0.1', 'A fix.'), 'v0.0.1 - a fix');
+  assert.equal(buildReleaseTitle('0.0.1', 'A fix.', ''), 'v0.0.1 - a fix');
+});
+
+test('makeLatestFlag with a package: Latest moves only within the package line; a Latest on another line is left standing ("false"); a Latest that is no tag of the form still throws -- RED before UMB3-193', () => {
+  assert.equal(makeLatestFlag('0.0.1', '', 'py'), 'true');
+  assert.equal(makeLatestFlag('0.0.2', 'py-v0.0.1', 'py'), 'true');
+  assert.equal(makeLatestFlag('0.0.1', 'py-v0.0.2', 'py'), 'false');
+  assert.equal(makeLatestFlag('0.0.1', 'py-v0.0.1', 'py'), 'true', 'a re-run keeps Latest');
+  assert.equal(makeLatestFlag('0.0.1', 'npm-v0.0.2', 'py'), 'false', 'another package line holds Latest');
+  assert.equal(makeLatestFlag('9.0.0', 'v1.0.0', 'py'), 'false', 'a bare line is another line too');
+  assert.throws(() => makeLatestFlag('0.0.1', 'garbage', 'py'), /not a bare vX\.Y\.Z or <pkg>-vX\.Y\.Z/);
+  assert.throws(() => makeLatestFlag('1.0.0', 'py-v0.0.1'), /not a bare vX\.Y\.Z/, 'a single-package repo never guesses around a prefixed Latest');
+});
+
+test('mirroredTitle: a Release title that opens with its package and version ("py v0.0.1 - ...") is the name\'s own opening for the tag py-v0.0.1 -- RED before UMB3-193', () => {
+  assert.equal(mirroredTitle('Kolwen', 'py-v0.0.1', 'py v0.0.1 - the Python package publishes its first client'), 'Kolwen py v0.0.1 - the Python package publishes its first client');
+  assert.equal(mirroredTitle('Kolwen', 'py-v0.0.1', 'odd name'), 'Kolwen py-v0.0.1 - odd name');
+  assert.equal(mirroredTitle('Kolwen', 'py-v0.0.1', 'py v0.0.10 - x'), 'Kolwen py-v0.0.1 - py v0.0.10 - x', 'only at a boundary');
+});
