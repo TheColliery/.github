@@ -2110,3 +2110,51 @@ test('prev-stable step behaviour (UMB3-193): a stretch of tag-less commits betwe
     assert.match(first.env, /^PREVIOUS_STABLE_TAG=$/m, 'the first stable tag has none (its parent does not exist, so the walk is empty)');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+// UMB3-193 round 5 (2026-11-09): the CI check for the class "a test hands a child process the real environment" (main's ruling on CodeRabbit's three cries in one CoalWash review).
+// The canon holds instances, so it is a RATCHET: the six files below are the Bankfire-sourced scanner tests (byte-equal copies in scripts/ and the two templates; the scanner parity
+// contract holds them equal and secret-scan.test.mjs is Bankfire's source), pinned by blob id with the reason; an edit to one spends the pin and the file is read again. Everything else
+// in scripts/ and templates/ must be clean: a new test with `env: process.env`, or HOME and USERPROFILE without TEMP, TMP and TMPDIR, fails here.
+const { scanChildEnv } = await import(pathToFileURL(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', 'child-env-census.mjs')).href);
+const { collectScriptsMjs } = await import(pathToFileURL(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', 'git-env-census.mjs')).href);
+const SCANNER_WHY = 'byte-equal copy of the Bankfire-sourced scanner test, held equal by scripts/scanner-parity.mjs: its scratch repo gets HOME and USERPROFILE only. The fix is made at the Bankfire source and re-copied into all six places.';
+const CHILD_ENV_PINS = [
+  ['scripts/secret-gate.test.mjs', '16ed57199ce1293a3115c2cb8191cc02e6489fb7'], ['templates/article/scripts/secret-gate.test.mjs', '16ed57199ce1293a3115c2cb8191cc02e6489fb7'], ['templates/published-code/scripts/secret-gate.test.mjs', '16ed57199ce1293a3115c2cb8191cc02e6489fb7'],
+  ['scripts/secret-scan.test.mjs', '521eb48843762191f44bca16e2b008d6eacbb645'], ['templates/article/scripts/secret-scan.test.mjs', '521eb48843762191f44bca16e2b008d6eacbb645'], ['templates/published-code/scripts/secret-scan.test.mjs', '521eb48843762191f44bca16e2b008d6eacbb645'],
+].map(([rel, blob]) => ({ rel, blob, why: SCANNER_WHY }));
+function childEnvFiles() {
+  const files = [];
+  for (const root of ['', 'templates/overlay-coal-skill', 'templates/article', 'templates/published-code', 'templates/private-working', 'templates/overlay-llm-deploy']) {
+    const dir = path.join(ROOT, ...root.split('/').filter(Boolean));
+    if (!fs.existsSync(path.join(dir, 'scripts'))) continue;
+    for (const f of collectScriptsMjs(dir)) if (f.rel.endsWith('.test.mjs')) files.push({ rel: (root ? root + '/' : '') + f.rel, text: f.text });
+  }
+  return files;
+}
+
+test('the canon\'s own tests start no child with the real environment: the child-env census over scripts/ and templates/ finds nothing beyond the six pinned scanner copies -- RED before UMB3-193 round 5', () => {
+  const files = childEnvFiles();
+  assert.ok(files.length >= 40, 'the walk finds the tests it polices: ' + files.length);
+  const r = scanChildEnv(files, CHILD_ENV_PINS);
+  assert.deepEqual(r.findings, [], 'a test hands a child the real environment (give it a sandboxed env: HOME, USERPROFILE, TEMP, TMP, TMPDIR in the test\'s own folder)');
+  assert.equal(r.exempted, CHILD_ENV_PINS.length, 'every pin is used');
+  assert.ok(r.calls >= 80 && r.withEnv >= 60 && r.ok >= 40, 'the census reads the spawns it polices: ' + JSON.stringify({ calls: r.calls, withEnv: r.withEnv, ok: r.ok }));
+});
+
+test('the child-env pins hold only while the file is the pinned blob: the six files ARE those blobs today, and one added byte spends the pin -- RED before UMB3-193 round 5', () => {
+  const files = childEnvFiles();
+  for (const p of CHILD_ENV_PINS) {
+    const f = files.find((x) => x.rel === p.rel);
+    assert.ok(f, p.rel + ' is walked');
+    assert.equal(gitBlobId(f.text), p.blob, `${p.rel} changed: re-read the pin's reason, then update CHILD_ENV_PINS (or fix the file)`);
+    assert.ok(scanChildEnv([{ rel: p.rel, text: f.text }], []).findings.length >= 1, p.rel + ' is read as a real finding without its pin');
+    assert.ok(scanChildEnv([{ rel: p.rel, text: f.text + '\n' }], [p]).findings.length >= 1, 'one added byte spends the pin');
+  }
+});
+
+test('SKILL-REPO-PATTERN.md Layer 4 carries the child-env-census row: the rule, the two findings, the spread, the sandbox keys, the ratchet and the ceiling -- RED before UMB3-193 round 5', () => {
+  const row = PATTERN.split('\n').find((l) => l.startsWith('| `scripts/lib/child-env-census.mjs`'));
+  assert.ok(row, 'the row exists');
+  for (const re of [/child-env-census\.test\.mjs/, /`HOME`, `USERPROFILE`, `TEMP`, `TMP` and `TMPDIR`/, /`process\.env` whole/, /spreadList/, /RATCHET/, /ships NO pin|NO pin/, /git-env-census\.mjs/, /unread/, /MUST for the rule/]) assert.match(row, re);
+  for (const f of ['child-env-census.mjs', 'child-env-census.test.mjs']) assert.ok(fs.existsSync(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', f)), f + ' is in the overlay lib folder');
+});
