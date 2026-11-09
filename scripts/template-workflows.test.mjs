@@ -2070,7 +2070,9 @@ test('CLAUDE-AI-INSTALL.md says which ZIP a claude.ai user starts with: rot-cana
   assert.ok(t.includes('Each ZIP is named after its canary (`rot-canary.zip` holds `rot-canary`)'), 'the naming rule');
   assert.ok(t.includes('`rot-canary.zip` (the v3.22.2 asset, one of nine ZIPs built the same way)') && t.includes('in two accounts: accepted, security scan passed, listed under "Created by you"'), 'the recorded upload, verbatim');
   assert.ok(t.includes('Not tested: a lower-case `skill.md`, the 201-byte description case (`telemetry-canary`), and the other eight ZIPs'), 'the untested cases, verbatim');
-  assert.ok(t.includes('Manual invocation only') && t.includes('https://github.com/TheColliery/CoalMine/releases'), 'manual invocation and where the ZIP is');
+  assert.ok(t.includes('Manual invocation only'), 'manual invocation');
+  // where the ZIP is: asserted as the markdown link the page uses, anchored on its text and its closing parenthesis, so the URL standing in prose or inside a longer link does not pass (CodeQL #32)
+  assert.match(t, /\[CoalMine's Releases\]\(https:\/\/github\.com\/TheColliery\/CoalMine\/releases\)/, 'the ZIP is linked from CoalMine\'s Releases');
 });
 
 // UMB3-193 round 3 follow-up (2026-11-09, the macOS leg of run 42535764327): the previous-stable walk runs under `set -u`, and a commit with no tag gives an empty
