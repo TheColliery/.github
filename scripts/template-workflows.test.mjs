@@ -2180,3 +2180,27 @@ test('the gate step of both canon workflows skips a package-tagged Release in th
     assert.ok(/elif \[\[ "\$\{rel\}" =~ \$\{pkg_tag_re\} \]\]; then continue; fi/.test(body), `${name}: a package Release is skipped when the tag is bare`);
   }
 });
+
+// 2026-11-12c (the c96 section of the CoalWorks chief's return: CoalBoard's canon-diff draft read the markdownlint and scorecard pins as places the ROOM is ahead). Every room and this repo's own
+// workflows pin markdownlint-cli2-action v25.0.0, scorecard-action v2.5.0 and one codeql-action commit; the canon had stayed at v24.2.0, v2.4.4 and an older codeql-action. A canon pin is never BEHIND the pin this repo
+// runs itself, and one codeql-action commit serves init, analyze and upload-sarif (Dependabot moves them as one group), so a copy never splits the group.
+test('the canon pins markdownlint-cli2-action, scorecard-action and the one codeql-action commit at what this repo runs itself -- RED before 2026-11-12c', () => {
+  const own = (name) => pinsOf(readText(`.github/workflows/${name}`));
+  const mine = (action) => {
+    const hits = [...own('markdownlint.yml'), ...own('scorecard.yml')].filter((p) => (action === 'codeql' ? p.action.startsWith('github/codeql-action/') : p.action === action));
+    assert.ok(hits.length >= 1, `this repo pins ${action}`);
+    assert.equal(new Set(hits.map((p) => p.sha)).size, 1, `this repo pins ${action} once`);
+    return hits[0].sha;
+  };
+  const want = { 'DavidAnson/markdownlint-cli2-action': mine('DavidAnson/markdownlint-cli2-action'), 'ossf/scorecard-action': mine('ossf/scorecard-action'), codeql: mine('codeql') };
+  let checked = 0;
+  for (const rel of ['templates/published-code/.github/workflows/markdownlint.yml', 'templates/published-code/.github/workflows/scorecard.yml', 'templates/published-code/.github/workflows/codeql.yml', 'templates/private-working/.github/workflows/gate.yml']) {
+    for (const p of pinsOf(readText(rel))) {
+      const key = p.action.startsWith('github/codeql-action/') ? 'codeql' : p.action;
+      if (!(key in want)) continue;
+      assert.equal(p.sha, want[key], `${rel}: ${p.action} is at ${p.sha.slice(0, 8)} (${p.tag}), this repo runs ${want[key].slice(0, 8)}`);
+      checked++;
+    }
+  }
+  assert.ok(checked >= 6, `the check reached the pins it is meant to police (${checked})`);
+});

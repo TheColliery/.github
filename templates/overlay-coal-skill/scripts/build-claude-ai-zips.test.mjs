@@ -282,6 +282,22 @@ test('where the real path cannot be resolved a run through a symlinked or juncti
   assert.equal(fs.existsSync(path.join(other, 'dist-claude-ai')), false, 'an import never runs it on the identity compare either');
 });
 
+// 2026-11-12c (the umbrella auditor's F1 on 571ae22): a volume that gives no file id answers stat with dev 0 and ino 0, and the identity compare then calls ANY two files one, so an import ran the build. A
+// zero ino is no identity at all: the guard falls on to the plain paths, so a direct run still stages and an import still runs nothing.
+const NO_REALPATH_ZERO_STAT = NO_REALPATH + "fs.statSync = () => ({ dev: 0n, ino: 0n });\n";
+test('where stat gives no file id (dev 0, ino 0) the identity compare is no answer: an import runs nothing and a direct run still stages -- RED before 2026-11-12c (auditor F1)', () => {
+  const root = fs.realpathSync.native(repo(['alpha']));
+  const pre = path.join(root, 'no-realpath.mjs');
+  fs.writeFileSync(pre, NO_REALPATH_ZERO_STAT);
+  const other = fs.realpathSync.native(repo(['alpha']));
+  const imported = spawnSync(process.execPath, ['--max-old-space-size=256', '--import', pathToFileURL(pre).href, importProbe(other)], { cwd: other, encoding: 'utf8', timeout: 60000, env: childEnv() });
+  assert.equal(imported.stdout, 'imported\nexitCode=unset\n', imported.stdout + imported.stderr);
+  assert.equal(fs.existsSync(path.join(other, 'dist-claude-ai')), false, 'an import never runs it on a zero file id');
+  const direct = spawnSync(process.execPath, ['--max-old-space-size=256', '--import', pathToFileURL(pre).href, path.join(root, 'scripts', 'build-claude-ai-zips.mjs')], { cwd: root, encoding: 'utf8', timeout: 60000, env: childEnv() });
+  assert.equal(direct.status, 0, direct.stdout + direct.stderr);
+  assert.ok(fs.existsSync(path.join(root, 'dist-claude-ai', 'alpha', 'SKILL.md')), 'the entry still ran on the plain paths');
+});
+
 test('imported from `node -e` (no argv[1] at all) the guard answers "not the entry" without throwing: nothing runs, exit 0 -- 2026-11-12a mutant Z6', () => {
   const root = repo(['alpha']);
   const code = `await import(${JSON.stringify(pathToFileURL(path.join(root, 'scripts', 'build-claude-ai-zips.mjs')).href)}); console.log('imported');`;

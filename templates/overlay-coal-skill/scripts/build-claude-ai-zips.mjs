@@ -154,20 +154,27 @@ async function main() {
   console.log(`Done: ${skills.length - failed}/${skills.length} skill(s) staged into ${outDir}, ${failed} failed`);
 }
 
+// dev:ino of what a path names, or null where the volume gives none (stat fails, or answers ino 0: a zero id would make any two files one)
+function fileIdentity(p) {
+  try {
+    const s = fs.statSync(p, { bigint: true });
+    return s.ino === 0n ? null : `${s.dev}:${s.ino}`;
+  } catch {
+    return null;
+  }
+}
+
 function isMainModule(url) {
   if (!process.argv[1]) return false;
   const self = fileURLToPath(url);
   try {
     return fs.realpathSync.native(self) === fs.realpathSync.native(process.argv[1]);
   } catch {
-    // the real path cannot be resolved: compare file identity (stat follows a link, so a symlinked temp folder still matches), and the plain paths only where stat fails too
-    try {
-      const a = fs.statSync(self, { bigint: true });
-      const b = fs.statSync(process.argv[1], { bigint: true });
-      return a.dev === b.dev && a.ino === b.ino;
-    } catch {
-      return path.resolve(self) === path.resolve(process.argv[1]);
-    }
+    // the real path cannot be resolved: compare file identity (stat follows a link, so a symlinked temp folder still matches); where stat gives no identity (it fails, or a volume answers ino 0) the
+    // plain paths are the last resort
+    const a = fileIdentity(self);
+    const b = fileIdentity(process.argv[1]);
+    return a !== null && b !== null ? a === b : path.resolve(self) === path.resolve(process.argv[1]);
   }
 }
 
