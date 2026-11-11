@@ -1600,12 +1600,12 @@ test('the canon release-notes.mjs and its test (the list\'s P1 and P2) read clea
   }
 });
 
-test('the three places a secret-scan or secret-gate file lives hold the same bytes, and the secret-scan test is the Bankfire source\'s (blob 521eb488, Bankfire d17ffd0): the scanner parity contract -- RED before 08d D3', () => {
+test('the three places a secret-scan or secret-gate file lives hold the same bytes, and the secret-scan test is the Bankfire source\'s (blob f420af29, Bankfire 557a2e6): the scanner parity contract -- RED before 08d D3', () => {
   for (const name of ['secret-scan.test.mjs', 'secret-gate.test.mjs', 'secret-gate.mjs']) {
     const blobs = CARRIER_DIRS.map((d) => gitBlobId(readText(`${d}/${name}`)));
     assert.equal(new Set(blobs).size, 1, `${name} differs between the three places: ${blobs.join(' ')}`);
   }
-  assert.ok(gitBlobId(readText('scripts/secret-scan.test.mjs')).startsWith('521eb488'), 'the Bankfire source test moved: re-copy it byte for byte into the three places (scripts/scanner-parity.mjs reads it)');
+  assert.ok(gitBlobId(readText('scripts/secret-scan.test.mjs')).startsWith('f420af29'), 'the Bankfire source test moved: re-copy it byte for byte into the three places (scripts/scanner-parity.mjs reads it)');
 });
 
 test('the public hooks say what the secret scan does NOT catch, including a token header with a scheme word: the answer to CoalMine LOW-1 -- the scan-limit sentence', () => {
@@ -2112,15 +2112,14 @@ test('prev-stable step behaviour (UMB3-193): a stretch of tag-less commits betwe
 });
 
 // UMB3-193 round 5 (2026-11-09): the CI check for the class "a test hands a child process the real environment" (main's ruling on CodeRabbit's three cries in one CoalWash review).
-// The canon holds instances, so it is a RATCHET: the six files below are the Bankfire-sourced scanner tests (byte-equal copies in scripts/ and the two templates; the scanner parity
-// contract holds them equal and secret-scan.test.mjs is Bankfire's source), pinned by blob id with the reason; an edit to one spends the pin and the file is read again. Everything else
+// The canon holds instances, so it is a RATCHET: the three files below are the Bankfire-sourced scanner gate tests (byte-equal copies in scripts/ and the two templates; the scanner-gate test
+// still gives its scratch repo HOME and USERPROFILE only, the secret-scan test no longer does since the 2026-11-12 re-copy), pinned by blob id with the reason; an edit to one spends the pin and the file is read again. Everything else
 // in scripts/ and templates/ must be clean: a new test with `env: process.env`, or HOME and USERPROFILE without TEMP, TMP and TMPDIR, fails here.
 const { scanChildEnv } = await import(pathToFileURL(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', 'child-env-census.mjs')).href);
 const { collectScriptsMjs } = await import(pathToFileURL(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', 'git-env-census.mjs')).href);
-const SCANNER_WHY = 'byte-equal copy of the Bankfire-sourced scanner test, held equal by scripts/scanner-parity.mjs: its scratch repo gets HOME and USERPROFILE only. The fix is made at the Bankfire source and re-copied into all six places.';
+const SCANNER_WHY = 'byte-equal copy of the Bankfire-sourced scanner gate test: its scratch repo gets HOME and USERPROFILE only. Its fix is made at the Bankfire source (the secret-scan test already points TEMP, TMP and TMPDIR at the sandbox since Bankfire 557a2e6) and re-copied into all three places.';
 const CHILD_ENV_PINS = [
   ['scripts/secret-gate.test.mjs', '16ed57199ce1293a3115c2cb8191cc02e6489fb7'], ['templates/article/scripts/secret-gate.test.mjs', '16ed57199ce1293a3115c2cb8191cc02e6489fb7'], ['templates/published-code/scripts/secret-gate.test.mjs', '16ed57199ce1293a3115c2cb8191cc02e6489fb7'],
-  ['scripts/secret-scan.test.mjs', '521eb48843762191f44bca16e2b008d6eacbb645'], ['templates/article/scripts/secret-scan.test.mjs', '521eb48843762191f44bca16e2b008d6eacbb645'], ['templates/published-code/scripts/secret-scan.test.mjs', '521eb48843762191f44bca16e2b008d6eacbb645'],
 ].map(([rel, blob]) => ({ rel, blob, why: SCANNER_WHY }));
 function childEnvFiles() {
   const files = [];
@@ -2132,7 +2131,7 @@ function childEnvFiles() {
   return files;
 }
 
-test('the canon\'s own tests start no child with the real environment: the child-env census over scripts/ and templates/ finds nothing beyond the six pinned scanner copies -- RED before UMB3-193 round 5', () => {
+test('the canon\'s own tests start no child with the real environment: the child-env census over scripts/ and templates/ finds nothing beyond the three pinned scanner-gate copies -- RED before UMB3-193 round 5', () => {
   const files = childEnvFiles();
   assert.ok(files.length >= 40, 'the walk finds the tests it polices: ' + files.length);
   const r = scanChildEnv(files, CHILD_ENV_PINS);
@@ -2141,7 +2140,7 @@ test('the canon\'s own tests start no child with the real environment: the child
   assert.ok(r.calls >= 80 && r.withEnv >= 60 && r.ok >= 40, 'the census reads the spawns it polices: ' + JSON.stringify({ calls: r.calls, withEnv: r.withEnv, ok: r.ok }));
 });
 
-test('the child-env pins hold only while the file is the pinned blob: the six files ARE those blobs today, and one added byte spends the pin -- RED before UMB3-193 round 5', () => {
+test('the child-env pins hold only while the file is the pinned blob: the three files ARE those blobs today, and one added byte spends the pin -- RED before UMB3-193 round 5', () => {
   const files = childEnvFiles();
   for (const p of CHILD_ENV_PINS) {
     const f = files.find((x) => x.rel === p.rel);
@@ -2157,4 +2156,27 @@ test('SKILL-REPO-PATTERN.md Layer 4 carries the child-env-census row: the rule, 
   assert.ok(row, 'the row exists');
   for (const re of [/child-env-census\.test\.mjs/, /`HOME`, `USERPROFILE`, `TEMP`, `TMP` and `TMPDIR`/, /`process\.env` whole/, /spreadList/, /RATCHET/, /ships NO pin|NO pin/, /git-env-census\.mjs/, /unread/, /MUST for the rule/]) assert.match(row, re);
   for (const f of ['child-env-census.mjs', 'child-env-census.test.mjs']) assert.ok(fs.existsSync(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', f)), f + ' is in the overlay lib folder');
+});
+
+// 2026-11-12a (CoalLedger t330 #4, its CW-054 row): the launch form of a BARE tag counted every other Release, a package Release (`py-v1.0.0`) included. In a repository that holds both forms the bare
+// launch form was then refused ("the launch form is the repository's ONE pre-release Release; found 2") or re-pointed the wrong Release. The package-prefixed Releases belong to their own lines, so the
+// bare form skips them as the prefixed form already skips the bare ones.
+test('gate behaviour (2026-11-12a): the BARE launch form skips package-prefixed Releases: a first launch posts beside them, a re-point takes the bare one, a bare stable closes it, a package stable does not -- RED before the fix', { skip: !HAS_BASH && 'no bash on this machine' }, () => {
+  const tags = 'v0.1.0-beta.1 v0.1.0-beta.2 py-v1.0.0 py-v1.0.1 npm-v2.0.0 v1.0.0';
+  let r = runGate({ INPUT_TAG: 'v0.1.0-beta.1', INPUT_LAUNCH: 'true', FAKE_TAGS: tags, FAKE_RELEASES: 'py-v1.0.0 npm-v2.0.0' });
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /post=true\ntag=v0\.1\.0-beta\.1\nlaunch=true\nrepoint=\npkg=\n/, 'a first bare launch posts beside two package Releases');
+  r = runGate({ INPUT_TAG: 'v0.1.0-beta.2', INPUT_LAUNCH: 'true', FAKE_TAGS: tags, FAKE_RELEASES: 'py-v1.0.0 v0.1.0-beta.1 py-v1.0.1', FAKE_COMPARE: 'ahead' });
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /post=true\ntag=v0\.1\.0-beta\.2\nlaunch=true\nrepoint=v0\.1\.0-beta\.1\npkg=\n/, 'the re-point takes the bare Release, never a package one');
+  r = runGate({ INPUT_TAG: 'v0.1.0-beta.2', INPUT_LAUNCH: 'true', FAKE_TAGS: tags, FAKE_RELEASES: 'py-v1.0.0 v1.0.0' });
+  assert.equal(r.code, 1, r.err); assert.match(r.err, /stable Release exists/); assert.ok(!r.out.includes('post=true'), 'a bare stable Release closes the bare launch form');
+  r = runGate({ INPUT_TAG: 'v0.1.0-beta.2', INPUT_LAUNCH: 'true', FAKE_TAGS: tags, FAKE_RELEASES: 'py-v1.0.0 v0.1.0-beta.1 v0.1.0-beta.2x' });
+  assert.equal(r.code, 1, r.err); assert.match(r.err, /ONE pre-release Release/, 'two bare Releases are still not the launch form');
+});
+
+test('the gate step of both canon workflows skips a package-tagged Release in the bare launch form by one named pattern, the same grammar as the tag gate', () => {
+  for (const name of BOTH) {
+    const body = runBody(stepBySubstr(wfLines(name), GATE_NAME));
+    assert.ok(body.includes("pkg_tag_re='^[a-z][a-z0-9]*-v'"), `${name}: the pattern is named once`);
+    assert.ok(/elif \[\[ "\$\{rel\}" =~ \$\{pkg_tag_re\} \]\]; then continue; fi/.test(body), `${name}: a package Release is skipped when the tag is bare`);
+  }
 });

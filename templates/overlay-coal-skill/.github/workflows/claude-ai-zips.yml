@@ -84,6 +84,7 @@ jobs:
           launch=false
           repoint=''
           ver_re='^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$'
+          pkg_tag_re='^[a-z][a-z0-9]*-v'
           # UMB3-193: a multi-package repository tags each package line `<pkg>-vX.Y.Z` (RELEASE-PATTERN.md, "The multi-package form"). `pkg` is the
           # package ('' for a bare tag) and `ver` the vX.Y.Z part: stable against pre-release is read off `ver`, never off the whole tag.
           pkg=''
@@ -127,9 +128,11 @@ jobs:
               others=0; stable=0; old=''; oldv=''
               while IFS= read -r rel; do
                 [[ -z "${rel}" || "${rel}" == "${tag}" ]] && continue
-                # UMB3-193: the launch form is judged per package line; a Release of another line is neither a stable close nor a re-point candidate
+                # UMB3-193: the launch form is judged per package line; a Release of another line is neither a stable close nor a re-point candidate. A bare tag skips every
+                # package-prefixed Release the same way (2026-11-12a, CoalLedger t330 #4): counted, it refused a first bare launch or re-pointed the wrong Release.
                 relv="${rel}"
-                if [[ -n "${pkg}" ]]; then [[ "${rel}" == "${pkg}-v"* ]] || continue; relv="${rel#"${pkg}-"}"; fi
+                if [[ -n "${pkg}" ]]; then [[ "${rel}" == "${pkg}-v"* ]] || continue; relv="${rel#"${pkg}-"}"
+                elif [[ "${rel}" =~ ${pkg_tag_re} ]]; then continue; fi
                 others=$((others + 1)); old="${rel}"; oldv="${relv}"
                 [[ "${relv}" != *-* ]] && stable=$((stable + 1))
               done <<< "${rels}"

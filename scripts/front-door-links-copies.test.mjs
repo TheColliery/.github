@@ -38,3 +38,16 @@ test('both workflows run the same engine over the front doors they name, on chan
   assert.ok(canon.listed.includes('README.md') && canon.listed.includes('SECURITY.md'), 'the canon names the room front doors');
   assert.ok(org.listed.includes('profile/README.md') && org.listed.includes('.github/SECURITY.md'), 'the org copy names the landing and the org-default community files');
 });
+
+// 2026-11-12a (CoalLedger t330 #2, its CW-054 row): the pipe leg skipped by platform NAME. A skip is decided by PROBING the capability (a FIFO that mkfifo really made), never by process.platform:
+// the name is a bad proxy (a Windows box with an emulation layer's mkfifo, a Linux volume that cannot hold a FIFO). One skippable leg per test, and the skip is a visible t.skip with its reason.
+test('the pipe leg of the front-door link test decides its skip by probing for a real FIFO, never by process.platform, and skips visibly -- RED before 2026-11-12a', () => {
+  const text = read('scripts/front-door-links.test.mjs');
+  const at = text.indexOf("test('CLI: a named file that is a pipe is refused at once");
+  assert.ok(at > 0, 'the pipe leg exists');
+  const leg = text.slice(at, text.indexOf('\n});\n', at));
+  assert.doesNotMatch(leg, /process\.platform/, 'no skip by platform name');
+  assert.match(leg, /isFIFO\(\)/, 'the probe asks Node whether what mkfifo made is a FIFO');
+  assert.equal((leg.match(/t\.skip\(/g) || []).length, 1, 'one skippable leg, one visible t.skip');
+  assert.equal(read('templates/published-code/scripts/front-door-links.test.mjs'), text, 'the template copy is the same');
+});
