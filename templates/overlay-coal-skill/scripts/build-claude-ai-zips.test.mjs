@@ -247,19 +247,39 @@ test('run through a junction or a symlinked folder the script is still the entry
 
 // the preload makes the real-path call fail, as it does where a path cannot be resolved: the guard then compares the plain paths
 const NO_REALPATH = "import fs from 'node:fs';\nfs.realpathSync.native = () => { throw new Error('unresolvable'); };\n";
-test('where the real path cannot be resolved the guard compares plain paths: a direct run still stages, an import still runs nothing -- RED before 2026-11-12a', () => {
-  const root = repo(['alpha']);
+// neither the real path nor the file identity can be read: only the plain compare is left, so this leg runs on a path that is its own real path (a symlinked temp folder, as on macOS, spells it two ways)
+const NO_REALPATH_NO_STAT = NO_REALPATH + "fs.statSync = () => { throw new Error('unreadable'); };\n";
+test('where neither the real path nor the file identity can be read the guard compares plain paths: a direct run still stages, an import still runs nothing -- RED before 2026-11-12a', () => {
+  const root = fs.realpathSync.native(repo(['alpha']));
   const pre = path.join(root, 'no-realpath.mjs');
-  fs.writeFileSync(pre, NO_REALPATH);
+  fs.writeFileSync(pre, NO_REALPATH_NO_STAT);
   const flags = ['--max-old-space-size=256', '--import', pathToFileURL(pre).href];
   const direct = spawnSync(process.execPath, [...flags, path.join(root, 'scripts', 'build-claude-ai-zips.mjs')], { cwd: root, encoding: 'utf8', timeout: 60000, env: childEnv() });
   assert.equal(direct.status, 0, direct.stdout + direct.stderr);
   assert.ok(fs.existsSync(path.join(root, 'dist-claude-ai', 'alpha', 'SKILL.md')), 'the entry ran on plain paths');
-  const other = repo(['alpha']);
+  const other = fs.realpathSync.native(repo(['alpha']));
   const imported = spawnSync(process.execPath, [...flags.slice(0, 1), '--import', pathToFileURL(pre).href, importProbe(other)], { cwd: other, encoding: 'utf8', timeout: 60000, env: childEnv() });
   assert.equal(imported.status, 0, imported.stdout + imported.stderr);
   assert.equal(imported.stdout, 'imported\nexitCode=unset\n');
   assert.equal(fs.existsSync(path.join(other, 'dist-claude-ai')), false, 'an import never runs it, resolved or not');
+});
+
+// 2026-11-12b: the macOS red of 12a. A temp folder there is a symlink (/var -> /private/var): the loader hands import.meta.url the REAL path while process.argv[1] stays as typed, so where the real-path call
+// fails, a compare of plain paths never matched and a direct run staged nothing. The fallback compares file IDENTITY (dev + ino through stat, which follows links) before it falls to plain paths.
+test('where the real path cannot be resolved a run through a symlinked or junctioned folder still stages: the fallback compares file identity, not spelling -- RED on macOS before 2026-11-12b', (t) => {
+  const root = repo(['alpha']);
+  const via = path.join(SANDBOX, 'via' + n++);
+  fs.mkdirSync(via);
+  try { fs.symlinkSync(path.join(root, 'scripts'), path.join(via, 'scripts'), 'junction'); } catch { t.skip('this account cannot make a junction or symlink here'); return; }
+  const pre = path.join(root, 'no-realpath.mjs');
+  fs.writeFileSync(pre, NO_REALPATH);
+  const r = spawnSync(process.execPath, ['--max-old-space-size=256', '--import', pathToFileURL(pre).href, path.join(via, 'scripts', 'build-claude-ai-zips.mjs')], { cwd: root, encoding: 'utf8', timeout: 60000, env: childEnv() });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.ok(fs.existsSync(path.join(root, 'dist-claude-ai', 'alpha', 'SKILL.md')), 'the build ran through the link with no real path');
+  const other = repo(['alpha']);
+  const imported = spawnSync(process.execPath, ['--max-old-space-size=256', '--import', pathToFileURL(pre).href, importProbe(other)], { cwd: other, encoding: 'utf8', timeout: 60000, env: childEnv() });
+  assert.equal(imported.stdout, 'imported\nexitCode=unset\n', imported.stdout + imported.stderr);
+  assert.equal(fs.existsSync(path.join(other, 'dist-claude-ai')), false, 'an import never runs it on the identity compare either');
 });
 
 test('imported from `node -e` (no argv[1] at all) the guard answers "not the entry" without throwing: nothing runs, exit 0 -- 2026-11-12a mutant Z6', () => {

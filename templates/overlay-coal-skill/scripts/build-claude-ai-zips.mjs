@@ -160,7 +160,14 @@ function isMainModule(url) {
   try {
     return fs.realpathSync.native(self) === fs.realpathSync.native(process.argv[1]);
   } catch {
-    return path.resolve(self) === path.resolve(process.argv[1]);
+    // the real path cannot be resolved: compare file identity (stat follows a link, so a symlinked temp folder still matches), and the plain paths only where stat fails too
+    try {
+      const a = fs.statSync(self, { bigint: true });
+      const b = fs.statSync(process.argv[1], { bigint: true });
+      return a.dev === b.dev && a.ino === b.ino;
+    } catch {
+      return path.resolve(self) === path.resolve(process.argv[1]);
+    }
   }
 }
 
