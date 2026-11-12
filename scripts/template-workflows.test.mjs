@@ -2271,6 +2271,11 @@ test('dependabot.yml keeps ONE group for the github-actions ecosystem and groups
   assert.deepEqual((text.slice(text.indexOf('    groups:\n')).match(/^ {6}[A-Za-z0-9_-]+:\s*$/gm) || []).map((l) => l.trim()), ['github-actions:'], 'one group, and no second one');
   assert.match(text, /^ {6}github-actions:\n(?: {8,}.*\n)*? {8}group-by: dependency-name$/m, 'group-by: dependency-name inside the group');
   assert.match(text, /holds the canon's templates/, 'the one line on why this copy differs');
+  // 2026-11-12j (main's ruling): ONE version-update PR open at a time, so two per-action PRs never touch one workflow file and race. Vendor, dependabot-options-reference, read 2026-11-12:
+  // "Change the limit on the maximum number of pull requests for version updates open at any time"; security updates have a separate fixed limit of 10.
+  assert.match(text, /^ {4}open-pull-requests-limit: 1$/m, 'the limit is one, on the github-actions entry');
+  assert.match(text, /one at a time/, 'the comment says why one at a time');
+  assert.doesNotMatch(text, /first live run/, 'the comment leaves nothing to the first live run');
 });
 
 // 2026-11-12h item 2: a comment beside a pinned SHA says what the SHA IS. A major tag (\`# v4\`) moves on to newer releases, so the comment stops describing the pin the day it moves.
