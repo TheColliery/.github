@@ -121,7 +121,10 @@ test('private-working pre-push refuses (exit 1) and names scripts/gate.mjs when 
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'pw-prepush-'));
   try {
     assert.equal(spawnSync('git', ['init', '-q'], { cwd: repo, timeout: 30000 }).status, 0);
-    const r = spawnSync('sh', [PW_PREPUSH], { cwd: repo, encoding: 'utf8', timeout: 30000 });
+    // the hook looks for \`node\` on PATH: a runner has it there; a shell that started this node by its absolute path (a WSL clone, 2026-11-12) does not, and the hook then says "node not found" instead
+    const pathKey = Object.keys(process.env).find((k) => k.toLowerCase() === 'path') ?? 'PATH';
+    const env = { ...process.env, [pathKey]: path.dirname(process.execPath) + path.delimiter + (process.env[pathKey] ?? '') };
+    const r = spawnSync('sh', [PW_PREPUSH], { cwd: repo, encoding: 'utf8', timeout: 30000, env });
     assert.equal(r.status, 1, 'exit ' + r.status + ' stderr=' + r.stderr);
     assert.match(r.stderr, /scripts\/gate\.mjs/);
     assert.doesNotMatch(r.stderr, /MODULE_NOT_FOUND|Cannot find module/, 'a human message, not a node stack trace');
@@ -2187,28 +2190,87 @@ test('the gate step of both canon workflows skips a package-tagged Release in th
 // that splits a group, differs from the others and fails. An action pinned in only one place has nothing to disagree with: its mutants stay equivalent, and the tag comment below
 // is the only check that reaches it.
 const PIN_LINE = /uses:\s*([^@\s]+)@([0-9a-f]{40})\s*(?:#\s*(\S.*?))?\s*$/;
-function allPins() {
-  const files = [...workflowFiles(TEMPLATES), ...fs.readdirSync(OWN_WF).filter((f) => /\.ya?ml$/.test(f)).map((f) => path.join(OWN_WF, f))];
+const workflowRels = () => [...workflowFiles(TEMPLATES), ...fs.readdirSync(OWN_WF).filter((f) => /\.ya?ml$/.test(f)).map((f) => path.join(OWN_WF, f))].map((f) => path.relative(ROOT, f).split(path.sep).join('/')).sort();
+// `bump` = { action, sha, dirs }: the pins of that action are read as the SHA a Dependabot job over `dirs` would write, in the files those directories reach (isScanned below)
+function pinsFrom(rels, bump) {
   const pins = [];
-  for (const f of files) {
-    fs.readFileSync(f, 'utf8').split(/\r?\n/).forEach((l, i) => {
+  for (const rel of rels) {
+    fs.readFileSync(path.join(ROOT, ...rel.split('/')), 'utf8').split(/\r?\n/).forEach((l, i) => {
       const m = PIN_LINE.exec(l);
-      if (m) pins.push({ file: path.relative(ROOT, f).split(path.sep).join('/'), line: i + 1, action: m[1].startsWith('github/codeql-action/') ? 'github/codeql-action' : m[1], sha: m[2], tag: m[3] ?? '' });
+      if (!m) return;
+      const action = m[1].startsWith('github/codeql-action/') ? 'github/codeql-action' : m[1];
+      const moved = bump && bump.action === action && isScanned(rel, bump.dirs);
+      pins.push({ file: rel, line: i + 1, action, sha: moved ? bump.sha : m[2], tag: m[3] ?? '' });
     });
   }
   return pins;
 }
-test('every action is pinned to ONE commit across the canon templates and this repo\'s own workflows: a lagging pin, or a copy that splits a group, fails (the mutants of the 12c test, 2026-11-12h)', () => {
-  const pins = allPins();
+const allPins = () => pinsFrom(workflowRels());
+// the actions pinned to more than one commit, as readable lines
+function splitActions(pins) {
   const byAction = new Map();
   for (const p of pins) {
     const shas = byAction.get(p.action) ?? new Map();
     shas.set(p.sha, [...(shas.get(p.sha) ?? []), `${p.file}:${p.line}`]);
     byAction.set(p.action, shas);
   }
-  const split = [...byAction].filter(([, shas]) => shas.size > 1).map(([action, shas]) => `${action}: ${[...shas].map(([sha, where]) => `${sha.slice(0, 8)} at ${where.join(', ')}`).join(' vs ')}`);
+  return { byAction, split: [...byAction].filter(([, shas]) => shas.size > 1).map(([action, shas]) => `${action}: ${[...shas].map(([sha, where]) => `${sha.slice(0, 8)} at ${where.join(', ')}`).join(' vs ')}`) };
+}
+test('every action is pinned to ONE commit across the canon templates and this repo\'s own workflows: a lagging pin, or a copy that splits a group, fails (the mutants of the 12c test, 2026-11-12h)', () => {
+  const pins = allPins();
+  const { byAction, split } = splitActions(pins);
   assert.deepEqual(split, [], 'an action pinned to more than one commit');
   assert.ok(pins.length >= 40 && byAction.size >= 8, `the check reached the pins it is meant to police (${pins.length} pins, ${byAction.size} actions)`);
+});
+
+// ---- 2026-11-12i: the rule above is true only while the bot that moves the pins moves them everywhere at once. Dependabot's github-actions fetcher (dependabot-core, github_actions/lib/dependabot/github_actions/file_fetcher.rb,
+// read 2026-11-12): directory "/" scans /.github/workflows (and the root action.yml); ANY OTHER directory scans the YAML files directly in it, so a template's workflows need the directory
+// /templates/<kind>/.github/workflows. The docs (docs.github.com .../dependabot-options-reference, read 2026-11-12): \`directories\` lists several; \`groups.<name>.group-by: dependency-name\` makes one pull request for each
+// dependency update across all of them, all directories of one ecosystem.
+function dependabotDirs() {
+  const dirs = [];
+  let inList = false;
+  for (const l of readText('.github/dependabot.yml').split(/\r?\n/)) {
+    const one = /^\s+directory:\s*["']?([^"'\s#]+)/.exec(l);
+    if (one) { dirs.push(one[1]); inList = false; continue; }
+    if (/^\s+directories:\s*$/.test(l)) { inList = true; continue; }
+    if (!inList) continue;
+    const item = /^\s+-\s*["']?([^"'\s#]+)/.exec(l);
+    if (item) dirs.push(item[1]); else if (!/^\s*(#.*)?$/.test(l)) inList = false;
+  }
+  return dirs;
+}
+function isScanned(rel, dirs) {
+  const folder = '/' + path.posix.dirname(rel);
+  return dirs.some((d) => (d === '/' ? folder === '/.github/workflows' : folder === d.replace(/\/+$/, '')));
+}
+test('dependabot.yml names every folder that holds workflows, so the bot reaches every pin the rule above compares: the templates as well as this repository', () => {
+  const dirs = dependabotDirs();
+  assert.ok(dirs.includes('/'), 'the repository\'s own workflows');
+  const missed = workflowRels().filter((rel) => !isScanned(rel, dirs));
+  assert.deepEqual(missed, [], 'a workflow file no Dependabot directory reaches');
+});
+
+test('the tree Dependabot would produce when an action moves (in every folder it scans) keeps the pin rule green; the tree it produced before (moved in / only) is red (2026-11-12i)', () => {
+  const rels = workflowRels();
+  const dirs = dependabotDirs();
+  const { byAction } = splitActions(pinsFrom(rels));
+  const NEW = 'f'.repeat(40);
+  const shared = [...byAction].filter(([, shas]) => [...shas.values()].flat().length >= 2).map(([action]) => action);
+  assert.ok(shared.length >= 6, `actions pinned in more than one place: ${shared.length}`);
+  const redBefore = [];
+  for (const action of shared) {
+    assert.deepEqual(splitActions(pinsFrom(rels, { action, sha: NEW, dirs })).split, [], `${action}: moved in every folder the config lists`);
+    if (splitActions(pinsFrom(rels, { action, sha: NEW, dirs: ['/'] })).split.length) redBefore.push(action);
+  }
+  assert.ok(redBefore.includes('actions/checkout') && redBefore.includes('github/codeql-action'), `moved in / only, the rule goes red for: ${redBefore.join(', ')}`);
+});
+
+test('dependabot.yml keeps ONE group for the github-actions ecosystem and groups by dependency name across its directories, so one pull request moves an action everywhere; its comment says why this copy differs from the organization\'s', () => {
+  const text = readText('.github/dependabot.yml').replace(/\r\n/g, '\n');
+  assert.deepEqual((text.slice(text.indexOf('    groups:\n')).match(/^ {6}[A-Za-z0-9_-]+:\s*$/gm) || []).map((l) => l.trim()), ['github-actions:'], 'one group, and no second one');
+  assert.match(text, /^ {6}github-actions:\n(?: {8,}.*\n)*? {8}group-by: dependency-name$/m, 'group-by: dependency-name inside the group');
+  assert.match(text, /holds the canon's templates/, 'the one line on why this copy differs');
 });
 
 // 2026-11-12h item 2: a comment beside a pinned SHA says what the SHA IS. A major tag (\`# v4\`) moves on to newer releases, so the comment stops describing the pin the day it moves.
