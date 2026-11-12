@@ -51,9 +51,9 @@ jobs:
           # rest of the job, readable by every later step (SKILL-REPO-PATTERN.md, Layer 5).
           persist-credentials: false
       - if: hashFiles('**/*.js', '**/*.mjs', '**/*.cjs', '**/*.ts', '**/*.tsx') != ''
-        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           languages: javascript-typescript
           queries: security-and-quality
       - if: hashFiles('**/*.js', '**/*.mjs', '**/*.cjs', '**/*.ts', '**/*.tsx') != ''
-        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1

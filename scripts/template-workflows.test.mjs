@@ -121,7 +121,10 @@ test('private-working pre-push refuses (exit 1) and names scripts/gate.mjs when 
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'pw-prepush-'));
   try {
     assert.equal(spawnSync('git', ['init', '-q'], { cwd: repo, timeout: 30000 }).status, 0);
-    const r = spawnSync('sh', [PW_PREPUSH], { cwd: repo, encoding: 'utf8', timeout: 30000 });
+    // the hook looks for \`node\` on PATH: a runner has it there; a shell that started this node by its absolute path (a WSL clone, 2026-11-12) does not, and the hook then says "node not found" instead
+    const pathKey = Object.keys(process.env).find((k) => k.toLowerCase() === 'path') ?? 'PATH';
+    const env = { ...process.env, [pathKey]: path.dirname(process.execPath) + path.delimiter + (process.env[pathKey] ?? '') };
+    const r = spawnSync('sh', [PW_PREPUSH], { cwd: repo, encoding: 'utf8', timeout: 30000, env });
     assert.equal(r.status, 1, 'exit ' + r.status + ' stderr=' + r.stderr);
     assert.match(r.stderr, /scripts\/gate\.mjs/);
     assert.doesNotMatch(r.stderr, /MODULE_NOT_FOUND|Cannot find module/, 'a human message, not a node stack trace');
@@ -2181,26 +2184,131 @@ test('the gate step of both canon workflows skips a package-tagged Release in th
   }
 });
 
-// 2026-11-12c (the c96 section of the CoalWorks chief's return: CoalBoard's canon-diff draft read the markdownlint and scorecard pins as places the ROOM is ahead). Every room and this repo's own
-// workflows pin markdownlint-cli2-action v25.0.0, scorecard-action v2.5.0 and one codeql-action commit; the canon had stayed at v24.2.0, v2.4.4 and an older codeql-action. A canon pin is never BEHIND the pin this repo
-// runs itself, and one codeql-action commit serves init, analyze and upload-sarif (Dependabot moves them as one group), so a copy never splits the group.
-test('the canon pins markdownlint-cli2-action, scorecard-action and the one codeql-action commit at what this repo runs itself -- RED before 2026-11-12c', () => {
-  const own = (name) => pinsOf(readText(`.github/workflows/${name}`));
-  const mine = (action) => {
-    const hits = [...own('markdownlint.yml'), ...own('scorecard.yml')].filter((p) => (action === 'codeql' ? p.action.startsWith('github/codeql-action/') : p.action === action));
-    assert.ok(hits.length >= 1, `this repo pins ${action}`);
-    assert.equal(new Set(hits.map((p) => p.sha)).size, 1, `this repo pins ${action} once`);
-    return hits[0].sha;
-  };
-  const want = { 'DavidAnson/markdownlint-cli2-action': mine('DavidAnson/markdownlint-cli2-action'), 'ossf/scorecard-action': mine('ossf/scorecard-action'), codeql: mine('codeql') };
-  let checked = 0;
-  for (const rel of ['templates/published-code/.github/workflows/markdownlint.yml', 'templates/published-code/.github/workflows/scorecard.yml', 'templates/published-code/.github/workflows/codeql.yml', 'templates/private-working/.github/workflows/gate.yml']) {
-    for (const p of pinsOf(readText(rel))) {
-      const key = p.action.startsWith('github/codeql-action/') ? 'codeql' : p.action;
-      if (!(key in want)) continue;
-      assert.equal(p.sha, want[key], `${rel}: ${p.action} is at ${p.sha.slice(0, 8)} (${p.tag}), this repo runs ${want[key].slice(0, 8)}`);
-      checked++;
-    }
+// 2026-11-12h item 3 (the mutants of the 12c pin test). The 12c test policed three actions at what this repo runs: measured with one lagging-pin mutant for each of the 56 pinned
+// lines, it killed 9 and let 47 through (checkout, setup-node, upload-artifact, fetch-metadata and the rest were not policed). The rule is now general: an action REPOSITORY is pinned
+// to ONE commit across the canon templates and this repo's own workflows, so a pin that lags, or a copy that splits a repository, differs from the others and fails. A repository
+// pinned in only one place has nothing to disagree with: its mutants stay equivalent, and the tag comment below is the only check that reaches it.
+// 12k: the unit of the rule is the repository (owner/repo), NOT the dependency name Dependabot uses. github/codeql-action/init, /analyze and /upload-sarif are three dependencies to the
+// bot (dependabot-core, github_actions/lib/dependabot/github_actions/file_parser.rb names a path action as repo plus path; this repository's own PRs #99 and #22 are titled "Bump
+// github/codeql-action/upload-sarif") but ONE repository: a bump that moves only one of them reds CodeQL, so the rule keeps them on one commit.
+const PIN_LINE = /uses:\s*([^@\s]+)@([0-9a-f]{40})\s*(?:#\s*(\S.*?))?\s*$/;
+const workflowRels = () => [...workflowFiles(TEMPLATES), ...fs.readdirSync(OWN_WF).filter((f) => /\.ya?ml$/.test(f)).map((f) => path.join(OWN_WF, f))].map((f) => path.relative(ROOT, f).split(path.sep).join('/')).sort();
+const repoOf = (name) => name.split('/').slice(0, 2).join('/');
+// `bump` = { names, sha, dirs }: the pins of those dependency names are read as the SHA a Dependabot job over `dirs` would write, in the files those directories reach (isScanned below)
+function pinsFrom(rels, bump) {
+  const pins = [];
+  for (const rel of rels) {
+    fs.readFileSync(path.join(ROOT, ...rel.split('/')), 'utf8').split(/\r?\n/).forEach((l, i) => {
+      const m = PIN_LINE.exec(l);
+      if (!m) return;
+      const moved = bump && bump.names.includes(m[1]) && isScanned(rel, bump.dirs);
+      pins.push({ file: rel, line: i + 1, name: m[1], action: repoOf(m[1]), sha: moved ? bump.sha : m[2], tag: m[3] ?? '' });
+    });
   }
-  assert.ok(checked >= 6, `the check reached the pins it is meant to police (${checked})`);
+  return pins;
+}
+const allPins = () => pinsFrom(workflowRels());
+// the repositories pinned to more than one commit, as readable lines
+function splitActions(pins) {
+  const byAction = new Map();
+  for (const p of pins) {
+    const shas = byAction.get(p.action) ?? new Map();
+    shas.set(p.sha, [...(shas.get(p.sha) ?? []), `${p.file}:${p.line}`]);
+    byAction.set(p.action, shas);
+  }
+  return { byAction, split: [...byAction].filter(([, shas]) => shas.size > 1).map(([action, shas]) => `${action}: ${[...shas].map(([sha, where]) => `${sha.slice(0, 8)} at ${where.join(', ')}`).join(' vs ')}`) };
+}
+test('every action is pinned to ONE commit across the canon templates and this repo\'s own workflows: a lagging pin, or a copy that splits a repository, fails (the mutants of the 12c test, 2026-11-12h)', () => {
+  const pins = allPins();
+  const { byAction, split } = splitActions(pins);
+  assert.deepEqual(split, [], 'an action pinned to more than one commit');
+  assert.ok(pins.length >= 40 && byAction.size >= 8, `the check reached the pins it is meant to police (${pins.length} pins, ${byAction.size} actions)`);
+});
+
+// ---- 2026-11-12i/k: the rule above is true only while the bot that moves the pins moves them everywhere at once. Dependabot's github-actions fetcher (dependabot-core, github_actions/lib/dependabot/github_actions/file_fetcher.rb,
+// read 2026-11-12): directory "/" scans /.github/workflows (and the root action.yml); ANY OTHER directory scans the YAML files directly in it, so a template's workflows need the directory
+// /templates/<kind>/.github/workflows. What a group yields (dependabot-core main, read 2026-11-12, 12k): updater/lib/dependabot/updater/operations/create_group_update_pull_request.rb lines 109-112 pick
+// compile_all_dependency_changes_for_directories(group) when job.source.directories is set; updater/lib/dependabot/updater/group_update_creation.rb lines 214-247 loop every directory and
+// merge_changes! all of them into the first change, so a plain group is ONE pull request across all its directories; common/lib/dependabot/dependency_group.rb lines 73-74
+// (group_by_dependency_name? is @group_by == "dependency-name") is the only switch that splits it, one pull request per dependency name.
+const stripComments = (text) => text.replace(/\r\n/g, '\n').split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+function dependabotDirs(text = readText('.github/dependabot.yml')) {
+  const dirs = [];
+  let inList = false;
+  for (const l of stripComments(text).split('\n')) {
+    const one = /^\s+directory:\s*["']?([^"'\s#]+)/.exec(l);
+    if (one) { dirs.push(one[1]); inList = false; continue; }
+    if (/^\s+directories:\s*$/.test(l)) { inList = true; continue; }
+    if (!inList) continue;
+    const item = /^\s+-\s*["']?([^"'\s#]+)/.exec(l);
+    if (item) dirs.push(item[1]); else if (!/^\s*(#.*)?$/.test(l)) inList = false;
+  }
+  return dirs;
+}
+function isScanned(rel, dirs) {
+  const folder = '/' + path.posix.dirname(rel);
+  return dirs.some((d) => (d === '/' ? folder === '/.github/workflows' : folder === d.replace(/\/+$/, '')));
+}
+// What the bot produces from a config, per the lines quoted above: a plain group is ONE pull request moving every dependency name in every listed directory; with
+// `group-by: dependency-name` it is one pull request per dependency name.
+const hasGroupBy = (text) => /^\s+group-by:\s*dependency-name\s*$/m.test(stripComments(text));
+function botPullRequests(text, names) {
+  return hasGroupBy(text) ? names.map((n) => [n]) : [names];
+}
+const NEW_SHA = 'f'.repeat(40);
+const dependencyNames = (rels) => [...new Set(pinsFrom(rels).map((p) => p.name))].sort();
+// the splits left in the tree by each pull request the config would open, on its own (the PR is merged alone: the next one opens against the new main)
+function splitsAfterEachPullRequest(text) {
+  const rels = workflowRels();
+  const dirs = dependabotDirs(text);
+  return botPullRequests(text, dependencyNames(rels)).flatMap((names) => splitActions(pinsFrom(rels, { names, sha: NEW_SHA, dirs })).split.map((s) => `${names.join('+')}: ${s}`));
+}
+test('dependabot.yml names every folder that holds workflows, so the bot reaches every pin the rule above compares: the templates as well as this repository', () => {
+  const dirs = dependabotDirs();
+  assert.ok(dirs.includes('/'), 'the repository\'s own workflows');
+  const missed = workflowRels().filter((rel) => !isScanned(rel, dirs));
+  assert.deepEqual(missed, [], 'a workflow file no Dependabot directory reaches');
+});
+
+test('the tree each pull request of this config would produce keeps the pin rule green: one PR moves every action in every listed folder (12k)', () => {
+  const text = readText('.github/dependabot.yml');
+  const names = dependencyNames(workflowRels());
+  assert.ok(names.length >= 10 && names.filter((n) => n.startsWith('github/codeql-action/')).length === 3, `the three codeql-action paths are three dependency names: ${names.join(', ')}`);
+  assert.equal(botPullRequests(text, names).length, 1, 'one pull request for the group');
+  assert.deepEqual(splitsAfterEachPullRequest(text), []);
+});
+
+test('the witnesses: the codeql-action paths moved one at a time, group-by present, a folder missing, or the root only -- each leaves the pin rule RED (12k, red-first)', () => {
+  const text = readText('.github/dependabot.yml').replace(/\r\n/g, '\n');
+  const rels = workflowRels();
+  const codeql = dependencyNames(rels).filter((n) => n.startsWith('github/codeql-action/'));
+  const dirs = dependabotDirs(text);
+  for (const one of codeql) assert.ok(splitActions(pinsFrom(rels, { names: [one], sha: NEW_SHA, dirs })).split.length > 0, `a PR for ${one} alone splits the repository`);
+  const withGroupBy = text.replace(/^( {8})patterns:/m, '$1group-by: dependency-name\n$1patterns:');
+  assert.ok(hasGroupBy(withGroupBy) && !hasGroupBy(text), 'the mutant carries group-by and the config does not');
+  assert.ok(splitsAfterEachPullRequest(withGroupBy).length > 0, 'group-by: dependency-name splits the codeql paths into separate PRs');
+  const noTemplate = text.replace(/^ {6}- \/templates\/published-code\/\.github\/workflows\n/m, '');
+  assert.notEqual(noTemplate, text, 'the mutant removed a folder');
+  assert.ok(splitsAfterEachPullRequest(noTemplate).length > 0, 'a folder left out of the config is a pin the bot never moves');
+  const rootOnly = text.replace(/^ {6}- \/templates\/.*\n/gm, '');
+  assert.ok(splitsAfterEachPullRequest(rootOnly).length > 0, 'the root alone (the 12h config) leaves every template behind');
+});
+
+test('dependabot.yml keeps ONE plain group for the github-actions ecosystem -- no group-by, no pull-request limit -- and its comment says who merges what and why this copy differs from the organization\'s (12k)', () => {
+  const text = readText('.github/dependabot.yml').replace(/\r\n/g, '\n');
+  const code = stripComments(text);
+  assert.deepEqual((code.slice(code.indexOf('    groups:\n')).match(/^ {6}[A-Za-z0-9_-]+:\s*$/gm) || []).map((l) => l.trim()), ['github-actions:'], 'one group, and no second one');
+  assert.match(code, /^ {8}patterns:\n {10}- "\*"$/m, 'the group takes every dependency');
+  assert.doesNotMatch(code, /group-by/, 'no group-by: it would split the group into one PR per dependency name');
+  assert.doesNotMatch(code, /open-pull-requests-limit/, 'the vendor default stands: with one weekly PR there is no second one to race');
+  assert.match(text, /holds the canon's templates/, 'the one line on why this copy differs');
+  assert.doesNotMatch(text, /groups by dependency name|Human still merges|first live run|one at a time|are one dependency/, 'the sentences 12j wrote and the auditor found false');
+  assert.match(text, /only patch and minor bumps merges itself/, 'who merges what: patch and minor');
+  assert.match(text, /3541faf/, 'the race sentence names the commit it came from');
+});
+
+// 2026-11-12h item 2: a comment beside a pinned SHA says what the SHA IS. A major tag (\`# v4\`) moves on to newer releases, so the comment stops describing the pin the day it moves.
+test('no pinned action\'s comment names only a moving major tag: it names the exact version the SHA is (RED before 2026-11-12h item 2, five lines)', () => {
+  const moving = allPins().filter((p) => /^v\d+$/.test(p.tag)).map((p) => `${p.file}:${p.line} ${p.action} # ${p.tag}`);
+  assert.deepEqual(moving, []);
 });

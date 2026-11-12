@@ -1,7 +1,15 @@
 version: 2
 updates:
   - package-ecosystem: github-actions
-    directory: /
+    # This repository's copy differs from the organization's: it holds the canon's templates (no room does), so it lists their workflow folders too.
+    # A non-root directory is scanned for the YAML files directly in it (Dependabot's github-actions file fetcher), hence /.github/workflows under each template.
+    directories:
+      - /
+      - /templates/article/.github/workflows
+      - /templates/overlay-coal-skill/.github/workflows
+      - /templates/overlay-llm-deploy/.github/workflows
+      - /templates/private-working/.github/workflows
+      - /templates/published-code/.github/workflows
     schedule:
       interval: weekly
       # One fixed weekly slot, the same in every repository of the organization.
@@ -13,15 +21,16 @@ updates:
     commit-message:
       prefix: ci
     # Assign every bump PR to the maintainer -> a notification fires (assignment is
-    # a "participating" event, delivered at any watch level). Human still merges.
+    # a "participating" event, delivered at any watch level).
     assignees:
       - HetCreep
-    # ONE weekly PR for every action bump, whatever its size. Two PRs that touch the same
-    # workflow file race: the first merges, the second is then behind main and GitHub
-    # refuses its auto-merge (GITHUB_TOKEN may not write workflow content outside its own
-    # diff). Any second group re-opens that race, so there is one. A group holding a major
-    # bump reads as major and waits for a human (the auto-merge allowlist); the group also
-    # keeps every github/codeql-action/* path in step (a split init/analyze bump reds CodeQL).
+    # Who merges what: a PR holding only patch and minor bumps merges itself once the required checks pass (dependabot-auto-merge.yml); a PR holding a major bump waits for a human.
+    # One group with no group-by: Dependabot opens ONE pull request a week for every action in every folder above (dependabot-core, create_group_update_pull_request.rb and
+    # group_update_creation.rb, compile_all_dependency_changes_for_directories: each directory's changes are merged into one change; only group-by: dependency-name splits it, one PR per
+    # dependency name). That keeps one commit per action across the canon and this repo's own workflows, which scripts/template-workflows.test.mjs checks, and the three
+    # github/codeql-action paths (init, analyze, upload-sarif: three dependency names to the bot) move together. One PR also means no second PR open beside it: two PRs on one workflow
+    # file raced, the first merged, and GitHub refused auto-merge on whichever landed second (commit 3541faf, 2026-10-23: CoalBoard #29, Kolwen #66, .github #89, merged by hand).
+    # Not re-measured on this repository since this change. The one cost: a PR holding a major bump reads as major, so the whole week's bumps wait for a human.
     groups:
       github-actions:
         patterns:
