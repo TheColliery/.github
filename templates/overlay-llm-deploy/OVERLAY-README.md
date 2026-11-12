@@ -31,7 +31,9 @@ deploy files first, nothing here is invented.
   real PyPI, everything else — including every manual dispatch — goes to TestPyPI) is
   deliberately conservative: a wrong TestPyPI upload is harmless, a wrong real-PyPI upload
   is permanent. `{{PY_DIR}}` and `{{TAG_PREFIX}}` are the only variables; do not widen the
-  regex that gates the real-PyPI branch.
+  regex that gates the real-PyPI branch. Where a variable stands as a whole YAML value (`working-directory` and `packages-dir`)
+  it sits inside double quotes, so the template is valid YAML before substitution (an unquoted one is not, and Dependabot
+  fails its whole job on a file it cannot parse); substitute the text inside the quotes and keep them.
 
 ## NOT included this pass
 

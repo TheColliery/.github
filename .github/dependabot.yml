@@ -30,6 +30,7 @@ updates:
     # dependency name). That keeps one commit per action across the canon and this repo's own workflows, which scripts/template-workflows.test.mjs checks, and the three
     # github/codeql-action paths (init, analyze, upload-sarif: three dependency names to the bot) move together. One PR also means no second PR open beside it: two PRs on one workflow
     # file raced, the first merged, and GitHub refused auto-merge on whichever landed second (commit 3541faf, 2026-10-23: CoalBoard #29, Kolwen #66, .github #89, merged by hand).
+    # Every file in these folders must parse as YAML: Dependabot fails the whole job on one that does not (scripts/template-workflows.test.mjs checks the files it is pointed at).
     # Not re-measured on this repository since this change. The one cost: a PR holding a major bump reads as major, so the whole week's bumps wait for a human.
     groups:
       github-actions:

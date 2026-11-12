@@ -2307,6 +2307,89 @@ test('dependabot.yml keeps ONE plain group for the github-actions ecosystem -- n
   assert.match(text, /3541faf/, 'the race sentence names the commit it came from');
 });
 
+// ---- 2026-11-12l: the first live Dependabot job on the unit above failed with dependency_file_not_parseable on
+// templates/overlay-llm-deploy/.github/workflows/publish-pypi.yml, and that one file failed the whole job (no pull request, no version update).
+//// The file held two unquoted values that open with a double curly brace (the template variable for the package folder): the second one, a flow mapping followed by more text,
+// is not YAML in any parser (PyYAML 6.0.3 on libyaml: line 142, column 35). The checks above read workflow files as lines and never parsed one.
+// This repository has no YAML parser and Node has none, so the class is policed two ways. (1) flowValueFindings, a narrow pure-Node lint for the class that broke:
+// a plain value that opens a flow collection and is not one well-formed collection on its line, or opens with two braces. It runs on every machine.
+// (2) A real parser, Ruby's Psych (Dependabot's own language) or else Python's PyYAML, when the machine has one; a machine with neither skips that leg visibly.
+const OPEN_FLOW = /^[[{]/;
+const BLOCK_HEAD = /^[|>][+-]?\d*\s*(?:#.*)?$/;
+const VALUE_OF = /^\s*(?:-\s+)*(?:[^\s#'"{[][^:]*?:\s+)?(.*)$/;
+// where a flow collection that starts at value[0] closes, or -1 when the line ends first
+function flowCloseAt(value) {
+  let depth = 0;
+  let quote = '';
+  for (let k = 0; k < value.length; k++) {
+    const c = value[k];
+    if (quote) { if (c === quote) quote = ''; continue; }
+    if (c === '"' || c === "'") quote = c;
+    else if (c === '{' || c === '[') depth++;
+    else if ((c === '}' || c === ']') && --depth === 0) return k;
+  }
+  return -1;
+}
+function flowValueFindings(text) {
+  const found = [];
+  let blockIndent = -1;
+  text.replace(/\r\n/g, '\n').split('\n').forEach((line, i) => {
+    const indent = line.length - line.trimStart().length;
+    if (blockIndent >= 0) {
+      if (line.trim() === '' || indent > blockIndent) return;
+      blockIndent = -1;
+    }
+    if (line.trim() === '' || /^\s*#/.test(line)) return;
+    const value = VALUE_OF.exec(line)[1];
+    if (BLOCK_HEAD.test(value)) { blockIndent = indent; return; }
+    if (!OPEN_FLOW.test(value)) return;
+    const close = flowCloseAt(value);
+    const rest = close < 0 ? null : value.slice(close + 1).trim();
+    if (value.startsWith('{{')) found.push(`line ${i + 1}: a plain value opens with two braces: ${value.trim()}`);
+    else if (rest === null || !(rest === '' || rest.startsWith('#'))) found.push(`line ${i + 1}: a plain value opens a flow collection that is not one well-formed collection on its line: ${value.trim()}`);
+  });
+  return found;
+}
+// every workflow file in every folder the config lists: the folders Dependabot is pointed at
+function listedWorkflowFiles(configText = readText('.github/dependabot.yml')) {
+  const files = [];
+  for (const d of dependabotDirs(configText)) {
+    const folder = d === '/' ? '.github/workflows' : d.replace(/^\/+|\/+$/g, '');
+    const abs = path.join(ROOT, ...folder.split('/'));
+    if (!fs.existsSync(abs)) continue;
+    for (const f of fs.readdirSync(abs).sort()) if (/\.ya?ml$/.test(f)) files.push(`${folder}/${f}`);
+  }
+  return files;
+}
+test('the lint finds the shape that failed the first live job and leaves quoted values, closed flow values, block scalars and comments alone (12l, red-first)', () => {
+  assert.equal(flowValueFindings('    working-directory: {{PY_DIR}}\n').length, 1, 'two braces open a flow mapping used as a key');
+  assert.equal(flowValueFindings('          packages-dir: {{PY_DIR}}/dist\n').length, 1, 'a flow mapping followed by text');
+  assert.equal(flowValueFindings('  - {{PY_DIR}}\n').length, 1, 'the same inside a list item');
+  assert.deepEqual(flowValueFindings('    working-directory: "{{PY_DIR}}"\n    packages-dir: "{{PY_DIR}}/dist"\n    on: { push: null }\n    tags: ["v*"]\n    x: [a, b] # note\n'), []);
+  assert.deepEqual(flowValueFindings('        run: |\n          echo {{not_yaml}}\n          x: {{y}}\n        name: ok\n'), [], 'a block scalar is text');
+  assert.deepEqual(flowValueFindings('      # working-directory: {{PY_DIR}}\n'), [], 'a comment is not read');
+});
+
+test('every workflow file in every folder dependabot.yml lists passes the lint: a config that lists a folder Dependabot cannot parse is red here first (12l, red-first)', () => {
+  const files = listedWorkflowFiles();
+  assert.ok(files.length >= 24 && files.some((f) => f.startsWith('templates/overlay-llm-deploy/')), `the check reached the files it is meant to police (${files.length})`);
+  const bad = files.flatMap((f) => flowValueFindings(readText(f)).map((m) => `${f}: ${m}`));
+  assert.deepEqual(bad, [], 'a file Dependabot would fail on');
+});
+// the real-parser leg: a parser that only reads (syntax, no object construction), the first step of any load
+const YAML_PARSERS = [
+  { name: 'ruby Psych', cmd: 'ruby', probe: ['-ryaml', '-e', 'exit'], run: ['-ryaml', '-e', 'ARGV.each { |f| Psych.parse(File.read(f)) }'] },
+  { name: 'python PyYAML', cmd: 'python3', probe: ['-c', 'import yaml'], run: ['-c', 'import sys, yaml; [yaml.compose(open(f, encoding="utf-8")) for f in sys.argv[1:]]'] },
+];
+const spawnQuiet = (cmd, args) => spawnSync(cmd, args, { encoding: 'utf8', timeout: 60000, cwd: ROOT });
+const yamlParser = () => YAML_PARSERS.find((p) => { const r = spawnQuiet(p.cmd, p.probe); return !r.error && r.status === 0; });
+test('a real YAML parser reads every workflow file in every folder dependabot.yml lists (12l)', (t) => {
+  const parser = yamlParser();
+  if (!parser) { t.skip('no ruby with Psych and no python3 with PyYAML on this machine (CI has ruby)'); return; }
+  const r = spawnQuiet(parser.cmd, [...parser.run, ...listedWorkflowFiles()]);
+  assert.equal(r.status, 0, `${parser.name} could not read a listed file: ${(r.stderr || '').split('\n').slice(0, 3).join(' | ')}`);
+});
+
 // 2026-11-12h item 2: a comment beside a pinned SHA says what the SHA IS. A major tag (\`# v4\`) moves on to newer releases, so the comment stops describing the pin the day it moves.
 test('no pinned action\'s comment names only a moving major tag: it names the exact version the SHA is (RED before 2026-11-12h item 2, five lines)', () => {
   const moving = allPins().filter((p) => /^v\d+$/.test(p.tag)).map((p) => `${p.file}:${p.line} ${p.action} # ${p.tag}`);
