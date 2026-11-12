@@ -2181,26 +2181,38 @@ test('the gate step of both canon workflows skips a package-tagged Release in th
   }
 });
 
-// 2026-11-12c (the c96 section of the CoalWorks chief's return: CoalBoard's canon-diff draft read the markdownlint and scorecard pins as places the ROOM is ahead). Every room and this repo's own
-// workflows pin markdownlint-cli2-action v25.0.0, scorecard-action v2.5.0 and one codeql-action commit; the canon had stayed at v24.2.0, v2.4.4 and an older codeql-action. A canon pin is never BEHIND the pin this repo
-// runs itself, and one codeql-action commit serves init, analyze and upload-sarif (Dependabot moves them as one group), so a copy never splits the group.
-test('the canon pins markdownlint-cli2-action, scorecard-action and the one codeql-action commit at what this repo runs itself -- RED before 2026-11-12c', () => {
-  const own = (name) => pinsOf(readText(`.github/workflows/${name}`));
-  const mine = (action) => {
-    const hits = [...own('markdownlint.yml'), ...own('scorecard.yml')].filter((p) => (action === 'codeql' ? p.action.startsWith('github/codeql-action/') : p.action === action));
-    assert.ok(hits.length >= 1, `this repo pins ${action}`);
-    assert.equal(new Set(hits.map((p) => p.sha)).size, 1, `this repo pins ${action} once`);
-    return hits[0].sha;
-  };
-  const want = { 'DavidAnson/markdownlint-cli2-action': mine('DavidAnson/markdownlint-cli2-action'), 'ossf/scorecard-action': mine('ossf/scorecard-action'), codeql: mine('codeql') };
-  let checked = 0;
-  for (const rel of ['templates/published-code/.github/workflows/markdownlint.yml', 'templates/published-code/.github/workflows/scorecard.yml', 'templates/published-code/.github/workflows/codeql.yml', 'templates/private-working/.github/workflows/gate.yml']) {
-    for (const p of pinsOf(readText(rel))) {
-      const key = p.action.startsWith('github/codeql-action/') ? 'codeql' : p.action;
-      if (!(key in want)) continue;
-      assert.equal(p.sha, want[key], `${rel}: ${p.action} is at ${p.sha.slice(0, 8)} (${p.tag}), this repo runs ${want[key].slice(0, 8)}`);
-      checked++;
-    }
+// 2026-11-12h item 3 (the mutants of the 12c pin test). The 12c test policed three actions at what this repo runs: measured with one lagging-pin mutant for each of the 56 pinned
+// lines, it killed 9 and let 47 through (checkout, setup-node, upload-artifact, fetch-metadata and the rest were not policed). The rule is now general: an action is pinned to ONE
+// commit across the canon templates and this repo's own workflows (codeql-action's three paths count as one, Dependabot moves them as a group), so a pin that lags, or a copy
+// that splits a group, differs from the others and fails. An action pinned in only one place has nothing to disagree with: its mutants stay equivalent, and the tag comment below
+// is the only check that reaches it.
+const PIN_LINE = /uses:\s*([^@\s]+)@([0-9a-f]{40})\s*(?:#\s*(\S.*?))?\s*$/;
+function allPins() {
+  const files = [...workflowFiles(TEMPLATES), ...fs.readdirSync(OWN_WF).filter((f) => /\.ya?ml$/.test(f)).map((f) => path.join(OWN_WF, f))];
+  const pins = [];
+  for (const f of files) {
+    fs.readFileSync(f, 'utf8').split(/\r?\n/).forEach((l, i) => {
+      const m = PIN_LINE.exec(l);
+      if (m) pins.push({ file: path.relative(ROOT, f).split(path.sep).join('/'), line: i + 1, action: m[1].startsWith('github/codeql-action/') ? 'github/codeql-action' : m[1], sha: m[2], tag: m[3] ?? '' });
+    });
   }
-  assert.ok(checked >= 6, `the check reached the pins it is meant to police (${checked})`);
+  return pins;
+}
+test('every action is pinned to ONE commit across the canon templates and this repo\'s own workflows: a lagging pin, or a copy that splits a group, fails (the mutants of the 12c test, 2026-11-12h)', () => {
+  const pins = allPins();
+  const byAction = new Map();
+  for (const p of pins) {
+    const shas = byAction.get(p.action) ?? new Map();
+    shas.set(p.sha, [...(shas.get(p.sha) ?? []), `${p.file}:${p.line}`]);
+    byAction.set(p.action, shas);
+  }
+  const split = [...byAction].filter(([, shas]) => shas.size > 1).map(([action, shas]) => `${action}: ${[...shas].map(([sha, where]) => `${sha.slice(0, 8)} at ${where.join(', ')}`).join(' vs ')}`);
+  assert.deepEqual(split, [], 'an action pinned to more than one commit');
+  assert.ok(pins.length >= 40 && byAction.size >= 8, `the check reached the pins it is meant to police (${pins.length} pins, ${byAction.size} actions)`);
+});
+
+// 2026-11-12h item 2: a comment beside a pinned SHA says what the SHA IS. A major tag (\`# v4\`) moves on to newer releases, so the comment stops describing the pin the day it moves.
+test('no pinned action\'s comment names only a moving major tag: it names the exact version the SHA is (RED before 2026-11-12h item 2, five lines)', () => {
+  const moving = allPins().filter((p) => /^v\d+$/.test(p.tag)).map((p) => `${p.file}:${p.line} ${p.action} # ${p.tag}`);
+  assert.deepEqual(moving, []);
 });
