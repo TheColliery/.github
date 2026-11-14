@@ -11,6 +11,7 @@ import {
   ARTICLE_PRIVATE_MARKER, ARTICLE_CHANGEREQUEST_MARKER, PRIVATE_WORKING_MARKER,
   TEMPLATE_DIR_FOR_KIND, parseGithubOrigin, matchesWithPlaceholders,
   ORG_DEFAULT_FILES, liveFileVerdict, gitRemoteState, noRemoteVerdict,
+  hasTopLevelConcurrency, workflowsMissingConcurrency,
 } from './lib/skeleton-check-lib.mjs';
 
 // A scratch zones-root, one fixture per test to keep each hermetic. Every fixture is
@@ -838,5 +839,59 @@ test('scratchpad/ is an ignore line in every kind of template .gitignore (RED be
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const files = ['templates/published-code/.gitignore', 'templates/private-working/.gitignore', 'templates/article/.gitignore'];
   const missing = files.filter((f) => !fs.readFileSync(path.join(root, f), 'utf8').split(/\r?\n/).includes('scratchpad/'));
+  assert.deepEqual(missing, []);
+});
+
+// --- concurrency (UMB4-023): a workflow with no top-level `concurrency:` block is a finding ---
+
+const WF_WITH = 'name: X\non:\n  pull_request:\nconcurrency:\n  group: x-${{ github.ref }}\n  cancel-in-progress: true\njobs:\n  a:\n    runs-on: ubuntu-latest\n';
+const WF_WITHOUT = 'name: X\non:\n  pull_request:\njobs:\n  a:\n    runs-on: ubuntu-latest\n';
+
+test('hasTopLevelConcurrency: true for a top-level block, a string group, and CRLF', () => {
+  assert.equal(hasTopLevelConcurrency(WF_WITH), true);
+  assert.equal(hasTopLevelConcurrency('on: push\nconcurrency: ci-${{ github.ref }}\njobs: {}\n'), true);
+  assert.equal(hasTopLevelConcurrency(WF_WITH.replace(/\n/g, '\r\n')), true);
+});
+
+test('hasTopLevelConcurrency: false when absent, job-level only, or only in a comment', () => {
+  assert.equal(hasTopLevelConcurrency(WF_WITHOUT), false);
+  assert.equal(hasTopLevelConcurrency('jobs:\n  a:\n    concurrency: a\n    runs-on: x\n'), false);
+  assert.equal(hasTopLevelConcurrency('# concurrency: x\non: push\njobs: {}\n'), false);
+  assert.equal(hasTopLevelConcurrency('on: push\nconcurrency_note: x\njobs: {}\n'), false);
+});
+
+test('workflowsMissingConcurrency: names only the workflow without the group, sorted, .yml and .yaml alike', () => {
+  const root = makeScratch();
+  const wf = path.join(root, 'r', '.github', 'workflows');
+  write(path.join(wf, 'ci.yml'), WF_WITH);
+  write(path.join(wf, 'skill-checks.yml'), WF_WITHOUT);
+  write(path.join(wf, 'a.yaml'), WF_WITHOUT);
+  write(path.join(wf, 'README.md'), 'not a workflow');
+  write(path.join(wf, 'sub', 'nested.yml'), WF_WITHOUT);
+  write(path.join(wf, 'dir.yml', 'x'), ''); // a folder named like a workflow is no workflow
+  assert.deepEqual(workflowsMissingConcurrency(path.join(root, 'r')), ['a.yaml', 'skill-checks.yml']);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('workflowsMissingConcurrency: a repo with no workflows folder has nothing to report', () => {
+  const root = makeScratch();
+  fs.mkdirSync(path.join(root, 'r'));
+  assert.deepEqual(workflowsMissingConcurrency(path.join(root, 'r')), []);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('every canon workflow template carries a top-level concurrency group (SERIES-CANON item 1)', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const dirs = [];
+  const walk = (d) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (!e.isDirectory()) continue;
+      if (p.endsWith(path.join('.github', 'workflows'))) dirs.push(p); else walk(p);
+    }
+  };
+  walk(path.join(root, 'templates'));
+  assert.ok(dirs.length >= 3, `expected the template workflow folders, found ${dirs.length}`);
+  const missing = dirs.flatMap((d) => workflowsMissingConcurrency(path.dirname(path.dirname(d))).map((f) => path.relative(root, path.join(d, f))));
   assert.deepEqual(missing, []);
 });

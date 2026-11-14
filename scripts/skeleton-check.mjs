@@ -36,12 +36,15 @@
 //               hardcoded "<umbrellaRoot>/template-<kind>" guess (UMB-045's own named gap,
 //               closed here per UMB-048 item 3) — omit a kind to skip its template-repo section.
 //
+// Every classified room's own .github/workflows/*.yml|yaml is also checked for a top-level `concurrency:` group
+// (UMB4-023, the canon's one-per-workflow MUST); each file without one is a `[concurrency]` row and exits 1.
+//
 // Zero-dependency (Phoenix #2); fail-loud CLI (scripts-quality.md §1).
 
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
-import { findRepos as findReposLib, SKELETON_FILES, TEMPLATE_DIR_FOR_KIND, parseGithubOrigin, matchesWithPlaceholders, formatDetailsTable, liveFileVerdict, gitRemoteState, noRemoteVerdict } from './lib/skeleton-check-lib.mjs';
+import { findRepos as findReposLib, SKELETON_FILES, TEMPLATE_DIR_FOR_KIND, parseGithubOrigin, matchesWithPlaceholders, formatDetailsTable, liveFileVerdict, gitRemoteState, noRemoteVerdict, workflowsMissingConcurrency } from './lib/skeleton-check-lib.mjs';
 import { isLicenseStub, licenseIdentityMismatches } from './lib/license-check-lib.mjs';
 import { compareOverlaySet } from './lib/overlay-set.mjs';
 import { pinOnlyDifference, pinLine } from './lib/pin-normalize.mjs';
@@ -367,6 +370,17 @@ async function main() {
         failed++;
       }
     }
+    // UMB4-023: the canon's `concurrency:` MUST (one top-level group per workflow), checked on the room's OWN workflow folder,
+    // every file in it, not only the skeleton's; a gap is counted into `failed`, like a LICENSE stub. The fix is the room's belt.
+    try {
+      for (const wf of workflowsMissingConcurrency(repo.dir)) {
+        console.log(`  [concurrency] .github/workflows/${wf}: no top-level concurrency: group (SKILL-REPO-PATTERN.md, one per workflow)`);
+        failed++;
+      }
+    } catch (e) {
+      console.log(`  [concurrency]: FAIL reading .github/workflows (${e.message})`);
+      failed++;
+    }
     // UMB-348: an overlay is adopted as ONE set. A room carrying a canon release workflow is judged on every file the workflow runs
     // (derived from the workflow, scripts/lib/overlay-set.mjs), by blob id; a stale or missing script is a named row, not a failed tag run.
     if (kind === 'published-code') {
@@ -450,12 +464,12 @@ async function main() {
   }
 
   if (failed > 0) {
-    // `failed` aggregates three distinct classes (a read/compare error, a LICENSE
-    // stub, a --settings mismatch) -- see the per-item lines above for which one(s)
+    // `failed` aggregates four distinct classes (a read/compare error, a LICENSE
+    // stub, a workflow with no concurrency group, a --settings mismatch) -- see the per-item lines above for which one(s)
     // fired; the old wording named only the first class and misdescribed a run whose
     // sole issue was a LICENSE stub or a settings FAIL as "an actual read/compare
     // failure" (self-caught, UMB-054 item 3's own rot-canary pass).
-    console.error(`FAIL: ${failed} issue(s) found — a read/compare error, a LICENSE stub, or a --settings mismatch (see the lines above for which).`);
+    console.error(`FAIL: ${failed} issue(s) found — a read/compare error, a LICENSE stub, a workflow with no concurrency group, or a --settings mismatch (see the lines above for which).`);
     process.exitCode = 1;
   }
 }

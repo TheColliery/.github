@@ -291,6 +291,25 @@ export function findRepos(zonesRoot, zones) {
   return repos;
 }
 
+// UMB4-023 -- the canon's `concurrency:` MUST (SKILL-REPO-PATTERN.md, "one per workflow"; SERIES-CANON item 1): a workflow file
+// in a repo's .github/workflows/ with no TOP-LEVEL `concurrency:` key is a finding. Top-level = the key at column 0;
+// a job-level key is indented, and a comment line starts with `#`, so neither counts. A string group
+// (`concurrency: ci-${{ github.ref }}`) is a group too. Only the folder's own files: GitHub reads no subfolder.
+export function hasTopLevelConcurrency(text) {
+  return /^["']?concurrency["']?[ \t]*:/m.test(text.replace(/\r\n/g, '\n'));
+}
+
+// The workflow file names in <repoDir>/.github/workflows/ that lack the group, sorted (node/runtime.md §9).
+export function workflowsMissingConcurrency(repoDir) {
+  const dir = path.join(repoDir, '.github', 'workflows');
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isFile() && /\.ya?ml$/.test(e.name))
+    .map((e) => e.name)
+    .filter((name) => !hasTopLevelConcurrency(fs.readFileSync(path.join(dir, name), 'utf8')))
+    .sort();
+}
+
 // UMB-128 -- `--details`: the REPO DETAILS surface (About description · website · topics)
 // judged against DOC-PATTERN.md §"Repo details". Pure: the caller fetches the org's repo
 // list (`GET /orgs/{org}/repos`) and hands the objects here. The instrument REPORTS; it never
