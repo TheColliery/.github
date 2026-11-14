@@ -9,7 +9,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -18,7 +18,7 @@ const LIB = path.join(HERE, 'lib', 'secret-scan.mjs');
 const KEY = ['AK', 'IA', 'ABCDEFGHIJKLMNOP'].join(''); // an access-key-id shape, assembled so this file never carries one
 const ZERO = '0'.repeat(40);
 const made = [];
-// UMB-439 ruling 3 (a): ONE sandbox of the test's own. Every fixture folder, every child's TEMP, TMP, TMPDIR, HOME and USERPROFILE live in it, and the
+// ONE sandbox of the test's own. Every fixture folder, every child's TEMP, TMP, TMPDIR, HOME and USERPROFILE live in it, and the
 // developer's global git configuration never applies (HOME and XDG_CONFIG_HOME are the sandbox, whose own global configuration is an empty file, and the system config is off).
 const SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'secret-gate-sandbox-'));
 fs.writeFileSync(path.join(SANDBOX, '.gitconfig'), '');
@@ -32,7 +32,7 @@ const gitEnv = () => ({
   PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, windir: process.env.windir, ComSpec: process.env.ComSpec, PATHEXT: process.env.PATHEXT,
   TEMP: SANDBOX, TMP: SANDBOX, TMPDIR: SANDBOX, HOME: SANDBOX, USERPROFILE: SANDBOX, XDG_CONFIG_HOME: SANDBOX,
   GIT_CONFIG_NOSYSTEM: '1',
-  // git stops searching for a repository at the sandbox's parent: a temp folder that sits inside a repository must not make a fixture look like part of it (UMB-456 (1) vi)
+  // git stops searching for a repository at the sandbox's parent: a temp folder that sits inside a repository must not make a fixture look like part of it
   GIT_CEILING_DIRECTORIES: path.dirname(SANDBOX),
 });
 
@@ -68,17 +68,17 @@ function repo(commits, { withLib = true } = {}) {
 // HOME of its own, and whatever the test plants on top (a GIT_DIR a hook inherited).
 const gateEnv = (dir, extraEnv = {}) => ({ ...gitEnv(), NODE_OPTIONS: process.env.NODE_OPTIONS, HOME: dir, USERPROFILE: dir, ...extraEnv });
 
-function run(dir, args = [], input = '', extraEnv = {}) {
-  const r = spawnSync(process.execPath, [path.join(dir, 'scripts', 'secret-gate.mjs'), ...args], {
-    cwd: dir, input, encoding: 'utf8', timeout: 60000,
+function run(dir, args = [], input = '', extraEnv = {}, timeout = 60000) {
+  const r = spawnSync(process.execPath, ['--max-old-space-size=512', path.join(dir, 'scripts', 'secret-gate.mjs'), ...args], {
+    cwd: dir, input, encoding: 'utf8', timeout,
     env: gateEnv(dir, extraEnv),
   });
   return { code: r.status, out: r.stdout || '', err: r.stderr || '' };
 }
 
 // Teardown of a tree git children just used: on Windows a git.exe that outlives its launcher by a few seconds still holds the tree, and one plain rmSync
-// answers EBUSY, EPERM or ENOTEMPTY, failing the test for a reason that is not the test's (CoalWash e63, measured: a loop of fresh calls clears it, the
-// retry options of one call do not; order 16i item 6). A tree still held past the budget throws: a real leak stays loud.
+// answers EBUSY, EPERM or ENOTEMPTY, failing the test for a reason that is not the test's (measured: a loop of fresh calls clears it, the
+// retry options of one call do not). A tree still held past the budget throws: a real leak stays loud.
 function removeTree(dir, budgetMs = 30000) {
   const until = Date.now() + budgetMs;
   for (;;) {
@@ -140,7 +140,7 @@ test('--pre-push with a clean range passes and says what it read; with no refs o
   assert.match(run(dir, ['--pre-push'], '').out, /no refs on stdin, nothing to scan/);
 });
 
-// 14h (item 14, courier 3; CoalWash LOW): --remote=<name> names the PUSH remote, so a commit held only by ANOTHER remote still counts as unpushed. Nothing exercised the flag.
+// --remote=<name> names the PUSH remote, so a commit held only by ANOTHER remote still counts as unpushed. Nothing exercised the flag.
 // The fixture: three commits, the middle one adds a key and the last deletes it (the tree at HEAD is clean), the tip sits on the remote-tracking ref of `other` only, and the push is a new branch to `origin`.
 test('--pre-push --remote=<name>: a commit held only by another remote is scanned for the named push remote, and is skipped when the named remote already holds it or no remote is named', () => {
   const dir = repo([{ 'a.txt': 'one\n' }, { 'k.txt': `${KEY}\n` }, { 'k.txt': null }]);
@@ -195,7 +195,7 @@ test('a scan that cannot run fails: a missing scanner and a directory that is no
   assert.match(r.out, /FAIL SECRETS: .*not inside a git repository/);
 });
 
-test('a git that runs and refuses is reported with its own first line, never as git missing from PATH (found 2026-10-23 while testing the one-wording classifier class)', () => {
+test('a git that runs and refuses is reported with its own first line, never as git missing from PATH', () => {
   // a .git FILE naming a directory that is gone: git 2.56 answers "gitfile does not point to a valid repository", exit 128.
   // RED before the fix: the gate printed the cause "is git on PATH?" although git ran (git 2.56), or, on the ubuntu runner's
   // older git, which answers "not a git repository: <path>", the wrong cause "not inside a git repository" (CI, 2026-10-23).
@@ -207,7 +207,7 @@ test('a git that runs and refuses is reported with its own first line, never as 
   fs.writeFileSync(path.join(dir, '.git'), 'gitdir: ' + path.join(dir, 'gone-gitdir') + '\n');
   const r = run(dir);
   assert.strictEqual(r.code, 1);
-  assert.match(r.out, /FAIL SECRETS: git could not list the tracked files \(fatal: /);
+  assert.match(r.out, /FAIL SECRETS: git could not list the tracked files \("fatal: /);
   assert.ok(!/is git on PATH/.test(r.out), 'git ran, so PATH is not the cause');
 });
 
@@ -295,11 +295,11 @@ test('a staged blob that is damaged on disk fails the scan by count: exit 1, nam
   assert.match(r.out, /FAIL SECRETS: 1 tracked file\(s\) could not be read, so were NOT scanned: "damaged\.txt"/);
 });
 
-// UMB-439 ruling 3 (a), from the LLM zone's patrol: the fixtures must not depend on, or write into, the developer's own machine. Every fixture
+// The fixtures must not depend on, or write into, the developer's own machine. Every fixture
 // folder lives in ONE sandbox of the test's own, the children's TEMP, TMP and TMPDIR point at it, and the developer's global git configuration
 // (a hooks path, a signing rule, a template directory) never applies: HOME and XDG_CONFIG_HOME are the sandbox, whose global configuration is an empty file, and the system
 // config is switched off. The witness below plants a hostile global config and a hostile HOME; the fixture commits must still work.
-test('the fixtures run in the test\'s own sandbox: a hostile global git config and HOME never reach them, and the fixture folders live inside the sandbox -- RED before UMB-439', () => {
+test('the fixtures run in the test\'s own sandbox: a hostile global git config and HOME never reach them, and the fixture folders live inside the sandbox', () => {
   const hostile = fs.mkdtempSync(path.join(os.tmpdir(), 'secret-gate-hostile-'));
   made.push(hostile);
   const hooks = path.join(hostile, 'hooks');
@@ -308,7 +308,7 @@ test('the fixtures run in the test\'s own sandbox: a hostile global git config a
   const hostileConfig = '[core]\n\thooksPath = ' + hooks.replace(/\\/g, '/') + '\n';
   fs.writeFileSync(path.join(hostile, '.gitconfig'), hostileConfig); // read through HOME
   fs.mkdirSync(path.join(hostile, 'git'));
-  fs.writeFileSync(path.join(hostile, 'git', 'config'), hostileConfig); // read through XDG_CONFIG_HOME (UMB-456 (1) v: it was planted at hostile/.gitconfig, a path XDG never reads)
+  fs.writeFileSync(path.join(hostile, 'git', 'config'), hostileConfig); // read through XDG_CONFIG_HOME (a copy at hostile/.gitconfig alone would test nothing: XDG never reads that path)
   // The hostile HOME, USERPROFILE and XDG_CONFIG_HOME are planted on THIS process (and put back): the environment of a fixture call is built from named keys, so none of them
   // reaches git. Make gitEnv() a copy of the process's own environment and the commit below fails under the hostile hook.
   // SECRET_GATE_TEST_PLANTED is no GIT_ name: a copy of the process's own environment, filtered or not, would carry it. NODE_OPTIONS is the one name the gate child is handed on purpose.
@@ -319,7 +319,7 @@ test('the fixtures run in the test\'s own sandbox: a hostile global git config a
     const dir = repo([{ 'a.txt': 'x\n' }]); // a commit under the hostile global hook would fail with exit 1
     assert.equal(git(dir, 'config', '--global', '--list'), '', 'git reads no global configuration even with the hostile HOME and XDG_CONFIG_HOME in place');
     assert.ok(path.resolve(dir).startsWith(path.resolve(SANDBOX) + path.sep), 'the fixture folder is inside the sandbox: ' + dir);
-    const probe = execFileSync(process.execPath, ['-e', 'const e = process.env; console.log(JSON.stringify([e.TEMP, e.TMP, e.TMPDIR, e.HOME, e.XDG_CONFIG_HOME, e.GIT_CONFIG_NOSYSTEM, e.GIT_CONFIG_GLOBAL === undefined, e.SECRET_GATE_TEST_PLANTED === undefined, e.NODE_OPTIONS === undefined]))'], { encoding: 'utf8', timeout: 60000, env: gitEnv() });
+    const probe = execFileSync(process.execPath, ['--max-old-space-size=256', '-e', 'const e = process.env; console.log(JSON.stringify([e.TEMP, e.TMP, e.TMPDIR, e.HOME, e.XDG_CONFIG_HOME, e.GIT_CONFIG_NOSYSTEM, e.GIT_CONFIG_GLOBAL === undefined, e.SECRET_GATE_TEST_PLANTED === undefined, e.NODE_OPTIONS === undefined]))'], { encoding: 'utf8', timeout: 60000, env: gitEnv() });
     const [tmp, tmp2, tmpdir, home, xdg, nosys, noGlobal, noMarker, noNodeOptions] = JSON.parse(probe);
     assert.deepEqual([tmp, tmp2, tmpdir, home, xdg], [SANDBOX, SANDBOX, SANDBOX, SANDBOX, SANDBOX]);
     assert.equal(fs.readFileSync(path.join(SANDBOX, '.gitconfig'), 'utf8'), '', 'the global config is an empty file of the sandbox');
@@ -327,19 +327,19 @@ test('the fixtures run in the test\'s own sandbox: a hostile global git config a
     assert.equal(noGlobal, true, 'no GIT_CONFIG_GLOBAL is set: the canon allows only GIT_CONFIG_NOSYSTEM, GIT_TERMINAL_PROMPT and GIT_CEILING_DIRECTORIES');
     assert.equal(noMarker, true, 'the environment is built from named keys: a name the process merely inherited is not in it');
     assert.equal(noNodeOptions, true, 'a git call is handed no NODE_OPTIONS');
-    const gateProbe = execFileSync(process.execPath, ['-e', 'const e = process.env; console.log(JSON.stringify([e.NODE_OPTIONS, e.SECRET_GATE_TEST_PLANTED === undefined, e.HOME]))'], { encoding: 'utf8', timeout: 60000, env: gateEnv(SANDBOX) });
+    const gateProbe = execFileSync(process.execPath, ['--max-old-space-size=256', '-e', 'const e = process.env; console.log(JSON.stringify([e.NODE_OPTIONS, e.SECRET_GATE_TEST_PLANTED === undefined, e.HOME]))'], { encoding: 'utf8', timeout: 60000, env: gateEnv(SANDBOX) });
     assert.deepEqual(JSON.parse(gateProbe), ['--max-old-space-size=512', true, SANDBOX], 'the gate child is handed NODE_OPTIONS by name and nothing else the process inherited');
   } finally {
     for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
   }
 });
 
-// UMB-456 (1) vi (CoalGob N1): when the machine's temp folder sits inside a git repository, the sandbox sits inside it too, and a fixture folder that is
+// When the machine's temp folder sits inside a git repository, the sandbox sits inside it too, and a fixture folder that is
 // NOT a repository would find that outer repository. The sandbox's git calls carry a ceiling at the sandbox's parent so the search stops there.
 // The witness runs the test that needs "not inside a git repository" in a child whose TEMP, TMP and TMPDIR are a folder inside a real repository.
 // The child's reporter is PINNED to tap: left to its default it is spec on Node 24 (measured, stdout a pipe or a file) and tap on Node 22 when stdout is not a TTY
-// (nodejs.org v22 test docs), so a count read from the default was right on a developer's Node 24 and wrong on CI's Node 22 (run 37722574073).
-test('the sandbox is closed against a repository ABOVE the temp folder: a non-repository fixture is still not inside one -- RED before UMB-456 (1) vi', { skip: process.env.SECRET_GATE_NESTED ? 'this is the nested run' : false }, () => {
+// (nodejs.org v22 test docs), so a count read from the default was right on a developer's Node 24 and wrong on CI's Node 22.
+test('the sandbox is closed against a repository ABOVE the temp folder: a non-repository fixture is still not inside one', { skip: process.env.SECRET_GATE_NESTED ? 'this is the nested run' : false }, () => {
   const outer = fs.mkdtempSync(path.join(os.tmpdir(), 'secret-gate-outer-'));
   made.push(outer);
   git(outer, 'init', '-q', '-b', 'main');
@@ -352,9 +352,9 @@ test('the sandbox is closed against a repository ABOVE the temp folder: a non-re
   assert.strictEqual(r.status, 0, r.stdout.slice(-800) + r.stderr.slice(-400));
 });
 
-// ---- order 2026-11-03b: a binary-looking NAME no longer skips a blob before its bytes are read; a blob id shared by several paths is read once;
+// ---- a binary-looking NAME no longer skips a blob before its bytes are read; a blob id shared by several paths is read once;
 // git is never launched from the checkout the gate scans. Each was RED on the code before it.
-test('a staged text file with a binary-looking name is still scanned: the bytes decide, never the name -- RED before 2026-11-03b', () => {
+test('a staged text file with a binary-looking name is still scanned: the bytes decide, never the name', () => {
   const nul = String.fromCharCode(0);
   const r = run(repo([{ 'notes.png': `id ${KEY}\n`, 'real.png': `PNG${nul}${nul} id ${KEY}\n` }]));
   assert.strictEqual(r.code, 1, r.out + r.err);
@@ -362,7 +362,7 @@ test('a staged text file with a binary-looking name is still scanned: the bytes 
   assert.doesNotMatch(r.out, /real\.png/, 'a blob whose first bytes hold a NUL is binary by its content and stays out of the text scan');
 });
 
-test('a blob id staged at several paths is handed to git cat-file once, and every path is still reported -- RED before 2026-11-03b', () => {
+test('a blob id staged at several paths is handed to git cat-file once, and every path is still reported', () => {
   const dir = repo([{ 'a.txt': `id ${KEY}\n`, 'b.txt': `id ${KEY}\n`, 'c/d.txt': `id ${KEY}\n`, 'README.md': 'hello\n' }]);
   // A preload records what the gate hands to cat-file; the gate's own code is never changed for the test.
   const preload = path.join(SANDBOX, `catfile-probe-${made.length}.mjs`);
@@ -371,8 +371,8 @@ test('a blob id staged at several paths is handed to git cat-file once, and ever
     "import cp from 'node:child_process';",
     "import fs from 'node:fs';",
     "import { syncBuiltinESMExports } from 'node:module';",
-    'const orig = cp.execFileSync;',
-    "cp.execFileSync = function (file, args, opts) { if (Array.isArray(args) && args.includes('cat-file') && opts && opts.input != null) fs.appendFileSync(process.env.GATE_PROBE_LOG, String(opts.input)); return orig.apply(this, arguments); };",
+    'const orig = cp.spawn;',
+    "cp.spawn = function (file, args) { const c = orig.apply(this, arguments); if (Array.isArray(args) && args.includes('cat-file')) { const end = c.stdin.end.bind(c.stdin); c.stdin.end = (d, ...rest) => { if (d != null) fs.appendFileSync(process.env.GATE_PROBE_LOG, String(d)); return end(d, ...rest); }; } return c; };",
     'syncBuiltinESMExports();',
   ].join('\n'));
   const r = run(dir, [], '', { NODE_OPTIONS: [process.env.NODE_OPTIONS, `--import=${pathToFileURL(preload).href}`].filter(Boolean).join(' '), GATE_PROBE_LOG: log });
@@ -383,7 +383,7 @@ test('a blob id staged at several paths is handed to git cat-file once, and ever
   assert.strictEqual(new Set(ids).size, ids.length, `every id is asked for once: ${ids.length} asked, ${new Set(ids).size} distinct`);
 });
 
-test('a git.exe planted in the scanned checkout is never run in git\'s place on Windows -- RED before 2026-11-03b', (t) => {
+test('a git.exe planted in the scanned checkout is never run in git\'s place on Windows', (t) => {
   // Elsewhere the current folder is searched only when PATH names it, the user's own setting, so the case is Windows'.
   if (process.platform !== 'win32') { t.skip('only Windows looks for a program in the current folder first'); return; }
   const dir = repo([{ 'README.md': 'hello\n' }]);
@@ -393,4 +393,79 @@ test('a git.exe planted in the scanned checkout is never run in git\'s place on 
   const r = run(dir);
   assert.strictEqual(r.code, 0, r.out + r.err);
   assert.match(r.out, /^PASS SECRETS: tree scan of \d+ tracked text file\(s\) clean/m);
+});
+
+// A staged blob larger than any whole-output buffer: the batch is streamed, and a blob whose bytes are binary is probed on its first bytes and
+// dropped as it streams past, never held. Before the stream, the batch was read into one buffer capped at 1 GiB, so a blob this size failed the
+// gate on every run. The blob is piped into git, never written as a file or held in memory here.
+test('a staged binary blob over 1 GiB is streamed past, never buffered: the gate still passes and names it nowhere', async () => {
+  const dir = repo([{ 'README.md': 'hello\n' }]);
+  const count = (out) => (/^PASS SECRETS: tree scan of (\d+) tracked text file/m.exec(out) || [])[1];
+  const before = count(run(dir).out);
+  assert.ok(before, 'the clean tree passes before the big blob is staged');
+  const size = (1 << 30) + (1 << 20);
+  const sha = await new Promise((resolve, reject) => {
+    const child = spawn('git', ['-C', dir, 'hash-object', '-w', '--stdin'], { env: gitEnv(), timeout: 300000, stdio: ['pipe', 'pipe', 'pipe'] });
+    let out = '';
+    child.stdout.on('data', (d) => { out += d; });
+    child.on('error', reject);
+    child.on('close', (code) => (code === 0 ? resolve(out.trim()) : reject(new Error(`hash-object exit ${code}`))));
+    const zeros = Buffer.alloc(1 << 20);
+    let left = size;
+    const pump = () => {
+      while (left > 0) { left -= zeros.length; if (!child.stdin.write(zeros)) { child.stdin.once('drain', pump); return; } }
+      child.stdin.end();
+    };
+    pump();
+  });
+  git(dir, 'update-index', '--add', '--cacheinfo', `100644,${sha},big.bin`);
+  const r = run(dir, [], '', {}, 300000);
+  assert.strictEqual(r.code, 0, r.out + r.err);
+  assert.strictEqual(count(r.out), before, 'the binary blob is not counted as a text file: ' + r.out);
+  assert.doesNotMatch(r.out, /big\.bin/);
+});
+
+// git honours a replace ref when it reads an object, so a local `git replace` could show the gate a clean blob in place of the one the commit
+// records and pushes. The gate reads every object with replace refs off.
+test('a replace ref never changes what is scanned: a key blob replaced by a clean one is still found, in the tree and in the pushed range', () => {
+  const dir = repo([{ 'a.txt': 'one\n' }, { 'k.txt': `${KEY}\n` }]);
+  const keyBlob = git(dir, 'rev-parse', 'HEAD:k.txt');
+  const clean = execFileSync('git', ['-C', dir, 'hash-object', '-w', '--stdin'], { input: 'clean\n', encoding: 'utf8', timeout: 60000, env: gitEnv() }).trim();
+  git(dir, 'replace', keyBlob, clean);
+  const tree = run(dir);
+  assert.strictEqual(tree.code, 1, tree.out + tree.err);
+  assert.match(tree.out, /tree "k\.txt":1 aws-access-key-id/);
+  const tip = git(dir, 'rev-parse', 'HEAD');
+  const pushed = run(dir, ['--pre-push'], `refs/heads/main ${tip} refs/heads/main ${ZERO}\n`);
+  assert.strictEqual(pushed.code, 1, pushed.out + pushed.err);
+  assert.match(pushed.out, /pushed [0-9a-f]{12} "k\.txt":1 aws-access-key-id/);
+});
+
+test('git\'s own diagnostic is escaped in the report: a path in it that carries a right-to-left override never reaches the terminal raw', () => {
+  const rlo = String.fromCharCode(0x202e);
+  // git names the .git file in its refusal, so the override sits in the checkout's own folder name
+  const dir = fs.mkdtempSync(path.join(SANDBOX, `secret-gate-rlo${rlo}knil-`));
+  made.push(dir);
+  fs.mkdirSync(path.join(dir, 'scripts', 'lib'), { recursive: true });
+  fs.copyFileSync(GATE, path.join(dir, 'scripts', 'secret-gate.mjs'));
+  fs.copyFileSync(LIB, path.join(dir, 'scripts', 'lib', 'secret-scan.mjs'));
+  fs.writeFileSync(path.join(dir, '.git'), 'gitdir: ' + path.join(dir, 'gone-gitdir') + '\n');
+  const r = run(dir);
+  assert.strictEqual(r.code, 1);
+  assert.match(r.out, /FAIL SECRETS: git could not list the tracked files \("fatal: /);
+  assert.ok(!r.out.includes(rlo), 'the override character in git\'s message must not reach the terminal');
+  assert.ok(r.out.includes(String.fromCharCode(92) + 'u202e'), r.out);
+});
+
+// A node child this file starts is capped like any harness child: a heap cap and a kill-timeout, so one runaway cannot take the machine.
+test('every node child this test file starts carries a heap cap and a kill-timeout', () => {
+  const src = fs.readFileSync(fileURLToPath(import.meta.url), 'utf8');
+  const calls = [...src.matchAll(/(?:execFileSync|spawnSync|spawn)\(process\.execPath, /g)];
+  assert.ok(calls.length >= 4, `found ${calls.length} node child calls`);
+  for (const m of calls) {
+    const call = src.slice(m.index, src.indexOf('});', m.index) + 3);
+    const line = src.slice(0, m.index).split('\n').length;
+    assert.ok(call.includes('--max-old-space-size='), `line ${line}: no heap cap`);
+    assert.ok(/\btimeout\b/.test(call), `line ${line}: no kill-timeout`);
+  }
 });

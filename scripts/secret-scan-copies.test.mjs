@@ -49,3 +49,19 @@ test('the org repo\'s own CI scans the tracked tree, and its acknowledged finger
   assert.ok(read('.github/workflows/verify-landing.yml').includes('run: node scripts/secret-gate.mjs'));
   for (const l of read('secret-scan.acks').split('\n').map((x) => x.replace(/#.*$/, '').trim()).filter(Boolean)) assert.match(l, /^[0-9a-f]{16}$/);
 });
+
+// The gate, its test and the template hooks are copied byte for byte into public repositories, so they carry no house pointer (a queue-row or
+// order id means nothing outside this house), and the hook says what the gate scans in commit mode: the staged tree, the index.
+const HOUSE_ID = /\b(?:UMB\d*|CWK|LWK\d*|ARK|BB|AR|AT|AV|AW|TG|CW|K)-\d+|\border \d{4}-\d\d-\d\d[a-z]?\b|\b\d{1,2}[a-z] \(item \d+|\bCoal[A-Z][a-z]+ (?:e\d+|N\d+|LOW|MEDIUM|HIGH)\b|\bruling \d+ \(/;
+const SHIPPED = ['scripts/secret-gate.mjs', 'scripts/secret-gate.test.mjs',
+  ...['published-code', 'article'].flatMap((k) => ['pre-commit', 'pre-push'].map((h) => `templates/${k}/.githooks/${h}`))];
+test('the shipped gate, its test and the template hooks carry no house ticket or order id', () => {
+  for (const f of SHIPPED) read(f).split('\n').forEach((l, i) => assert.doesNotMatch(l, HOUSE_ID, `${f}:${i + 1}`));
+});
+test('each template hook says commit mode scans the staged tree, not the tracked tree', () => {
+  for (const k of ['published-code', 'article']) {
+    const hook = read(`templates/${k}/.githooks/pre-commit`);
+    assert.ok(!/scans the tracked tree/.test(hook), `${k}: the hook says "tracked tree"`);
+    assert.match(hook, /pre-commit scans the staged tree/, k);
+  }
+});

@@ -11,7 +11,7 @@
 # able to abort; scripts-quality.md 1 — CLI scripts fail loud).
 
 # UMB-282 (a): the house secret scan (scripts/secret-gate.mjs). git hands only pre-push the ref lines on stdin, so only
-# pre-push passes --pre-push (every pushed commit, message and tag); pre-commit scans the tracked tree. One file, two
+# pre-push passes --pre-push (every pushed commit, message and tag); pre-commit scans the staged tree (the index). One file, two
 # hook names, identical bytes, so the branch is on the name git invoked.
 if [ "$(basename "$0")" = "pre-push" ]; then
   node scripts/secret-gate.mjs --pre-push "--remote=$1" || exit 1
