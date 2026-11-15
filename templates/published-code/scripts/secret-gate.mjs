@@ -40,24 +40,6 @@ const USAGE = 'usage: node scripts/secret-gate.mjs [--pre-push [--remote=<name>]
 const ACKS = 'secret-scan.acks';
 const BINARY = /\.(png|jpe?g|gif|webp|ico|pdf|zip|gz|tgz|7z|woff2?|ttf|otf|eot|mp[34]|mov|xlsx?|docx?|pptx?|gguf|safetensors|bin)$/i;
 const BACKSLASH = String.fromCharCode(92);
-// A text file in UTF-16 holds a NUL in every code unit of ASCII text, so a binary-looking NAME with NUL-bearing bytes is not yet binary: it is
-// UTF-16 text when it opens with a byte-order mark (FF FE little-endian, FE FF big-endian), or, with no mark, when its first bytes hold NULs on one
-// byte parity only (the high bytes of ASCII code units) for at least half its code units and none on the other, and it is then scanned. A real
-// binary file holds NULs on both parities, so it still reads binary. This decides only WHETHER such a file is text; every scanned blob is decoded
-// as UTF-8, and the scanner reads each NUL-bearing line again with its NULs removed (scanText), which finds a key in wide text of either order,
-// UTF-32 included. shortcut: a file with a binary-looking name, no mark and almost no ASCII in its first 8000 bytes reads as binary; a mark decides it.
-const UTF16_PROBE_BYTES = 8000;
-function utf16Of(bytes) {
-  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) return 'le';
-  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) return 'be';
-  const n = Math.min(bytes.length, UTF16_PROBE_BYTES) & ~1;
-  let even = 0;
-  let odd = 0;
-  for (let i = 0; i < n; i += 2) { if (bytes[i] === 0) even++; if (bytes[i + 1] === 0) odd++; }
-  if (even === 0 && odd > 0 && odd * 2 >= n / 2) return 'le';
-  if (odd === 0 && even > 0 && even * 2 >= n / 2) return 'be';
-  return null;
-}
 
 const args = process.argv.slice(2);
 const known = (a) => a === '--pre-push' || a.startsWith('--remote=');
@@ -80,7 +62,8 @@ if (process.platform === 'win32') process.env.NoDefaultCurrentDirectoryInExePath
 // git honours a replace ref when it reads an object, so a local `git replace` could show the scan other bytes than the commit records and the push
 // sends. Every git call here reads objects as they are stored.
 const NO_REPLACE = '--no-replace-objects';
-const gitIn = (a) => execFileSync('git', [NO_REPLACE, ...a], { encoding: 'utf8', maxBuffer: 256 << 20, timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'], env: gitEnv() });
+// The scanner asks for one answer as bytes ({ buffer: true }: a commit's patch, to decode wide text in it); every other answer is a string.
+const gitIn = (a, o) => execFileSync('git', [NO_REPLACE, ...a], { encoding: o && o.buffer ? 'buffer' : 'utf8', maxBuffer: 256 << 20, timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'], env: gitEnv() });
 // Reads blobs in one STREAMED process: "<sha> <type> <size>\n<bytes>\n" per object, "<sha> missing\n" for one git does not have. Each distinct id
 // is asked for once, however many paths stage it. An id in `probe` (every path that stages it has a binary-looking name) is judged on its first
 // bytes as they arrive and, when they are binary, dropped as it streams past, never held: a binary blob of any size costs no memory. Every other
@@ -207,22 +190,21 @@ async function main() {
     const allBinaryNamed = new Map(); // id -> true when every path that stages it has a binary-looking name
     for (const e of wanted) allBinaryNamed.set(e.sha, allBinaryNamed.get(e.sha) !== false && BINARY.test(e.name));
     const probe = new Set([...allBinaryNamed].filter(([, b]) => b).map(([id]) => id));
-    try { blobs = await readBlobs(wanted.map((e) => e.sha), probe, (b) => scan.looksBinary(b) && !utf16Of(b)); } catch (e) {
+    try { blobs = await readBlobs(wanted.map((e) => e.sha), probe, (b) => scan.looksBinary(b) && !scan.wideKinds(b).length); } catch (e) {
       fails.push(`git could not read the staged files (${e && e.code ? e.code : 'cat-file error'}); the tree was NOT scanned`);
     }
   }
   // A binary-looking NAME only marks a blob for the content probe: it is skipped when its bytes are binary too (a NUL in its first bytes,
-  // git's rule, the scanner's looksBinary), so a text file named .png is scanned like any other. Each distinct blob is decoded once.
-  const texts = new Map();
+  // git's rule, the scanner's looksBinary), so a text file named .png is scanned like any other. The scanner reads each blob from its bytes (scanBytes):
+  // wide text (UTF-16 or UTF-32, by the scanner's wideKinds rule) is decoded and scanned, and every blob is read as UTF-8 too.
   if (blobs) wanted.forEach((e) => {
     const bytes = blobs.get(e.sha);
     if (bytes === null) { unreadable.push(esc(e.name)); return; }
     if (bytes === BINARY_BLOB) return; // binary-named at every path and binary by its first bytes, dropped while it streamed
-    const utf16 = utf16Of(bytes);
-    if (!utf16 && BINARY.test(e.name) && scan.looksBinary(bytes)) return;
-    if (!texts.has(e.sha)) texts.set(e.sha, bytes.toString('utf8'));
+    // a binary-looking name with NUL-bearing bytes is still text when the scanner's wide-text rule reads its first bytes as UTF-16 or UTF-32 (the bytes the stream probe judged)
+    if (BINARY.test(e.name) && scan.looksBinary(bytes) && !scan.wideKinds(bytes.subarray(0, PROBE_BYTES)).length) return;
     scanned++;
-    for (const h of scan.scanText(texts.get(e.sha), e.name)) keep(h, `tree ${esc(e.name)}:${h.line}`, headAcks);
+    for (const h of scan.scanBytes(bytes, e.name)) keep(h, `tree ${esc(e.name)}:${h.line}`, headAcks);
   });
   if (unreadable.length) fails.push(`${unreadable.length} tracked file(s) could not be read, so were NOT scanned: ${unreadable.slice(0, 3).join('; ')}`);
 

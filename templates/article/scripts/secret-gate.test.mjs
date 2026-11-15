@@ -89,6 +89,9 @@ function removeTree(dir, budgetMs = 30000) {
   }
 }
 test.after(() => { for (const d of [...made, SANDBOX]) removeTree(d); });
+// test.after is skipped when the run ends early (an uncaught error, a call to process.exit); 'exit' still runs, so the sandbox goes then too. A
+// process killed from outside (a runner's timeout) runs neither, and its sandbox stays in the temp folder.
+process.once('exit', () => removeTree(SANDBOX, 5000));
 
 test('a clean tree passes: exit 0 and a PASS SECRETS line naming the files scanned', () => {
   const r = run(repo([{ 'README.md': 'hello\n' }]));
@@ -617,4 +620,105 @@ test('the scanner reports a key once on a line that also holds a NUL, read as it
   const hits = scanText(`a\nb ${KEY} c${String.fromCharCode(0)}d\n`, 'f.txt');
   assert.strictEqual(hits.length, 1, JSON.stringify(hits));
   assert.strictEqual(hits[0].line, 2);
+});
+
+// A Thai character written next to a key in wide text: its code unit holds a byte that is an ASCII letter or digit (ใ is 43 0E in UTF-16LE, า is
+// 32 0E, แ is 0E 41 in UTF-16BE), so any reading that only drops the NULs glues that byte onto the key and the pattern misses it. Decoded as wide
+// text, the key stands alone, as it does in its UTF-8 copy. ช (U+0E0A) is 0A 0E in UTF-16LE, so git also cuts the patch line inside it.
+const TH = (...cps) => String.fromCharCode(...cps);
+const glued = {
+  'th-chai.txt': ['le-bom', `a\nid ${KEY}${TH(0x0e43, 0x0e0a, 0x0e49)}\n`],
+  'th-aa.txt': ['le-bom', `a\n${KEY}${TH(0x0e32)}\n`],
+  'th-ae.txt': ['be', `a\nid${TH(0x0e41)}${KEY}\n`],
+  'th-ae-bom.txt': ['be-bom', `a\nid${TH(0x0e41)}${KEY} x\n`],
+};
+const wideBytes = (form, s) => {
+  const le = Buffer.from(s, 'utf16le');
+  if (form === 'le-bom') return Buffer.concat([Buffer.from([0xff, 0xfe]), le]);
+  if (form === 'be') return Buffer.from(le).swap16();
+  return Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from(le).swap16()]);
+};
+test('a key glued to a Thai character in UTF-16 (LE with a mark, BE with and without one) is refused in the tree, as its UTF-8 copy is', () => {
+  for (const [label, enc] of [['utf-16', (form, s) => wideBytes(form, s)], ['utf-8', (form, s) => Buffer.from(s, 'utf8')]]) {
+    const r = run(repo([Object.fromEntries(Object.entries(glued).map(([n, [form, s]]) => [n, enc(form, s)]))]));
+    assert.strictEqual(r.code, 1, `${label}: ${r.out}${r.err}`);
+    for (const name of Object.keys(glued)) assert.ok(r.out.includes(`tree "${name}":2 aws-access-key-id`), `${label} ${name} is refused: ${r.out}`);
+  }
+});
+test('a key glued to a Thai character in a UTF-16 file that one pushed commit adds and a later one deletes is refused, as its UTF-8 copy is; so is one added inside an existing UTF-16 file', () => {
+  const s = `a\nid ${KEY}${TH(0x0e43, 0x0e0a, 0x0e49)}\n`;
+  for (const [label, bytes] of [['utf-16le', wideBytes('le-bom', s)], ['utf-8', Buffer.from(s, 'utf8')]]) {
+    const dir = repo([{ 'a.txt': 'one\n' }, { 'k.txt': bytes }, { 'k.txt': null }]);
+    assert.strictEqual(run(dir).code, 0, `${label}: the tree at HEAD is clean`);
+    const tip = git(dir, 'rev-parse', 'HEAD');
+    const r = run(dir, ['--pre-push'], `refs/heads/main ${tip} refs/heads/main ${ZERO}\n`);
+    assert.strictEqual(r.code, 1, `${label}: ${r.out}${r.err}`);
+    assert.match(r.out, /pushed [0-9a-f]{12} "k\.txt":2 aws-access-key-id/, label);
+  }
+  // the added hunk starts part-way through the file, at whatever byte git's line break left it on
+  const lines = Array.from({ length: 6 }, (_, i) => `line ${TH(0x0e01 + i)} ${i}`);
+  const before = wideBytes('le-bom', lines.join('\n') + '\n');
+  const after = wideBytes('le-bom', [...lines.slice(0, 3), `id ${KEY}${TH(0x0e32)} x`, ...lines.slice(3)].join('\n') + '\n');
+  const dir = repo([{ 'w.txt': before }, { 'w.txt': after }, { 'w.txt': before }]);
+  assert.strictEqual(run(dir).code, 0, 'the tree at HEAD is clean');
+  const tip = git(dir, 'rev-parse', 'HEAD');
+  const r = run(dir, ['--pre-push'], `refs/heads/main ${tip} refs/heads/main ${ZERO}\n`);
+  assert.strictEqual(r.code, 1, r.out + r.err);
+  // the file's line breaks are its own (0A 00), so git's line 4 is the text's line 4
+  assert.match(r.out, /pushed [0-9a-f]{12} "w\.txt":4 aws-access-key-id/);
+});
+
+// The rule for "these bytes are wide text", at its edges: a byte-order mark; at least WIDE_MIN_NULS (12) NULs on one byte parity and at least
+// WIDE_SKEW (4) times as many as on the other; UTF-32 when three of four positions hold them. NULs spread evenly are never wide text.
+test('the wide-text rule reads a byte-order mark, or enough NULs skewed onto the high bytes, and nothing else', async () => {
+  const { wideKinds } = await import(pathToFileURL(LIB).href);
+  const at = (len, zeros) => { const b = Buffer.alloc(len, 0x61); for (const i of zeros) b[i] = 0; return b; };
+  const odd = Array.from({ length: 12 }, (_, i) => 2 * i + 1);
+  assert.deepStrictEqual(wideKinds(Buffer.from('x'.repeat(12), 'utf16le')), ['utf16']);
+  assert.deepStrictEqual(wideKinds(Buffer.from('x'.repeat(11), 'utf16le')), [], 'eleven NULs are too few');
+  assert.deepStrictEqual(wideKinds(at(64, [...odd, 40, 42, 44])), ['utf16'], 'twelve to three is skewed enough');
+  assert.deepStrictEqual(wideKinds(at(64, [...odd, 40, 42, 44, 46])), [], 'twelve to four is not');
+  assert.deepStrictEqual(wideKinds(Buffer.alloc(64)), [], 'NULs on every position are not wide text');
+  const two = Array.from({ length: 12 }, (_, i) => [4 * i + 2, 4 * i + 3]).flat();
+  assert.deepStrictEqual(wideKinds(at(64, two)), [], 'NULs on two of four positions are not UTF-32');
+  assert.deepStrictEqual(wideKinds(Buffer.from([0xff, 0xfe, 0x61])), ['utf16']);
+  assert.deepStrictEqual(wideKinds(Buffer.from([0xfe, 0xff, 0x61])), ['utf16']);
+  assert.deepStrictEqual(wideKinds(Buffer.from([0xff, 0xfe, 0, 0, 0x61])), ['utf32']);
+  assert.deepStrictEqual(wideKinds(Buffer.from([0, 0, 0xfe, 0xff, 0x61])), ['utf32']);
+  assert.deepStrictEqual(wideKinds(utf32le('x'.repeat(12))), ['utf32']);
+});
+
+// A whole blob is decoded from its first byte only, so UTF-32 that a stray byte has shifted off its four-byte grid decodes to nothing useful; the
+// NUL-removed reading, run because the rule still reads the blob as wide text, finds that key.
+test('a key in UTF-32 shifted off its grid by one stray byte is still refused', () => {
+  const r = run(repo([{ 'shift32.txt': Buffer.concat([Buffer.from('x'), utf32le(`a\nb ${KEY} c\n`)]) }]));
+  assert.strictEqual(r.code, 1, r.out + r.err);
+  assert.ok(r.out.includes('tree "shift32.txt":2 aws-access-key-id'), r.out);
+});
+
+// A patch held as bytes, cut as git cuts it (at every 0x0A byte), with a UTF-16 key: several readings find the key and it is one hit, at the text's
+// line. The same patch held as a string (a caller whose git() returns text) still has its NULs read away, as before. A blob's readings agree too.
+test('the scanner reports a UTF-16 key once from a patch held as bytes and once from a blob; a patch held as a string still reads its NULs away', async () => {
+  const { scanPatch, scanBytes } = await import(pathToFileURL(LIB).href);
+  const wide = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(`a\nb ${KEY} c\n`, 'utf16le')]);
+  const parts = [];
+  let from = 0;
+  for (let i = 0; i < wide.length; i++) if (wide[i] === 0x0a) { parts.push(wide.subarray(from, i)); from = i + 1; }
+  parts.push(wide.subarray(from));
+  const patch = Buffer.concat([Buffer.from(`${String.fromCharCode(0)}COMMIT c1\ndiff --git a/k.txt b/k.txt\n+++ b/k.txt\n@@ -0,0 +1,3 @@\n`),
+    ...parts.flatMap((p) => [Buffer.from('+'), p, Buffer.from('\n')])]);
+  assert.deepStrictEqual(scanPatch(patch).map((h) => [h.file, h.line, h.pattern]), [['k.txt', 2, 'aws-access-key-id']]);
+  assert.strictEqual(scanPatch(patch.toString('utf8')).length, 1, 'a string patch keeps the NUL-removed reading');
+  assert.strictEqual(scanBytes(wide, 'k.txt').length, 1, 'a blob read by several readings is one hit');
+});
+
+// U3: the NUL-removed reading runs only on bytes the rule reads as wide text. A stray NUL inside a key-shaped token of ordinary text is not read
+// away, so it adds no hit to such bytes (the hits a real binary gives stay those of the plain reading).
+test('a stray NUL inside a key-shaped token of bytes the rule does not read as wide text gives no hit, in the tree and in the pushed range', () => {
+  const dir = repo([{ 'a.txt': 'one\n' }, { 'stray.txt': `id ${KEY.slice(0, 2)}${String.fromCharCode(0)}${KEY.slice(2)}\n` }]);
+  const r = run(dir);
+  assert.strictEqual(r.code, 0, r.out + r.err);
+  const tip = git(dir, 'rev-parse', 'HEAD');
+  const p = run(dir, ['--pre-push'], `refs/heads/main ${tip} refs/heads/main ${ZERO}\n`);
+  assert.strictEqual(p.code, 0, p.out + p.err);
 });
