@@ -522,3 +522,25 @@ test('a cat-file answer that ends early, gives a bad size, drops a newline or ex
     assert.doesNotMatch(r.err, /TypeError/, mode);
   }
 });
+
+// A text file in UTF-16 holds a NUL in every code unit of ASCII text, so a gate that decodes UTF-8 or tests "binary" first never sees its key.
+// PowerShell 5.1's `>` writes UTF-16LE with a byte-order mark; an editor can write either order, with or without the mark. Each must be refused
+// exactly as its UTF-8 copy is, whatever its name. A real binary file, with NULs on both byte parities, is still skipped.
+test('a text file in UTF-16 (LE and BE, with and without a byte-order mark) that holds a key is refused like its UTF-8 copy; a binary with NULs on both parities is still skipped', () => {
+  const text = `a\nb ${KEY} c\n`;
+  const le = Buffer.from(text, 'utf16le');
+  const be = Buffer.from(le).swap16();
+  const files = {
+    'le-bom.txt': Buffer.concat([Buffer.from([0xff, 0xfe]), le]),
+    'le.txt': le,
+    'be-bom.txt': Buffer.concat([Buffer.from([0xfe, 0xff]), be]),
+    'be.txt': be,
+    'ps-out.bin': Buffer.concat([Buffer.from([0xff, 0xfe]), le]), // a UTF-16 file with a binary-looking name: decided UTF-16 before the binary test
+    'data.bin': Buffer.concat([Buffer.from([0x89, 0x50, 0x00, 0x00, 0x20]), Buffer.from(`id ${KEY}\n`, 'latin1'), Buffer.from([0x00, 0x01, 0x00])]),
+  };
+  const r = run(repo([files]));
+  assert.strictEqual(r.code, 1, r.out + r.err);
+  for (const name of ['le-bom.txt', 'le.txt', 'be-bom.txt', 'be.txt', 'ps-out.bin']) assert.ok(r.out.includes(`tree "${name}":2 aws-access-key-id`), `${name} is refused: ${r.out}`);
+  assert.doesNotMatch(r.out, /data\.bin/, 'a binary with NULs on both byte parities stays out of the text scan');
+  assert.ok(!r.out.includes(KEY) && !r.err.includes(KEY), 'the matched value is never printed');
+});
