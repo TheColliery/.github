@@ -750,3 +750,16 @@ test('new-repo.mjs --apply-settings refuses a full apply with no --zone or an un
   assert.equal(res.status, 0, res.stdout + res.stderr);
   assert.ok(!calls.some((c) => c.path.includes('/properties/')), 'no property call on a rulesets-only run');
 });
+
+// The private-working template's LICENSE is Apache's own text (its appendix boilerplate bracketed), so the holder and year live in a NOTICE, as in the
+// published-code template: a scaffold fills both and leaves no token.
+test('new-repo.mjs private-working: the scaffold carries a NOTICE with the holder and year filled, and no token left', () => {
+  const root = scratchDir();
+  const target = path.join(root, 'r');
+  const res = run(['private-working', '--name', 'x', '--holder', 'Example Holder', '--year', '2026', target]);
+  assert.equal(res.status, 0, res.stderr);
+  const notice = fs.readFileSync(path.join(target, 'NOTICE'), 'utf8');
+  assert.match(notice, /^Copyright 2026 Example Holder\r?$/m);
+  assert.ok(!/\{\{[A-Z_]+\}\}/.test(notice), notice);
+  fs.rmSync(root, { recursive: true, force: true });
+});

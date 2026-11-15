@@ -101,14 +101,16 @@ test('the lexer reads a quote inside a regex and a backtick inside a template wi
 // (1) Work grows with the file, not its square: three scans walked the whole file again for each reference (the assignment-target test and the enclosing-
 // bracket test walked back over every earlier statement; a regex candidate that found no closing slash searched to the end of its line again for every later
 // slash). The counter is the census's own (CENSUS_WORK); the bound is per character and on the doubling, never a clock.
-test('the census does linear work on the three shapes that made it quadratic: repeated reads of a declared name, a spawner named many times, and a line of unclosed regex candidates -- RED before 2026-11-02a', async () => {
+test('the census does linear work on the five shapes that made it quadratic: repeated reads of a declared name, a spawner named many times, a line of unclosed regex candidates, and two for heads -- RED before 2026-11-02a', async () => {
   const { CENSUS_WORK } = await import('./git-env-census.mjs');
   const shapes = {
     reads: (n) => 'const a = 1;\n' + 'a;\n'.repeat(n),
     spawnerNames: (n) => 'spawnSync;\n'.repeat(n),
     regexLine: (n) => '/['.repeat(n) + '\n',
     // every reference sits in a for-of head after its `of`: the for-head question must not walk to the head's end again for each one
-    forHead: (n) => 'const a = 1;\nfor (const x of [' + 'a,'.repeat(n) + ']) {}\n',
+    forOf: (n) => 'const a = 1;\nfor (const x of [' + 'a,'.repeat(n) + ']) {}\n',
+    // every reference sits before the head's first `;`: each asks for the head's keyword, which lies past all of them, so it must be found once per head
+    forInit: (n) => 'const a = 1;\nfor (' + 'a,'.repeat(n) + 'a;;) {}\n',
   };
   for (const [name, make] of Object.entries(shapes)) {
     const at = (n) => { const text = make(n); CENSUS_WORK.steps = 0; scan(text); return { chars: text.length, steps: CENSUS_WORK.steps }; };
@@ -209,4 +211,19 @@ test('collectScriptsMjs refuses a .mjs that became a link after the listing, nev
     };
     assert.throws(() => collectScriptsMjs(dir), /scripts\/swapped\.mjs.*(symlink|regular file|changed)/);
   } finally { fs.readdirSync = origReaddir; removeTree(dir); }
+});
+
+// The open lands on another regular file than the one the name holds (the entry swapped between the listing and the open, or an open the platform
+// redirected): the census compares the descriptor with the name (dev and ino) and refuses before any read. Stood in for by an openSync that opens
+// another file for this one name.
+test('collectScriptsMjs refuses a .mjs whose open lands on another file than its name holds, never reading the other file', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'git-env-census-'));
+  const origOpen = fs.openSync;
+  try {
+    fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'scripts', 'named.mjs'), 'export const named = 1;\n');
+    fs.writeFileSync(path.join(dir, 'other.mjs'), 'export const other = 1;\n');
+    fs.openSync = function (p, ...rest) { return origOpen.call(this, String(p).endsWith('named.mjs') ? path.join(dir, 'other.mjs') : p, ...rest); };
+    assert.throws(() => collectScriptsMjs(dir), /scripts\/named\.mjs changed between the listing and the read/);
+  } finally { fs.openSync = origOpen; removeTree(dir); }
 });

@@ -1137,8 +1137,10 @@ export function censusGitSpawns(files, exempt = CENSUS_EXEMPT) {
 
 // Real filesystem walk of scripts/**/*.mjs, `rel` relative to `repo` so a finding names the
 // exact path the reviewer's own manual census used (a forward-slash path under the repository's scripts folder).
-// It reads regular files only, each within MAX_SOURCE_BYTES (ours, far above any script the flock ships): a symlink or junction anywhere under scripts/, a .mjs
-// that is not a regular file and a .mjs past the budget are refused by name with a throw, never followed, skipped or read (Deep Scan 2026-11-01: a .mjs link
+// It reads regular files only, each within MAX_SOURCE_BYTES (ours, far above any script the flock ships): a symlink or junction the listing shows under
+// scripts/, a .mjs that is not a regular file and a .mjs past the budget are refused by name with a throw, never followed, skipped or read. The walk trusts
+// the listing's types for a FOLDER: a folder swapped to a link after it is listed is walked through (readdirSync follows it), and every file read under
+// it is still checked as below and read under the budget (Deep Scan 2026-11-01: a .mjs link
 // to an endless device made the census read without end). The open refuses a link where the platform can (O_NOFOLLOW) and never waits on a pipe
 // (O_NONBLOCK); after it, the descriptor must be a regular file and the file the name names NOW (a name that is a link, or holds another file, is refused
 // before any read, on every platform). The size is checked on the descriptor, and the read itself stops at the budget plus one byte, so a file that grows
