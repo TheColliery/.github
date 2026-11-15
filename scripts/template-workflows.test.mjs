@@ -2399,3 +2399,59 @@ test('no pinned action\'s comment names only a moving major tag: it names the ex
   const moving = allPins().filter((p) => /^v\d+$/.test(p.tag)).map((p) => `${p.file}:${p.line} ${p.action} # ${p.tag}`);
   assert.deepEqual(moving, []);
 });
+
+// ---- order 2026-11-15c: four canon questions the CoalWorks heads carried up (row CW-054, c143) -------------------------------------------------------------
+test('the template dependabot.yml is the one the flock runs: one weekly group for every action bump, the fixed Thursday slot, and a true sentence on who merges (15c B1)', () => {
+  const t = readText('templates/published-code/.github/dependabot.yml').replace(/\r\n/g, '\n');
+  assert.match(t, /groups:\n {6}github-actions:\n {8}patterns:\n {10}- "\*"/);
+  assert.match(t, /day: thursday\n {6}time: "11:30"\n {6}timezone: Asia\/Bangkok/);
+  assert.doesNotMatch(t, /Human still merges/, 'a PR of patch and minor bumps merges itself once the checks pass');
+  assert.doesNotMatch(t, /group-by|open-pull-requests-limit/);
+});
+
+test('the template LICENSE is Apache-2.0 as apache.org publishes it: the appendix keeps its bracketed boilerplate, and the holder and year live in NOTICE (15c B2)', () => {
+  for (const k of ['published-code', 'private-working']) {
+    const t = readText(`templates/${k}/LICENSE`);
+    assert.match(t, /^ {3}Copyright \[yyyy\] \[name of copyright owner\]\r?$/m, k);
+    assert.doesNotMatch(t, /\{\{[A-Z_]+\}\}/, k + ': no token left to fill');
+  }
+  assert.match(readText('templates/published-code/NOTICE'), /^Copyright \{\{YEAR\}\} \{\{COPYRIGHT_HOLDER\}\}\r?$/m);
+});
+
+// A job-level permissions block REPLACES the workflow's top-level one, so a scope it does not name is none: a job that checks the repository out names contents.
+test('every canon workflow job that checks out the repository and declares its own permissions grants contents in that block (15c B3)', () => {
+  const files = [];
+  const walk = (dir) => { for (const e of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) { const p = `${dir}/${e.name}`; if (e.isDirectory()) walk(p); else if (/\.github\/workflows\/[^/]+\.ya?ml$/.test(p)) files.push(p); } };
+  walk('.github/workflows'); walk('templates');
+  assert.ok(files.length >= 20, 'the walk finds the workflows: ' + files.length);
+  const missing = [];
+  for (const rel of files) {
+    const lines = readText(rel).replace(/\r\n/g, '\n').split('\n');
+    const start = lines.findIndex((l) => /^jobs:\s*$/.test(l));
+    if (start < 0) continue;
+    const jobs = [];
+    for (let i = start + 1; i < lines.length; i++) {
+      if (/^\S/.test(lines[i])) break;
+      const m = /^ {2}([A-Za-z0-9_-]+):\s*$/.exec(lines[i]);
+      if (m) jobs.push({ name: m[1], from: i, to: lines.length }); else if (jobs.length && /^ {2}\S/.test(lines[i])) jobs[jobs.length - 1].to = i;
+    }
+    jobs.forEach((j, k) => { if (k + 1 < jobs.length) j.to = Math.min(j.to, jobs[k + 1].from); });
+    for (const j of jobs) {
+      const body = lines.slice(j.from + 1, j.to);
+      if (!body.some((l) => /uses: actions\/checkout@/.test(l))) continue;
+      const p = body.findIndex((l) => /^ {4}permissions:/.test(l));
+      if (p < 0) continue;
+      if (/^ {4}permissions:\s*(read-all|write-all)\s*$/.test(body[p])) continue;
+      const block = [];
+      for (let i = p + 1; i < body.length && (/^ {6}/.test(body[i]) || !body[i].trim()); i++) block.push(body[i]);
+      if (!block.some((l) => /^ {6}contents: (read|write)\b/.test(l))) missing.push(`${rel} job ${j.name}`);
+    }
+  }
+  assert.deepEqual(missing, []);
+});
+
+test('release-notes.mjs and its test describe the previous stable tag the way the workflow finds it, by its git log walk, never git describe (15c B4)', () => {
+  for (const rel of ['templates/overlay-coal-skill/scripts/release-notes.mjs', 'templates/overlay-coal-skill/scripts/release-notes.test.mjs', 'templates/article/scripts/release-notes.mjs']) {
+    assert.doesNotMatch(readText(rel), /git describe/, rel);
+  }
+});

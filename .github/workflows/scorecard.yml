@@ -27,7 +27,9 @@ jobs:
     name: Scorecard analysis
     runs-on: ubuntu-latest
     timeout-minutes: 20 # testing.md: every run has a finite clock; a room re-sizes this from its own measured suite time
+    # A job-level block REPLACES the workflow's top-level one, so a scope it does not name is none: contents is named for the checkout.
     permissions:
+      contents: read
       security-events: write
       id-token: write
     steps:

@@ -64,7 +64,7 @@ test('new-repo.mjs article: scripts/LICENSE is the Apache-2.0 code-part licence,
   const res = run(['article', '--name', 'x', '--holder', 'Example Holder', '--year', '2026', target]);
   assert.equal(res.status, 0, res.stderr);
   const code = fs.readFileSync(path.join(target, 'scripts', 'LICENSE'), 'utf8').replace(/\r\n/g, '\n');
-  // the canon text is itself a template: its appendix notice line holds the two placeholders, filled the way every published-code repo's is
+  // the canon text is Apache's own, its appendix boilerplate bracketed as apache.org publishes it (15c B2); the holder and year are the header's
   const apache = fs.readFileSync(APACHE_CANON, 'utf8').replace(/\r\n/g, '\n').split('{{YEAR}}').join('2026').split('{{COPYRIGHT_HOLDER}}').join('Example Holder');
   assert.ok(code.endsWith(apache), 'the full Apache-2.0 text, verbatim, is the tail of the file');
   const header = code.slice(0, code.length - apache.length);
@@ -749,4 +749,17 @@ test('new-repo.mjs --apply-settings refuses a full apply with no --zone or an un
   const { res, calls } = runWithTeamStub(['--apply-settings', 'published-code', '--repo', 'TheColliery/CoalNext', '--only', 'rulesets', '--dry-run'], NEW_ROOM);
   assert.equal(res.status, 0, res.stdout + res.stderr);
   assert.ok(!calls.some((c) => c.path.includes('/properties/')), 'no property call on a rulesets-only run');
+});
+
+// The private-working template's LICENSE is Apache's own text (its appendix boilerplate bracketed), so the holder and year live in a NOTICE, as in the
+// published-code template: a scaffold fills both and leaves no token.
+test('new-repo.mjs private-working: the scaffold carries a NOTICE with the holder and year filled, and no token left', () => {
+  const root = scratchDir();
+  const target = path.join(root, 'r');
+  const res = run(['private-working', '--name', 'x', '--holder', 'Example Holder', '--year', '2026', target]);
+  assert.equal(res.status, 0, res.stderr);
+  const notice = fs.readFileSync(path.join(target, 'NOTICE'), 'utf8');
+  assert.match(notice, /^Copyright 2026 Example Holder\r?$/m);
+  assert.ok(!/\{\{[A-Z_]+\}\}/.test(notice), notice);
+  fs.rmSync(root, { recursive: true, force: true });
 });
