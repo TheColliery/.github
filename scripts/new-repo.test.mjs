@@ -64,7 +64,7 @@ test('new-repo.mjs article: scripts/LICENSE is the Apache-2.0 code-part licence,
   const res = run(['article', '--name', 'x', '--holder', 'Example Holder', '--year', '2026', target]);
   assert.equal(res.status, 0, res.stderr);
   const code = fs.readFileSync(path.join(target, 'scripts', 'LICENSE'), 'utf8').replace(/\r\n/g, '\n');
-  // the canon text is itself a template: its appendix notice line holds the two placeholders, filled the way every published-code repo's is
+  // the canon text is Apache's own, its appendix boilerplate bracketed as apache.org publishes it (15c B2); the holder and year are the header's
   const apache = fs.readFileSync(APACHE_CANON, 'utf8').replace(/\r\n/g, '\n').split('{{YEAR}}').join('2026').split('{{COPYRIGHT_HOLDER}}').join('Example Holder');
   assert.ok(code.endsWith(apache), 'the full Apache-2.0 text, verbatim, is the tail of the file');
   const header = code.slice(0, code.length - apache.length);

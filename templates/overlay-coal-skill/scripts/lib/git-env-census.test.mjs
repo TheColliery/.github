@@ -107,6 +107,8 @@ test('the census does linear work on the three shapes that made it quadratic: re
     reads: (n) => 'const a = 1;\n' + 'a;\n'.repeat(n),
     spawnerNames: (n) => 'spawnSync;\n'.repeat(n),
     regexLine: (n) => '/['.repeat(n) + '\n',
+    // every reference sits in a for-of head after its `of`: the for-head question must not walk to the head's end again for each one
+    forHead: (n) => 'const a = 1;\nfor (const x of [' + 'a,'.repeat(n) + ']) {}\n',
   };
   for (const [name, make] of Object.entries(shapes)) {
     const at = (n) => { const text = make(n); CENSUS_WORK.steps = 0; scan(text); return { chars: text.length, steps: CENSUS_WORK.steps }; };
@@ -119,7 +121,7 @@ test('the census does linear work on the three shapes that made it quadratic: re
 
 // (2) The collector reads only regular files, within a byte budget: a .mjs symlink (or a link to a directory) under scripts/ is refused by name, never
 // followed and never skipped, and a file past the budget is refused by name before it is read.
-test('collectScriptsMjs refuses a symlink or junction under scripts/ by name, and a .mjs past the byte budget, instead of following or reading it -- RED before 2026-11-02a', async (t) => {
+test('collectScriptsMjs refuses a .mjs past the byte budget by name, before reading it -- RED before 2026-11-02a', async () => {
   const { MAX_SOURCE_BYTES } = await import('./git-env-census.mjs');
   assert.ok(Number.isInteger(MAX_SOURCE_BYTES) && MAX_SOURCE_BYTES > 0, 'the budget is a named number');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'git-env-census-'));
@@ -127,7 +129,14 @@ test('collectScriptsMjs refuses a symlink or junction under scripts/ by name, an
     fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'scripts', 'big.mjs'), 'x'.repeat(MAX_SOURCE_BYTES + 1));
     assert.throws(() => collectScriptsMjs(dir), /scripts\/big\.mjs.*budget/, 'an over-budget file is refused by name');
-    fs.rmSync(path.join(dir, 'scripts', 'big.mjs'));
+  } finally { removeTree(dir); }
+});
+
+// The link leg on its own, so where the account cannot make a link only this leg is skipped (one skippable leg per test).
+test('collectScriptsMjs refuses a symlink or junction under scripts/ by name, instead of following it -- RED before 2026-11-02a', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'git-env-census-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'real.mjs'), 'export const x = 1;\n');
     let made = true;
     try { fs.symlinkSync(process.platform === 'win32' ? dir : path.join(dir, 'real.mjs'), path.join(dir, 'scripts', 'link.mjs'), process.platform === 'win32' ? 'junction' : 'file'); } catch { made = false; }
@@ -168,4 +177,36 @@ test('a helper with a bare return, or one whose body can end without returning, 
     const r = scan(head + fn + '\n' + call);
     assert.deepEqual([r.findings, r.safe], [[], 1], `refused: ${fn}`);
   }
+});
+
+// The collector's read: the size is checked on the open descriptor, and the read itself stops at the budget plus one byte, so a .mjs that grows after the
+// check is refused by name. A preload-free stand-in for the growth: fstat reports 0 bytes for every regular file during the call.
+test('collectScriptsMjs stops reading at the budget: a .mjs that grows past it after the size check is refused by name, never read to its end', async () => {
+  const { MAX_SOURCE_BYTES } = await import('./git-env-census.mjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'git-env-census-'));
+  const orig = fs.fstatSync;
+  try {
+    fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'scripts', 'grows.mjs'), 'x'.repeat(MAX_SOURCE_BYTES + 1));
+    fs.fstatSync = function (...a) { const s = orig.apply(this, a); if (s.isFile()) Object.defineProperty(s, 'size', { value: 0 }); return s; };
+    assert.throws(() => collectScriptsMjs(dir), /scripts\/grows\.mjs.*budget/);
+  } finally { fs.fstatSync = orig; removeTree(dir); }
+});
+
+// A .mjs that the listing saw as a regular file and that is a link when it is opened (a swap after the listing): the open refuses it (O_NOFOLLOW where the
+// platform has it) or the check of the name after the open does, never reading the link's target. The listing is stood in for by a readdir that reports
+// the link as a file. The leg needs a file symlink and skips visibly where the account cannot make one.
+test('collectScriptsMjs refuses a .mjs that became a link after the listing, never reading the link\'s target', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'git-env-census-'));
+  const origReaddir = fs.readdirSync;
+  try {
+    fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'target.mjs'), 'export const x = 1;\n');
+    try { fs.symlinkSync(path.join(dir, 'target.mjs'), path.join(dir, 'scripts', 'swapped.mjs'), 'file'); } catch (e) { t.skip(`this account cannot make a file symlink (${e.code})`); return; }
+    fs.readdirSync = function (d, o) {
+      const list = origReaddir.call(this, d, o);
+      return list.map((e) => (e.name === 'swapped.mjs' ? { name: e.name, isSymbolicLink: () => false, isDirectory: () => false, isFile: () => true } : e));
+    };
+    assert.throws(() => collectScriptsMjs(dir), /scripts\/swapped\.mjs.*(symlink|regular file|changed)/);
+  } finally { fs.readdirSync = origReaddir; removeTree(dir); }
 });
