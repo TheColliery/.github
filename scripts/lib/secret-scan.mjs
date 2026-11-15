@@ -416,9 +416,21 @@ export function fingerprint(file, pattern, value) {
   return createHash('sha256').update(`${file}\0${pattern}\0${value}`).digest('hex').slice(0, 16);
 }
 
+// One line, read as it stands and, when it holds a NUL, read again with every NUL removed. UTF-16 and UTF-32 text (either byte order, with or without
+// a byte-order mark, after any non-ASCII prefix) carries each ASCII character as its own byte beside NULs, and those bytes survive a UTF-8 decode
+// as themselves, so removing the NULs brings a key's characters back together: it is then found, with the same fingerprint, as its UTF-8 copy is.
+// The second reading removes nothing but NULs, so a hit there needs the whole pattern-shaped token in order with only NULs between its bytes; on
+// bytes that are not text that is noise, and a hit only ever refuses (never lets a key through), acknowledgeable by its fingerprint like any other.
+function readLine(line) {
+  const found = matchLine(line);
+  if (!line.includes(NUL)) return found;
+  for (const h of matchLine(line.split(NUL).join(''))) if (!found.some((f) => f.pattern === h.pattern && f.value === h.value)) found.push(h);
+  return found;
+}
+
 // The pattern NAMES that hit one line. Never the matched text.
 export function scanLine(line) {
-  return matchLine(line).map((h) => h.pattern);
+  return readLine(line).map((h) => h.pattern);
 }
 
 // Scan a whole text. hits: [{ line, pattern, fp }]
@@ -426,7 +438,7 @@ export function scanText(text, file = '') {
   const hits = [];
   const lines = String(text).split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
-    for (const h of matchLine(lines[i])) hits.push({ line: i + 1, pattern: h.pattern, fp: fingerprint(file, h.pattern, h.value) });
+    for (const h of readLine(lines[i])) hits.push({ line: i + 1, pattern: h.pattern, fp: fingerprint(file, h.pattern, h.value) });
   }
   return hits;
 }
@@ -499,7 +511,7 @@ export function scanPatch(patch, opts = {}) {
     }
     if (inHeader) continue;
     if (l.startsWith('+') && file !== null) {
-      for (const h of matchLine(l.slice(1))) hits.push({ commit, file, line: lineNo, pattern: h.pattern, fp: fingerprint(file, h.pattern, h.value) });
+      for (const h of readLine(l.slice(1))) hits.push({ commit, file, line: lineNo, pattern: h.pattern, fp: fingerprint(file, h.pattern, h.value) });
       lineNo++;
     }
   }

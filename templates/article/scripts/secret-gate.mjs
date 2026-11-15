@@ -40,11 +40,12 @@ const USAGE = 'usage: node scripts/secret-gate.mjs [--pre-push [--remote=<name>]
 const ACKS = 'secret-scan.acks';
 const BINARY = /\.(png|jpe?g|gif|webp|ico|pdf|zip|gz|tgz|7z|woff2?|ttf|otf|eot|mp[34]|mov|xlsx?|docx?|pptx?|gguf|safetensors|bin)$/i;
 const BACKSLASH = String.fromCharCode(92);
-const BOM = String.fromCharCode(0xfeff);
-// A text file in UTF-16 holds a NUL in every code unit of ASCII text, so it is decided BEFORE any binary test. It is UTF-16 when it opens with a
-// byte-order mark (FF FE little-endian, FE FF big-endian), or, with no mark, when its first bytes hold NULs on one byte parity only (the high bytes
-// of ASCII code units) for at least half its code units and none on the other. A real binary file holds NULs on both parities, so it still reads
-// binary. shortcut: a UTF-16 file with no mark and almost no ASCII in its first 8000 bytes reads as binary; a mark always decides it.
+// A text file in UTF-16 holds a NUL in every code unit of ASCII text, so a binary-looking NAME with NUL-bearing bytes is not yet binary: it is
+// UTF-16 text when it opens with a byte-order mark (FF FE little-endian, FE FF big-endian), or, with no mark, when its first bytes hold NULs on one
+// byte parity only (the high bytes of ASCII code units) for at least half its code units and none on the other, and it is then scanned. A real
+// binary file holds NULs on both parities, so it still reads binary. This decides only WHETHER such a file is text; every scanned blob is decoded
+// as UTF-8, and the scanner reads each NUL-bearing line again with its NULs removed (scanText), which finds a key in wide text of either order,
+// UTF-32 included. shortcut: a file with a binary-looking name, no mark and almost no ASCII in its first 8000 bytes reads as binary; a mark decides it.
 const UTF16_PROBE_BYTES = 8000;
 function utf16Of(bytes) {
   if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) return 'le';
@@ -56,14 +57,6 @@ function utf16Of(bytes) {
   if (even === 0 && odd > 0 && odd * 2 >= n / 2) return 'le';
   if (odd === 0 && even > 0 && even * 2 >= n / 2) return 'be';
   return null;
-}
-// Text of a blob: UTF-16 by its byte order, the mark dropped (a BE blob is swapped to LE on a copy of its even length); everything else UTF-8.
-function decodeText(bytes, utf16) {
-  let s;
-  if (utf16 === 'le') s = bytes.toString('utf16le');
-  else if (utf16 === 'be') s = Buffer.from(bytes.subarray(0, bytes.length & ~1)).swap16().toString('utf16le');
-  else return bytes.toString('utf8');
-  return s.startsWith(BOM) ? s.slice(1) : s;
 }
 
 const args = process.argv.slice(2);
@@ -227,7 +220,7 @@ async function main() {
     if (bytes === BINARY_BLOB) return; // binary-named at every path and binary by its first bytes, dropped while it streamed
     const utf16 = utf16Of(bytes);
     if (!utf16 && BINARY.test(e.name) && scan.looksBinary(bytes)) return;
-    if (!texts.has(e.sha)) texts.set(e.sha, decodeText(bytes, utf16));
+    if (!texts.has(e.sha)) texts.set(e.sha, bytes.toString('utf8'));
     scanned++;
     for (const h of scan.scanText(texts.get(e.sha), e.name)) keep(h, `tree ${esc(e.name)}:${h.line}`, headAcks);
   });

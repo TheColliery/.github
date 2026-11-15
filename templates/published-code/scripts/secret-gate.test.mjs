@@ -535,7 +535,8 @@ test('a text file in UTF-16 (LE and BE, with and without a byte-order mark) that
     'le.txt': le,
     'be-bom.txt': Buffer.concat([Buffer.from([0xfe, 0xff]), be]),
     'be.txt': be,
-    'ps-out.bin': Buffer.concat([Buffer.from([0xff, 0xfe]), le]), // a UTF-16 file with a binary-looking name: decided UTF-16 before the binary test
+    // a UTF-16 file with a binary-looking name and bytes of its own (no other path stages the same blob): only the stream probe's UTF-16 rule keeps it
+    'ps-out.bin': Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(`x\nps ${KEY} out\n`, 'utf16le')]),
     'data.bin': Buffer.concat([Buffer.from([0x89, 0x50, 0x00, 0x00, 0x20]), Buffer.from(`id ${KEY}\n`, 'latin1'), Buffer.from([0x00, 0x01, 0x00])]),
   };
   const r = run(repo([files]));
@@ -543,4 +544,77 @@ test('a text file in UTF-16 (LE and BE, with and without a byte-order mark) that
   for (const name of ['le-bom.txt', 'le.txt', 'be-bom.txt', 'be.txt', 'ps-out.bin']) assert.ok(r.out.includes(`tree "${name}":2 aws-access-key-id`), `${name} is refused: ${r.out}`);
   assert.doesNotMatch(r.out, /data\.bin/, 'a binary with NULs on both byte parities stays out of the text scan');
   assert.ok(!r.out.includes(KEY) && !r.err.includes(KEY), 'the matched value is never printed');
+});
+
+// Wide text a byte-order mark does not announce, and wider text: UTF-16 with a non-ASCII character before the key (U+0100 little-endian, U+4E00
+// big-endian, 4,000 Thai characters), and UTF-32 little-endian. Each line is also read with its NUL bytes removed, so the key's own ASCII bytes come
+// back together whatever the width, order or prefix. A real binary with NULs is still never reported for noise.
+const utf16be = (s) => Buffer.from(s, 'utf16le').swap16();
+const utf32le = (s) => { const b = Buffer.alloc(s.length * 4); [...s].forEach((c, i) => b.writeUInt32LE(c.codePointAt(0), i * 4)); return b; };
+test('wide text with no byte-order mark, a non-ASCII prefix or four bytes a character still has its key refused, in the tree and in the pushed range', () => {
+  const thai = String.fromCharCode(0x0e01).repeat(4000);
+  const files = {
+    'u0100.txt': Buffer.from(`${String.fromCharCode(0x0100)}\nb ${KEY} c\n`, 'utf16le'),
+    'u4e00.txt': utf16be(`${String.fromCharCode(0x4e00)}\nb ${KEY} c\n`),
+    'thai.txt': Buffer.from(`${thai}\nb ${KEY} c\n`, 'utf16le'),
+    'u32.txt': utf32le(`a\nb ${KEY} c\n`),
+  };
+  const r = run(repo([files]));
+  assert.strictEqual(r.code, 1, r.out + r.err);
+  for (const name of Object.keys(files)) assert.ok(r.out.includes(`tree "${name}":2 aws-access-key-id`), `${name} is refused in the tree: ${r.out}`);
+  const dir = repo([{ 'a.txt': 'one\n' }, files, Object.fromEntries(Object.keys(files).map((n) => [n, null]))]);
+  assert.strictEqual(run(dir).code, 0, 'the tree at HEAD is clean');
+  const tip = git(dir, 'rev-parse', 'HEAD');
+  const p = run(dir, ['--pre-push'], `refs/heads/main ${tip} refs/heads/main ${ZERO}\n`);
+  assert.strictEqual(p.code, 1, p.out + p.err);
+  for (const name of Object.keys(files)) assert.match(p.out, new RegExp(`pushed [0-9a-f]{12} "${name.replace('.', String.fromCharCode(92) + '.')}":2 aws-access-key-id`), name);
+});
+
+// The pushed range reads each commit's patch as text. A key in a UTF-16 file (here little-endian with its mark, as PowerShell 5.1 writes it) that one
+// pushed commit adds and a later one deletes never reaches the tree scan, so the range must find it, exactly as it finds the same key in UTF-8.
+test('a UTF-16 key added and then deleted inside a pushed range is refused, as its UTF-8 copy is', () => {
+  for (const [label, bytes] of [['utf-16le', Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(`a\nb ${KEY} c\n`, 'utf16le')])], ['utf-8', Buffer.from(`a\nb ${KEY} c\n`, 'utf8')]]) {
+    const dir = repo([{ 'a.txt': 'one\n' }, { 'k.txt': bytes }, { 'k.txt': null }]);
+    assert.strictEqual(run(dir).code, 0, `${label}: the tree at HEAD is clean`);
+    const tip = git(dir, 'rev-parse', 'HEAD');
+    const r = run(dir, ['--pre-push'], `refs/heads/main ${tip} refs/heads/main ${ZERO}\n`);
+    assert.strictEqual(r.code, 1, `${label}: ${r.out}${r.err}`);
+    assert.match(r.out, /pushed [0-9a-f]{12} "k\.txt":2 aws-access-key-id/, label);
+  }
+});
+
+// Decoding noise: a file that is not text, with NUL bytes on both byte positions and no binary-looking name, is scanned and reported for nothing.
+test('a NUL-bearing file of pseudo-random bytes with no binary-looking name gives no hit, in the tree and in the pushed range', () => {
+  let x = 0x2545f491;
+  const noise = Buffer.alloc(65536, 0).map((_, i) => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return i % 3 === 0 ? 0 : (x >>> 0) & 0xff; });
+  const dir = repo([{ 'a.txt': 'one\n' }, { 'noise.dat': noise }]);
+  const r = run(dir);
+  assert.strictEqual(r.code, 0, r.out + r.err);
+  const tip = git(dir, 'rev-parse', 'HEAD');
+  const p = run(dir, ['--pre-push'], `refs/heads/main ${tip} refs/heads/main ${ZERO}\n`);
+  assert.strictEqual(p.code, 0, p.out + p.err);
+});
+
+// A binary-looking name with UTF-16 bytes and no byte-order mark, in each byte order: only the NUL-parity rule tells it from a real binary, so
+// each must still be scanned (and the stream probe must keep it).
+// And the reverse: text mostly outside ASCII (three Thai characters to one ASCII), so its NULs fall on one parity but on fewer than half its code
+// units and the parity rule cannot tell; only the byte-order mark says it is text.
+test('a binary-named UTF-16 file is still scanned: with no byte-order mark in either order, and with a mark over text mostly outside ASCII', () => {
+  const wide = String.fromCharCode(0x0e01, 0x0e01, 0x0e01, 0x61).repeat(1000);
+  const r = run(repo([{
+    'le-nobom.bin': Buffer.from(`y\nle ${KEY} nobom\n`, 'utf16le'),
+    'be-nobom.bin': Buffer.from(`z\nbe ${KEY} nobom\n`, 'utf16le').swap16(),
+    'le-mark.bin': Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(`${wide}\nb ${KEY} le\n`, 'utf16le')]),
+    'be-mark.bin': Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from(`${wide}\nb ${KEY} be\n`, 'utf16le').swap16()]),
+  }]));
+  assert.strictEqual(r.code, 1, r.out + r.err);
+  for (const name of ['le-nobom.bin', 'be-nobom.bin', 'le-mark.bin', 'be-mark.bin']) assert.ok(r.out.includes(`tree "${name}":2 aws-access-key-id`), `${name} is refused: ${r.out}`);
+});
+
+// The scanner's second reading adds only what the first did not find: a line that holds a key in plain ASCII and a NUL elsewhere is one hit, not two.
+test('the scanner reports a key once on a line that also holds a NUL, read as it stands and with its NULs removed', async () => {
+  const { scanText } = await import(pathToFileURL(LIB).href);
+  const hits = scanText(`a\nb ${KEY} c${String.fromCharCode(0)}d\n`, 'f.txt');
+  assert.strictEqual(hits.length, 1, JSON.stringify(hits));
+  assert.strictEqual(hits[0].line, 2);
 });
