@@ -62,7 +62,7 @@ export const SKELETON_FILES = {
     '.github/workflows/front-door-links.yml', 'scripts/front-door-links.mjs', 'scripts/lib/front-door-links.mjs', 'scripts/front-door-links.test.mjs',
   ],
   'private-working': [
-    'LICENSE', '.gitignore', '.gitattributes',
+    'LICENSE', 'NOTICE', '.gitignore', '.gitattributes',
     '.githooks/pre-push',
     '.github/workflows/gate.yml',
   ],

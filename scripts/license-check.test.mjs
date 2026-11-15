@@ -210,7 +210,7 @@ test('licenseIdentityMismatches: an unidentifiable body (the real Kolwen/CoalKil
   assert.deepEqual(licenseIdentityMismatches(bespoke, REAL_README_BADGE_MIT, REAL_NOTICE_MIT), []);
 });
 
-test('licenseIdentityMismatches: absent README/NOTICE (empty strings, the real private-working shape -- no NOTICE shipped) -> no mismatches, an absent surface has nothing to contradict', () => {
+test('licenseIdentityMismatches: absent README/NOTICE (empty strings, a repo that ships neither) -> no mismatches, an absent surface has nothing to contradict', () => {
   assert.deepEqual(licenseIdentityMismatches(REAL_APACHE_TEXT, '', ''), []);
 });
 

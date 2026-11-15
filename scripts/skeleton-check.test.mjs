@@ -895,3 +895,14 @@ test('every canon workflow template carries a top-level concurrency group (SERIE
   const missing = dirs.flatMap((d) => workflowsMissingConcurrency(path.dirname(path.dirname(d))).map((f) => path.relative(root, path.join(d, f))));
   assert.deepEqual(missing, []);
 });
+
+// 15i (the reviewer's LOW on 15c/15d): a licence-family file a template SHIPS is a file skeleton-check must flag when a live room of that kind lacks it.
+// templates/private-working gained a NOTICE (the holder and year) while its SKELETON_FILES row did not, so a private room without one went unflagged.
+test('SKELETON_FILES: every LICENSE and NOTICE a template ships is skeleton-owned for that kind', () => {
+  const templates = path.join(path.dirname(SKELETON_SCRIPT), '..', 'templates');
+  for (const kind of ['published-code', 'private-working', 'article']) {
+    for (const name of ['LICENSE', 'NOTICE']) {
+      if (fs.existsSync(path.join(templates, kind, name))) assert.ok(SKELETON_FILES[kind].includes(name), `${kind} ships ${name} but does not own it`);
+    }
+  }
+});
