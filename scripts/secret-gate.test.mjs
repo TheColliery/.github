@@ -395,23 +395,35 @@ test('a git.exe planted in the scanned checkout is never run in git\'s place on 
   assert.match(r.out, /^PASS SECRETS: tree scan of \d+ tracked text file\(s\) clean/m);
 });
 
-// A staged blob larger than any whole-output buffer: the batch is streamed, and a blob whose bytes are binary is probed on its first bytes and
-// dropped as it streams past, never held. Before the stream, the batch was read into one buffer capped at 1 GiB, so a blob this size failed the
-// gate on every run. The blob is piped into git, never written as a file or held in memory here.
-test('a staged binary blob over 1 GiB is streamed past, never buffered: the gate still passes and names it nowhere', async () => {
+// A staged binary blob is streamed past, never held: the batch is read as a stream, and a blob whose every path has a binary-looking name is judged
+// on its first bytes and dropped as it passes. The witness is the gate's PEAK memory (process.resourceUsage().maxRSS, written at exit by a preload),
+// compared with the same gate on the same tree before the blob is staged: holding the blob (the whole batch in one buffer, or the blob kept whole)
+// raises the peak by at least the blob's size (twice it, where the parts are joined at the end); streaming leaves only the pipe's chunks waiting for
+// the collector, measured at 38 to 44 MiB for a 64 MiB blob under a loaded suite. So the bound is the blob's own size, and 128 MiB keeps that margin
+// wide while the leg stays cheap (a few seconds) in every room's pre-commit and pre-push. The blob is piped into git, never written as a file or held in memory here.
+const PEAK_PRELOAD = path.join(SANDBOX, 'peak-rss.preload.mjs');
+fs.writeFileSync(PEAK_PRELOAD, "import fs from 'node:fs';\nprocess.on('exit', () => fs.writeFileSync(process.env.GATE_PEAK_OUT, String(process.resourceUsage().maxRSS * 1024)));\n");
+const BIG_BLOB_BYTES = 128 << 20;
+test('a staged binary blob is streamed past, never held: the gate passes, names it nowhere, and its peak memory grows by far less than the blob', async () => {
   const dir = repo([{ 'README.md': 'hello\n' }]);
   const count = (out) => (/^PASS SECRETS: tree scan of (\d+) tracked text file/m.exec(out) || [])[1];
-  const before = count(run(dir).out);
-  assert.ok(before, 'the clean tree passes before the big blob is staged');
-  const size = (1 << 30) + (1 << 20);
+  const peakOut = path.join(SANDBOX, `peak-${made.length}.txt`);
+  const measured = () => {
+    const r = run(dir, [], '', { NODE_OPTIONS: `--import ${pathToFileURL(PEAK_PRELOAD).href}`, GATE_PEAK_OUT: peakOut }, 120000);
+    return { r, peak: Number(fs.readFileSync(peakOut, 'utf8')) };
+  };
+  const base = measured();
+  assert.strictEqual(base.r.code, 0, base.r.out + base.r.err);
+  const before = count(base.r.out);
+  assert.ok(before && base.peak > 0, 'the clean tree passes and its peak is read');
   const sha = await new Promise((resolve, reject) => {
-    const child = spawn('git', ['-C', dir, 'hash-object', '-w', '--stdin'], { env: gitEnv(), timeout: 300000, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn('git', ['-C', dir, 'hash-object', '-w', '--stdin'], { env: gitEnv(), timeout: 120000, stdio: ['pipe', 'pipe', 'pipe'] });
     let out = '';
     child.stdout.on('data', (d) => { out += d; });
     child.on('error', reject);
     child.on('close', (code) => (code === 0 ? resolve(out.trim()) : reject(new Error(`hash-object exit ${code}`))));
     const zeros = Buffer.alloc(1 << 20);
-    let left = size;
+    let left = BIG_BLOB_BYTES;
     const pump = () => {
       while (left > 0) { left -= zeros.length; if (!child.stdin.write(zeros)) { child.stdin.once('drain', pump); return; } }
       child.stdin.end();
@@ -419,10 +431,12 @@ test('a staged binary blob over 1 GiB is streamed past, never buffered: the gate
     pump();
   });
   git(dir, 'update-index', '--add', '--cacheinfo', `100644,${sha},big.bin`);
-  const r = run(dir, [], '', {}, 300000);
-  assert.strictEqual(r.code, 0, r.out + r.err);
-  assert.strictEqual(count(r.out), before, 'the binary blob is not counted as a text file: ' + r.out);
-  assert.doesNotMatch(r.out, /big\.bin/);
+  const big = measured();
+  assert.strictEqual(big.r.code, 0, big.r.out + big.r.err);
+  assert.strictEqual(count(big.r.out), before, 'the binary blob is not counted as a text file: ' + big.r.out);
+  assert.doesNotMatch(big.r.out, /big\.bin/);
+  const grew = big.peak - base.peak;
+  assert.ok(grew < BIG_BLOB_BYTES, `the peak grew by ${(grew / 1048576).toFixed(1)} MiB for a ${BIG_BLOB_BYTES / 1048576} MiB blob: the blob was held`);
 });
 
 // git honours a replace ref when it reads an object, so a local `git replace` could show the gate a clean blob in place of the one the commit
@@ -467,5 +481,44 @@ test('every node child this test file starts carries a heap cap and a kill-timeo
     const line = src.slice(0, m.index).split('\n').length;
     assert.ok(call.includes('--max-old-space-size='), `line ${line}: no heap cap`);
     assert.ok(/\btimeout\b/.test(call), `line ${line}: no kill-timeout`);
+  }
+});
+
+// The stream parser's guards, each witnessed by a cat-file that answers wrongly: a preload swaps the gate's cat-file child for a node script that asks
+// the real git, then cuts or bends the answer. The gate must refuse with its own named error ("git could not read the staged files"), never pass the
+// tree and never throw a TypeError. early: the stream ends after the first object, exit 0 · negsize: the first header says size -1 · nonl: the newline
+// after the first object's bytes is missing · exit1: a whole, correct answer with exit code 1.
+const FAKE_CATFILE = path.join(SANDBOX, 'fake-catfile.mjs');
+fs.writeFileSync(FAKE_CATFILE, [
+  "import { execFileSync } from 'node:child_process';",
+  "import fs from 'node:fs';",
+  // the real git gets named keys only, never the environment the fake was handed
+  "const env = { PATH: process.env.PATH, Path: process.env.Path, SystemRoot: process.env.SystemRoot, PATHEXT: process.env.PATHEXT, HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, TEMP: process.env.TEMP, TMP: process.env.TMP, TMPDIR: process.env.TMPDIR, GIT_CONFIG_NOSYSTEM: '1', GIT_CEILING_DIRECTORIES: process.env.GIT_CEILING_DIRECTORIES };",
+  "const real = execFileSync('git', ['--no-replace-objects', 'cat-file', '--batch'], { input: fs.readFileSync(0), maxBuffer: 1 << 28, timeout: 60000, env });",
+  'const nl = real.indexOf(10);',
+  "const head = real.toString('latin1', 0, nl).split(' ');",
+  'const firstEnd = nl + 1 + Number(head[2]) + 1;',
+  'const mode = process.env.FAKE_CATFILE_MODE;',
+  'let out = real;',
+  "if (mode === 'early') out = real.subarray(0, firstEnd);",
+  "if (mode === 'negsize') out = Buffer.concat([Buffer.from(head[0] + ' ' + head[1] + ' -1' + String.fromCharCode(10, 10), 'latin1'), real.subarray(firstEnd)]);",
+  "if (mode === 'nonl') out = Buffer.concat([real.subarray(0, firstEnd - 1), real.subarray(firstEnd)]);",
+  "process.stdout.write(out, () => { process.exitCode = mode === 'exit1' ? 1 : 0; });",
+].join('\n'));
+const FAKE_PRELOAD = path.join(SANDBOX, 'fake-catfile.preload.mjs');
+fs.writeFileSync(FAKE_PRELOAD, [
+  "import cp from 'node:child_process';",
+  "import { syncBuiltinESMExports } from 'node:module';",
+  'const orig = cp.spawn;',
+  "cp.spawn = function (file, args, opts) { return Array.isArray(args) && args.includes('cat-file') ? orig.call(this, process.execPath, ['--max-old-space-size=256', " + JSON.stringify(FAKE_CATFILE) + "], opts) : orig.apply(this, arguments); };",
+  'syncBuiltinESMExports();',
+].join('\n'));
+test('a cat-file answer that ends early, gives a bad size, drops a newline or exits non-zero makes the gate refuse by name, never pass or throw', () => {
+  const dir = repo([{ 'README.md': 'hello\n', 'a.txt': 'clean\n' }]);
+  for (const [mode, why] of [['early', 'ECATFILE'], ['negsize', 'ECATFILE'], ['nonl', 'ECATFILE'], ['exit1', 'exit 1']]) {
+    const r = run(dir, [], '', { NODE_OPTIONS: `--import ${pathToFileURL(FAKE_PRELOAD).href}`, FAKE_CATFILE_MODE: mode });
+    assert.strictEqual(r.code, 1, `${mode}: ${r.out}${r.err}`);
+    assert.ok(r.out.includes(`FAIL SECRETS: git could not read the staged files (${why}); the tree was NOT scanned`), `${mode}: ${r.out}${r.err}`);
+    assert.doesNotMatch(r.err, /TypeError/, mode);
   }
 });
