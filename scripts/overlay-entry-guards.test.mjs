@@ -97,7 +97,7 @@ test('the canon CLIs that carry the entry guard carry ONE text: the zips builder
   for (const rel of GUARDED.slice(1)) assert.equal(guardBlock(rel), source, `${rel} drifted from the canon guard`);
 });
 
-test('no canon file but the one awaiting CoalFace compares import.meta.url with the path as typed (the command is in the 12h return)', () => {
+test('no canon file compares import.meta.url with the path as typed (the command is in the 12h return)', () => {
   const left = [];
   const walk = (dir) => {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -111,6 +111,6 @@ test('no canon file but the one awaiting CoalFace compares import.meta.url with 
   };
   walk(path.join(HERE, '..', 'templates'));
   walk(HERE);
-  // the one left is machine-reading.mjs (BB-87); when CoalFace's guard is re-adopted this list becomes empty and the line is removed
-  assert.deepEqual(left.map((l) => l.replace(/:\d+$/, '').split('\\').join('/')), ['templates/overlay-coal-skill/scripts/lib/machine-reading.mjs']);
+  // machine-reading.mjs was the last one (BB-87); CoalFace's guard was re-adopted 2026-11-15 (CoalFace 87e5cfb), so none is left
+  assert.deepEqual(left.map((l) => l.replace(/:\d+$/, '').split('\\').join('/')), []);
 });
