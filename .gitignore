@@ -11,3 +11,6 @@ skills-lock.json
 # CoalBoard's own staging and reports (.coalboard/proposed/, .coalboard/reports/): a board's
 # output lands inside the scanned repo by rule and is read there, never shipped (UMB-216).
 .coalboard/
+
+# The cold-read command's own last-seen state (scripts/watcher/cold-read.mjs): per machine, never shipped.
+scripts/watcher/cold-state-*.json

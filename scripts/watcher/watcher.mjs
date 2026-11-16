@@ -22,7 +22,8 @@ const TITLE_CAP = 200; // a title in the mail and in state; a feed entry can car
 const UNSAFE = new RegExp('[\\x00-\\x20\\x7f-\\x9f' + String.fromCharCode(0x2028, 0x2029) + ']', 'g');
 const oneLine = (s) => String(s).replace(UNSAFE, ' ').replace(/ +/g, ' ').trim();
 const KINDS = ['atom', 'rss', 'headings', 'raw', 'incidents'];
-const SOURCE_FIELDS = ['id', 'name', 'url', 'kind', 'everyHours', 'ignoreTitle'];
+const SOURCE_FIELDS = ['id', 'name', 'url', 'kind', 'everyHours', 'ignoreTitle', 'tier', 'keyPattern'];
+export const TIERS = ['hot', 'cold']; // a COLD source stays in the registry and leaves the cron: scripts/watcher/cold-read.mjs reads it by hand (the owner 2026-11-10: hot data and cold data)
 
 const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
 const unwrap = (s) => s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
@@ -61,6 +62,13 @@ export function headingsKey(html) {
     if (heads.length === 3) break;
   }
   return heads.length ? { key: heads.join(' | '), title: heads[1] ?? heads[0], link: '', updated: '' } : null;
+}
+
+// a raw page keyed on the FIRST match of a pattern (a version line, a dated heading) instead of on its whole content: a page whose body moves on every render (a build id, a
+// counter) but whose newest release line holds still has news only when that line changes. Null when the pattern is absent: the caller reports "no entry found", never a silent same.
+export function patternKey(text, pattern) {
+  const m = new RegExp(pattern).exec(text);
+  return m && m[0] ? { key: m[0].slice(0, 200), title: oneLine(m[0]).slice(0, TITLE_CAP), link: '', updated: '' } : null;
 }
 
 // a raw markdown or text file: the hash of what was read.
@@ -105,7 +113,7 @@ export async function keyFor(source, text, prev) {
   switch (source.kind) {
     case 'atom': case 'rss': return parseFeed(text, { ignoreTitle: source.ignoreTitle });
     case 'headings': return headingsKey(text);
-    case 'raw': return rawKey(text);
+    case 'raw': return source.keyPattern ? patternKey(text, source.keyPattern) : rawKey(text);
     case 'incidents': return incidentsKey(text, prev?.key);
     default: throw new Error('unknown kind ' + source.kind);
   }
@@ -125,7 +133,7 @@ const remember = (prev, key) => {
 // stateless cadence: a source with everyHours=n is due when (hour + its list index) % n === 0, so a list spreads over the hours by construction.
 export const isDue = (source, index, hourNumber) => (hourNumber + index) % (source.everyHours || 1) === 0;
 export function pickRun(sources, hourNumber, max) {
-  const due = sources.filter((s, i) => isDue(s, i, hourNumber));
+  const due = sources.filter((s, i) => s.tier !== 'cold' && isDue(s, i, hourNumber)); // the list index stays the stagger slot, cold or not
   return { run: due.slice(0, max), deferred: due.slice(max) };
 }
 
@@ -327,6 +335,11 @@ export function validateConfig(config) {
     if (u.username || u.password) return `${s.id}: url carries a credential`;
     if (!KINDS.includes(s.kind)) return `${s.id}: kind must be one of ${KINDS.join(', ')}`;
     if (s.everyHours !== undefined && (!Number.isInteger(s.everyHours) || s.everyHours < 1 || s.everyHours > 24)) return `${s.id}: everyHours must be an integer 1-24`;
+    if (s.tier !== undefined && !TIERS.includes(s.tier)) return `${s.id}: tier must be one of ${TIERS.join(', ')}`;
+    if (s.keyPattern !== undefined) {
+      if (s.kind !== 'raw') return `${s.id}: keyPattern belongs to a raw source`;
+      try { new RegExp(s.keyPattern); } catch { return `${s.id}: keyPattern is not a valid pattern`; }
+    }
     if (s.ignoreTitle !== undefined) { try { new RegExp(s.ignoreTitle, 'i'); } catch { return `${s.id}: ignoreTitle is not a valid pattern`; } }
   }
   return null;

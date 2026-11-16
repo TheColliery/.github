@@ -503,12 +503,12 @@ test('thecolliery.mjs: GitHub\'s own changelog label feeds sit after the 25 plat
   assert.deepStrictEqual(idsOf(c).slice(0, 25), ['claude-code', 'codex', 'gemini-cli', 'antigravity', 'copilot-cli', 'copilot-changelog', 'cursor', 'cline', 'windsurf', 'devin', 'kiro', 'augment', 'goose', 'amp', 'opencode', 'roo-code', 'kilo-code', 'continue', 'aider', 'qwen-code', 'openhands', 'mistral-vibe', 'crush', 'zed', 'jules'], 'the first 25 keep their slots');
 });
 
-test('kolwen.mjs: the five kept rows keep their slots, the beat\'s 45 rows follow, the two status watches follow them -- RED before UMB-460 (1) and BB-56', async () => {
+test('kolwen.mjs: the beat\'s rows and the two status watches stand after the allocation of 16l (the agent platforms, GitHub and CodeRabbit went to TheColliery)', async () => {
   const c = await load('kolwen.mjs');
-  assert.deepStrictEqual(idsOf(c).slice(0, 5), ['claude-code', 'cloudflare-changelog', 'github-changelog', 'cloudflare-blog', 'coderabbit-changelog']);
-  assert.ok(c.sources.length >= 5 + 45 + 2 + 12, 'later rows follow at the END (BB-112, UMB3-155)');
+  assert.deepStrictEqual(idsOf(c).slice(0, 5), ['cloudflare-changelog', 'cloudflare-blog', 'anthropic-api-notes', 'anthropic-deprecations', 'anthropic-pricing']);
+  assert.ok(c.sources.length >= 60, 'the beat\'s rows are still here');
   const byId = Object.fromEntries(c.sources.map((s) => [s.id, s]));
-  for (const id of ['anthropic-api-notes', 'anthropic-pricing', 'openai-status', 'gemini-api-changelog', 'groq-changelog', 'cloudflare-workers-ai', 'github-copilot', 'paddle-changelog', 'deepseek-updates', 'xai-news']) assert.ok(byId[id], id);
+  for (const id of ['anthropic-api-notes', 'anthropic-pricing', 'openai-status', 'gemini-api-changelog', 'groq-changelog', 'cloudflare-workers-ai', 'paddle-changelog', 'deepseek-updates', 'xai-news']) assert.ok(byId[id], id);
   assert.strictEqual(byId['paddle-changelog'].url, 'https://developer.paddle.com/changelog.xml');
   assert.strictEqual(byId['anthropic-news'].kind, 'headings');
   assert.strictEqual(byId['anthropic-status'].kind, 'atom');
@@ -519,7 +519,8 @@ test('kolwen.mjs: the five kept rows keep their slots, the beat\'s 45 rows follo
     assert.strictEqual(s.kind, 'raw'); assert.strictEqual(s.everyHours, 12);
   }
   assert.strictEqual(new Set(hf.map((s) => s.url)).size, 13);
-  const tail = c.sources.slice(5 + 45, 5 + 45 + 2);
+  const at = idsOf(c).indexOf('cloudflare-status');
+  const tail = c.sources.slice(at, at + 2);
   assert.deepStrictEqual(tail.map((s) => [s.id, s.kind, s.url]), [
     ['cloudflare-status', 'incidents', 'https://www.cloudflarestatus.com/api/v2/incidents.json'],
     ['groq-status', 'raw', 'https://groqstatus.com/api/v2/incidents.json'],
@@ -666,7 +667,7 @@ test('validateConfig accepts the incidents kind', () => {
 test('kolwen.mjs, BB-112 / Issues 41-42: the status row reads the incident history; the One Client feed, the four GitHub release feeds and the seven pages of Free-plan facts close the list, in that order', async () => {
   const c = await load('kolwen.mjs');
   const i = idsOf(c).indexOf('cloudflare-status');
-  assert.strictEqual(i, 5 + 45, 'the slots before it did not move');
+  assert.ok(i > 0, 'the status row is in the list');
   assert.deepStrictEqual([c.sources[i].kind, c.sources[i].url, c.sources[i].everyHours], ['incidents', 'https://www.cloudflarestatus.com/api/v2/incidents.json', 1]);
   assert.strictEqual(c.sources[i + 1].id, 'groq-status');
   assert.strictEqual(c.sources[i + 1].kind, 'raw', 'Groq lists its history newest first and was never blind to a closed incident: left as it was');
@@ -681,7 +682,7 @@ test('kolwen.mjs, BB-112 / Issues 41-42: the status row reads the incident histo
   const docs = c.sources.filter((s) => s.id.startsWith('cloudflare-doc-'));
   assert.strictEqual(docs.length, 7);
   for (const s of docs) { assert.match(s.url, /^https:\/\/developers\.cloudflare\.com\/[a-z0-9\/-]+\/index\.md$/, s.id); assert.strictEqual(s.kind, 'raw'); assert.strictEqual(s.everyHours, 24); }
-  assert.ok(c.sources.length >= 5 + 45 + 2 + 12, 'later rows follow at the END (UMB3-155)');
+  assert.ok(c.sources.length >= 60, 'later rows follow at the END (UMB3-155)');
 });
 
 // UMB3-155, the Article 50 interop beat: four sources appended at the END, every 24 hours; a new version in a fixture feed raises the change, the same feed does not.
@@ -689,7 +690,7 @@ test('kolwen.mjs, UMB3-155: the Article 50 interop beat closes the list (the Com
   const c = await load('kolwen.mjs');
   const ids = idsOf(c);
   const want = ['eu-code-ai-generated-content', 'c2pa-specification', 'c2pa-rs', 'synthid-text'];
-  assert.deepStrictEqual(ids.slice(-want.length), want, 'appended at the END, so every earlier slot keeps its hour');
+  assert.deepStrictEqual(ids.slice(ids.indexOf(want[0]), ids.indexOf(want[0]) + want.length), want, 'the four rows stand together, in this order');
   const byId = Object.fromEntries(c.sources.map((s) => [s.id, s]));
   assert.deepStrictEqual(want.map((id) => [byId[id].kind, byId[id].everyHours]), [['raw', 24], ['atom', 24], ['atom', 24], ['atom', 24]]);
   assert.strictEqual(byId['eu-code-ai-generated-content'].url, 'https://digital-strategy.ec.europa.eu/en/policies/code-practice-ai-generated-content');
@@ -753,29 +754,12 @@ test('worker.mjs writes one small console line per run: a day of runs, with a 4 
 });
 
 // Main's ruling 2026-10-09 (the .github deputy's 5 (b) proposal): the TheColliery instance carries the Cloudflare surfaces its own Workers run, appended at the END.
-test('thecolliery.mjs: eleven Cloudflare rows close the list (status history hourly, six per-product changelog feeds every 6 hours, four docs pages every 24 hours) and nothing earlier moved', async () => {
+test('thecolliery.mjs: the Cloudflare family is read by Kolwen\'s account alone (16l, the owner 2026-11-10: one source, one account), and GitHub\'s general changelog and CodeRabbit\'s are TheColliery\'s', async () => {
   const c = await load('thecolliery.mjs');
-  assert.strictEqual(c.sources.length, 30 + 11);
-  const added = c.sources.slice(30);
-  assert.deepStrictEqual(added.map((s) => s.id), [
-    'cloudflare-status',
-    'cloudflare-changelog-workers', 'cloudflare-changelog-kv', 'cloudflare-changelog-r2', 'cloudflare-changelog-dns', 'cloudflare-changelog-registrar', 'cloudflare-changelog-email-service',
-    'cloudflare-doc-workers-limits', 'cloudflare-doc-kv-pricing', 'cloudflare-doc-r2-pricing', 'cloudflare-doc-email-service-limits',
-  ]);
-  assert.deepStrictEqual([added[0].kind, added[0].url, added[0].everyHours], ['incidents', 'https://www.cloudflarestatus.com/api/v2/incidents.json', 1]);
-  const feeds = added.slice(1, 7);
-  for (const s of feeds) { assert.match(s.url, /^https:\/\/developers\.cloudflare\.com\/changelog\/rss\/[a-z0-9-]+\.xml$/, s.id); assert.strictEqual(s.kind, 'rss'); assert.strictEqual(s.everyHours, 6); }
-  assert.deepStrictEqual(feeds.map((s) => s.url.split('/').pop()), ['workers.xml', 'kv.xml', 'r2.xml', 'dns.xml', 'registrar.xml', 'email-service.xml'], 'email-routing.xml answers 404: Email Routing\'s notes sit under email-service');
-  for (const s of added.slice(7)) { assert.match(s.url, /^https:\/\/developers\.cloudflare\.com\/[a-z0-9\/-]+\/index\.md$/, s.id); assert.strictEqual(s.kind, 'raw'); assert.strictEqual(s.everyHours, 24); }
   const kolwen = await load('kolwen.mjs');
-  const mine = new Set(c.sources.map((s) => s.url));
-  for (const id of ['cloudflare-wrangler', 'cloudflare-mcp-servers', 'cloudflare-agents-sdk', 'cloudflare-sandbox-sdk', 'cloudflare-one-client', 'cloudflare-workers-ai']) {
-    assert.ok(!mine.has(kolwen.sources.find((s) => s.id === id).url), id + ' stays in the commercial hub\'s list only');
-  }
-  // the day's fetches this adds, from the stagger itself: counted over the 168 hours of a week, per day
-  const week = (list) => Array.from({ length: 168 }, (_, h) => pickRun(list, h, 1e9).run.length).reduce((a, b) => a + b, 0);
-  const perDay = (week(c.sources) - week(c.sources.slice(0, 30))) / 7;
-  assert.ok(perDay > 40 && perDay < 60, 'the eleven rows add about 52 fetches a day, measured ' + perDay);
+  assert.deepStrictEqual(idsOf(c).filter((id) => id.startsWith('cloudflare-')), [], 'no Cloudflare row here: the general changelog feed on the other account contains the per-product ones');
+  for (const id of ['cloudflare-status', 'cloudflare-changelog', 'cloudflare-doc-workers-limits', 'cloudflare-doc-kv-pricing', 'cloudflare-doc-r2-pricing', 'cloudflare-doc-email-service-limits']) assert.ok(idsOf(kolwen).includes(id), id + ' is Kolwen\'s');
+  for (const id of ['github-changelog', 'coderabbit-changelog']) assert.ok(idsOf(c).includes(id) && !idsOf(kolwen).includes(id), id + ' serves the whole house: TheColliery');
 });
 
 // ---- order 09g, COURIER 2 (the Kolwen head's 09e item 26): ONE ITEM IS REPORTED ONCE -------------------------------------------------------------------
@@ -1028,4 +1012,81 @@ test('dedupe, the claim ignores an OLD claim that a stale read shows: only a rec
   kv.get = async (k, type) => (k === 'state' && after ? JSON.parse(old) : real(k, type)); // a stale location: the read after the write still shows the old claim
   await runWith({ kv, routes: oneAtom('a1'), send, config: cfg(1) });
   assert.strictEqual(sent.length, 1);
+});
+
+// ---- 2026-11-16l: ONE SOURCE, ONE ACCOUNT; hot and cold; the rows of the ledger's list --------------------------------------------------------------------
+test('no URL is fetched by both accounts, and the busiest hour of the week of each stays under maxPerRun and the Free plan\'s 50 subrequests (the busiest run is in the failure message) -- RED before 16l, ten URLs were in both', async () => {
+  const both = []; const seen = new Map(); const busiest = {};
+  for (const name of ['kolwen.mjs', 'thecolliery.mjs']) {
+    const c = await load(name);
+    for (const s of c.sources) { const u = new URL(s.url).href; if (seen.has(u) && seen.get(u) !== c.instance) both.push(u); seen.set(u, c.instance); }
+    busiest[c.instance] = Math.max(...Array.from({ length: 168 }, (_, h) => pickRun(c.sources, h, 1e9).run.length));
+    assert.ok(busiest[c.instance] <= c.maxPerRun && busiest[c.instance] <= 45, `${c.instance}: the busiest hour asks for ${busiest[c.instance]} fetches, maxPerRun ${c.maxPerRun}, subrequest budget 50 (all: ${JSON.stringify(busiest)})`);
+  }
+  assert.deepStrictEqual(both, [], 'a URL read by both accounts');
+});
+
+test('a COLD source stays in the registry and never rides the cron; the tier and the key pattern are validated -- RED before 16l', () => {
+  const src = (over) => ({ id: 'a', name: 'A', url: 'https://example.invalid/a', kind: 'raw', everyHours: 1, ...over });
+  const list = [src({ id: 'hot' }), src({ id: 'cold', tier: 'cold' }), src({ id: 'warm', tier: 'hot' })];
+  for (let h = 0; h < 24; h++) assert.ok(!pickRun(list, h, 99).run.some((s) => s.id === 'cold'), 'hour ' + h);
+  assert.deepStrictEqual(pickRun(list, 3, 99).run.map((s) => s.id), ['hot', 'warm']);
+  const bad = (o) => validateConfig({ instance: 'x', maxPerRun: 5, sources: [src(o)] });
+  assert.match(bad({ tier: 'lukewarm' }), /tier must be one of hot, cold/);
+  assert.match(bad({ kind: 'atom', keyPattern: 'x' }), /keyPattern belongs to a raw source/);
+  assert.match(bad({ keyPattern: '(' }), /keyPattern is not a valid pattern/);
+  assert.strictEqual(bad({ tier: 'cold', keyPattern: 'v\\d+' }), null);
+});
+
+test('windsurf: a page whose body moves on every render but whose newest release line holds still is NOT a change, and a new release line is -- RED before 16l (it was a hash: "? -> ?" in most digests)', async () => {
+  const c = await load('thecolliery.mjs');
+  const s = c.sources.find((x) => x.id === 'windsurf');
+  assert.ok(s.keyPattern, 'the row reads its newest release line');
+  const page = (build, ...versions) => `> ## Documentation Index\n\n# Devin Desktop changelog\n\nbuild ${build}\n\n${versions.map((v) => '**' + v + '**\n\nNovember 12, 2026\n').join('\n')}`;
+  const a = await keyFor(s, page('aaa111', 'v3.12.59', 'v3.12.58'));
+  const b = await keyFor(s, page('bbb222', 'v3.12.59', 'v3.12.58'));
+  assert.strictEqual(a.key, b.key, 'two fetches of the same release list are one key');
+  assert.strictEqual(a.title, '**v3.12.59**');
+  const n = await keyFor(s, page('ccc333', 'v3.12.60', 'v3.12.59'));
+  assert.notStrictEqual(n.key, a.key, 'a new release line moves the key');
+  assert.strictEqual(await keyFor(s, 'no version here'), null, 'a page without the line is "no entry found", never a silent same');
+  const was = await rawKey(page('aaa111', 'v3.12.59')); const now = await rawKey(page('bbb222', 'v3.12.59'));
+  assert.notStrictEqual(was.key, now.key, 'positive control: the whole-page hash DID read the build id as news');
+});
+
+test('the ledger\'s registry list (WHATSNEW-LEDGER.md line 770): Goose and OpenCode at their new repositories with the flapping tags ignored; Cline, OpenHands and Kilo Code ignore theirs -- RED before 16l', async () => {
+  const c = await load('thecolliery.mjs');
+  const by = Object.fromEntries(c.sources.map((s) => [s.id, s]));
+  assert.strictEqual(by.goose.url, 'https://github.com/aaif-goose/goose/releases.atom');
+  assert.strictEqual(by.opencode.url, 'https://github.com/anomalyco/opencode/releases.atom');
+  const pick = (id, ...titles) => parseFeed(atom(...titles), { ignoreTitle: by[id].ignoreTitle })?.title;
+  assert.strictEqual(pick('goose', 'gdk-1.0', 'windows-installer-test', 'v1.55.0'), 'v1.55.0');
+  assert.strictEqual(pick('opencode', 'vscode-v0.3.0', 'github-v1.2.0', 'v2.1.0'), 'v2.1.0');
+  assert.strictEqual(pick('cline', 'archive/old', 'v3.1.0'), 'v3.1.0');
+  assert.strictEqual(pick('openhands', 'v1.23.0-r1', 'v1.28.1'), 'v1.28.1');
+  assert.strictEqual(pick('kilo-code', 'kilo-v2-checkpoints-9', 'v7.8.15'), 'v7.8.15');
+});
+
+test('the eight readable sources of the nine of 2026-11-10 (Adobe refuses a bot and is dropped) are in the registries, each on one account, and the five cold ones are cold; a program the daily updater installs is cold, its changelog is read at a day -- 16l', async () => {
+  const k = await load('kolwen.mjs'); const t = await load('thecolliery.mjs');
+  const K = Object.fromEntries(k.sources.map((s) => [s.id, s])); const T = Object.fromEntries(t.sources.map((s) => [s.id, s]));
+  for (const id of ['claude-dev-blog', 'supabase-changelog']) assert.ok(K[id] && K[id].tier !== 'cold' && K[id].everyHours === 12, id);
+  for (const id of ['anthropic-engineering']) assert.strictEqual(K[id].tier, 'cold', id);
+  for (const id of ['skillspector', 'git-for-windows', 'mcp-spec', 'nodejs-security', 'gitbook-changelog']) assert.strictEqual(T[id].tier, 'cold', id);
+  for (const id of ['claude-code', 'codex', 'copilot-cli', 'mistral-vibe']) assert.strictEqual(T[id].tier, 'cold', id + ': the updater installs it');
+  for (const id of ['antigravity', 'cursor']) assert.ok(T[id].tier !== 'cold' && T[id].everyHours >= 24, id + ': a changelog that says more than a version, at no shorter than a day');
+  assert.strictEqual(K['claude-dev-blog'].url, 'https://claude.dev/rss.xml');
+});
+
+// 2026-11-17: a count of sources written in prose drifts the day a row moves (the 16l README said 41 and 63 against a live 37 and 64). The two docs and the two registries pin none; the check sees the
+// shapes "41 sources", "(63 sources", "63 rows" and "sixty sources" is not a shape the house writes. Red-first: it fails on the 16l text.
+test('no watcher doc or registry header pins a number of sources: a count in prose drifts silently -- RED before 2026-11-17', () => {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const SHAPE = /\b\d+\s+(sources|rows|feeds)\b/i;
+  const offenders = [];
+  for (const f of ['README.md', 'sources/kolwen.mjs', 'sources/thecolliery.mjs']) {
+    fs.readFileSync(path.join(here, f), 'utf8').split(/\r?\n/).forEach((l, i) => { if (!/^\s*\{ id: /.test(l) && SHAPE.test(l)) offenders.push(`${f}:${i + 1}`); });
+  }
+  assert.deepStrictEqual(offenders, [], 'a pinned count of sources');
+  assert.ok(SHAPE.test('(63 sources; the chief deploys it)') && SHAPE.test('// 64 sources;') && !SHAPE.test('the sources of the week'), 'positive control: the check reads the shapes it is meant to');
 });

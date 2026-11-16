@@ -4,10 +4,10 @@ One Cloudflare Cron Worker per Cloudflare account (owner ruling BB-28, UMB-445).
 
 | Instance | List | Watches |
 | --- | --- | --- |
-| TheColliery | `sources/thecolliery.mjs` (41 sources) | every AI agent platform the Coal* skills support, GitHub's own changelog by label (actions, application security, supply chain security, platform governance, account management, copilot), and the Cloudflare surfaces its own Workers run (the status history, six per-product changelog feeds, four limits and pricing pages) |
-| Kolwen | `sources/kolwen.mjs` (63 sources; the LLM chief deploys it) | the commercial hub's beat: Cloudflare, GitHub, CodeRabbit, Claude Code, the model vendors and the open-weight organisations (rows from `LLMWorks/warehouse/antenna-beat-2026-10.md`), the Paddle changelog, and two status watches (Cloudflare, Groq) |
+| TheColliery | `sources/thecolliery.mjs` | every AI agent platform the Coal* skills support, GitHub's own changelog (general and by label) and CodeRabbit's changelog, and the open-source forge's toolchain (Node.js security, Git for Windows, the MCP specification, GitBook, SkillSpector); the sources a machine updates itself carry `tier: 'cold'` and are read by hand |
+| Kolwen | `sources/kolwen.mjs` (the LLM chief deploys it) | the commercial hub's beat: the whole Cloudflare family (status, changelog, limits and pricing pages), the model vendors and the open-weight organisations (rows from `LLMWorks/warehouse/antenna-beat-2026-10.md`), the Paddle and Supabase changelogs, the Claude builder blog, and the Groq status watch |
 
-A new website joins as ONE data row in the instance's list, appended at the END (the order is the stagger). The busiest hour of the week stays under `maxPerRun` and the Free plan's 50 subrequests: a test prints the worst hour and holds it near the mean. A feed URL appears once per list.
+A new website joins as ONE data row in the instance's list, appended at the END (the order is the stagger). The busiest hour of the week stays under `maxPerRun` and the Free plan's 50 subrequests: a test prints the worst hour and holds it near the mean. A feed URL appears once across both lists. A source count is never written here: `watcher.test.mjs` fails on a number of sources in this file or in a registry's header, so it cannot drift again (16m's README said 41 and 63 against a live 37 and 64).
 
 ## What one run does
 
@@ -60,5 +60,12 @@ Free-plan budget, from Cloudflare's docs read 2026-10-04: 10 ms CPU per Cron run
 ## Tests
 
 ```text
-node --test scripts/watcher/watcher.test.mjs scripts/watcher/deploy-payload.test.mjs
+node --test scripts/watcher/watcher.test.mjs scripts/watcher/deploy-payload.test.mjs scripts/watcher/cold-read.test.mjs
 ```
+
+## One source, one account; hot and cold (2026-11-16, the owner 2026-11-10)
+
+- **One account per source.** A URL is fetched by ONE instance. What serves Coal* or the whole house (the agent platforms, GitHub's changelog, CodeRabbit's) is TheColliery's; what serves Kolwen is Kolwen's; the Cloudflare family (status, the changelog feeds, the limits and pricing pages) lives on Kolwen's account once. `watcher.test.mjs` fails on a URL in both registries and prints each account's busiest hour of the week against `maxPerRun` and the Free plan's 50 subrequests.
+- **Hot and cold.** A source may carry `tier: 'cold'`. It stays in the registry (nothing is lost, and one edit warms it up again) and the cron never fetches it. A program the box's daily updater installs is cold by default, because learning its news after the update costs nothing; a source stays hot only where its news asks for an act the updater cannot do (a price, a deprecation with a date, a breaking change a room's code must answer).
+- **The cold read.** `node scripts/watcher/cold-read.mjs <instance>` fetches the cold sources of one instance one at a time with the watcher's own `fetchSource`, compares them with their own last-seen state (`scripts/watcher/cold-state-<instance>.json`, git-ignored), and prints the change list in the digests' shape. The first run baselines; `--dry-run` writes nothing. The weekly round runs it.
+- **`keyPattern`** (a `raw` source only): the source's key is the first match of the pattern, not a hash of the whole page, so a page whose body moves on every render (a build id) but whose newest release line holds still has news only when that line changes (Windsurf's changelog).
