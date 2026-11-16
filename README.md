@@ -103,6 +103,7 @@ This specific repository (`.github`) manages the following internal assets:
 * **[`SKILL-REPO-PATTERN.md`](SKILL-REPO-PATTERN.md)**: The shared repository layout and machinery—manifests, source-vs-dist, config system, gates, workflows.
 * **[`RELEASE-PATTERN.md`](RELEASE-PATTERN.md)**: The shape of a GitHub Release—title, notes body, which tags get one, and the migration note a MAJOR ships.
 * **[`RELEASE-NOTES-TEMPLATE.md`](RELEASE-NOTES-TEMPLATE.md)**: The fill-in skeleton that implements `RELEASE-PATTERN.md`—the CHANGELOG entry, the Release title and body, and the `MIGRATION.md` shape, with a worked example.
+* **[`ADVISORY-PATTERN.md`](ADVISORY-PATTERN.md)**: The shape of a GitHub security advisory—the gate that says whether a finding gets one, the fields GitHub needs before a CVE request, the body, and who drafts, checks, signs and publishes.
 * **[`ADOPTION-PATTERN.md`](ADOPTION-PATTERN.md)**: What to do when a rule, doc shape, or skill comes from outside the series—adopt the idea not the identity, pick the narrowest surface, carry the source, and rule a conflict in the open.
 * **[`PERMISSION-MATRIX.md`](PERMISSION-MATRIX.md)**: The least-power capability each tool requests, and the rights it deliberately never asks for.
 * **[`SWEEP-MARKS.md`](SWEEP-MARKS.md)**: The event → doc-spot registry: which surfaces each recurring event rots, and who owns sweeping each one.
