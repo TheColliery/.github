@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -174,7 +174,12 @@ async function main() {
 }
 
 // Run only when invoked directly (not when imported by the test).
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+// Both sides go through realpath.native (node/runtime.md section 4): a junction, a symlinked folder or a Windows 8.3 name spells one file two ways, and a guard that compares the path as typed
+// is false there and the script exits 0 having done nothing. If either side cannot be resolved the file runs: a silent no-op of this gate is worse than an unwanted run.
+const isEntry = () => {
+  try { return realpathSync.native(process.argv[1]) === realpathSync.native(fileURLToPath(import.meta.url)); } catch { return true; }
+};
+if (process.argv[1] && isEntry()) {
   main();
 }
 

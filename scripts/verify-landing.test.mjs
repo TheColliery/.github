@@ -1,8 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
+import path, { join } from 'node:path';
+import os, { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { verifyLanding } from './verify-landing.mjs';
 
 // hermetic fixture builder — sandboxed under os.tmpdir(), cleaned by the caller
@@ -222,4 +224,21 @@ test('catches the retired HetCreep/CoalMine address on an install / landing surf
     }
     assert.ok(!f.some((x) => x.startsWith('README.md:')), 'a conforming surface is not flagged');
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// 2026-11-16l: an entry guard compares what the process was started with against what this file really is (node/runtime.md section 4). Started through a junction or a symlink to
+// this folder, argv[1] is the link's spelling and import.meta.url is the real file, so a guard that compares them as typed is false and the script exits 0 having done nothing.
+// The witness runs the script through a link and asks for output: the work either ran or failed loud, never a silent no-op.
+function throughALink(t, script, run) {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'entry-link-'));
+  try {
+    const link = path.join(dir, 'via');
+    try { symlinkSync(path.dirname(fileURLToPath(import.meta.url)), link, 'junction'); } catch (e) { t.skip('no link can be made here: ' + e.code); return; }
+    run(spawnSync(process.execPath, ['--max-old-space-size=512', path.join(link, script)], { cwd: dir, encoding: 'utf8', timeout: 60000, env: { ...process.env, PAT_TOKEN: '' } }));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+}
+test('verify-landing.mjs started through a link to its folder runs its check instead of exiting 0 in silence', (t) => {
+  throughALink(t, 'verify-landing.mjs', (r) => {
+    assert.match(r.stdout + r.stderr, /\[verify-landing\]/, 'a run through a link did nothing and said nothing: exit ' + r.status);
+  });
 });

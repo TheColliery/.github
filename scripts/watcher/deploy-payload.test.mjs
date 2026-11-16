@@ -206,3 +206,14 @@ test('the README and the generator\'s own usage name the antenna senders, never 
   const example = help.stdout.split('\n').find((l) => l.trim().startsWith('example:'));
   assert.strictEqual(senderOf(example), 'antenna-llm@kolwen.com');
 });
+
+// 2026-11-16l: started through a junction (or a symlink) to its folder the script runs and says its usage; with an entry guard that compares the path as typed it exits 0 in silence.
+test('deploy-payload.mjs started through a link to its folder runs instead of exiting 0 in silence', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'entry-link-'));
+  try {
+    const link = path.join(dir, 'via');
+    try { fs.symlinkSync(path.dirname(fileURLToPath(import.meta.url)), link, 'junction'); } catch (e) { t.skip('no link can be made here: ' + e.code); return; }
+    const r = spawnSync(process.execPath, ['--max-old-space-size=512', path.join(link, 'deploy-payload.mjs')], { cwd: dir, encoding: 'utf8', timeout: 60000 });
+    assert.match(r.stdout + r.stderr, /deploy-payload: /, 'a run through a link did nothing and said nothing: exit ' + r.status);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

@@ -114,4 +114,9 @@ function main() {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+// Entry only, never on import. Both sides go through realpath.native (node/runtime.md section 4): started through a junction or a symlinked folder, argv[1] is the link's spelling and
+// import.meta.url is the real file, so a guard that compares the path as typed is false and the script exits 0 having done nothing. If either side cannot be resolved the file runs.
+const isEntry = () => {
+  try { return fs.realpathSync.native(process.argv[1]) === fs.realpathSync.native(fileURLToPath(import.meta.url)); } catch { return true; }
+};
+if (process.argv[1] && isEntry()) main();

@@ -23,7 +23,7 @@
 // visitor") are NOT gated — a green run is NOT "all SWEEP-MARKS swept". Those stay with
 // SWEEP-MARKS.md + the human.
 
-import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, existsSync, realpathSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -177,7 +177,12 @@ export function verifyLanding(root) {
 }
 
 // --- CLI entry (only when run directly, not when imported by the test) ---
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+// Both sides go through realpath.native (node/runtime.md section 4): a junction, a symlinked folder or a Windows 8.3 name spells one file two ways, and a guard that compares the path as typed
+// is false there and the script exits 0 having done nothing. If either side cannot be resolved the file runs: a silent no-op of this gate is worse than an unwanted run.
+const isEntry = () => {
+  try { return realpathSync.native(process.argv[1]) === realpathSync.native(fileURLToPath(import.meta.url)); } catch { return true; }
+};
+if (process.argv[1] && isEntry()) {
   const failures = verifyLanding(ROOT);
   if (failures.length) {
     console.error(`[verify-landing] FAIL — ${failures.length} issue(s):`);
