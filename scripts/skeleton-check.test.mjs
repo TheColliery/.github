@@ -920,3 +920,13 @@ test('placeholderVerdict: a filled NOTICE is the template, a slot left unfilled 
   assert.equal(placeholderVerdict(NOTICE_SOURCE, 'Bankfire\nCopyright (c) 2026 HetCreep\n\nPortions generated with AI assistance.\n'), null);
   assert.equal(placeholderVerdict('no slot here\n', 'no slot here\n'), null);
 });
+
+// 16b (the review of 4be36a3, A-M1 and A-L1): a slot line with one slot filled and another left as {{TOKEN}} is not filled (the slot match alone
+// lets a slot's fill be the token itself), and a raw copy with CRLF line ends is a slot left unfilled, as its LF copy is.
+test('placeholderVerdict: a line with one slot filled and one left, or a slot filled with a token, is unfilled; a raw CRLF copy is unfilled', () => {
+  const filled = 'CoalMine\nCopyright 2026 HetCreep\n\nThis product is part of the TheColliery series (https://github.com/TheColliery)\nand is licensed under Apache-2.0.\n';
+  assert.equal(placeholderVerdict(NOTICE_SOURCE, filled.replace('HetCreep', '{{COPYRIGHT_HOLDER}}')), 'unfilled', 'holder left');
+  assert.equal(placeholderVerdict(NOTICE_SOURCE, filled.replace('Apache-2.0.', 'the {{LICENSE_BADGE}} licence.')), 'unfilled', 'a fill that holds a token');
+  assert.equal(placeholderVerdict(NOTICE_SOURCE, NOTICE_SOURCE.replace(/\n/g, '\r\n')), 'unfilled', 'a raw CRLF copy');
+  assert.equal(placeholderVerdict(NOTICE_SOURCE, filled), 'filled', 'every slot filled stays filled');
+});
