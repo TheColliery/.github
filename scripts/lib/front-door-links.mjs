@@ -123,11 +123,19 @@ const transient = (r) => r.status === 0 || (r.status >= 500 && r.status < 600);
 export const API_HOST = 'https://api.github.com';
 /** The REST route that answers for a github.com page that is a bare repository (/owner/repo) or a bare account (/owner), or null for any other page: a deep page
  * (a file, an issue, a release) has no cheap REST twin here, so its anonymous answer stands. */
+// github.com's own top-level routes: a one- or two-segment path that starts with one of these is a product page (/pricing, /sponsors/<user>, /orgs/<org>, /topics/<topic>), never an account or a
+// repository, so the REST API has no twin for it and its anonymous answer stands. The list is GitHub's reserved names as read from its routes; a name missing from it costs, at worst, a REST
+// answer for a path that is not a repository (a 404 is then a finding for a link that was already failing to answer).
+export const RESERVED_ROUTES = new Set(['about', 'account', 'advisories', 'apps', 'assets', 'codespaces', 'collections', 'community', 'contact', 'copilot', 'customer-stories', 'dashboard', 'discussions',
+  'education', 'enterprise', 'events', 'explore', 'features', 'git-guides', 'github-copilot', 'issues', 'join', 'login', 'logout', 'marketplace', 'mobile', 'models', 'new', 'notifications', 'orgs',
+  'organizations', 'partners', 'premium-support', 'pricing', 'pulls', 'readme', 'resources', 'search', 'security', 'sessions', 'settings', 'signup', 'site', 'solutions', 'sponsors', 'stars', 'team',
+  'topics', 'trending', 'users', 'watching', 'why-github']);
 export function apiRouteOf(url) {
   let u;
   try { u = new URL(url); } catch { return null; }
   if (u.hostname.toLowerCase() !== 'github.com') return null;
   const segs = u.pathname.split('/').filter(Boolean);
+  if (segs.length && RESERVED_ROUTES.has(segs[0].toLowerCase())) return null;
   if (segs.length === 1 && /^[A-Za-z0-9-]+$/.test(segs[0])) return `/users/${segs[0]}`;
   if (segs.length === 2 && /^[A-Za-z0-9._-]+$/.test(segs[0]) && /^[A-Za-z0-9._-]+$/.test(segs[1])) return `/repos/${segs[0]}/${segs[1]}`;
   return null;

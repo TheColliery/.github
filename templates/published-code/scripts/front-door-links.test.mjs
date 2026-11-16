@@ -362,3 +362,27 @@ test('checkFiles: a github.com repository or account link that stays 5xx is read
   assert.deepEqual(r.findings, []);
   assert.equal(m.calls.length, 1, 'a page that answers is never asked of the API');
 });
+
+// 2026-11-16m: the two guards the review found untested (the host check, redirect:'manual') and the reserved routes -- each is killed by removing it
+test('apiRouteOf and viaApi: only github.com itself is asked, the call never follows a redirect with the token, and a github.com product page is not an account or a repository -- RED before 16m (three survivors)', async () => {
+  const { apiRouteOf } = await import('./lib/front-door-links.mjs');
+  for (const u of ['https://gist.github.com/a/b', 'https://github.com.evil.example/a/b', 'https://example.com/a/b', 'https://api.github.com/repos/a/b', 'https://raw.githubusercontent.com/a/b']) assert.strictEqual(apiRouteOf(u), null, u);
+  for (const u of ['https://github.com/pricing', 'https://github.com/sponsors/someone', 'https://github.com/orgs/TheColliery', 'https://github.com/topics/ai', 'https://github.com/Settings', 'https://github.com/features/actions']) assert.strictEqual(apiRouteOf(u), null, u);
+  assert.strictEqual(apiRouteOf('https://github.com/TheColliery/CoalMine/'), '/repos/TheColliery/CoalMine', 'a repository link keeps its route, a trailing slash included');
+  assert.strictEqual(apiRouteOf('https://github.com/TheColliery'), '/users/TheColliery');
+  // through checkFiles: a link on a look-alike host or a product page never reaches the API, and the call that does carries redirect:'manual'
+  const seen = [];
+  const fetchFn = async (url, init) => { seen.push({ u: String(url), redirect: init.redirect, auth: init.headers.authorization }); return { status: String(url).startsWith('https://api.github.com/') ? 200 : 504, headers: { get: () => null }, body: null }; };
+  for (const u of ['https://github.com.evil.example/a/b', 'https://github.com/pricing', 'https://github.com/sponsors/someone']) {
+    seen.length = 0;
+    const r = await checkFiles([{ name: 'R.md', text: `[x](${u})\n` }], { fetchFn, retryMs: 0, token: 'T-123' });
+    assert.match(r.findings[0].message, /HTTP 504/, u);
+    assert.ok(!seen.some((c) => c.u.startsWith('https://api.github.com/')), u + ' is not asked of the API');
+  }
+  seen.length = 0;
+  await checkFiles([{ name: 'R.md', text: '[x](https://github.com/TheColliery/CoalMine)\n' }], { fetchFn, retryMs: 0, token: 'T-123' });
+  const api = seen.find((c) => c.u.startsWith('https://api.github.com/'));
+  assert.strictEqual(api.redirect, 'manual', 'the token is never sent along a redirect');
+  assert.strictEqual(api.auth, 'Bearer T-123');
+  assert.ok(seen.filter((c) => c !== api).every((c) => c.auth === undefined), 'the token goes to the API host only');
+});
