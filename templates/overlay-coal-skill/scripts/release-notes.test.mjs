@@ -716,5 +716,7 @@ test('release-notes.mjs: a bare launch-form tag in a repository whose current La
   fs.writeFileSync(path.join(stableDir, 'CHANGELOG.md'), TWO);
   const stable = run(stableDir, { GITHUB_REF_NAME: 'v1.2.0', PREVIOUS_STABLE_TAG: 'v1.1.0', LATEST_TAG: 'core-v2.0.0' });
   assert.equal(stable.status, 1, stable.stderr);
+  // a CHANGELOG read failure or a shape error also exits 1 with no title (t342 F8, 2026-11-17): the refusal is the one makeLatestFlag words, so the leg pins its sentence
+  assert.match(stable.stderr, /the current Latest release is tagged "core-v2.0.0", not a bare vX.Y.Z -- refusing to guess whether v1.2.0 should take Latest/, stable.stderr);
   assert.equal(fs.existsSync(path.join(stableDir, 'release-title.txt')), false);
 });
