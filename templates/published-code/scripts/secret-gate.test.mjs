@@ -757,7 +757,9 @@ const LINE_BYTES = 4096;
 // of its own whose fingerprint the acks file can carry, and the gate's peak memory grows by a few times the file, never by the dozens decoding costs.
 // 16j: the file is 9 MiB, one MiB past the 8 MiB bound, not 32: past the bound its size changes nothing the test proves, and each gate run over it
 // costs seconds. The peak assertion below is six times the file (54 MiB): the gate's peak grows by about 27 MiB over a tiny repo with the bound and by about
-// 82 MiB without it (measured 2026-11-16 on this file's shape, gate and scanner as shipped against the scanner with the bound disabled). The 16j wording of
+// 82 MiB without it (measured 2026-11-16 on this file's shape, gate and scanner as shipped against the scanner with the bound disabled; Windows 11, Node 26, n = 1 each). The 54 MiB is a
+// midpoint between 27 and 82, not a derived number, and it was measured on Windows only: macOS and Linux account a process's peak differently, so the three-OS CI result of the push is read
+// before any room copies this file. The 16j wording of
 // this comment, a decode cost of about 240 MiB against a bound of ten times the file (90 MiB), was wrong: 240 MiB was a peak, on a file with short lines, and 82
 // MiB sits under 90, so that bound told nothing apart; the exit code and the message below were what caught a scanner without the bound.
 const SAMPLES_BYTES = 9 << 20;
@@ -828,7 +830,7 @@ test('the decode bound gives wide text past it one hit that follows its bytes, n
 });
 
 // 16a (15i NIT-2, the c175 item): the bound itself. Wide text of exactly WIDE_DECODE_MAX_BYTES is still decoded and scanned; one byte more is not
-// (the bound unit test above). The key at the end is found, and no too-large hit is given.
+// (the bound unit test above). This file is exactly 8 MiB, AT the bound on purpose, the largest one still decoded; the unit test above holds the file that is over it. The key at the end is found, and no too-large hit is given.
 test('wide text of exactly the decode bound is still scanned, with no too-large hit', async () => {
   const { scanBytes, WIDE_DECODE_MAX_BYTES } = await import(pathToFileURL(LIB).href);
   const b = Buffer.alloc(WIDE_DECODE_MAX_BYTES);
