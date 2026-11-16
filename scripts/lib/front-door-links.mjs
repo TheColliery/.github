@@ -120,11 +120,39 @@ export function judge(link, result) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const transient = (r) => r.status === 0 || (r.status >= 500 && r.status < 600);
 
+export const API_HOST = 'https://api.github.com';
+/** The REST route that answers for a github.com page that is a bare repository (/owner/repo) or a bare account (/owner), or null for any other page: a deep page
+ * (a file, an issue, a release) has no cheap REST twin here, so its anonymous answer stands. */
+export function apiRouteOf(url) {
+  let u;
+  try { u = new URL(url); } catch { return null; }
+  if (u.hostname.toLowerCase() !== 'github.com') return null;
+  const segs = u.pathname.split('/').filter(Boolean);
+  if (segs.length === 1 && /^[A-Za-z0-9-]+$/.test(segs[0])) return `/users/${segs[0]}`;
+  if (segs.length === 2 && /^[A-Za-z0-9._-]+$/.test(segs[0]) && /^[A-Za-z0-9._-]+$/.test(segs[1])) return `/repos/${segs[0]}/${segs[1]}`;
+  return null;
+}
+/** GitHub's own word in the incident of 2026-11-09 (05:59Z, "Increased timeouts due to surge in anonymous users"; update 08:16Z): "Logged-in users and authenticated requests are
+ * unaffected." So a github.com repository or account link whose anonymous answer stayed 5xx after the retry is asked once of the REST API with the caller's token: a 2xx or a 404 there
+ * is the page's real answer. Anything else (the API's own 5xx, a 401 or 403, no answer, a redirect) returns null and the anonymous answer stands: a 504 that persists stays a finding.
+ * The token goes to the one fixed API host, in a header, never into a URL, and a redirect is not followed with it. */
+export async function viaApi(fetchFn, target, token, timeoutMs = DEFAULT_TIMEOUT_MS) {
+  const route = apiRouteOf(target.href);
+  if (!route || !token) return null;
+  let r;
+  try {
+    r = await fetchFn(API_HOST + route, { method: 'GET', redirect: 'manual', headers: { 'user-agent': USER_AGENT, accept: 'application/vnd.github+json', authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(timeoutMs) });
+  } catch { return null; }
+  try { await r.body?.cancel(); } catch { /* the body is not the answer */ }
+  if ((r.status >= 200 && r.status < 300) || r.status === 404) return { status: r.status, finalUrl: target.href, hops: 0, viaApi: true };
+  return null;
+}
+
 /**
  * Check the outward links of named texts. `files` = [{ name, text }]. Returns { findings: [{ file, line, url, message }], links: n } with one fetch per
  * distinct URL per run. `skipHosts` is an array of host names (lower-case) to leave alone, reported as skipped.
  */
-export async function checkFiles(files, { fetchFn = globalThis.fetch, timeoutMs = DEFAULT_TIMEOUT_MS, retryMs = DEFAULT_RETRY_MS, maxHops = MAX_HOPS, skipHosts = [] } = {}) {
+export async function checkFiles(files, { fetchFn = globalThis.fetch, timeoutMs = DEFAULT_TIMEOUT_MS, retryMs = DEFAULT_RETRY_MS, maxHops = MAX_HOPS, skipHosts = [], token = '' } = {}) {
   const findings = [];
   const seen = new Map();
   const skipped = [];
@@ -139,6 +167,7 @@ export async function checkFiles(files, { fetchFn = globalThis.fetch, timeoutMs 
       if (!result) {
         result = await probe(fetchFn, target.href, { timeoutMs, maxHops, skipHosts });
         if (transient(result)) { await sleep(retryMs); result = await probe(fetchFn, target.href, { timeoutMs, maxHops, skipHosts }); }
+        if (transient(result) && token) result = (await viaApi(fetchFn, target, token, timeoutMs)) || result;
         seen.set(target.href, result);
       }
       if (result.skippedHost) { skipped.push(link.url); continue; }
