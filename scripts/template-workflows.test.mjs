@@ -2126,7 +2126,7 @@ const { scanChildEnv } = await import(pathToFileURL(path.join(TEMPLATES, 'overla
 const { collectScriptsMjs } = await import(pathToFileURL(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', 'git-env-census.mjs')).href);
 const SCANNER_WHY = 'byte-equal copy of the Bankfire-sourced scanner gate test: its scratch repo gets HOME and USERPROFILE only. Its fix is made at the Bankfire source (the secret-scan test already points TEMP, TMP and TMPDIR at the sandbox since Bankfire 557a2e6) and re-copied into all three places.';
 const CHILD_ENV_PINS = [
-  ['scripts/secret-gate.test.mjs', '0d82f7061b768e425e12dcf1c19444515f903bee'], ['templates/article/scripts/secret-gate.test.mjs', '0d82f7061b768e425e12dcf1c19444515f903bee'], ['templates/published-code/scripts/secret-gate.test.mjs', '0d82f7061b768e425e12dcf1c19444515f903bee'],
+  ['scripts/secret-gate.test.mjs', '47e6a269042b01898ba58703a5110e5de5887af2'], ['templates/article/scripts/secret-gate.test.mjs', '47e6a269042b01898ba58703a5110e5de5887af2'], ['templates/published-code/scripts/secret-gate.test.mjs', '47e6a269042b01898ba58703a5110e5de5887af2'],
 ].map(([rel, blob]) => ({ rel, blob, why: SCANNER_WHY }));
 function childEnvFiles() {
   const files = [];
