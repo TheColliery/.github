@@ -484,6 +484,7 @@ globalThis.fetch = async (url, init = {}) => {
   const method = init.method || 'GET';
   fs.appendFileSync(process.env.STUB_LOG, JSON.stringify({ method, path: p, body: init.body ? JSON.parse(init.body) : undefined }) + '\\n');
   const reply = (status, obj) => new Response(status === 204 ? null : JSON.stringify(obj), { status });
+  if (method === 'GET' && S.failRepo && p === '/repos/TheColliery/' + S.repo.name) return reply(502, {});
   if (method === 'GET' && p === '/repos/TheColliery/' + S.repo.name) return reply(200, S.repo);
   if (method === 'GET' && p === '/orgs/TheColliery/teams/coal') return reply(200, { description: S.description });
   if (method === 'GET' && p.startsWith('/orgs/TheColliery/teams/coal/repos')) return reply(200, S.teamRepos);
@@ -781,4 +782,13 @@ test('--apply-settings article --only rulesets on a PUBLIC repo still creates ta
   assert.equal(res.status, 0, res.stdout + res.stderr);
   assert.deepEqual(writes(calls), ['POST /repos/TheColliery/ArtNext/rulesets']);
   assert.match(res.stdout, /tagRuleset: ok \(HTTP 201, created "tag-immutable"/);
+});
+
+// 16h (the 16g re-check's MEDIUM): when the repo read fails, whether the repo is private is UNKNOWN. A failed read must not read as public: a private
+// article would get tag-immutable and the run would exit 0. The tag ruleset is reported FAIL and nothing is written for it.
+test('--apply-settings article --only rulesets, the repo read FAILS (502): the tag ruleset is FAIL, nothing is written for it, the exit is not 0 (fail closed)', () => {
+  const { res, calls } = runWithTeamStub(['--apply-settings', 'article', '--repo', 'TheColliery/ChotNext', '--only', 'rulesets'], { name: 'ChotNext', id: 1300000003, private: true, default_branch: 'main' }, { rulesets: [ORG_GUARD], failRepo: true });
+  assert.notEqual(res.status, 0, res.stdout + res.stderr);
+  assert.deepEqual(writes(calls), [], 'no ruleset is written when the repository could not be read');
+  assert.match(res.stdout, /tagRuleset: FAIL/);
 });
