@@ -1067,12 +1067,12 @@ test('the ledger\'s registry list (WHATSNEW-LEDGER.md line 770): Goose and OpenC
   assert.strictEqual(pick('kilo-code', 'kilo-v2-checkpoints-9', 'v7.8.15'), 'v7.8.15');
 });
 
-test('the nine sources of 2026-11-10 are in the registries, each on one account, and the six cold ones are cold; a program the daily updater installs is cold, its changelog is read at a day -- 16l', async () => {
+test('the eight readable sources of the nine of 2026-11-10 (Adobe refuses a bot and is dropped) are in the registries, each on one account, and the five cold ones are cold; a program the daily updater installs is cold, its changelog is read at a day -- 16l', async () => {
   const k = await load('kolwen.mjs'); const t = await load('thecolliery.mjs');
   const K = Object.fromEntries(k.sources.map((s) => [s.id, s])); const T = Object.fromEntries(t.sources.map((s) => [s.id, s]));
   for (const id of ['claude-dev-blog', 'supabase-changelog']) assert.ok(K[id] && K[id].tier !== 'cold' && K[id].everyHours === 12, id);
   for (const id of ['anthropic-engineering']) assert.strictEqual(K[id].tier, 'cold', id);
-  for (const id of ['skillspector', 'git-for-windows', 'mcp-spec', 'nodejs-security', 'gitbook-changelog', 'adobe-firefly-whats-new']) assert.strictEqual(T[id].tier, 'cold', id);
+  for (const id of ['skillspector', 'git-for-windows', 'mcp-spec', 'nodejs-security', 'gitbook-changelog']) assert.strictEqual(T[id].tier, 'cold', id);
   for (const id of ['claude-code', 'codex', 'copilot-cli', 'mistral-vibe']) assert.strictEqual(T[id].tier, 'cold', id + ': the updater installs it');
   for (const id of ['antigravity', 'cursor']) assert.ok(T[id].tier !== 'cold' && T[id].everyHours >= 24, id + ': a changelog that says more than a version, at no shorter than a day');
   assert.strictEqual(K['claude-dev-blog'].url, 'https://claude.dev/rss.xml');

@@ -49,6 +49,5 @@ export default {
     { id: 'mcp-spec', name: 'Model Context Protocol specification releases', url: 'https://github.com/modelcontextprotocol/modelcontextprotocol/releases.atom', kind: 'atom', everyHours: 24, tier: 'cold' },
     { id: 'nodejs-security', name: 'Node.js security releases', url: 'https://nodejs.org/en/feed/vulnerability.xml', kind: 'rss', everyHours: 24, tier: 'cold' },
     { id: 'gitbook-changelog', name: 'GitBook changelog', url: 'https://gitbook.com/docs/changelog/rss.xml', kind: 'rss', everyHours: 24, tier: 'cold' },
-    { id: 'adobe-firefly-whats-new', name: 'Adobe Firefly what\'s new', url: 'https://helpx.adobe.com/firefly/web/whats-new.html', kind: 'headings', everyHours: 24, tier: 'cold' },
   ],
 };
