@@ -2317,7 +2317,9 @@ test('dependabot.yml keeps ONE plain group for the github-actions ecosystem -- n
 // is not YAML in any parser (PyYAML 6.0.3 on libyaml: line 142, column 35). The checks above read workflow files as lines and never parsed one.
 // This repository has no YAML parser and Node has none, so the class is policed two ways. (1) flowValueFindings, a narrow pure-Node lint for the class that broke:
 // a plain value that opens a flow collection and is not one well-formed collection on its line, or opens with two braces. It runs on every machine.
-// (2) A real parser, Ruby's Psych (Dependabot's own language) or else Python's PyYAML, when the machine has one; a machine with neither skips that leg visibly.
+// (2) A real parser, when the machine has one; a machine with neither skips that leg visibly. The Ruby leg calls the line Dependabot itself calls (dependabot-core workflow_file.rb line 28:
+// YAML.safe_load(content, aliases: true, permitted_classes: [Date, Time, Symbol]); file_parser.rb turns Psych::SyntaxError, DisallowedClass and BadAlias into dependency_file_not_parseable),
+// so a custom tag or an undefined alias fails here as it fails the job. The Python leg is libyaml's CSafeLoader plus a walk that refuses any tag outside tag:yaml.org,2002:.
 const OPEN_FLOW = /^[[{]/;
 const BLOCK_HEAD = /^[|>][+-]?\d*\s*(?:#.*)?$/;
 const VALUE_OF = /^\s*(?:-\s+)*(?:[^\s#'"{[][^:]*?:\s+)?(.*)$/;
@@ -2380,10 +2382,22 @@ test('every workflow file in every folder dependabot.yml lists passes the lint: 
   const bad = files.flatMap((f) => flowValueFindings(readText(f)).map((m) => `${f}: ${m}`));
   assert.deepEqual(bad, [], 'a file Dependabot would fail on');
 });
-// the real-parser leg: a parser that only reads (syntax, no object construction), the first step of any load
+// the real-parser leg: the consumer's own load call (Ruby), or libyaml's safe loader composing the node graph and refusing a tag the safe loader would not build (Python)
+const PY_SAFE_WALK = [
+  'import sys, yaml',
+  'def walk(n, seen):',
+  '    if id(n) in seen: return',
+  '    seen.add(id(n))',
+  '    if not n.tag.startswith("tag:yaml.org,2002:"): raise yaml.YAMLError("custom tag " + n.tag)',
+  '    for c in (n.value if isinstance(n.value, list) else []):',
+  '        for k in (c if isinstance(c, tuple) else (c,)): walk(k, seen)',
+  'for f in sys.argv[1:]:',
+  '    root = yaml.compose(open(f, encoding="utf-8"), Loader=yaml.CSafeLoader)',
+  '    if root is not None: walk(root, set())',
+].join('\n');
 const YAML_PARSERS = [
-  { name: 'ruby Psych', cmd: 'ruby', probe: ['-ryaml', '-e', 'exit'], run: ['-ryaml', '-e', 'ARGV.each { |f| Psych.parse(File.read(f)) }'] },
-  { name: 'python PyYAML', cmd: 'python3', probe: ['-c', 'import yaml'], run: ['-c', 'import sys, yaml; [yaml.compose(open(f, encoding="utf-8")) for f in sys.argv[1:]]'] },
+  { name: 'ruby Psych safe_load', cmd: 'ruby', probe: ['-rdate', '-ryaml', '-e', 'exit'], run: ['-rdate', '-ryaml', '-e', 'ARGV.each { |f| YAML.safe_load(File.read(f), aliases: true, permitted_classes: [Date, Time, Symbol]) }'] },
+  { name: 'python PyYAML CSafeLoader', cmd: 'python3', probe: ['-c', 'import yaml; yaml.CSafeLoader'], run: ['-c', PY_SAFE_WALK] },
 ];
 const spawnQuiet = (cmd, args) => spawnSync(cmd, args, { encoding: 'utf8', timeout: 60000, cwd: ROOT });
 const yamlParser = () => YAML_PARSERS.find((p) => { const r = spawnQuiet(p.cmd, p.probe); return !r.error && r.status === 0; });
@@ -2392,6 +2406,20 @@ test('a real YAML parser reads every workflow file in every folder dependabot.ym
   if (!parser) { t.skip('no ruby with Psych and no python3 with PyYAML on this machine (CI has ruby)'); return; }
   const r = spawnQuiet(parser.cmd, [...parser.run, ...listedWorkflowFiles()]);
   assert.equal(r.status, 0, `${parser.name} could not read a listed file: ${(r.stderr || '').split('\n').slice(0, 3).join(' | ')}`);
+});
+// 2026-11-16l: the leg refuses what the old compose-only leg passed and Dependabot fails on (red-first: against the old Psych.parse / yaml.compose lines the first two files below pass)
+test('the real-parser leg refuses a custom tag and an undefined alias, and accepts an alias, a timestamp and a quoted placeholder (16l)', (t) => {
+  const parser = yamlParser();
+  if (!parser) { t.skip('no ruby with Psych and no python3 with PyYAML CSafeLoader on this machine (CI has ruby)'); return; }
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yaml-leg-'));
+  try {
+    const put = (name, body) => { const p = path.join(dir, name); fs.writeFileSync(p, body); return p; };
+    const run = (p) => spawnQuiet(parser.cmd, [...parser.run, p]).status;
+    assert.notEqual(run(put('tag.yml', 'a: !custom x\n')), 0, 'a custom tag');
+    assert.notEqual(run(put('alias.yml', 'a: *nowhere\n')), 0, 'an undefined alias');
+    assert.notEqual(run(put('quote.yml', 'a: "x\n')), 0, 'an unclosed quote');
+    assert.equal(run(put('ok.yml', 'a: &x 1\nb: *x\nc: 2026-11-16\nd: "{{PY_DIR}}/dist"\n')), 0, 'an alias, a date and a quoted placeholder');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 // 2026-11-12h item 2: a comment beside a pinned SHA says what the SHA IS. A major tag (\`# v4\`) moves on to newer releases, so the comment stops describing the pin the day it moves.
