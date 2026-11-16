@@ -44,7 +44,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
-import { findRepos as findReposLib, SKELETON_FILES, TEMPLATE_DIR_FOR_KIND, parseGithubOrigin, matchesWithPlaceholders, formatDetailsTable, liveFileVerdict, gitRemoteState, noRemoteVerdict, workflowsMissingConcurrency } from './lib/skeleton-check-lib.mjs';
+import { findRepos as findReposLib, SKELETON_FILES, TEMPLATE_DIR_FOR_KIND, parseGithubOrigin, matchesWithPlaceholders, placeholderVerdict, formatDetailsTable, liveFileVerdict, gitRemoteState, noRemoteVerdict, workflowsMissingConcurrency } from './lib/skeleton-check-lib.mjs';
 import { isLicenseStub, licenseIdentityMismatches } from './lib/license-check-lib.mjs';
 import { compareOverlaySet } from './lib/overlay-set.mjs';
 import { pinOnlyDifference, pinLine } from './lib/pin-normalize.mjs';
@@ -92,6 +92,17 @@ function compareFile(templatePath, livePath) {
   const tLines = tn.split('\n').length;
   const lLines = ln.split('\n').length;
   return `DIFFERS (template ${tLines}L vs live ${lLines}L)`;
+}
+
+// A live room fills a template's {{TOKEN}} slots (its name, year, holder, licence), so a filled file is the template, not drift; a slot still
+// left unfilled is a finding even where the bytes are otherwise identical (placeholderVerdict, the lib).
+function compareLiveFile(templatePath, livePath) {
+  const base = compareFile(templatePath, livePath);
+  if (base === 'ABSENT') return base;
+  const verdict = placeholderVerdict(fs.readFileSync(templatePath, 'utf8'), fs.readFileSync(livePath, 'utf8'));
+  if (verdict === 'unfilled') return `${base.startsWith('DIFFERS') ? base : 'DIFFERS'} -- an unfilled {{TOKEN}} slot is left in the live file`;
+  if (verdict === 'filled' && base.startsWith('DIFFERS')) return 'identical (its {{TOKEN}} slots filled)';
+  return base;
 }
 
 // A GitHub TEMPLATE repo keeps the source's `{{TOKEN}}` slots (or fills them: NOTICE reads
@@ -343,7 +354,7 @@ async function main() {
         continue;
       }
       try {
-        const verdict = compareFile(templatePath, livePath);
+        const verdict = compareLiveFile(templatePath, livePath);
         console.log(`  ${rel}: ${liveFileVerdict(rel, verdict)}`);
         // UMB-054 item 3: the owner's standing law is LICENSE = full text per part,
         // never SPDX-only, never a stub -- checked independently of the template diff

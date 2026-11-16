@@ -26,14 +26,33 @@ export function parseGithubOrigin(url) {
 // where the source reads "licensed under {{LICENSE_BADGE}}.". True when `liveText` is
 // `templateText` with each token replaced by some non-empty text on ONE line: only a slot
 // may differ, never the text around it, and a slot cannot swallow a line. A template
-// with no tokens is an exact (CRLF-normalized) compare. Used ONLY for a template-repo
-// clone; a real room's file is compared exactly, so a leftover token there stays drift.
+// with no tokens is an exact (CRLF-normalized) compare. A slot's fill here may be any text,
+// a token included: a template-repo clone keeps its slots on purpose. A real room's file is
+// judged by placeholderVerdict (below), where a token left in a slot is a finding.
 export function matchesWithPlaceholders(templateText, liveText) {
   const norm = (s) => String(s).replace(/\r\n/g, '\n');
   const parts = norm(templateText).split(/\{\{[A-Z0-9_]+\}\}/);
   if (parts.length === 1) return norm(templateText) === norm(liveText);
   const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`^${parts.map(escape).join('[^\\n]+')}$`).test(norm(liveText));
+}
+
+// A skeleton file with {{TOKEN}} slots (NOTICE, SECURITY.md, a hook) is filled in by every room, so a byte compare reads DIFFERS forever (15i
+// LOW-1). 'unfilled': a template line that holds a slot is still in the live text word for word (the slot never filled), or a slot's fill
+// itself holds a {{TOKEN}} (one slot of a line filled and another left: the 4be36a3 review's A-M1); 'filled': the live text is the template with
+// each slot filled by text that holds no token; null: the template has no slot, or the live text differs outside its slots (real drift). A live
+// line that only MENTIONS a {{TOKEN}} outside a slot (a comment explaining the fill) is not a slot left unfilled.
+const SLOT = /\{\{[A-Z0-9_]+\}\}/;
+export function placeholderVerdict(templateText, liveText) {
+  const norm = (s) => String(s).replace(/\r\n/g, '\n');
+  const slotLines = norm(templateText).split('\n').filter((l) => SLOT.test(l));
+  if (!slotLines.length) return null;
+  const live = new Set(norm(liveText).split('\n'));
+  if (slotLines.some((l) => live.has(l))) return 'unfilled';
+  const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const fill = '(?:(?!\\{\\{[A-Z0-9_]+\\}\\})[^\\n])+';
+  if (new RegExp(`^${norm(templateText).split(SLOT).map(escape).join(fill)}$`).test(norm(liveText))) return 'filled';
+  return matchesWithPlaceholders(templateText, liveText) ? 'unfilled' : null;
 }
 
 // Skeleton-owned files per kind, relative to templates/<kind>/. A room may carry more

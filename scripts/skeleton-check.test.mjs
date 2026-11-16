@@ -11,7 +11,7 @@ import {
   ARTICLE_PRIVATE_MARKER, ARTICLE_CHANGEREQUEST_MARKER, PRIVATE_WORKING_MARKER,
   TEMPLATE_DIR_FOR_KIND, parseGithubOrigin, matchesWithPlaceholders,
   ORG_DEFAULT_FILES, liveFileVerdict, gitRemoteState, noRemoteVerdict,
-  hasTopLevelConcurrency, workflowsMissingConcurrency,
+  hasTopLevelConcurrency, workflowsMissingConcurrency, placeholderVerdict,
 } from './lib/skeleton-check-lib.mjs';
 
 // A scratch zones-root, one fixture per test to keep each hermetic. Every fixture is
@@ -905,4 +905,28 @@ test('SKELETON_FILES: every LICENSE and NOTICE a template ships is skeleton-owne
       if (fs.existsSync(path.join(templates, kind, name))) assert.ok(SKELETON_FILES[kind].includes(name), `${kind} ships ${name} but does not own it`);
     }
   }
+});
+
+// 16a (15i LOW-1, CodeRabbit t339): a live room fills a template's {{TOKEN}} slots, so a byte compare read every room's NOTICE as DIFFERS forever.
+// Filled slots are the template; a slot line kept word for word is not filled (the slot match alone would pass it); a line that only mentions a
+// token is not a slot; a different shape stays drift.
+test('placeholderVerdict: a filled NOTICE is the template, a slot left unfilled is a finding, a mention of a token is not, another shape is drift', () => {
+  const filled = 'CoalMine\nCopyright 2026 HetCreep\n\nThis product is part of the TheColliery series (https://github.com/TheColliery)\nand is licensed under Apache-2.0.\n';
+  assert.equal(placeholderVerdict(NOTICE_SOURCE, filled), 'filled');
+  assert.equal(placeholderVerdict(NOTICE_SOURCE, filled.replace(/\n/g, '\r\n')), 'filled', 'CRLF is the same text');
+  assert.equal(placeholderVerdict(NOTICE_SOURCE, NOTICE_SOURCE), 'unfilled');
+  assert.equal(placeholderVerdict(NOTICE_SOURCE, filled.replace('CoalMine', '{{REPO_NAME}}')), 'unfilled');
+  assert.equal(placeholderVerdict('# {{REPO_NAME}} fence.\nrun\n', '# Bankfire fence (the template\'s {{REPO_NAME}} filled).\nrun\n'), null, 'a mention is not a slot, and the shape differs');
+  assert.equal(placeholderVerdict(NOTICE_SOURCE, 'Bankfire\nCopyright (c) 2026 HetCreep\n\nPortions generated with AI assistance.\n'), null);
+  assert.equal(placeholderVerdict('no slot here\n', 'no slot here\n'), null);
+});
+
+// 16b (the review of 4be36a3, A-M1 and A-L1): a slot line with one slot filled and another left as {{TOKEN}} is not filled (the slot match alone
+// lets a slot's fill be the token itself), and a raw copy with CRLF line ends is a slot left unfilled, as its LF copy is.
+test('placeholderVerdict: a line with one slot filled and one left, or a slot filled with a token, is unfilled; a raw CRLF copy is unfilled', () => {
+  const filled = 'CoalMine\nCopyright 2026 HetCreep\n\nThis product is part of the TheColliery series (https://github.com/TheColliery)\nand is licensed under Apache-2.0.\n';
+  assert.equal(placeholderVerdict(NOTICE_SOURCE, filled.replace('HetCreep', '{{COPYRIGHT_HOLDER}}')), 'unfilled', 'holder left');
+  assert.equal(placeholderVerdict(NOTICE_SOURCE, filled.replace('Apache-2.0.', 'the {{LICENSE_BADGE}} licence.')), 'unfilled', 'a fill that holds a token');
+  assert.equal(placeholderVerdict(NOTICE_SOURCE, NOTICE_SOURCE.replace(/\n/g, '\r\n')), 'unfilled', 'a raw CRLF copy');
+  assert.equal(placeholderVerdict(NOTICE_SOURCE, filled), 'filled', 'every slot filled stays filled');
 });
