@@ -1,7 +1,10 @@
 # TheColliery
 
 <p align="center">
-  <img src="./thecolliery_banner.png" width="25%" alt="TheColliery Banner">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./colliery-banner-d3-dark.svg">
+    <img src="./colliery-banner-d3-light.svg" width="100%" alt="">
+  </picture>
 </p>
 
 <p align="center">
