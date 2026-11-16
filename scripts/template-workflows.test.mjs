@@ -2319,7 +2319,9 @@ test('dependabot.yml keeps ONE plain group for the github-actions ecosystem -- n
 // a plain value that opens a flow collection and is not one well-formed collection on its line, or opens with two braces. It runs on every machine.
 // (2) A real parser, when the machine has one; a machine with neither skips that leg visibly. The Ruby leg calls the line Dependabot itself calls (dependabot-core workflow_file.rb line 28:
 // YAML.safe_load(content, aliases: true, permitted_classes: [Date, Time, Symbol]); file_parser.rb turns Psych::SyntaxError, DisallowedClass and BadAlias into dependency_file_not_parseable),
-// so a custom tag or an undefined alias fails here as it fails the job. The Python leg is libyaml's CSafeLoader plus a walk that refuses any tag outside tag:yaml.org,2002:.
+// so a tag that loads a class (!ruby/object:) or an undefined alias fails here as it fails the job (Psych drops an UNKNOWN local tag such as !custom and returns the value: read at ruby/psych
+// to_ruby.rb, 2026-11-16, so that one is not a job failure). The Python leg is libyaml's CSafeLoader plus a walk that accepts only the tags the consumer's safe loader builds (the YAML core tags
+// and !ruby/symbol, !ruby/sym) and refuses every other, which is stricter than Ruby for an unknown local tag and a deliberate cheap superset: no workflow file carries a tag.
 const OPEN_FLOW = /^[[{]/;
 const BLOCK_HEAD = /^[|>][+-]?\d*\s*(?:#.*)?$/;
 const VALUE_OF = /^\s*(?:-\s+)*(?:[^\s#'"{[][^:]*?:\s+)?(.*)$/;
@@ -2385,10 +2387,11 @@ test('every workflow file in every folder dependabot.yml lists passes the lint: 
 // the real-parser leg: the consumer's own load call (Ruby), or libyaml's safe loader composing the node graph and refusing a tag the safe loader would not build (Python)
 const PY_SAFE_WALK = [
   'import sys, yaml',
+  'ALLOWED = {"tag:yaml.org,2002:" + x for x in ("str", "int", "float", "bool", "null", "seq", "map", "timestamp", "binary", "merge", "value")} | {"!ruby/symbol", "!ruby/sym"}',
   'def walk(n, seen):',
   '    if id(n) in seen: return',
   '    seen.add(id(n))',
-  '    if not n.tag.startswith("tag:yaml.org,2002:"): raise yaml.YAMLError("custom tag " + n.tag)',
+  '    if n.tag not in ALLOWED: raise yaml.YAMLError("tag " + n.tag)',
   '    for c in (n.value if isinstance(n.value, list) else []):',
   '        for k in (c if isinstance(c, tuple) else (c,)): walk(k, seen)',
   'for f in sys.argv[1:]:',
@@ -2407,18 +2410,25 @@ test('a real YAML parser reads every workflow file in every folder dependabot.ym
   const r = spawnQuiet(parser.cmd, [...parser.run, ...listedWorkflowFiles()]);
   assert.equal(r.status, 0, `${parser.name} could not read a listed file: ${(r.stderr || '').split('\n').slice(0, 3).join(' | ')}`);
 });
-// 2026-11-16l: the leg refuses what the old compose-only leg passed and Dependabot fails on (red-first: against the old Psych.parse / yaml.compose lines the first two files below pass)
-test('the real-parser leg refuses a custom tag and an undefined alias, and accepts an alias, a timestamp and a quoted placeholder (16l)', (t) => {
+// 2026-11-16l, corrected 2026-11-16m: the leg refuses a tag that loads a class and an undefined alias, and accepts an alias, a timestamp, a binary and a quoted placeholder. Red-first against the old
+// lines (Psych.parse, yaml.compose): the class-loading tag passes the old Ruby leg and the old Python one; the undefined alias passes the old RUBY leg only (PyYAML's compose already refused it).
+// The 16l fixture used `!custom x` for every parser, and Psych does not refuse that: the Python-only fixtures below are where the stricter fallback is pinned.
+test('the real-parser leg refuses a class-loading tag and an undefined alias, and accepts an alias, a timestamp, a binary and a quoted placeholder (16l, 16m)', (t) => {
   const parser = yamlParser();
   if (!parser) { t.skip('no ruby with Psych and no python3 with PyYAML CSafeLoader on this machine (CI has ruby)'); return; }
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yaml-leg-'));
   try {
     const put = (name, body) => { const p = path.join(dir, name); fs.writeFileSync(p, body); return p; };
     const run = (p) => spawnQuiet(parser.cmd, [...parser.run, p]).status;
-    assert.notEqual(run(put('tag.yml', 'a: !custom x\n')), 0, 'a custom tag');
+    assert.notEqual(run(put('tag.yml', 'a: !ruby/object:Object {}\n')), 0, 'a tag that loads a class');
     assert.notEqual(run(put('alias.yml', 'a: *nowhere\n')), 0, 'an undefined alias');
     assert.notEqual(run(put('quote.yml', 'a: "x\n')), 0, 'an unclosed quote');
-    assert.equal(run(put('ok.yml', 'a: &x 1\nb: *x\nc: 2026-11-16\nd: "{{PY_DIR}}/dist"\n')), 0, 'an alias, a date and a quoted placeholder');
+    assert.equal(run(put('ok.yml', 'a: &x 1\nb: *x\nc: 2026-11-16\nd: "{{PY_DIR}}/dist"\ne: !!binary aGk=\nf: !!str x\n')), 0, 'an alias, a date, a binary, a quoted placeholder');
+    if (parser.cmd === 'python3') {
+      assert.notEqual(run(put('python.yml', 'a: !!python/object/apply:os.system [x]\n')), 0, 'a python tag (the 16l walk accepted any tag:yaml.org,2002: tag)');
+      assert.notEqual(run(put('set.yml', 'a: !!set {x, y}\n')), 0, 'a set');
+      assert.notEqual(run(put('custom.yml', 'a: !custom x\n')), 0, 'an unknown local tag: stricter than Psych, on purpose');
+    }
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
