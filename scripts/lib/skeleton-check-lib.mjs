@@ -36,6 +36,20 @@ export function matchesWithPlaceholders(templateText, liveText) {
   return new RegExp(`^${parts.map(escape).join('[^\\n]+')}$`).test(norm(liveText));
 }
 
+// A skeleton file with {{TOKEN}} slots (NOTICE, SECURITY.md, a hook) is filled in by every room, so a byte compare reads DIFFERS forever (15i
+// LOW-1). 'unfilled': a template line that holds a slot is still in the live text word for word (the slot never filled), which the slot match
+// alone would pass; 'filled': the live text is the template with each slot filled; null: the template has no slot, or the live text differs
+// outside its slots (real drift). A live line that only MENTIONS a {{TOKEN}} (a comment explaining the fill) is not a slot left unfilled.
+const SLOT = /\{\{[A-Z0-9_]+\}\}/;
+export function placeholderVerdict(templateText, liveText) {
+  const lines = (s) => String(s).replace(/\r\n/g, '\n').split('\n');
+  const slotLines = lines(templateText).filter((l) => SLOT.test(l));
+  if (!slotLines.length) return null;
+  const live = new Set(lines(liveText));
+  if (slotLines.some((l) => live.has(l))) return 'unfilled';
+  return matchesWithPlaceholders(templateText, liveText) ? 'filled' : null;
+}
+
 // Skeleton-owned files per kind, relative to templates/<kind>/. A room may carry more
 // files than this (its own README body, its own SOURCES.md, ...) — those are not
 // skeleton-owned and are out of this instrument's scope by design. The same holds for a GitHub template
