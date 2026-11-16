@@ -756,7 +756,10 @@ const LINE_BYTES = 4096;
 // whole: a 32 MiB one took 8.1 s and 1.19 GB (the reviewer's measure). Past WIDE_DECODE_MAX_BYTES it is not decoded: the scan fails by name with a hit
 // of its own whose fingerprint the acks file can carry, and the gate's peak memory grows by a few times the file, never by the dozens decoding costs.
 // 16j: the file is 9 MiB, one MiB past the 8 MiB bound, not 32: past the bound its size changes nothing the test proves, and each gate run over it
-// costs seconds. Decoding it would grow the peak by about 240 MiB (measured at 8 MiB), so the bound below, ten times the file, still tells the two apart.
+// costs seconds. The peak assertion below is six times the file (54 MiB): the gate's peak grows by about 27 MiB over a tiny repo with the bound and by about
+// 82 MiB without it (measured 2026-11-16 on this file's shape, gate and scanner as shipped against the scanner with the bound disabled). The 16j wording of
+// this comment, a decode cost of about 240 MiB against a bound of ten times the file (90 MiB), was wrong: 240 MiB was a peak, on a file with short lines, and 82
+// MiB sits under 90, so that bound told nothing apart; the exit code and the message below were what caught a scanner without the bound.
 const SAMPLES_BYTES = 9 << 20;
 test('wide text past the decode bound fails the scan by name, costs a few times its size in memory, and passes once its fingerprint is acknowledged', async () => {
   const dir = repo([{ 'README.md': 'hello\n' }]);
@@ -791,7 +794,7 @@ test('wide text past the decode bound fails the scan by name, costs a few times 
   assert.match(big.r.out, /NOT decoded or scanned\. Check each for keys first: acknowledging its fingerprint in secret-scan\.acks lets those exact bytes pass without the wide-text scan/);
   assert.doesNotMatch(big.r.out, /secret-shaped match/, 'a file too large to decode is not called a match');
   const grew = big.peak - base.peak;
-  assert.ok(grew < 10 * SAMPLES_BYTES, `the peak grew by ${(grew / 1048576).toFixed(1)} MiB for a ${SAMPLES_BYTES / 1048576} MiB file`);
+  assert.ok(grew < 6 * SAMPLES_BYTES, `the peak grew by ${(grew / 1048576).toFixed(1)} MiB for a ${SAMPLES_BYTES / 1048576} MiB file`);
   // the pushed range reads the same bytes past the bound (a new file's hunk is its whole content, its missing last line break restored): the same
   // hit, with the same fingerprint, so one acknowledgement covers both
   git(dir, 'commit', '-q', '-m', 'samples');
