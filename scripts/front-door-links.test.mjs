@@ -327,3 +327,38 @@ test('CLI: a named file whose open lands on another file than its name holds is 
     assert.match(r.stdout, /^FAIL .*README\.md: cannot be read \(changed between the check and the read/m);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+// 2026-11-16l: GitHub's incident of 2026-11-09 answered anonymous requests 504 for 4.7 minutes while "authenticated requests are unaffected"; the one retry after 2 s did not span it and 17 front-door links went red.
+const apiStub = (web, api) => { const calls = []; return { calls, fetchFn: async (url, init) => { const u = String(url); calls.push({ u, auth: init.headers.authorization }); const s = u.startsWith('https://api.github.com/') ? api(u) : web(u); return { status: s, headers: { get: () => null }, body: null }; } }; };
+const oneLink = (u) => [{ name: 'README.md', text: `[x](${u})\n` }];
+test('checkFiles: a github.com repository or account link that stays 5xx is read through the REST API with the token, sent to the API host only; a 504 that persists stays a finding -- RED before 16l', async () => {
+  let m = apiStub(() => 504, () => 200);
+  let r = await checkFiles(oneLink('https://github.com/TheColliery/CoalMine'), { fetchFn: m.fetchFn, retryMs: 0, token: 'T-123' });
+  assert.deepEqual(r.findings, [], 'the REST answer is the page answer');
+  assert.deepEqual(m.calls.map((c) => c.u), ['https://github.com/TheColliery/CoalMine', 'https://github.com/TheColliery/CoalMine', 'https://api.github.com/repos/TheColliery/CoalMine']);
+  assert.deepEqual(m.calls.map((c) => c.auth), [undefined, undefined, 'Bearer T-123'], 'the token reaches the API host only');
+  m = apiStub(() => 504, () => 200);
+  r = await checkFiles(oneLink('https://github.com/TheColliery'), { fetchFn: m.fetchFn, retryMs: 0, token: 'T-123' });
+  assert.deepEqual(r.findings, []);
+  assert.equal(m.calls[2].u, 'https://api.github.com/users/TheColliery', 'an account link asks /users/<name>, which answers for an organisation too');
+  m = apiStub(() => 504, () => 404);
+  r = await checkFiles(oneLink('https://github.com/TheColliery/Gone'), { fetchFn: m.fetchFn, retryMs: 0, token: 'T-123' });
+  assert.match(r.findings[0].message, /HTTP 404/, 'a repository the API says is not there is a finding');
+  for (const api of [() => 504, () => 403, () => 401]) {
+    m = apiStub(() => 504, api);
+    r = await checkFiles(oneLink('https://github.com/TheColliery/CoalMine'), { fetchFn: m.fetchFn, retryMs: 0, token: 'T-123' });
+    assert.match(r.findings[0].message, /HTTP 504/, 'an API that does not answer 2xx or 404 leaves the 504 standing');
+  }
+  m = apiStub(() => 504, () => 200);
+  r = await checkFiles(oneLink('https://github.com/TheColliery/CoalMine/blob/main/README.md'), { fetchFn: m.fetchFn, retryMs: 0, token: 'T-123' });
+  assert.match(r.findings[0].message, /HTTP 504/, 'a deep page has no REST twin here: its 504 stands');
+  assert.ok(!m.calls.some((c) => c.u.startsWith('https://api.github.com/')), 'and the API is not asked');
+  m = apiStub(() => 504, () => 200);
+  r = await checkFiles(oneLink('https://github.com/TheColliery/CoalMine'), { fetchFn: m.fetchFn, retryMs: 0 });
+  assert.match(r.findings[0].message, /HTTP 504/, 'with no token the behaviour is what it was');
+  assert.ok(!m.calls.some((c) => c.u.startsWith('https://api.github.com/')));
+  m = apiStub(() => 200, () => 500);
+  r = await checkFiles(oneLink('https://github.com/TheColliery/CoalMine'), { fetchFn: m.fetchFn, retryMs: 0, token: 'T-123' });
+  assert.deepEqual(r.findings, []);
+  assert.equal(m.calls.length, 1, 'a page that answers is never asked of the API');
+});
