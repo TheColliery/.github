@@ -126,8 +126,13 @@ function main() {
 }
 
 // Entry only, never on import. Both sides go through realpath.native (node/runtime.md section 4): started through a junction or a symlinked folder, argv[1] is the link's spelling and
-// import.meta.url is the real file, so a guard that compares the path as typed is false and the script exits 0 having done nothing. If either side cannot be resolved the file runs.
+// import.meta.url is the real file, so a guard that compares the path as typed is false and the script exits 0 having done nothing. If a side cannot be resolved the guard falls back to file identity and then to the plain paths, so a missing argv path is not this file (the overlay's shape, build-claude-ai-zips.mjs): a guard that answers true there runs the script on import.
+const fileIdentity = (p) => { try { const s = fs.statSync(p, { bigint: true }); return s.ino === 0n ? null : `${s.dev}:${s.ino}`; } catch { return null; } };
 const isEntry = () => {
-  try { return fs.realpathSync.native(process.argv[1]) === fs.realpathSync.native(fileURLToPath(import.meta.url)); } catch { return true; }
+  const self = fileURLToPath(import.meta.url);
+  try { return fs.realpathSync.native(self) === fs.realpathSync.native(process.argv[1]); } catch {
+    const a = fileIdentity(self); const b = fileIdentity(process.argv[1]);
+    return a !== null && b !== null ? a === b : path.resolve(self) === path.resolve(process.argv[1]);
+  }
 };
 if (process.argv[1] && isEntry()) main();

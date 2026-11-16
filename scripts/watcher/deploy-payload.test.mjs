@@ -217,3 +217,10 @@ test('deploy-payload.mjs started through a link to its folder runs instead of ex
     assert.match(r.stdout + r.stderr, /deploy-payload: /, 'a run through a link did nothing and said nothing: exit ' + r.status);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+// 2026-11-16m: the entry guard FAILS CLOSED. Imported where process.argv[1] is a path that does not exist, realpath throws; a guard that answers true there runs the script on import
+// (verify-landing would run its gate, update-readme would rewrite the READMEs of the working folder). The compare falls back to file identity and then to the plain paths.
+test('deploy-payload.mjs imported with an argv path that does not exist does not run: the entry guard fails closed -- RED before 16m', () => {
+  const r = spawnSync(process.execPath, ['--max-old-space-size=512', '--input-type=module', '-e', `await import(${JSON.stringify(new URL('./deploy-payload.mjs', import.meta.url).href)})`, 'nosuchfile'], { encoding: 'utf8', timeout: 60000, cwd: os.tmpdir(), env: { ...process.env, PAT_TOKEN: '' } });
+  assert.strictEqual(r.stdout + r.stderr, '', 'the import ran the script: ' + (r.stdout + r.stderr).slice(0, 120));
+});

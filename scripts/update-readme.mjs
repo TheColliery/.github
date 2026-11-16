@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync, realpathSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, writeFileSync, realpathSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 function authHeaders() {
@@ -175,9 +175,14 @@ async function main() {
 
 // Run only when invoked directly (not when imported by the test).
 // Both sides go through realpath.native (node/runtime.md section 4): a junction, a symlinked folder or a Windows 8.3 name spells one file two ways, and a guard that compares the path as typed
-// is false there and the script exits 0 having done nothing. If either side cannot be resolved the file runs: a silent no-op of this gate is worse than an unwanted run.
+// is false there and the script exits 0 having done nothing. If a side cannot be resolved the guard falls back to file identity and then to the plain paths, so a missing argv path is not this file (the overlay's shape, build-claude-ai-zips.mjs): a guard that answers true there runs the script on import.
+const fileIdentity = (p) => { try { const s = statSync(p, { bigint: true }); return s.ino === 0n ? null : `${s.dev}:${s.ino}`; } catch { return null; } };
 const isEntry = () => {
-  try { return realpathSync.native(process.argv[1]) === realpathSync.native(fileURLToPath(import.meta.url)); } catch { return true; }
+  const self = fileURLToPath(import.meta.url);
+  try { return realpathSync.native(self) === realpathSync.native(process.argv[1]); } catch {
+    const a = fileIdentity(self); const b = fileIdentity(process.argv[1]);
+    return a !== null && b !== null ? a === b : resolve(self) === resolve(process.argv[1]);
+  }
 };
 if (process.argv[1] && isEntry()) {
   main();
