@@ -24,7 +24,7 @@
   "actionsWorkflowToken": { "default_workflow_permissions": "read", "can_approve_pull_request_reviews": false },
   "ruleset": {
     "status": "n/a",
-    "reason": "Not written per repo: every private repo is covered by the ORGANIZATION ruleset private-main-guard (id 27358894; deletion + non_fast_forward on the default branch; targets visibility = private; the organization-admin role bypasses), created 2026-11-16 on GitHub Team. A new private repo is covered the day it exists, so this apply writes nothing for it. On the Free plan a private repo has no ruleset (POST /repos/{owner}/{repo}/rulesets answered 403 on template-private-working, 2026-09-03). SERIES-CANON.md, Repository rulesets.",
+    "reason": "Not written per repo: every private repo is covered by the ORGANIZATION ruleset private-main-guard (id 27358894; deletion + non_fast_forward on the default branch; targets visibility = private; empty bypass list, the recovery being the owner disabling it for one operation), created 2026-11-16 on GitHub Team. A new private repo is covered the day it exists, so this apply writes nothing for it. On the Free plan a private repo has no ruleset (POST /repos/{owner}/{repo}/rulesets answered 403 on template-private-working, 2026-09-03). SERIES-CANON.md, Repository rulesets.",
     "$ifItEverBecomesAvailableNote": "the caveat from repo-settings.published-code.json's ruleset.$noRequiredStatusChecksNote applies identically the day this becomes applicable — gate.yml's own steps are hashFiles-gated the same way ci.yml's are (the .github commit da15148 red-fix covers all three kinds), so a future required-status-check here should name the 'gate' job, never a step inside it."
   },
   "tagRuleset": {
