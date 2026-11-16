@@ -1,10 +1,10 @@
 #!/bin/sh
 # {{REPO_NAME}} pre-push fence.
 #
-# THIS IS THE REAL FENCE, not CI. A private repo on a Free plan has no branch protection
-# and no required status checks — a red CI run cannot block anything, it can only report
-# after the fact. This hook runs BEFORE the push, on the one machine that exists, at zero
-# Actions minutes. CI is the second opinion.
+# THIS IS THE REAL FENCE, not CI. A private repo of this org has no required status checks
+# (the org ruleset private-main-guard blocks deletion and force-push only, SERIES-CANON.md) —
+# a red CI run cannot block anything, it can only report after the fact. This hook runs
+# BEFORE the push, on the one machine that exists, at no Actions cost. CI is the second opinion.
 #
 # Fails CLOSED, like the published-code gate: a fence that skips itself when it cannot run
 # is no fence, so a missing node or a missing scripts/gate.mjs REFUSES the push with a

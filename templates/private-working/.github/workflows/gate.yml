@@ -1,9 +1,9 @@
 name: gate
 
 # ONE workflow, ONE Linux job — sized to a PRIVATE repo, not to the published-code shape.
-# Reason: minutes come from the org's shared 2,000/month Free pool. A 3-OS x 2-node matrix
-# would exhaust the whole org quota in a small number of pushes and take every other
-# private repo down with it. Every published-code repo is PUBLIC, where that matrix is free.
+# Reason: Actions use on a private repo is money, drawn from one dollar allowance the organization's plan includes each month
+# (Team: $18 USD, GitHub's billing page, read 2026-11-16; Free: $12), shared by every private repo. A 3-OS x 2-node matrix
+# would spend that allowance in a small number of pushes and take every other private repo down with it. Every published-code repo is PUBLIC, where that matrix is free.
 
 on:
   push:
