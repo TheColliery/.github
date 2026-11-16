@@ -36,19 +36,25 @@ const gitEnv = () => ({
   GIT_CEILING_DIRECTORIES: path.dirname(SANDBOX),
 });
 
+// The identity and the no-signing switch ride on every call, never into the fixture's config: three `git config` spawns per repository cost about
+// 0.5 s each fixture on Windows (measured 2026-11-16), a quarter of a fixture, and this file builds some 60.
+const GIT_IDENTITY = ['-c', 'user.email=test@example.invalid', '-c', 'user.name=test', '-c', 'commit.gpgsign=false'];
 function git(dir, ...args) {
-  return execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'], env: gitEnv() }).trim();
+  return execFileSync('git', [...GIT_IDENTITY, '-C', dir, ...args], { encoding: 'utf8', timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'], env: gitEnv() }).trim();
 }
+
+// One `git init`, made once: every fixture starts as a copy of this empty repository (a copy of five small entries is milliseconds, an init is
+// about a quarter of a second on Windows, measured 2026-11-16). `--template=` leaves out the sample hooks, so there is nothing to copy but the skeleton.
+const INIT_TEMPLATE = path.join(SANDBOX, 'init-template');
+fs.mkdirSync(INIT_TEMPLATE);
+execFileSync('git', ['init', '-q', '-b', 'main', '--template=', INIT_TEMPLATE], { timeout: 60000, stdio: 'ignore', env: gitEnv() });
 
 // A throwaway repository holding the gate and its scanner, with one commit per entry of `commits` ({ file: text } maps;
 // a null text deletes the file).
 function repo(commits, { withLib = true } = {}) {
   const dir = fs.mkdtempSync(path.join(SANDBOX, 'secret-gate-'));
   made.push(dir);
-  git(dir, 'init', '-q', '-b', 'main');
-  git(dir, 'config', 'user.email', 'test@example.invalid');
-  git(dir, 'config', 'user.name', 'test');
-  git(dir, 'config', 'commit.gpgsign', 'false');
+  fs.cpSync(INIT_TEMPLATE, dir, { recursive: true });
   fs.mkdirSync(path.join(dir, 'scripts', 'lib'), { recursive: true });
   fs.copyFileSync(GATE, path.join(dir, 'scripts', 'secret-gate.mjs'));
   if (withLib) fs.copyFileSync(LIB, path.join(dir, 'scripts', 'lib', 'secret-scan.mjs'));
@@ -743,10 +749,15 @@ test('a UTF-16 key inside a mostly UTF-32 file, added then deleted inside a push
   assert.match(r.out, /pushed [0-9a-f]{12} "mix\.txt":\d+ aws-access-key-id/);
 });
 
-// 15i V1: the cost of decoding is bounded. A 32 MiB file of 16-bit samples, which the rule reads as UTF-16 (each sample's high byte is NUL), was
-// decoded whole: 8.1 s and 1.19 GB (the reviewer's measure). Past WIDE_DECODE_MAX_BYTES it is not decoded: the scan fails by name with a hit of its
-// own whose fingerprint the acks file can carry, and the gate's peak memory grows by a few times the blob, never by the dozens decoding costs.
-const SAMPLES_BYTES = 32 << 20;
+// A line of 4 KiB, not 64 bytes: the scan costs per line, and 131,000 short lines made each 8 MiB scan in the bound tests take about a second for
+// nothing they prove (16j, measured: 949 ms against 178 ms per scan).
+const LINE_BYTES = 4096;
+// 15i V1: the cost of decoding is bounded. A file of 16-bit samples, which the rule reads as UTF-16 (each sample's high byte is NUL), was decoded
+// whole: a 32 MiB one took 8.1 s and 1.19 GB (the reviewer's measure). Past WIDE_DECODE_MAX_BYTES it is not decoded: the scan fails by name with a hit
+// of its own whose fingerprint the acks file can carry, and the gate's peak memory grows by a few times the file, never by the dozens decoding costs.
+// 16j: the file is 9 MiB, one MiB past the 8 MiB bound, not 32: past the bound its size changes nothing the test proves, and each gate run over it
+// costs seconds. Decoding it would grow the peak by about 240 MiB (measured at 8 MiB), so the bound below, ten times the file, still tells the two apart.
+const SAMPLES_BYTES = 9 << 20;
 test('wide text past the decode bound fails the scan by name, costs a few times its size in memory, and passes once its fingerprint is acknowledged', async () => {
   const dir = repo([{ 'README.md': 'hello\n' }]);
   const peakOut = path.join(SANDBOX, `peak-${made.length}.txt`);
@@ -763,7 +774,7 @@ test('wide text past the decode bound fails the scan by name, costs a few times 
     child.on('error', reject);
     child.on('close', (code) => (code === 0 ? resolve(out.trim()) : reject(new Error(`hash-object exit ${code}`))));
     const chunk = Buffer.alloc(1 << 20);
-    for (let i = 0; i < chunk.length; i += 2) chunk[i] = ((i >> 1) * 7) & 0x7f;
+    for (let i = 0; i < chunk.length; i += 2) chunk[i] = i % LINE_BYTES === 0 ? 0x0a : 0x20 + (((i >> 1) * 7) % 0x5f); // printable 16-bit samples, a line every 4 KiB
     let left = SAMPLES_BYTES;
     const pump = () => {
       while (left > 0) { left -= chunk.length; if (!child.stdin.write(chunk)) { child.stdin.once('drain', pump); return; } }
@@ -780,7 +791,7 @@ test('wide text past the decode bound fails the scan by name, costs a few times 
   assert.match(big.r.out, /NOT decoded or scanned\. Check each for keys first: acknowledging its fingerprint in secret-scan\.acks lets those exact bytes pass without the wide-text scan/);
   assert.doesNotMatch(big.r.out, /secret-shaped match/, 'a file too large to decode is not called a match');
   const grew = big.peak - base.peak;
-  assert.ok(grew < 6 * SAMPLES_BYTES, `the peak grew by ${(grew / 1048576).toFixed(1)} MiB for a ${SAMPLES_BYTES / 1048576} MiB file`);
+  assert.ok(grew < 10 * SAMPLES_BYTES, `the peak grew by ${(grew / 1048576).toFixed(1)} MiB for a ${SAMPLES_BYTES / 1048576} MiB file`);
   // the pushed range reads the same bytes past the bound (a new file's hunk is its whole content, its missing last line break restored): the same
   // hit, with the same fingerprint, so one acknowledgement covers both
   git(dir, 'commit', '-q', '-m', 'samples');
@@ -801,14 +812,14 @@ test('wide text past the decode bound fails the scan by name, costs a few times 
 // only); bytes that are not wide text are never bounded; UTF-32 longer than one chunk of code points decodes whole.
 test('the decode bound gives wide text past it one hit that follows its bytes, never bounds other text, and long UTF-32 decodes whole', async () => {
   const { scanBytes, wideTexts, WIDE_DECODE_MAX_BYTES, WIDE_TOO_LARGE } = await import(pathToFileURL(LIB).href);
-  const wide = (fill) => { const b = Buffer.alloc(WIDE_DECODE_MAX_BYTES + 2); for (let i = 0; i < b.length; i += 2) b[i] = i % 64 === 0 ? 0x0a : fill; return b; };
+  const wide = (fill) => { const b = Buffer.alloc(WIDE_DECODE_MAX_BYTES + 2); for (let i = 0; i < b.length; i += 2) b[i] = i % LINE_BYTES === 0 ? 0x0a : fill; return b; };
   const one = scanBytes(wide(0x61), 'w.bin');
   const two = scanBytes(wide(0x62), 'w.bin');
   assert.deepStrictEqual(one.map((h) => [h.line, h.pattern]), [[1, WIDE_TOO_LARGE]]);
   assert.notStrictEqual(one[0].fp, two[0].fp, 'other bytes ask again');
   assert.notStrictEqual(scanBytes(wide(0x61), 'v.bin')[0].fp, one[0].fp, 'the same bytes at another path ask again');
   const plain = Buffer.alloc(WIDE_DECODE_MAX_BYTES + 2, 0x61);
-  for (let i = 0; i < plain.length; i += 64) plain[i] = 0x0a;
+  for (let i = 0; i < plain.length; i += LINE_BYTES) plain[i] = 0x0a;
   assert.deepStrictEqual(scanBytes(plain, 'a.txt'), []);
   assert.strictEqual(wideTexts(utf32le('x'.repeat(200000)))[0], 'x'.repeat(200000));
 });
@@ -818,7 +829,7 @@ test('the decode bound gives wide text past it one hit that follows its bytes, n
 test('wide text of exactly the decode bound is still scanned, with no too-large hit', async () => {
   const { scanBytes, WIDE_DECODE_MAX_BYTES } = await import(pathToFileURL(LIB).href);
   const b = Buffer.alloc(WIDE_DECODE_MAX_BYTES);
-  for (let i = 0; i < b.length; i += 2) b[i] = i % 64 === 0 ? 0x0a : 0x61;
+  for (let i = 0; i < b.length; i += 2) b[i] = i % LINE_BYTES === 0 ? 0x0a : 0x61;
   const key = Buffer.from(`\nid ${KEY}\n`, 'utf16le');
   key.copy(b, b.length - key.length);
   assert.deepStrictEqual(scanBytes(b, 'edge.bin').map((h) => h.pattern), ['aws-access-key-id']);
