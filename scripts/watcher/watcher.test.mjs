@@ -1077,3 +1077,16 @@ test('the eight readable sources of the nine of 2026-11-10 (Adobe refuses a bot 
   for (const id of ['antigravity', 'cursor']) assert.ok(T[id].tier !== 'cold' && T[id].everyHours >= 24, id + ': a changelog that says more than a version, at no shorter than a day');
   assert.strictEqual(K['claude-dev-blog'].url, 'https://claude.dev/rss.xml');
 });
+
+// 2026-11-17: a count of sources written in prose drifts the day a row moves (the 16l README said 41 and 63 against a live 37 and 64). The two docs and the two registries pin none; the check sees the
+// shapes "41 sources", "(63 sources", "63 rows" and "sixty sources" is not a shape the house writes. Red-first: it fails on the 16l text.
+test('no watcher doc or registry header pins a number of sources: a count in prose drifts silently -- RED before 2026-11-17', () => {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const SHAPE = /\b\d+\s+(sources|rows|feeds)\b/i;
+  const offenders = [];
+  for (const f of ['README.md', 'sources/kolwen.mjs', 'sources/thecolliery.mjs']) {
+    fs.readFileSync(path.join(here, f), 'utf8').split(/\r?\n/).forEach((l, i) => { if (!/^\s*\{ id: /.test(l) && SHAPE.test(l)) offenders.push(`${f}:${i + 1}`); });
+  }
+  assert.deepStrictEqual(offenders, [], 'a pinned count of sources');
+  assert.ok(SHAPE.test('(63 sources; the chief deploys it)') && SHAPE.test('// 64 sources;') && !SHAPE.test('the sources of the week'), 'positive control: the check reads the shapes it is meant to');
+});

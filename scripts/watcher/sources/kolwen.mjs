@@ -2,14 +2,14 @@
 // builds on. DATA ONLY: no function, no credential. The same watcher code as TheColliery's instance; only this list differs. Deployed on the Kolwen account
 // by the LLM chief with `node scripts/watcher/deploy-payload.mjs kolwen --from <sender>` (see README.md).
 // Order is the stagger: a source with everyHours=n is due when (hour + its index) % n === 0, so adding to the END keeps every earlier slot.
-// 64 sources; the busiest hour of the week asks for the number the test prints in its failure message, against maxPerRun and the Free plan's 50 subrequests.
+// The busiest hour of the week asks for the number the test prints in its failure message, against maxPerRun and the Free plan's 50 subrequests. No source count is written here: a test refuses one.
 export default {
   instance: 'kolwen',
   maxPerRun: 24,
   sources: [
     { id: 'cloudflare-changelog', name: 'Cloudflare changelog', url: 'https://developers.cloudflare.com/changelog/rss/index.xml', kind: 'rss', everyHours: 2 },
     { id: 'cloudflare-blog', name: 'Cloudflare blog', url: 'https://blog.cloudflare.com/rss/', kind: 'rss', everyHours: 6 },
-    // UMB-460 (1): the beat's 44 rows, in the order of LLMWorks/warehouse/antenna-beat-2026-10.md section 2 (row 1 first), each read once on 2026-10-05.
+    // UMB-460 (1): the beat's rows, in the order of LLMWorks/warehouse/antenna-beat-2026-10.md section 2 (row 1 first), each read once on 2026-10-05.
     { id: 'anthropic-api-notes', name: 'Anthropic · Claude Platform release notes', url: 'https://platform.claude.com/docs/en/release-notes/feed.xml', kind: 'rss', everyHours: 2 },
     { id: 'anthropic-deprecations', name: 'Anthropic · model deprecations', url: 'https://platform.claude.com/docs/en/about-claude/model-deprecations.md', kind: 'raw', everyHours: 6 },
     { id: 'anthropic-pricing', name: 'Anthropic · API pricing', url: 'https://platform.claude.com/docs/en/about-claude/pricing.md', kind: 'raw', everyHours: 6 },
