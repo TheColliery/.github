@@ -50,6 +50,13 @@ function fakeGithub(over = {}) {
       if (rr.releasePages) return ok(rr.releasePages[Number(u.searchParams.get('page') || 1) - 1] ?? []);
       return ok(rr.releases);
     }
+    m = u.pathname.match(/^\/repos\/TheColliery\/([^/]+)\/properties\/values$/);
+    if (m && repos[m[1]]) {
+      const rr = repos[m[1]];
+      if (rr.propsStatus) return { ok: false, status: rr.propsStatus, json: async () => ({}) };
+      const zone = rr.zone === undefined ? 'CoalWorks' : rr.zone; // a repository of this fake is a Coal* one unless a test says otherwise
+      return ok([{ property_name: 'repo-kind', value: 'published-code' }, ...(zone === null ? [] : [{ property_name: 'zone', value: zone }])]);
+    }
     m = u.pathname.match(/^\/repos\/TheColliery\/([^/]+)$/);
     if (m && repos[m[1]]) return ok(repos[m[1]]);
     return { ok: false, status: 404, json: async () => ({}) };
@@ -401,4 +408,49 @@ test('checkTag accepts a multi-package tag <pkg>-vX.Y.Z and its -label form, ref
   const rel = { tag_name: 'py-v0.0.1', name: 'py v0.0.1 - the Python package publishes its first client', body: 'x', html_url: 'https://github.com/TheColliery/Kolwen/releases/tag/py-v0.0.1' };
   assert.equal(buildAnnouncement('Kolwen', rel, 'https://github.com/TheColliery/Kolwen').title, 'Kolwen py v0.0.1 - the Python package publishes its first client');
   assert.ok(buildAnnouncement('Kolwen', rel, 'u').body.endsWith(marker('Kolwen', 'py-v0.0.1')));
+});
+
+// ---- 2026-11-16l, UMB3-202: the forge announces CoalWorks and org repositories only; Kolwen's two name-reservation releases reached the Announcements (#165, #166) ---------------------------------
+const rel = (tag, h = 1) => ({ tag_name: tag, name: tag + ' - a change', body: 'Notes.', draft: false, prerelease: false, published_at: hoursAgo(h), html_url: 'https://github.com/TheColliery/x/releases/tag/' + tag });
+const zoned = () => ({
+  CoalMine: { name: 'CoalMine', html_url: 'https://github.com/TheColliery/CoalMine', private: false, zone: 'CoalWorks', releases: [rel('v1.0.0')] },
+  OrgTool: { name: 'OrgTool', html_url: 'https://github.com/TheColliery/OrgTool', private: false, zone: 'org', releases: [rel('v2.0.0')] },
+  Kolwen: { name: 'Kolwen', html_url: 'https://github.com/TheColliery/Kolwen', private: false, zone: 'LLMWorks', releases: [rel('v0.0.2')] },
+  Bare: { name: 'Bare', html_url: 'https://github.com/TheColliery/Bare', private: false, zone: null, releases: [rel('v0.1.0')] },
+});
+test('sweep: a repository whose zone is not CoalWorks or org is skipped and NAMED, never announced, and its Releases are not even listed -- RED before UMB3-202', async () => {
+  const gh = fakeGithub({ repos: zoned() });
+  const summary = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'announce-zone-')), 'summary.md');
+  try {
+    const { r, logs } = await go(gh, { post: true, now: NOW, summaryFile: summary });
+    assert.equal(r.posted, 2, 'CoalMine (CoalWorks) and OrgTool (org) are announced');
+    assert.equal(r.skipped, 2, 'Kolwen (LLMWorks) and Bare (no zone) are skipped');
+    assert.equal(r.failed, 0);
+    assert.ok(logs.some((l) => /SKIPPED Kolwen: .*"LLMWorks"/.test(l)), 'the zone it has is named');
+    assert.ok(logs.some((l) => /SKIPPED Bare: .*unset/.test(l)));
+    assert.ok(!gh.st.calls.some((c) => c.includes('/repos/TheColliery/Kolwen/releases')), 'a skipped repository is not read for Releases');
+    assert.ok(!gh.st.discussions.some((d) => d.body.includes('TheColliery/Kolwen@')), 'no Kolwen marker was posted');
+    const text = fs.readFileSync(summary, 'utf8');
+    assert.match(text, /Skipped, not announced/);
+    assert.match(text, /\*\*Kolwen\*\*: zone "LLMWorks"/);
+    assert.equal(exitCodeFor(r), 0, 'a skip is not a failure');
+  } finally { fs.rmSync(path.dirname(summary), { recursive: true, force: true }); }
+});
+test('a manual run with a repo and a tag refuses a repository of another zone, and still posts one of CoalWorks -- RED before UMB3-202', async () => {
+  const gh = fakeGithub({ repos: zoned() });
+  await assert.rejects(() => go(gh, { repo: 'Kolwen', tag: 'v0.0.2', post: true, now: NOW }), /zone "LLMWorks".*only CoalWorks and org/);
+  await assert.rejects(() => go(gh, { repo: 'Bare', tag: 'v0.1.0', post: true, now: NOW }), /zone unset/);
+  assert.equal(gh.st.creates, 0);
+  const { r } = await go(gh, { repo: 'CoalMine', tag: 'v1.0.0', post: true, now: NOW });
+  assert.deepEqual(r, { posted: 1 });
+});
+test('sweep: a zone that cannot be read is a counted failure naming the repository and the run goes red; nothing of it is posted, the others still are', async () => {
+  const repos = zoned();
+  repos.Kolwen.propsStatus = 500;
+  const gh = fakeGithub({ repos });
+  const { r, logs } = await go(gh, { post: true, now: NOW });
+  assert.equal(r.failed, 1);
+  assert.equal(r.posted, 2);
+  assert.ok(logs.some((l) => /FAIL Kolwen: its zone could not be read/.test(l)));
+  assert.equal(exitCodeFor(r), 1);
 });

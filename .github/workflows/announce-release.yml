@@ -5,6 +5,10 @@ name: announce-release
 # the Releases API's discussion_category_name cannot do it (it opens the discussion in the Release's own repository):
 # scripts/lib/announce-release.mjs.
 #
+# WHICH REPOSITORIES: only those whose custom property `zone` is CoalWorks or org (UMB3-202, the owner's ruling of 2026-11-10). The forge's Announcements are the open-source forge's;
+# a Kolwen release (zone LLMWorks) is the commercial hub's and is not mirrored here (the two-domains ruling of 2026-09-22). A repository of another zone is skipped and named in the run
+# log and the run summary, and a manual run with repo and tag refuses it. The zone is read from GitHub at run time, so no repository name is written into the code.
+#
 # Two ways to run it. On the SIX-HOURLY SCHEDULE (opened by the owner on 2026-10-04, after the first post was read) it sweeps the
 # stable Releases published in the last 30 hours and posts each one once. The window is sized in scripts/lib/announce-release.mjs
 # (SCHEDULE_WINDOW_HOURS; its arithmetic is there): two dropped slots plus the largest scheduled-run delay measured so far
