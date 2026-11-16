@@ -60,5 +60,12 @@ Free-plan budget, from Cloudflare's docs read 2026-10-04: 10 ms CPU per Cron run
 ## Tests
 
 ```text
-node --test scripts/watcher/watcher.test.mjs scripts/watcher/deploy-payload.test.mjs
+node --test scripts/watcher/watcher.test.mjs scripts/watcher/deploy-payload.test.mjs scripts/watcher/cold-read.test.mjs
 ```
+
+## One source, one account; hot and cold (2026-11-16, the owner 2026-11-10)
+
+- **One account per source.** A URL is fetched by ONE instance. What serves Coal* or the whole house (the agent platforms, GitHub's changelog, CodeRabbit's) is TheColliery's; what serves Kolwen is Kolwen's; the Cloudflare family (status, the changelog feeds, the limits and pricing pages) lives on Kolwen's account once. `watcher.test.mjs` fails on a URL in both registries and prints each account's busiest hour of the week against `maxPerRun` and the Free plan's 50 subrequests.
+- **Hot and cold.** A source may carry `tier: 'cold'`. It stays in the registry (nothing is lost, and one edit warms it up again) and the cron never fetches it. A program the box's daily updater installs is cold by default, because learning its news after the update costs nothing; a source stays hot only where its news asks for an act the updater cannot do (a price, a deprecation with a date, a breaking change a room's code must answer).
+- **The cold read.** `node scripts/watcher/cold-read.mjs <instance>` fetches the cold sources of one instance one at a time with the watcher's own `fetchSource`, compares them with their own last-seen state (`scripts/watcher/cold-state-<instance>.json`, git-ignored), and prints the change list in the digests' shape. The first run baselines; `--dry-run` writes nothing. The weekly round runs it.
+- **`keyPattern`** (a `raw` source only): the source's key is the first match of the pattern, not a hash of the whole page, so a page whose body moves on every render (a build id) but whose newest release line holds still has news only when that line changes (Windsurf's changelog).

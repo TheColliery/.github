@@ -2,16 +2,13 @@
 // builds on. DATA ONLY: no function, no credential. The same watcher code as TheColliery's instance; only this list differs. Deployed on the Kolwen account
 // by the LLM chief with `node scripts/watcher/deploy-payload.mjs kolwen --from <sender>` (see README.md).
 // Order is the stagger: a source with everyHours=n is due when (hour + its index) % n === 0, so adding to the END keeps every earlier slot.
-// 68 sources; the busiest hour of the week asks for the number the test prints in its failure message, against maxPerRun and the Free plan's 50 subrequests.
+// 64 sources; the busiest hour of the week asks for the number the test prints in its failure message, against maxPerRun and the Free plan's 50 subrequests.
 export default {
   instance: 'kolwen',
   maxPerRun: 24,
   sources: [
-    { id: 'claude-code', name: 'Claude Code', url: 'https://github.com/anthropics/claude-code/releases.atom', kind: 'atom', everyHours: 1 },
     { id: 'cloudflare-changelog', name: 'Cloudflare changelog', url: 'https://developers.cloudflare.com/changelog/rss/index.xml', kind: 'rss', everyHours: 2 },
-    { id: 'github-changelog', name: 'GitHub changelog', url: 'https://github.blog/changelog/feed/', kind: 'rss', everyHours: 2 },
     { id: 'cloudflare-blog', name: 'Cloudflare blog', url: 'https://blog.cloudflare.com/rss/', kind: 'rss', everyHours: 6 },
-    { id: 'coderabbit-changelog', name: 'CodeRabbit changelog', url: 'https://docs.coderabbit.ai/changelog.md', kind: 'raw', everyHours: 6 },
     // UMB-460 (1): the beat's 44 rows, in the order of LLMWorks/warehouse/antenna-beat-2026-10.md section 2 (row 1 first), each read once on 2026-10-05.
     { id: 'anthropic-api-notes', name: 'Anthropic · Claude Platform release notes', url: 'https://platform.claude.com/docs/en/release-notes/feed.xml', kind: 'rss', everyHours: 2 },
     { id: 'anthropic-deprecations', name: 'Anthropic · model deprecations', url: 'https://platform.claude.com/docs/en/about-claude/model-deprecations.md', kind: 'raw', everyHours: 6 },
@@ -21,11 +18,9 @@ export default {
     { id: 'anthropic-status', name: 'Anthropic · Claude status', url: 'https://status.claude.com/history.atom', kind: 'atom', everyHours: 2 },
     { id: 'openai-news', name: 'OpenAI · news', url: 'https://openai.com/news/rss.xml', kind: 'rss', everyHours: 2 },
     { id: 'openai-status', name: 'OpenAI · status', url: 'https://status.openai.com/history.atom', kind: 'atom', everyHours: 2 },
-    { id: 'codex-npm', name: 'OpenAI · Codex CLI', url: 'https://registry.npmjs.org/@openai/codex/latest', kind: 'raw', everyHours: 2 },
     { id: 'gemini-api-changelog', name: 'Google · Gemini API changelog', url: 'https://ai.google.dev/gemini-api/docs/changelog.md.txt', kind: 'raw', everyHours: 2 },
     { id: 'google-ai-blog', name: 'Google · AI blog', url: 'https://blog.google/innovation-and-ai/technology/ai/rss/', kind: 'rss', everyHours: 6 },
     { id: 'google-developers-blog', name: 'Google · developers blog', url: 'https://developers.googleblog.com/feeds/posts/default/', kind: 'rss', everyHours: 6 },
-    { id: 'antigravity-changelog', name: 'Google · Antigravity', url: 'https://antigravity.google/changelog.md', kind: 'raw', everyHours: 6 },
     { id: 'mistral-news', name: 'Mistral · news', url: 'https://mistral.ai/news/rss', kind: 'rss', everyHours: 6 },
     { id: 'mistral-changelog', name: 'Mistral · docs changelog', url: 'https://docs.mistral.ai/resources/changelogs', kind: 'headings', everyHours: 6 },
     { id: 'groq-changelog', name: 'Groq · API changelog', url: 'https://console.groq.com/docs/changelog.md', kind: 'raw', everyHours: 6 },
@@ -54,8 +49,6 @@ export default {
     { id: 'perplexity-changelog', name: 'Perplexity · API changelog', url: 'https://docs.perplexity.ai/docs/resources/changelog/rss.xml', kind: 'rss', everyHours: 6 },
     { id: 'allenai-blog', name: 'Ai2 · research and news', url: 'https://allenai.org/rss.xml', kind: 'rss', everyHours: 12 },
     { id: 'sarvam-blog', name: 'Sarvam · blog', url: 'https://www.sarvam.ai/rss.xml', kind: 'rss', everyHours: 12 },
-    { id: 'cursor-changelog', name: 'Cursor · changelog', url: 'https://cursor.com/changelog/rss.xml', kind: 'rss', everyHours: 6 },
-    { id: 'github-copilot', name: 'GitHub · Copilot changelog label', url: 'https://github.blog/changelog/label/copilot/feed/', kind: 'rss', everyHours: 2 },
     { id: 'paddle-changelog', name: 'Paddle · developer changelog', url: 'https://developer.paddle.com/changelog.xml', kind: 'rss', everyHours: 6 },
     // antenna-beat-2026-10.md row 45 (8c7c51ce, 17c): the Baseline monthly digest, the Kolwen head's web-feature news (LWK2-064, UMB3-049)
     { id: 'webdev-baseline-digest', name: 'web.dev · blog feed (Baseline monthly digest)', url: 'https://web.dev/blog/feed.xml', kind: 'rss', everyHours: 12 },
@@ -89,5 +82,8 @@ export default {
     { id: 'c2pa-specification', name: 'C2PA · specification releases', url: 'https://github.com/c2pa-org/specifications/releases.atom', kind: 'atom', everyHours: 24 },
     { id: 'c2pa-rs', name: 'C2PA · c2pa-rs reference implementation releases', url: 'https://github.com/contentauth/c2pa-rs/releases.atom', kind: 'atom', everyHours: 24, ignoreTitle: '^(?!c2pa-v)' },
     { id: 'synthid-text', name: 'Google DeepMind · SynthID Text releases', url: 'https://github.com/google-deepmind/synthid-text/releases.atom', kind: 'atom', everyHours: 24 },
+    { id: 'claude-dev-blog', name: 'Claude builder blog (claude.dev)', url: 'https://claude.dev/rss.xml', kind: 'rss', everyHours: 12 },
+    { id: 'supabase-changelog', name: 'Supabase changelog', url: 'https://supabase.com/changelog-rss.xml', kind: 'rss', everyHours: 12 },
+    { id: 'anthropic-engineering', name: 'Anthropic engineering', url: 'https://www.anthropic.com/engineering', kind: 'headings', everyHours: 24, tier: 'cold' },
   ],
 };
