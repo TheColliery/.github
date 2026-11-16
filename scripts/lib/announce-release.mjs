@@ -11,6 +11,12 @@
 // hand-written here; a hand post is outward content under the owner's word. The post is idempotent: a marker comment at the end of the
 // body names the Release, and a Release whose marker is already in a recent Announcements discussion is not posted again.
 //
+// WHICH REPOSITORIES (UMB3-202, the owner's ruling of 2026-11-10, "ตามแนะนำ"): the forge's Announcements are the forge's. The two-domains ruling of 2026-09-22 (kolwen.com is the commercial hub,
+// thecolliery.org the open-source forge; cross-links yes, a shared surface never) means a Kolwen release is no news for the people who follow the Coal* tools. So a repository is announced only when its
+// custom property `zone` is one of ANNOUNCED_ZONES, read at GET /repos/{owner}/{repo}/properties/values: never a repository name written into the code, so a new repository of a listed zone is announced
+// with no edit here. A repository of any other zone, a zone that is unset and a zone that cannot be read are NOT announced; the sweep skips the first two by name in its log and run summary and counts
+// the third as a failure, and a manual run with a repo and a tag refuses the same way.
+//
 // Zero dependencies: node builtins and the global fetch. Every call carries a timeout; the create is never retried (a timeout does not
 // prove the post did not land, and a second create would double-post).
 import fs from 'node:fs';
@@ -33,6 +39,7 @@ export const SCHEDULE_DROPPED_SLOTS = 2;
 export const MEASURED_MAX_DELAY_HOURS = 5.7;
 export const SCHEDULE_HEADROOM_HOURS = 6;
 export const SCHEDULE_WINDOW_HOURS = Math.ceil((SCHEDULE_DROPPED_SLOTS + 1) * SCHEDULE_PERIOD_HOURS + MEASURED_MAX_DELAY_HOURS + SCHEDULE_HEADROOM_HOURS);
+export const ANNOUNCED_ZONES = ['CoalWorks', 'org']; // the Coal* skill suite and the cross-zone surfaces; LLMWorks (Kolwen, Bankfire, ...) and Articles are other surfaces
 export const SCAN_PAGES = 5; // 250 discussions back when looking for an existing marker
 
 const REPO_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -61,6 +68,20 @@ export function neutralizeMentions(text) {
 // A post the machine will not make: the mirrored title overflows GitHub's ceiling (UMB-433). It is never cut and never posted bare; the
 // room's DRAFTER re-composes the summary (release-notes.mjs --check fails it before the tag), and a manual run posts it with that title.
 export class HeldPost extends Error {}
+
+// The zone of a repository: its custom property `zone`, or null when it carries none. One read per repository per client; a read that fails throws, and the caller decides (never a guess).
+const zoneReads = new WeakMap();
+export async function zoneOf(api, repo) {
+  let reads = zoneReads.get(api);
+  if (!reads) { reads = new Map(); zoneReads.set(api, reads); }
+  if (!reads.has(repo)) {
+    const props = await api.rest(`/repos/${ORG}/${repo}/properties/values`);
+    const z = Array.isArray(props) ? props.find((p) => p && p.property_name === 'zone') : null;
+    reads.set(repo, z && typeof z.value === 'string' && z.value ? z.value : null);
+  }
+  return reads.get(repo);
+}
+const notAnnounced = (repo, zone) => `${ORG}/${repo} has zone ${zone ? JSON.stringify(zone) : 'unset'}, and only ${ANNOUNCED_ZONES.join(' and ')} are announced: another zone's releases are not the forge's news (UMB3-202)`;
 
 // A title handed in for a manual post (INPUT_TITLE): the room's re-composition, used as written after three checks.
 function checkHandedTitle(title) {
@@ -142,6 +163,8 @@ export async function announceOne(api, target, repo, tag, { post, log, title: ha
   checkRepo(repo); checkTag(tag);
   const meta = await api.rest(`/repos/${ORG}/${repo}`);
   if (meta.private) throw new Error(`${ORG}/${repo} is private: a private repository is never announced`);
+  const zone = await zoneOf(api, repo);
+  if (!ANNOUNCED_ZONES.includes(zone)) throw new Error(notAnnounced(repo, zone));
   const release = await api.rest(`/repos/${ORG}/${repo}/releases/tags/${tag}`);
   if (release.draft) throw new Error(`${repo} ${tag} is a draft: only a published Release is announced`);
   // The marker lookup comes FIRST: a Release already announced (whatever its title, a hand-re-composed one included) is never held again.
@@ -169,7 +192,7 @@ export async function announceOne(api, target, repo, tag, { post, log, title: ha
 const RELEASE_PAGES = 3;
 
 // Sweep: every published Release of every public, non-archived, non-fork repository of the org published within `windowHours`.
-export async function sweep(api, target, { post, log, windowHours, now = Date.now(), held = [] }) {
+export async function sweep(api, target, { post, log, windowHours, now = Date.now(), held = [], skipped = [] }) {
   const repos = await api.rest(`/orgs/${ORG}/repos?type=public&per_page=100`);
   if (!Array.isArray(repos)) throw new Error('the org repository list is not a list');
   if (repos.length >= 100) throw new Error('the org has 100 or more public repositories: the sweep reads one page and refuses to run on a partial list');
@@ -179,8 +202,11 @@ export async function sweep(api, target, { post, log, windowHours, now = Date.no
   // the Release list is read page by page (three pages of a hundred) so a Release past the first ten is seen; a repository whose list cannot be read whole is one counted failure and the sweep goes on (UMB3-006)
   const get = async (p) => { try { return { status: 200, json: await api.rest(p) }; } catch (e) { const m = /answered (\d+)/.exec(String(e && e.message)); return { status: m ? Number(m[1]) : 0, json: null }; } };
   for (const r of repos.filter((x) => !x.archived && !x.fork && !x.is_template && !x.private).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+    let zone;
+    try { zone = await zoneOf(api, r.name); } catch (e) { unread.push({ repo: r.name, why: `its zone could not be read (${e.message}); not announced` }); continue; }
+    if (!ANNOUNCED_ZONES.includes(zone)) { skipped.push({ repo: r.name, zone }); log(`SKIPPED ${r.name}: its zone is ${zone ? JSON.stringify(zone) : 'unset'}, not one the forge announces (${ANNOUNCED_ZONES.join(', ')})`); continue; }
     const read = await getAllPages(get, `/repos/${ORG}/${r.name}/releases`, (j) => j, RELEASE_PAGES);
-    if (read.partial) unread.push({ repo: r.name, why: pageNote(read) });
+    if (read.partial) unread.push({ repo: r.name, why: `could not read the Release list whole (${pageNote(read)})` });
     const list = read.items;
     // A stable Release only: a pre-release (the launch form) is a repo's own announcement and goes by hand, with a repo and a tag.
     for (const rel of list) if (!rel.draft && !rel.prerelease && rel.published_at && Date.parse(rel.published_at) >= since && TAG_RE.test(rel.tag_name)) due.push({ repo: r.name, tag: rel.tag_name, at: Date.parse(rel.published_at) });
@@ -188,7 +214,8 @@ export async function sweep(api, target, { post, log, windowHours, now = Date.no
   due.sort((a, b) => a.at - b.at);
   log(`sweep: ${due.length} Release(s) published in the last ${windowHours} hours`);
   const counts = { posted: 0, 'would-post': 0, already: 0, failed: 0, held: 0 };
-  for (const u of unread) { counts.failed++; log(`FAIL ${u.repo}: could not read the Release list whole (${u.why}); the Releases read before it are still announced`); }
+  if (skipped.length) counts.skipped = skipped.length;
+  for (const u of unread) { counts.failed++; log(`FAIL ${u.repo}: ${u.why}; the Releases read before it are still announced`); }
   for (const d of due) {
     try { counts[await announceOne(api, target, d.repo, d.tag, { post, log, held })]++; } catch (e) { counts.failed++; log(`FAIL ${d.repo} ${d.tag}: ${e.message}`); }
   }
@@ -196,9 +223,15 @@ export async function sweep(api, target, { post, log, windowHours, now = Date.no
 }
 
 // The held posts are written into the run's summary page (GITHUB_STEP_SUMMARY), best effort: the log line is the record that cannot fail.
-function writeSummary(file, held) {
-  if (!file || !held.length) return;
-  const lines = ['## Held, not posted', '', 'These Releases were not announced: the mirrored title would overflow GitHub\'s title ceiling. Nothing was cut and nothing was posted bare. The room re-composes the summary; then run this workflow by hand (repo, tag, post=true, title). A manual run is not limited by the sweep window.', ''];
+function writeSummary(file, held, skipped = []) {
+  if (!file || !(held.length || skipped.length)) return;
+  const lines = [];
+  if (skipped.length) {
+    lines.push('## Skipped, not announced', '', 'These repositories have a zone the forge does not announce (the custom property `zone`, UMB3-202). Their Releases are not the forge\'s news.', '');
+    for (const s of skipped) lines.push(`- **${s.repo}**: zone ${s.zone ? JSON.stringify(s.zone) : 'unset'}`);
+    lines.push('');
+  }
+  if (held.length) lines.push('## Held, not posted', '', 'These Releases were not announced: the mirrored title would overflow GitHub\'s title ceiling. Nothing was cut and nothing was posted bare. The room re-composes the summary; then run this workflow by hand (repo, tag, post=true, title). A manual run is not limited by the sweep window.', '');
   for (const h of held) lines.push(`- **${h.repo} ${h.tag}**: ${h.reason}`);
   try { fs.appendFileSync(file, lines.join('\n') + '\n'); } catch { /* the log line already names it */ }
 }
@@ -210,10 +243,11 @@ export async function run({ repo, tag, post, windowHours, token, fetchImpl, log 
   const api = client({ token, fetchImpl });
   const target = await findTarget(api);
   const held = [];
+  const skipped = [];
   if (repo) { const outcome = await announceOne(api, target, repo, tag, { post, log, title, held }); writeSummary(summaryFile, held); return { [outcome]: 1 }; }
   if (tag) throw new Error('a tag needs a repo');
-  const counts = await sweep(api, target, { post, log, windowHours, now, held });
-  writeSummary(summaryFile, held);
+  const counts = await sweep(api, target, { post, log, windowHours, now, held, skipped });
+  writeSummary(summaryFile, held, skipped);
   return counts;
 }
 
