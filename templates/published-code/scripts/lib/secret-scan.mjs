@@ -557,7 +557,7 @@ function scanPatchWide(bytes, opts) {
     if (l.startsWith('\0COMMIT ')) { flush(); commit = l.slice(8).trim(); file = null; inHeader = false; continue; }
     if (l.startsWith('diff --git ') || l.startsWith('diff --cc ')) { flush(); file = null; inHeader = true; continue; }
     if (inHeader && l.startsWith('+++ ')) {
-      const p = Buffer.from(l.slice(4).replace(/\t$/, ''), 'latin1').toString('utf8');
+      const p = Buffer.from(dropOneTab(l.slice(4)), 'latin1').toString('utf8');
       file = p === '/dev/null' ? null : unquotePath(p).replace(/^b\//, '');
       if (file !== null && skip && skip(file)) file = null;
       continue;
@@ -583,6 +583,9 @@ function scanPatchWide(bytes, opts) {
 // is not git's quoting comes back raw: the fingerprint then matches no ack, which is the safe side.
 const BACKSLASH = String.fromCharCode(92);
 const C_ESCAPES = new Map([['a', 7], ['b', 8], ['t', 9], ['n', 10], ['v', 11], ['f', 12], ['r', 13], ['"', 34], [BACKSLASH, 92]]);
+// git ends a `+++` path with ONE TAB when the name holds a space; this drops that one trailing TAB and nothing else. Written without a regular expression: the replace-with-a-regex form was
+// the two sites CodeQL's js/incomplete-sanitization reported in this file (the free assessment of 2026-11-16, Pithead's copy at lines 560 and 648), and a string compare cannot be read as a sanitiser.
+const dropOneTab = (s) => (s.endsWith('\t') ? s.slice(0, -1) : s);
 function unquotePath(p) {
   if (!(p.length >= 2 && p.startsWith('"') && p.endsWith('"'))) return p;
   const s = p.slice(1, -1);
@@ -645,7 +648,7 @@ function scanPatchText(patch, opts, nulDrop) {
     if (inHeader && l.startsWith('+++ ')) {
       // git ends a `+++` path with ONE TAB when the name holds a space, quoted or not (27D-2, git 2.56.0). An unquoted name never holds a
       // raw TAB (git writes it as \t), so that one trailing TAB is the separator and never part of the name.
-      const p = l.slice(4).replace(/\t$/, '');
+      const p = dropOneTab(l.slice(4));
       file = p === '/dev/null' ? null : unquotePath(p).replace(/^b\//, '');
       if (file !== null && skip && skip(file)) file = null;
       continue;
