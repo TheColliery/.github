@@ -763,3 +763,22 @@ test('new-repo.mjs private-working: the scaffold carries a NOTICE with the holde
   assert.ok(!/\{\{[A-Z_]+\}\}/.test(notice), notice);
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+// 16g (the 16e review's MEDIUM): a PRIVATE article takes the organization ruleset private-main-guard for its default branch, which the article
+// canon's own main-guard reads as already held (rulesetCoversRules sees the inherited ruleset), and no tag ruleset: the private canon sets none.
+// Before, --apply-settings article on a private repo would have created tag-immutable.
+const ORG_GUARD = { id: 27358894, name: 'private-main-guard', target: 'branch', enforcement: 'active', conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: [] } }, rules: [{ type: 'deletion' }, { type: 'non_fast_forward' }], bypass_actors: [] };
+test('--apply-settings article --only rulesets on a PRIVATE repo covered by the organization ruleset: main-guard IN-SYNC, tag-immutable N/A, ZERO writes (the private-article case)', () => {
+  const { res, calls } = runWithTeamStub(['--apply-settings', 'article', '--repo', 'TheColliery/ChotNext', '--only', 'rulesets'], { name: 'ChotNext', id: 1300000001, private: true, default_branch: 'main' }, { rulesets: [ORG_GUARD] });
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  assert.deepEqual(writes(calls), [], 'no ruleset is written on a private article that the organization ruleset covers');
+  assert.match(res.stdout, /ruleset: IN-SYNC \("main-guard" canon already held/);
+  assert.match(res.stdout, /tagRuleset: N\/A \(.*private/);
+});
+
+test('--apply-settings article --only rulesets on a PUBLIC repo still creates tag-immutable: the private skip is for private repos only', () => {
+  const { res, calls } = runWithTeamStub(['--apply-settings', 'article', '--repo', 'TheColliery/ArtNext', '--only', 'rulesets'], { name: 'ArtNext', id: 1300000002, private: false, default_branch: 'main' }, { rulesets: [{ id: 1, ...CANON_BRANCH }] });
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  assert.deepEqual(writes(calls), ['POST /repos/TheColliery/ArtNext/rulesets']);
+  assert.match(res.stdout, /tagRuleset: ok \(HTTP 201, created "tag-immutable"/);
+});

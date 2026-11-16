@@ -311,7 +311,10 @@ async function applyRulesetSurfaces(settings, req, base) {
   const defaultBranch = repoInfo.ok ? repoInfo.json?.default_branch : undefined;
   const specs = [['ruleset', settings.ruleset], ['tagRuleset', settings.tagRuleset]];
   for (const [surface, s] of specs) if (s?.status === 'n/a') out.push({ surface, ok: true, status: 'N/A', reason: s.reason });
-  const live = specs.filter(([, s]) => s?.name);
+  // a PRIVATE repo of any kind takes the organization ruleset for its default branch and sets no tag ruleset of its own (SERIES-CANON.md, Repository rulesets), so a private article does not get the article canon's tag-immutable; its main-guard is read as held by the organization ruleset (readRulesetDetails includes inherited rulesets)
+  const isPrivate = repoInfo.ok && repoInfo.json?.private === true;
+  if (isPrivate && specs[1][1]?.name) out.push({ surface: 'tagRuleset', ok: true, status: 'N/A', reason: 'a private repo sets no tag ruleset of its own: the private canon is the organization ruleset on the default branch (SERIES-CANON.md, Repository rulesets)' });
+  const live = specs.filter(([surface, s]) => s?.name && !(isPrivate && surface === 'tagRuleset'));
   if (live.length === 0 && !settings.leftoverRulesets) return out;
   // every page of the list and every detail, or a named failure: a ruleset dropped from the picture could make the planner create a duplicate beside it (UMB3-006)
   let details;
