@@ -102,6 +102,8 @@ Then the standing `Zero-dependency, offline, no API keys.` line, unchanged.
 
 Title is `# Verifying <Tool>`. Same section order across the family.
 
+A security advisory a room drafts for a fixed vulnerability follows [ADVISORY-PATTERN.md](./ADVISORY-PATTERN.md): the gate that says whether a finding gets one, the fields GitHub needs before a CVE request, the body and the seats. Row 2 below keeps what `SECURITY.md` itself says about advisories.
+
 | # | Section (`H2`) | Holds |
 |---|---|---|
 | 1 | Intro (no heading) | One line: "verified under the same framework as [sibling]"—Phoenix-13 hooks, reproducible builds, periodic scans. |
