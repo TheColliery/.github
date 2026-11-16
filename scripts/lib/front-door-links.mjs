@@ -124,11 +124,14 @@ export const API_HOST = 'https://api.github.com';
 /** The REST route that answers for a github.com page that is a bare repository (/owner/repo) or a bare account (/owner), or null for any other page: a deep page
  * (a file, an issue, a release) has no cheap REST twin here, so its anonymous answer stands. */
 // github.com's own top-level routes: a one- or two-segment path that starts with one of these is a product page (/pricing, /sponsors/<user>, /orgs/<org>, /topics/<topic>), never an account or a
-// repository, so the REST API has no twin for it and its anonymous answer stands. The list is GitHub's reserved names as read from its routes; a name missing from it costs, at worst, a REST
-// answer for a path that is not a repository (a 404 is then a finding for a link that was already failing to answer).
-export const RESERVED_ROUTES = new Set(['about', 'account', 'advisories', 'apps', 'assets', 'codespaces', 'collections', 'community', 'contact', 'copilot', 'customer-stories', 'dashboard', 'discussions',
-  'education', 'enterprise', 'events', 'explore', 'features', 'git-guides', 'github-copilot', 'issues', 'join', 'login', 'logout', 'marketplace', 'mobile', 'models', 'new', 'notifications', 'orgs',
-  'organizations', 'partners', 'premium-support', 'pricing', 'pulls', 'readme', 'resources', 'search', 'security', 'sessions', 'settings', 'signup', 'site', 'solutions', 'sponsors', 'stars', 'team',
+// repository, so the REST API has no twin for it and its anonymous answer stands. THE LIST IS OURS AND INCOMPLETE: GitHub publishes no list of its reserved names (searched 2026-11-17; the lists on the
+// web are third-party), so these are the product routes the house has seen. The two ways it can be wrong are not alike. A name that is here and is a real account or organisation (a second route
+// called community was removed for that reason: github.com/community is an organisation) only loses the REST fallback for that link, whose anonymous answer stands, so a 504 stays a finding.
+// A name that is missing from it costs a REST answer for a path that is not a repository: a false 404 is then a finding for a link that may be fine, and a false 2xx hides a dead page. So the list
+// errs toward length, and a link to a missing name is added here with a test.
+export const RESERVED_ROUTES = new Set(['about', 'account', 'advisories', 'apps', 'assets', 'codespaces', 'collections', 'contact', 'copilot', 'customer-stories', 'dashboard', 'discussions',
+  'education', 'enterprise', 'events', 'explore', 'features', 'git-guides', 'github-copilot', 'home', 'issues', 'join', 'login', 'logout', 'marketplace', 'mcp', 'mobile', 'models', 'new', 'notifications', 'orgs',
+  'organizations', 'partners', 'premium-support', 'pricing', 'pulls', 'readme', 'resources', 'search', 'security', 'sessions', 'settings', 'signup', 'site', 'sitemap', 'solutions', 'sponsors', 'stars', 'status', 'team',
   'topics', 'trending', 'users', 'watching', 'why-github']);
 export function apiRouteOf(url) {
   let u;

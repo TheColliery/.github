@@ -386,3 +386,14 @@ test('apiRouteOf and viaApi: only github.com itself is asked, the call never fol
   assert.strictEqual(api.auth, 'Bearer T-123');
   assert.ok(seen.filter((c) => c !== api).every((c) => c.auth === undefined), 'the token goes to the API host only');
 });
+
+// 2026-11-17 (the m5 review): the list is ours and incomplete, a real organisation called community must keep its REST fallback, and the four routes the review named are reserved. Red-first: against the
+// 16m list community is reserved and home, mcp, sitemap and status are not.
+test('apiRouteOf: github.com/community is an organisation (asked of the API), and /home, /mcp, /sitemap and /status are product pages (not asked); the list says it is ours -- RED before 2026-11-17', async () => {
+  const { apiRouteOf, RESERVED_ROUTES } = await import('./lib/front-door-links.mjs');
+  assert.strictEqual(apiRouteOf('https://github.com/community'), '/users/community');
+  assert.strictEqual(apiRouteOf('https://github.com/community/community'), '/repos/community/community');
+  for (const u of ['https://github.com/home', 'https://github.com/mcp', 'https://github.com/sitemap', 'https://github.com/status', 'https://github.com/status/incidents']) assert.strictEqual(apiRouteOf(u), null, u);
+  assert.ok(!RESERVED_ROUTES.has('community'));
+  assert.match(fs.readFileSync(new URL('./lib/front-door-links.mjs', import.meta.url), 'utf8'), /THE LIST IS OURS AND INCOMPLETE/, 'the code says whose list it is');
+});
