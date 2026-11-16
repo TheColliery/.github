@@ -33,7 +33,7 @@ deploy files first, nothing here is invented.
   is permanent. `{{PY_DIR}}` and `{{TAG_PREFIX}}` are the only variables; do not widen the
   regex that gates the real-PyPI branch. Where a variable stands as a whole YAML value (`working-directory` and `packages-dir`)
   it sits inside double quotes, so the template is valid YAML before substitution (an unquoted one is not, and Dependabot
-  fails its whole job on a file it cannot parse); substitute the text inside the quotes and keep them.
+  fails its whole job on a file it cannot parse); substitute the text inside the quotes and keep them. The substituted text holds no double quote and no backslash: inside double quotes either one is a YAML escape or ends the string, and the file stops parsing.
 
 ## NOT included this pass
 

@@ -7,6 +7,11 @@ name: Dependabot auto-merge
 # PR open (the dependabot.yml `assignees` then notifies the maintainer). MAJOR bumps
 # are never auto-merged (a human reviews the breaking change). Only `dependabot[bot]`
 # reaches the merge step, so a human-opened PR never auto-merges.
+#
+# A GROUPED pull request reads as its highest bump (read 2026-11-16 at dependabot/fetch-metadata 25dd0e3, the pin below): src/dependabot/output.ts sets update-type from
+# maxSemver(updatedDependencies), which returns the first of major, minor, patch that any dependency in the group carries, so a group holding a major bump reads major and waits for a human.
+# The merge this token enables starts no verify-landing run on main (measured 2026-11-12, #170 merged as b4e3aca): the pull request's own run is the record. It tested the merge of the
+# head with main as main stood then; if main moved between that run and the merge, the merged tree was not run, and the next push to main runs it.
 on: pull_request
 
 # Minimal top-level token (Scorecard Token-Permissions best practice); only the
