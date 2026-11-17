@@ -110,7 +110,7 @@ function readBlobs(shas, probe, looksBinary, nameOf = new Map(), isWide = () => 
           if (held > ceiling) return tooBig(cur.id, 'is too large to hold');
           if (cur.keep === null && (cur.have >= PROBE_BYTES || cur.left === 0)) {
             cur.keep = !looksBinary(Buffer.concat(cur.parts));
-            if (!cur.keep) { const tail = Buffer.concat(cur.parts).subarray(PROBE_BYTES); if (tail.length && isWide(tail)) cur.wide = true; held -= cur.have; cur.parts = []; }
+            if (!cur.keep) { held -= cur.have; cur.parts = []; }
           }
         } else if (cur) {
           if (data[pos] !== 10) return stop('cat-file output was malformed');

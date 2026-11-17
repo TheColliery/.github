@@ -901,6 +901,24 @@ test('a UTF-16 file under a binary-looking name whose wide text starts after the
   assert.ok(!r.out.includes(KEY) && !r.err.includes(KEY), 'the value is never printed');
 });
 
+// t343 F5, the 18a reviewer's surviving mutants (2026-11-18): the first test above fits in ONE chunk, so a gate that never asked the chunks after the drop (nochunk) or never read a flagged blob again
+// (noreread) passed it. Two files past 64 KiB, each of which only one path can find: LATE has its only wide-reading bytes after the first chunk (nochunk and noreread miss it), FIRST has them from byte 8,000,
+// inside the first chunk, then 80 KB of NUL-free CJK (a gate that judges the first chunk on its first 8,000 bytes alone, "prefix", and noreread miss it). The reviewer's third mutant, "notail" (also asking the
+// part of the first chunk past the prefix), is EQUIVALENT: the drop decision already judges all the bytes the first pieces hold, and a blob read again is kept only when its WHOLE bytes read wide, so the check
+// changed no outcome; it was removed (18b). Each file is named .bin and holds the key on line 2.
+test('a binary-named UTF-16 file past 64 KiB is scanned whether its wide-reading bytes sit in a later chunk or in the first chunk past the prefix -- RED against the nochunk, noreread and prefix mutants', () => {
+  const utf16 = (s) => Buffer.from(s, 'utf16le');
+  const CJK = (n) => '\u4e4e'.repeat(n);
+  const late = utf16('x' + CJK(36000) + '\nid ' + KEY + '\n');
+  const first = utf16('x' + CJK(3999) + '\nid ' + KEY + '\n' + 'a'.repeat(80) + CJK(40000)); // the ASCII run starts at byte 8000, right after the prefix
+  assert.ok(late.length > 65536 && first.length > 65536 + 8000, 'both files are past the first chunk');
+  const r = run(repo([{ 'late-chunk.bin': late, 'first-chunk.bin': first }]), [], '', {}, 120000);
+  assert.strictEqual(r.code, 1, r.out + r.err);
+  assert.match(r.out, /tree "late-chunk\.bin":2 aws-access-key-id/, 'the key in a LATER chunk is found: ' + r.out);
+  assert.match(r.out, /tree "first-chunk\.bin":2 aws-access-key-id/, 'the key in the first chunk past the prefix is found: ' + r.out);
+  assert.ok(!r.out.includes(KEY) && !r.err.includes(KEY), 'the value is never printed');
+});
+
 // t340 (CodeRabbit, on CoalWash's copy): the NUL-removed reading de-duplicated each hit by scanning every hit before it, so one line of many
 // distinct key-shaped tokens with NULs between their characters cost the square of their count (20,000 tokens: 11.8 s on one machine; 40,000:
 // 41.6 s). With a Set it is linear (20,000: about 0.1 s). No wall-clock assertion (t342 F6, 2026-11-17: a loaded runner can pass a 2 s bound slowly): the scan runs in a CHILD with a heap cap and a
