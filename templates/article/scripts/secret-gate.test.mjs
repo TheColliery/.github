@@ -512,6 +512,8 @@ fs.writeFileSync(FAKE_CATFILE, [
   "if (mode === 'early') out = real.subarray(0, firstEnd);",
   "if (mode === 'negsize') out = Buffer.concat([Buffer.from(head[0] + ' ' + head[1] + ' -1' + String.fromCharCode(10, 10), 'latin1'), real.subarray(firstEnd)]);",
   "if (mode === 'nonl') out = Buffer.concat([real.subarray(0, firstEnd - 1), real.subarray(firstEnd)]);",
+  // huge: the first header declares 300,000,000 bytes (past the 256 MiB ceiling) and the stream then ends: only the header check can answer it by name
+  "if (mode === 'huge') out = Buffer.concat([Buffer.from(head[0] + ' blob 300000000' + String.fromCharCode(10), 'latin1'), Buffer.from('xx')]);",
   "process.stdout.write(out, () => { process.exitCode = mode === 'exit1' ? 1 : 0; });",
 ].join('\n'));
 const FAKE_PRELOAD = path.join(SANDBOX, 'fake-catfile.preload.mjs');
@@ -530,6 +532,24 @@ test('a cat-file answer that ends early, gives a bad size, drops a newline or ex
     assert.ok(r.out.includes(`FAIL SECRETS: git could not read the staged files (${why}); the tree was NOT scanned`), `${mode}: ${r.out}${r.err}`);
     assert.doesNotMatch(r.err, /TypeError/, mode);
   }
+});
+
+// t342 F9 (17b): SECRET_GATE_MAX_HELD_BYTES can only LOWER the ceiling. The reviewer's mutant (a ceiling taken from any positive value) survived the 17a tests, which ran a LOWER value and a huge one only
+// on a small tree. Here a cat-file that declares a 300,000,000-byte blob (past the 256 MiB ceiling) is run with the variable raised far past it: the gate must still refuse the header by name with the
+// DEFAULT ceiling in the message, where a gate that obeyed the raised value would read on and end with "cat-file output ended early". A lowered value and an invalid one are checked beside it.
+test('SECRET_GATE_MAX_HELD_BYTES cannot raise the held-bytes ceiling: a blob declared past 256 MiB is refused by name whatever the variable says -- RED against a gate that takes any positive value', () => {
+  const dir = repo([{ 'README.md': 'hello\n' }]);
+  const base = { NODE_OPTIONS: `--import ${pathToFileURL(FAKE_PRELOAD).href}`, FAKE_CATFILE_MODE: 'huge' };
+  const named = /FAIL SECRETS: "README\.md" is too large to hold: more than (\d+) bytes of staged text would be held in memory at once; the tree was NOT scanned/;
+  for (const value of [undefined, '999999999999', '268435456', '268435457', '0', '-5', 'abc', '1e30', '']) {
+    const r = run(dir, [], '', { ...base, ...(value === undefined ? {} : { SECRET_GATE_MAX_HELD_BYTES: value }) });
+    assert.strictEqual(r.code, 1, `${value}: ${r.out}${r.err}`);
+    const m = named.exec(r.out);
+    assert.ok(m, `${value}: the declared 300,000,000-byte blob was not refused by name: ${r.out}${r.err}`);
+    assert.strictEqual(m[1], '268435456', `${value}: the ceiling in force is the default 256 MiB`);
+  }
+  const lowered = run(dir, [], '', { ...base, SECRET_GATE_MAX_HELD_BYTES: '1000' });
+  assert.match(lowered.out, /more than 1000 bytes of staged text/, 'a lower value is obeyed');
 });
 
 // A text file in UTF-16 holds a NUL in every code unit of ASCII text, so a gate that decodes UTF-8 or tests "binary" first never sees its key.
