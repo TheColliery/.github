@@ -14,8 +14,10 @@
 #   This file must be committed executable (mode 100755): git silently SKIPS a hook that is
 #   not, on Linux and macOS, so the fence would simply not exist there.
 # BYPASS (and it is a real hole, named rather than hidden): git push --no-verify
-#   Nothing available on a Free private repo can close that. The fence is a discipline
-#   with a machine behind it, not a wall.
+#   Nothing the org sets on a private repo closes that: its ruleset (private-main-guard, GitHub Team)
+#   blocks deletion and force-push of the default branch and requires no status check, because a private
+#   repo's CI stops when the plan's monthly Actions allowance (dollars) is spent and a required check would
+#   freeze every room (SERIES-CANON.md). The fence is a discipline with a machine behind it, not a wall.
 
 if ! command -v node >/dev/null 2>&1; then
   echo "pre-push: node not found — push refused (this fence fails CLOSED). Install node, or --no-verify if you mean it." >&2
