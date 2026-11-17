@@ -1607,7 +1607,7 @@ test('the canon release-notes.mjs and its test (the list\'s P1 and P2) read clea
   }
 });
 
-test('the three places a secret-scan or secret-gate file lives hold the same bytes, and the secret-scan test is the Bankfire source\'s (blob ff837c49, Bankfire 557a2e6): the scanner parity contract -- RED before 08d D3', () => {
+test('the three places a secret-scan or secret-gate file lives hold the same bytes, and the secret-scan test is the Bankfire source\'s (blob ff837c49, Bankfire c5c22d4): the scanner parity contract -- RED before 08d D3', () => {
   for (const name of ['secret-scan.test.mjs', 'secret-gate.test.mjs', 'secret-gate.mjs']) {
     const blobs = CARRIER_DIRS.map((d) => gitBlobId(readText(`${d}/${name}`)));
     assert.equal(new Set(blobs).size, 1, `${name} differs between the three places: ${blobs.join(' ')}`);
