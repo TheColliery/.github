@@ -76,7 +76,10 @@ const BINARY_BLOB = Symbol('binary');
 const HELD_CEILING = 256 << 20;
 const heldCeiling = () => { const n = Number(process.env.SECRET_GATE_MAX_HELD_BYTES); return Number.isSafeInteger(n) && n > 0 && n < HELD_CEILING ? n : HELD_CEILING; };
 const PROBE_BYTES = 8000; // the scanner's looksBinary reads this many first bytes
-function readBlobs(shas, probe, looksBinary, nameOf = new Map()) {
+// A probed blob dropped as binary by its first bytes is not final (t343 F5, 2026-11-18): the prefix cannot see wide text that starts later (an ASCII character, then 8 KB of CJK, then a key), so every chunk
+// that streams past after the drop is asked the scanner's wide-text rule (isWide), and a blob where any chunk reads wide is answered { rereadBytes: size } instead of BINARY_BLOB. The caller reads that one blob
+// again, held, and decides on the WHOLE bytes. Memory stays bounded: nothing is held for a blob that never reads wide.
+function readBlobs(shas, probe, looksBinary, nameOf = new Map(), isWide = () => false) {
   const ids = [...new Set(shas)];
   const ceiling = heldCeiling();
   let held = 0;
@@ -100,19 +103,19 @@ function readBlobs(shas, probe, looksBinary, nameOf = new Map()) {
           const piece = data.subarray(pos, pos + take);
           pos += take;
           cur.left -= take;
-          if (cur.keep === false) continue;
+          if (cur.keep === false) { if (!cur.wide && isWide(piece)) cur.wide = true; continue; }
           cur.parts.push(piece);
           cur.have += take;
           held += take;
           if (held > ceiling) return tooBig(cur.id, 'is too large to hold');
           if (cur.keep === null && (cur.have >= PROBE_BYTES || cur.left === 0)) {
             cur.keep = !looksBinary(Buffer.concat(cur.parts));
-            if (!cur.keep) { held -= cur.have; cur.parts = []; }
+            if (!cur.keep) { const tail = Buffer.concat(cur.parts).subarray(PROBE_BYTES); if (tail.length && isWide(tail)) cur.wide = true; held -= cur.have; cur.parts = []; }
           }
         } else if (cur) {
           if (data[pos] !== 10) return stop('cat-file output was malformed');
           pos++;
-          let whole = BINARY_BLOB;
+          let whole = cur.wide ? { rereadBytes: cur.size } : BINARY_BLOB;
           if (cur.keep !== false) { try { whole = Buffer.concat(cur.parts); } catch { return tooBig(cur.id, 'could not be joined'); } }
           out.set(cur.id, whole);
           cur = null;
@@ -127,7 +130,7 @@ function readBlobs(shas, probe, looksBinary, nameOf = new Map()) {
           const size = Number(parts[2]);
           if (!Number.isSafeInteger(size) || size < 0) return stop('cat-file output was malformed');
           if (!probe.has(id) && held + size > ceiling) return tooBig(id, 'is too large to hold'); // a header already says it: refused before one byte is held
-          cur = { id, left: size, keep: probe.has(id) ? null : true, parts: [], have: 0 };
+          cur = { id, left: size, size, keep: probe.has(id) ? null : true, parts: [], have: 0, wide: false };
         }
       }
     });
@@ -206,7 +209,17 @@ async function main() {
     for (const e of wanted) allBinaryNamed.set(e.sha, allBinaryNamed.get(e.sha) !== false && BINARY.test(e.name));
     const probe = new Set([...allBinaryNamed].filter(([, b]) => b).map(([id]) => id));
     const nameOf = new Map(wanted.map((e) => [e.sha, e.name]));
-    try { blobs = await readBlobs(wanted.map((e) => e.sha), probe, (b) => scan.looksBinary(b) && !scan.wideKinds(b).length, nameOf); } catch (e) {
+    const prefixBinary = (b) => scan.looksBinary(b) && !scan.wideKinds(b).length;
+    try {
+      blobs = await readBlobs(wanted.map((e) => e.sha), probe, prefixBinary, nameOf, (b) => scan.wideKinds(b).length > 0);
+      // a blob some chunk of which reads as wide text is read again, one at a time, and judged on its whole bytes; one past the held-bytes ceiling stays skipped, as it was before (it cannot be held)
+      for (const [id, v] of [...blobs]) {
+        if (!v || v === BINARY_BLOB || v.rereadBytes === undefined) continue;
+        if (v.rereadBytes > heldCeiling()) { blobs.set(id, BINARY_BLOB); continue; }
+        const again = (await readBlobs([id], new Set(), prefixBinary, nameOf)).get(id);
+        blobs.set(id, again && !scan.wideKinds(again).length ? BINARY_BLOB : again);
+      }
+    } catch (e) {
       fails.push(e && e.code === 'EHELD' ? `${e.message}; the tree was NOT scanned` : `git could not read the staged files (${e && e.code ? e.code : 'cat-file error'}); the tree was NOT scanned`);
     }
   }
@@ -218,7 +231,7 @@ async function main() {
     if (bytes === null) { unreadable.push(esc(e.name)); return; }
     if (bytes === BINARY_BLOB) return; // binary-named at every path and binary by its first bytes, dropped while it streamed
     // a binary-looking name with NUL-bearing bytes is still text when the scanner's wide-text rule reads its first bytes as UTF-16 or UTF-32 (the bytes the stream probe judged)
-    if (BINARY.test(e.name) && scan.looksBinary(bytes) && !scan.wideKinds(bytes.subarray(0, PROBE_BYTES)).length) return;
+    if (BINARY.test(e.name) && scan.looksBinary(bytes) && !scan.wideKinds(bytes).length) return;
     scanned++;
     for (const h of scan.scanBytes(bytes, e.name)) keep(h, `tree ${esc(e.name)}:${h.line}`, headAcks);
   });

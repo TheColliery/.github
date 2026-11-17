@@ -886,6 +886,21 @@ test('the bytes held for staged text are bounded: a text blob past the ceiling i
   assert.strictEqual(run(binary, [], '', { SECRET_GATE_MAX_HELD_BYTES: '100000' }).code, 0, 'a binary-named binary blob is dropped as it streams and holds nothing');
 });
 
+// t343 F5 (2026-11-18): a binary-looking NAME and a first 8,000 bytes without a NUL pattern read as wide were enough to skip a UTF-16 file whose wide text starts later: one ASCII character, then CJK text with no
+// NUL byte, then a key. The same bytes under a text name were scanned. Now a blob dropped by its prefix is still asked, chunk by chunk as it streams, whether any later chunk reads as wide text; if one does it is read
+// again and judged on its whole bytes. A real binary (NULs on both parities) is still skipped, however large, and one past the held-bytes ceiling stays skipped.
+test('a UTF-16 file under a binary-looking name whose wide text starts after the first 8,000 bytes is scanned like its text-named twin; a real binary is still skipped -- RED before 2026-11-18', () => {
+  const body = 'x' + '\u4e4e'.repeat(5000) + '\nid ' + KEY + '\n';
+  const wide = Buffer.from(body, 'utf16le');
+  const binary = Buffer.concat([Buffer.from([0x89, 0x50, 0x00, 0x00]), Buffer.alloc(20000, 0), Buffer.from(`id ${KEY}\n`, 'latin1'), Buffer.from([0x00, 0x01, 0x00]), Buffer.alloc(20000, 7)]);
+  const r = run(repo([{ 'late.bin': wide, 'twin.txt': Buffer.concat([wide, Buffer.from([0x20, 0x00])]), 'real.png': binary }]));
+  assert.strictEqual(r.code, 1, r.out + r.err);
+  assert.match(r.out, /tree "late\.bin":2 aws-access-key-id/, 'the binary-named wide file is scanned: ' + r.out);
+  assert.match(r.out, /tree "twin\.txt":2 aws-access-key-id/, 'its text-named twin is, as before');
+  assert.doesNotMatch(r.out, /real\.png/, 'a real binary with NULs on both parities stays out of the text scan');
+  assert.ok(!r.out.includes(KEY) && !r.err.includes(KEY), 'the value is never printed');
+});
+
 // t340 (CodeRabbit, on CoalWash's copy): the NUL-removed reading de-duplicated each hit by scanning every hit before it, so one line of many
 // distinct key-shaped tokens with NULs between their characters cost the square of their count (20,000 tokens: 11.8 s on one machine; 40,000:
 // 41.6 s). With a Set it is linear (20,000: about 0.1 s). No wall-clock assertion (t342 F6, 2026-11-17: a loaded runner can pass a 2 s bound slowly): the scan runs in a CHILD with a heap cap and a
