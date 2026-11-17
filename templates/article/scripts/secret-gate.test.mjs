@@ -514,7 +514,9 @@ fs.writeFileSync(FAKE_CATFILE, [
   "if (mode === 'nonl') out = Buffer.concat([real.subarray(0, firstEnd - 1), real.subarray(firstEnd)]);",
   // huge: the first header declares 300,000,000 bytes (past the 256 MiB ceiling) and the stream then ends: only the header check can answer it by name
   "if (mode === 'huge') out = Buffer.concat([Buffer.from(head[0] + ' blob 300000000' + String.fromCharCode(10), 'latin1'), Buffer.from('xx')]);",
-  "process.stdout.write(out, () => { process.exitCode = mode === 'exit1' ? 1 : 0; });",
+  // rechunk: the whole, correct answer, handed over in pieces of FAKE_CHUNK bytes a millisecond apart, so the gate sees pieces of a size git does not choose (18b: the verdict must not depend on them)
+  "if (mode === 'rechunk') { const n = Number(process.env.FAKE_CHUNK); (async () => { for (let i = 0; i < out.length; i += n) { process.stdout.write(out.subarray(i, i + n)); await new Promise((r) => setTimeout(r, 1)); } })(); }",
+  "else process.stdout.write(out, () => { process.exitCode = mode === 'exit1' ? 1 : 0; });",
 ].join('\n'));
 const FAKE_PRELOAD = path.join(SANDBOX, 'fake-catfile.preload.mjs');
 fs.writeFileSync(FAKE_PRELOAD, [
@@ -902,10 +904,9 @@ test('a UTF-16 file under a binary-looking name whose wide text starts after the
 });
 
 // t343 F5, the 18a reviewer's surviving mutants (2026-11-18): the first test above fits in ONE chunk, so a gate that never asked the chunks after the drop (nochunk) or never read a flagged blob again
-// (noreread) passed it. Two files past 64 KiB, each of which only one path can find: LATE has its only wide-reading bytes after the first chunk (nochunk and noreread miss it), FIRST has them from byte 8,000,
-// inside the first chunk, then 80 KB of NUL-free CJK (a gate that judges the first chunk on its first 8,000 bytes alone, "prefix", and noreread miss it). The reviewer's third mutant, "notail" (also asking the
-// part of the first chunk past the prefix), is EQUIVALENT: the drop decision already judges all the bytes the first pieces hold, and a blob read again is kept only when its WHOLE bytes read wide, so the check
-// changed no outcome; it was removed (18b). Each file is named .bin and holds the key on line 2.
+// (noreread) passed it. Two files past 64 KiB, each of which only one path can find: LATE has its only wide-reading bytes after the first chunk, FIRST has them from byte 8,000, inside the first chunk, then
+// 80 KB of NUL-free CJK (a first-chunk decision judged on its first 8,000 bytes alone, "prefix", misses it). The 18b bounce replaced the per-chunk check by totals over the whole blob; the tests below it
+// (the TAIL and SPLIT witnesses, the oracle, the chunk sizes) pin that. Each file here is named .bin and holds the key on line 2.
 test('a binary-named UTF-16 file past 64 KiB is scanned whether its wide-reading bytes sit in a later chunk or in the first chunk past the prefix -- RED against the nochunk, noreread and prefix mutants', () => {
   const utf16 = (s) => Buffer.from(s, 'utf16le');
   const CJK = (n) => '\u4e4e'.repeat(n);
@@ -917,6 +918,79 @@ test('a binary-named UTF-16 file past 64 KiB is scanned whether its wide-reading
   assert.match(r.out, /tree "late-chunk\.bin":2 aws-access-key-id/, 'the key in a LATER chunk is found: ' + r.out);
   assert.match(r.out, /tree "first-chunk\.bin":2 aws-access-key-id/, 'the key in the first chunk past the prefix is found: ' + r.out);
   assert.ok(!r.out.includes(KEY) && !r.err.includes(KEY), 'the value is never printed');
+});
+
+// 18b (HIGH): the verdict on a binary-named blob must equal judging the WHOLE file, whatever the chunk sizes. The two reviewer witnesses, rebuilt here with this file's KEY, each defeat every per-piece form of the
+// check: TAIL has 12 NULs on even positions in its first 8,000 bytes and the key line (25 odd NULs) in the first chunk past them, then one weak odd NUL every 6,200 bytes, so no piece reads wide and the whole file
+// does; SPLIT has the key line cut across the 128 KiB chunk edge with each half weakened (a few NULs on each side), again wide only in total. The third test is the oracle: blobs around the rule's thresholds,
+// the gate's verdict compared with scanning the whole buffer (looksBinary and wideKinds, then scanBytes), so a clever per-piece rule cannot pass by matching two shapes.
+const WIT_SIZE = 400000;
+const witTail = () => {
+  const b = Buffer.alloc(WIT_SIZE, 0x41);
+  for (let i = 1; i <= 12; i++) b[i * 100 + (i % 2) * 2] = 0;
+  Buffer.from('\nid ' + KEY + '\n', 'utf16le').copy(b, 8000);
+  for (let p = 70000; p + 1 < WIT_SIZE; p += 6200) { b[p] = 0x7a; b[p + 1] = 0; }
+  return b;
+};
+const witSplit = () => {
+  const b = Buffer.alloc(WIT_SIZE, 0x41);
+  b[100] = 0;
+  for (const p of [130800, 130804, 130810, 130814, 131300, 131304, 131310, 131314]) b[p] = 0;
+  Buffer.from('\nid ' + KEY + '\n', 'utf16le').copy(b, 131048);
+  for (let p = 196608; p + 1 < 393216; p += 6000) { b[p] = 0x7a; b[p + 1] = 0; }
+  return b;
+};
+test('a binary-named blob whose wide-text evidence is split across pieces, each piece reading as binary, is judged on the whole file: the reviewer\'s TAIL and SPLIT witnesses are found -- RED before 18b', async () => {
+  const { wideKinds, looksBinary } = await import(pathToFileURL(LIB).href);
+  for (const [name, blob] of [['tail.bin', witTail()], ['split.bin', witSplit()]]) {
+    assert.ok(looksBinary(blob) && wideKinds(blob).length > 0, name + ': the whole file reads as wide text (the premise)');
+    for (let off = 0; off < blob.length; off += 65536) assert.strictEqual(wideKinds(blob.subarray(off, off + 65536)).length, 0, name + ': no 64 KiB piece reads wide on its own');
+    const r = run(repo([{ [name]: blob }]), [], '', {}, 120000);
+    assert.strictEqual(r.code, 1, name + ': ' + r.out + r.err);
+    assert.match(r.out, new RegExp('tree "' + name.replace('.', '\\.') + '":2 aws-access-key-id'), name + ' is scanned: ' + r.out);
+    assert.ok(!r.out.includes(KEY) && !r.err.includes(KEY), 'the value is never printed');
+  }
+});
+
+test('the gate\'s verdict on a binary-named blob equals the whole-buffer verdict across the wide-text rule\'s thresholds and chunk edges (the oracle) -- RED before 18b', async () => {
+  const { wideKinds, looksBinary, scanBytes } = await import(pathToFileURL(LIB).href);
+  const make = (opposing, keyAt, later) => {
+    const b = Buffer.alloc(300000, 0x41);
+    b[3] = 0; // one NUL in the prefix: git's rule calls the blob binary
+    for (let i = 0; i < opposing; i++) b[200 + i * 100 + (i % 2) * 2] = 0; // even positions, split between offsets 0 and 2 mod 4
+    Buffer.from('\nid ' + KEY + '\n', 'utf16le').copy(b, keyAt);
+    for (let k = 0; k < later; k++) { const p = 70000 + k * 6200; b[p] = 0x7a; b[p + 1] = 0; }
+    return b;
+  };
+  const files = {};
+  for (const opposing of [0, 7, 11, 12]) for (const keyAt of [8000, 131048]) for (const later of [0, 37]) files[`b-${opposing}-${keyAt}-${later}.bin`] = make(opposing, keyAt, later);
+  const verdict = (b) => (looksBinary(b) && !wideKinds(b).length ? false : scanBytes(b, 'x').length > 0);
+  const names = Object.keys(files);
+  const outs = {};
+  for (let i = 0; i < names.length; i += 4) { // four blobs a run: the gate lists at most five matches
+    const group = names.slice(i, i + 4);
+    const out = run(repo([Object.fromEntries(group.map((n) => [n, files[n]]))]), [], '', {}, 240000).out;
+    for (const n of group) outs[n] = out;
+  }
+  let flagged = 0;
+  for (const [name, b] of Object.entries(files)) {
+    const found = new RegExp('tree "' + name.replace(/[.]/g, '\\.') + '":').test(outs[name]);
+    assert.strictEqual(found, verdict(b), name + ': the gate says ' + (found ? 'found' : 'skipped') + ', the whole-buffer verdict says ' + (verdict(b) ? 'found' : 'skipped'));
+    if (verdict(b)) flagged++;
+  }
+  assert.ok(flagged > 0 && flagged < Object.keys(files).length, 'the grid has both outcomes, so the comparison tests something: ' + flagged);
+});
+
+// 18b: the verdict must not depend on the size of the pieces the stream arrives in. The same two witnesses, with the cat-file answer handed over in pieces of 1,001, 4,093 and 16,385 bytes (none a multiple of
+// four, so a piece starts at a different position mod 4 each time): a gate that counted NULs by position inside each piece instead of by absolute offset would split the evidence between the two parities and miss it.
+test('the two witnesses are found whatever size the cat-file pieces arrive in (absolute offsets, not per-piece positions) -- RED against a per-piece position count', () => {
+  for (const chunk of [1001, 4093, 16385]) {
+    for (const [name, blob] of [['tail.bin', witTail()], ['split.bin', witSplit()]]) {
+      const r = run(repo([{ [name]: blob }]), [], '', { NODE_OPTIONS: `--import ${pathToFileURL(FAKE_PRELOAD).href}`, FAKE_CATFILE_MODE: 'rechunk', FAKE_CHUNK: String(chunk) }, 180000);
+      assert.strictEqual(r.code, 1, `${name} in pieces of ${chunk}: ${r.out}${r.err}`);
+      assert.match(r.out, new RegExp('tree "' + name.replace('.', '\\.') + '":2 aws-access-key-id'), `${name} in pieces of ${chunk}: ${r.out}`);
+    }
+  }
 });
 
 // t340 (CodeRabbit, on CoalWash's copy): the NUL-removed reading de-duplicated each hit by scanning every hit before it, so one line of many

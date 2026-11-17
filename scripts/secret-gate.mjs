@@ -76,10 +76,26 @@ const BINARY_BLOB = Symbol('binary');
 const HELD_CEILING = 256 << 20;
 const heldCeiling = () => { const n = Number(process.env.SECRET_GATE_MAX_HELD_BYTES); return Number.isSafeInteger(n) && n > 0 && n < HELD_CEILING ? n : HELD_CEILING; };
 const PROBE_BYTES = 8000; // the scanner's looksBinary reads this many first bytes
-// A probed blob dropped as binary by its first bytes is not final (t343 F5, 2026-11-18): the prefix cannot see wide text that starts later (an ASCII character, then 8 KB of CJK, then a key), so every chunk
-// that streams past after the drop is asked the scanner's wide-text rule (isWide), and a blob where any chunk reads wide is answered { rereadBytes: size } instead of BINARY_BLOB. The caller reads that one blob
-// again, held, and decides on the WHOLE bytes. Memory stays bounded: nothing is held for a blob that never reads wide.
-function readBlobs(shas, probe, looksBinary, nameOf = new Map(), isWide = () => false) {
+// A probed blob dropped as binary by its first bytes is not final (t343 F5, 2026-11-18; the 18b bounce made it a whole-file verdict). The prefix cannot see wide text that starts later, and no single piece of the
+// stream can be trusted alone either: the scanner's wide-text rule is a threshold on TOTALS (NULs by byte position mod 4: at least WIDE_MIN_NULS, and at least WIDE_SKEW times the others), so evidence split
+// across pieces, each under the threshold, reads wide only in sum. So every probed blob keeps four counters, NULs by ABSOLUTE offset mod 4, over every byte it streams (constant memory, whatever the chunk
+// sizes), and the rule is applied once to the totals when the blob ends: a dropped blob whose totals read wide is answered { rereadBytes: size } instead of BINARY_BLOB, and the caller reads that one blob again,
+// held, and judges it on its whole bytes. The verdict equals judging the whole file; nothing is held for a blob that never reads wide. The rule restated here is wideKinds' count test in secret-scan.mjs
+// (the Bankfire source, its own constants); a test compares this verdict with the scanner's on the whole buffer.
+const WIDE_MIN_NULS = 12;
+const WIDE_SKEW = 4;
+const wideByCounts = (z) => {
+  const even = z[0] + z[2];
+  const odd = z[1] + z[3];
+  if (Math.max(even, odd) >= WIDE_MIN_NULS && Math.max(even, odd) >= WIDE_SKEW * Math.min(even, odd)) return true;
+  for (let k = 0; k < 4; k++) {
+    const high = Math.min(z[(k + 1) & 3], z[(k + 2) & 3], z[(k + 3) & 3]);
+    if (high >= WIDE_MIN_NULS && high >= WIDE_SKEW * z[k]) return true;
+  }
+  return false;
+};
+const countNuls = (z, piece, offset) => { for (let i = 0; i < piece.length; i++) if (piece[i] === 0) z[(offset + i) & 3]++; };
+function readBlobs(shas, probe, looksBinary, nameOf = new Map()) {
   const ids = [...new Set(shas)];
   const ceiling = heldCeiling();
   let held = 0;
@@ -103,19 +119,20 @@ function readBlobs(shas, probe, looksBinary, nameOf = new Map(), isWide = () => 
           const piece = data.subarray(pos, pos + take);
           pos += take;
           cur.left -= take;
-          if (cur.keep === false) { if (!cur.wide && isWide(piece)) cur.wide = true; continue; }
+          if (cur.z) countNuls(cur.z, piece, cur.size - cur.left - take); // the piece's first byte sits at blob offset size - (left + take)
+          if (cur.keep === false) continue;
           cur.parts.push(piece);
           cur.have += take;
           held += take;
           if (held > ceiling) return tooBig(cur.id, 'is too large to hold');
           if (cur.keep === null && (cur.have >= PROBE_BYTES || cur.left === 0)) {
             cur.keep = !looksBinary(Buffer.concat(cur.parts));
-            if (!cur.keep) { held -= cur.have; cur.parts = []; }
+            if (!cur.keep) { held -= cur.have; cur.parts = []; } else cur.z = null; // a blob kept as text needs no counters
           }
         } else if (cur) {
           if (data[pos] !== 10) return stop('cat-file output was malformed');
           pos++;
-          let whole = cur.wide ? { rereadBytes: cur.size } : BINARY_BLOB;
+          let whole = cur.z && cur.keep === false && wideByCounts(cur.z) ? { rereadBytes: cur.size } : BINARY_BLOB;
           if (cur.keep !== false) { try { whole = Buffer.concat(cur.parts); } catch { return tooBig(cur.id, 'could not be joined'); } }
           out.set(cur.id, whole);
           cur = null;
@@ -130,7 +147,7 @@ function readBlobs(shas, probe, looksBinary, nameOf = new Map(), isWide = () => 
           const size = Number(parts[2]);
           if (!Number.isSafeInteger(size) || size < 0) return stop('cat-file output was malformed');
           if (!probe.has(id) && held + size > ceiling) return tooBig(id, 'is too large to hold'); // a header already says it: refused before one byte is held
-          cur = { id, left: size, size, keep: probe.has(id) ? null : true, parts: [], have: 0, wide: false };
+          cur = { id, left: size, size, keep: probe.has(id) ? null : true, parts: [], have: 0, z: probe.has(id) ? [0, 0, 0, 0] : null };
         }
       }
     });
@@ -211,7 +228,7 @@ async function main() {
     const nameOf = new Map(wanted.map((e) => [e.sha, e.name]));
     const prefixBinary = (b) => scan.looksBinary(b) && !scan.wideKinds(b).length;
     try {
-      blobs = await readBlobs(wanted.map((e) => e.sha), probe, prefixBinary, nameOf, (b) => scan.wideKinds(b).length > 0);
+      blobs = await readBlobs(wanted.map((e) => e.sha), probe, prefixBinary, nameOf);
       // a blob some chunk of which reads as wide text is read again, one at a time, and judged on its whole bytes; one past the held-bytes ceiling stays skipped, as it was before (it cannot be held)
       for (const [id, v] of [...blobs]) {
         if (!v || v === BINARY_BLOB || v.rereadBytes === undefined) continue;
