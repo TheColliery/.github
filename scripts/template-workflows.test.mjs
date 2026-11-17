@@ -1557,7 +1557,7 @@ const readText = (rel) => fs.readFileSync(path.join(ROOT, ...rel.split('/')), 'u
 // The canon secret gate keeps GIT_INDEX_FILE BY DESIGN (commit mode reads the commit's own index, which a hook names through that variable), and GIT_INDEX_FILE is outside the three
 // GIT_ names the rule allows, so its two git spawns are findings the census is right to give. It is the ONE pinned carrier, at this blob; any edit spends the pin. The Bankfire source test was
 // the second until Bankfire returned gitEnv()'s literal alone (bd328f2e, 2026-10-09): it now passes the census with no pin, like the gate test.
-const GATE_PIN = { rel: 'scripts/secret-gate.mjs', blob: '33e8a4ae82683316832bbdc1100a56eabc65ee62', why: 'canon secret gate: keeps GIT_INDEX_FILE and GIT_CEILING_DIRECTORIES by design (its gitEnv() copies process.env minus the other GIT_ names); the census counts gitIn\'s execFileSync, the one finding, and the streamed cat-file child (started by spawn, which the census does not count, its rule 5) takes the same gitEnv()' };
+const GATE_PIN = { rel: 'scripts/secret-gate.mjs', blob: '0dd7e4e1f3ce9cf64a9a787836cf82ed47f95d44', why: 'canon secret gate: keeps GIT_INDEX_FILE and GIT_CEILING_DIRECTORIES by design (its gitEnv() copies process.env minus the other GIT_ names); the census counts gitIn\'s execFileSync, the one finding, and the streamed cat-file child (started by spawn, which the census does not count, its rule 5) takes the same gitEnv()' };
 
 test('the canon secret-gate test passes the canon census with no pin: it builds every git environment from named keys, in all three places it lives -- RED before 08d D3', () => {
   for (const dir of CARRIER_DIRS) {
@@ -1607,12 +1607,12 @@ test('the canon release-notes.mjs and its test (the list\'s P1 and P2) read clea
   }
 });
 
-test('the three places a secret-scan or secret-gate file lives hold the same bytes, and the secret-scan test is the Bankfire source\'s (blob f420af29, Bankfire 557a2e6): the scanner parity contract -- RED before 08d D3', () => {
+test('the three places a secret-scan or secret-gate file lives hold the same bytes, and the secret-scan test is the Bankfire source\'s (blob ff837c49, Bankfire 557a2e6): the scanner parity contract -- RED before 08d D3', () => {
   for (const name of ['secret-scan.test.mjs', 'secret-gate.test.mjs', 'secret-gate.mjs']) {
     const blobs = CARRIER_DIRS.map((d) => gitBlobId(readText(`${d}/${name}`)));
     assert.equal(new Set(blobs).size, 1, `${name} differs between the three places: ${blobs.join(' ')}`);
   }
-  assert.ok(gitBlobId(readText('scripts/secret-scan.test.mjs')).startsWith('f420af29'), 'the Bankfire source test moved: re-copy it byte for byte into the three places (scripts/scanner-parity.mjs reads it)');
+  assert.ok(gitBlobId(readText('scripts/secret-scan.test.mjs')).startsWith('ff837c49'), 'the Bankfire source test moved: re-copy it byte for byte into the three places (scripts/scanner-parity.mjs reads it)');
 });
 
 test('the public hooks say what the secret scan does NOT catch, including a token header with a scheme word: the answer to CoalMine LOW-1 -- the scan-limit sentence', () => {
@@ -2126,7 +2126,7 @@ const { scanChildEnv } = await import(pathToFileURL(path.join(TEMPLATES, 'overla
 const { collectScriptsMjs } = await import(pathToFileURL(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', 'git-env-census.mjs')).href);
 const SCANNER_WHY = 'byte-equal copy of the Bankfire-sourced scanner gate test: its scratch repo gets HOME and USERPROFILE only. Its fix is made at the Bankfire source (the secret-scan test already points TEMP, TMP and TMPDIR at the sandbox since Bankfire 557a2e6) and re-copied into all three places.';
 const CHILD_ENV_PINS = [
-  ['scripts/secret-gate.test.mjs', 'e546af72e42436d164b888d8da172aebce1afb2c'], ['templates/article/scripts/secret-gate.test.mjs', 'e546af72e42436d164b888d8da172aebce1afb2c'], ['templates/published-code/scripts/secret-gate.test.mjs', 'e546af72e42436d164b888d8da172aebce1afb2c'],
+  ['scripts/secret-gate.test.mjs', '77eeb1260f1b28aeb4f3fa97173e2809b85e34b0'], ['templates/article/scripts/secret-gate.test.mjs', '77eeb1260f1b28aeb4f3fa97173e2809b85e34b0'], ['templates/published-code/scripts/secret-gate.test.mjs', '77eeb1260f1b28aeb4f3fa97173e2809b85e34b0'],
 ].map(([rel, blob]) => ({ rel, blob, why: SCANNER_WHY }));
 function childEnvFiles() {
   const files = [];

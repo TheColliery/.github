@@ -65,3 +65,18 @@ test('each template hook says commit mode scans the staged tree, not the tracked
     assert.match(hook, /pre-commit scans the staged tree/, k);
   }
 });
+
+// 2026-11-17 (c179): the two sites CodeQL js/incomplete-sanitization reported in the canon scanner were the trailing-TAB replace of a `+++` path. The behaviour is unchanged (a name with a space ends in one TAB
+// that is not part of the name, and a name that ends in a real TAB is written \\t by git), so the red is the static class: no regular-expression replace of a trailing TAB is left, and the helper that replaced it
+// still drops exactly one. The positive control shows the check reads the shape it forbids.
+test('the scanner drops the trailing TAB of a +++ path without a regular-expression replace, and drops exactly one -- RED before 2026-11-17', async () => {
+  const text = read('scripts/lib/secret-scan.mjs');
+  const SHAPE = /\.replace\(\/\\t\$\/,/;
+  assert.ok(SHAPE.test("l.slice(4).replace(/\\t$/, '')"), 'positive control');
+  assert.ok(!SHAPE.test(text), 'a regular-expression replace of a trailing TAB is back in the scanner');
+  const { scanPatch } = await import(new URL('./lib/secret-scan.mjs', import.meta.url).href);
+  const key = 'gh' + 'p_' + 'aB3dE5gH7jK9mN1pQ3sT5vX7zA9cD1fG3hJ5';
+  const patch = ['diff --git a/my file.txt b/my file.txt', '--- a/my file.txt\t', '+++ b/my file.txt\t', '@@ -0,0 +1 @@', `+token ${key}`, ''].join('\n');
+  const hits = scanPatch(patch);
+  assert.deepStrictEqual(hits.map((h) => h.file), ['my file.txt'], 'the one TAB git writes after a name with a space is not part of the name');
+});
