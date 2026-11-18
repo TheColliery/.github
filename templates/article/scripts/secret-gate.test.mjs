@@ -515,6 +515,7 @@ fs.writeFileSync(FAKE_CATFILE, [
   // huge: the first header declares 300,000,000 bytes (past the 256 MiB ceiling) and the stream then ends: only the header check can answer it by name
   "if (mode === 'huge') out = Buffer.concat([Buffer.from(head[0] + ' blob 300000000' + String.fromCharCode(10), 'latin1'), Buffer.from('xx')]);",
   // rechunk: the whole, correct answer, handed over in pieces of FAKE_CHUNK bytes a millisecond apart, so the gate sees pieces of a size git does not choose (18b: the verdict must not depend on them)
+  "if (process.env.FAKE_SPAWN_LOG) fs.appendFileSync(process.env.FAKE_SPAWN_LOG, 'cat-file' + String.fromCharCode(10));",
   "if (mode === 'rechunk') { const n = Number(process.env.FAKE_CHUNK); (async () => { for (let i = 0; i < out.length; i += n) { process.stdout.write(out.subarray(i, i + n)); await new Promise((r) => setTimeout(r, 1)); } })(); }",
   "else process.stdout.write(out, () => { process.exitCode = mode === 'exit1' ? 1 : 0; });",
 ].join('\n'));
@@ -932,6 +933,14 @@ const witTail = () => {
   for (let p = 70000; p + 1 < WIT_SIZE; p += 6200) { b[p] = 0x7a; b[p + 1] = 0; }
   return b;
 };
+const witPredrop = () => {
+  const b = Buffer.alloc(WIT_SIZE, 0x41);
+  for (let i = 1; i <= 12; i++) b[i * 100 + (i % 2) * 2] = 0; // 12 NULs on even positions, split between offsets 0 and 2 mod 4 so no UTF-32 reading
+  Buffer.from('\nid ' + KEY + '\n', 'utf16le').copy(b, 8000); // 25 on odd positions
+  for (let k = 0; k < 15; k++) { b[9000 + k * 200] = 0x7a; b[9001 + k * 200] = 0; } // 15 more, all before the first piece ends
+  for (let k = 0; k < 11; k++) { const p = 70000 + k * 5000; b[p] = 0x7a; b[p + 1] = 0; } // 11 after it: under the threshold alone
+  return b;
+};
 const witSplit = () => {
   const b = Buffer.alloc(WIT_SIZE, 0x41);
   b[100] = 0;
@@ -942,7 +951,7 @@ const witSplit = () => {
 };
 test('a binary-named blob whose wide-text evidence is split across pieces, each piece reading as binary, is judged on the whole file: the reviewer\'s TAIL and SPLIT witnesses are found -- RED before 18b', async () => {
   const { wideKinds, looksBinary } = await import(pathToFileURL(LIB).href);
-  for (const [name, blob] of [['tail.bin', witTail()], ['split.bin', witSplit()]]) {
+  for (const [name, blob] of [['tail.bin', witTail()], ['split.bin', witSplit()], ['predrop.bin', witPredrop()]]) {
     assert.ok(looksBinary(blob) && wideKinds(blob).length > 0, name + ': the whole file reads as wide text (the premise)');
     for (let off = 0; off < blob.length; off += 65536) assert.strictEqual(wideKinds(blob.subarray(off, off + 65536)).length, 0, name + ': no 64 KiB piece reads wide on its own');
     const r = run(repo([{ [name]: blob }]), [], '', {}, 120000);
@@ -985,12 +994,30 @@ test('the gate\'s verdict on a binary-named blob equals the whole-buffer verdict
 // four, so a piece starts at a different position mod 4 each time): a gate that counted NULs by position inside each piece instead of by absolute offset would split the evidence between the two parities and miss it.
 test('the two witnesses are found whatever size the cat-file pieces arrive in (absolute offsets, not per-piece positions) -- RED against a per-piece position count', () => {
   for (const chunk of [1001, 4093, 16385]) {
-    for (const [name, blob] of [['tail.bin', witTail()], ['split.bin', witSplit()]]) {
+    for (const [name, blob] of [['tail.bin', witTail()], ['split.bin', witSplit()], ['predrop.bin', witPredrop()]]) {
       const r = run(repo([{ [name]: blob }]), [], '', { NODE_OPTIONS: `--import ${pathToFileURL(FAKE_PRELOAD).href}`, FAKE_CATFILE_MODE: 'rechunk', FAKE_CHUNK: String(chunk) }, 180000);
       assert.strictEqual(r.code, 1, `${name} in pieces of ${chunk}: ${r.out}${r.err}`);
       assert.match(r.out, new RegExp('tree "' + name.replace('.', '\\.') + '":2 aws-access-key-id'), `${name} in pieces of ${chunk}: ${r.out}`);
     }
   }
+});
+
+// 18c (LOW): how many blobs are read AGAIN is pinned, so a rule that flags too much (a skew of 1) costs a test and not just time. Each gate run's cat-file children are counted through the fake's log: a tree of a
+// real binary (NULs on both parities) is read once; a tree holding the wide-in-sum witness is read twice (the stream, then that one blob again).
+test('a real binary is never read twice and a blob wide only in sum is read exactly twice (the re-read count) -- RED against a rule that flags too much', () => {
+  const countReads = (files) => {
+    const log = path.join(SANDBOX, 'spawn-' + Math.random().toString(36).slice(2) + '.log');
+    const r = run(repo([files]), [], '', { NODE_OPTIONS: `--import ${pathToFileURL(FAKE_PRELOAD).href}`, FAKE_CATFILE_MODE: 'plain', FAKE_SPAWN_LOG: log }, 120000);
+    const n = fs.existsSync(log) ? fs.readFileSync(log, 'utf8').split('\n').filter(Boolean).length : 0;
+    return { r, n };
+  };
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x00, 0x00]), Buffer.alloc(30000, 0), Buffer.from('id ' + KEY + '\n', 'latin1'), Buffer.from([0x00, 0x01, 0x00]), Buffer.alloc(30000, 7), Buffer.from([0, 3, 0, 5, 0, 0, 0, 9])]);
+  const plain = countReads({ 'real.png': png });
+  assert.strictEqual(plain.r.code, 0, plain.r.out + plain.r.err);
+  assert.strictEqual(plain.n, 1, 'a real binary is read once');
+  const wide = countReads({ 'predrop.bin': witPredrop() });
+  assert.strictEqual(wide.r.code, 1, wide.r.out + wide.r.err);
+  assert.strictEqual(wide.n, 2, 'a blob wide only in sum is read twice');
 });
 
 // t340 (CodeRabbit, on CoalWash's copy): the NUL-removed reading de-duplicated each hit by scanning every hit before it, so one line of many
