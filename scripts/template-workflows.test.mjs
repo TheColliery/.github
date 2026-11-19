@@ -1329,9 +1329,12 @@ test('the wave-run row names the TODO rule, the process.exitCode wiring and the 
   assert.match(wf, /^ {6}matrix:\n {8}os: \[ubuntu-latest, macos-latest, windows-latest\]$/m, 'the gate job runs on a matrix of the three runners');
   assert.match(wf, /- name: Unit-test every scripts\/\*\.test\.mjs[^\n]*\n {8}shell: bash\n/, 'the unit-test step is a bash loop, so it names its shell for the Windows leg');
   assert.match(wf, /^ {4}runs-on: \$\{\{ matrix\.os \}\}$/m);
-  assert.match(wf, /^ {4}name: \$\{\{ matrix\.os == 'ubuntu-latest' && 'verify' \|\| format\('verify \(\{0\}\)', matrix\.os\) \}\}$/m, 'the ubuntu leg keeps the check name verify');
+  // 19c: the Node 24 legs join; a Node 22 leg keeps its name (the ubuntu one is the required check `verify`), a Node 24 leg is `verify (<os>, node 24)`
+  assert.match(wf, /^ {8}os: \[ubuntu-latest, macos-latest, windows-latest\]\n {8}node: \[22, 24\]$/m, 'every runner runs Node 22 and Node 24');
+  assert.match(wf, /^ {10}node-version: \$\{\{ matrix\.node \}\}$/m, 'setup-node takes the leg\'s Node');
+  assert.match(wf, /^ {4}name: \$\{\{ matrix\.node == 24 && format\('verify \(\{0\}, node 24\)', matrix\.os\) \|\| \(matrix\.os == 'ubuntu-latest' && 'verify' \|\| format\('verify \(\{0\}\)', matrix\.os\)\) \}\}$/m, 'the ubuntu leg on Node 22 keeps the check name verify');
   for (const step of ['Secret scan', 'Doc references', 'Verify the landing']) {
-    assert.match(wf, new RegExp('- name: ' + step + '[^\\n]*\\n(?: {8}[^\\n]*\\n)*? {8}if: matrix\\.os == \'ubuntu-latest\''), step + ' runs on the ubuntu leg only');
+    assert.match(wf, new RegExp('- name: ' + step + '[^\\n]*\\n(?: {8}[^\\n]*\\n)*? {8}if: matrix\\.os == \'ubuntu-latest\' && matrix\\.node == 22$', 'm'), step + ' runs on the ubuntu leg on Node 22 only');
   }
 });
 

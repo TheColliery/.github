@@ -27,11 +27,15 @@ jobs:
     # The macOS leg (order 09f, 2026-10-09; node/runtime.md section 6): the canon's tests ran on ubuntu alone, so six rooms' main went red on macOS from a canon test the canon could not see.
     # The Windows leg joins in order 09g (node/runtime.md section 6 asks for all three; the box that writes the canon is Windows). The ubuntu leg keeps the check name `verify`; a leg that is not
     # ubuntu is named `verify (<os>)`. Only the unit tests run on every leg: the three steps after them read the repo, not the OS.
-    name: ${{ matrix.os == 'ubuntu-latest' && 'verify' || format('verify ({0})', matrix.os) }}
+    # The Node 24 legs join in order 19c (node/runtime.md section 6, the matrix [22, 24]; the rooms' own CI already ran the copies on Node 24 on all three systems). The images behind the three
+    # -latest labels (ubuntu-24.04, macOS-26-arm64, windows-2025-vs2026) cache Node 22.23.4 and 24.22.2 (actions/runner-images readmes, read 2026-11-19), so `24` resolves without a download.
+    # A Node 22 leg keeps its name (the required check `verify` and its siblings); a Node 24 leg is `verify (<os>, node 24)`.
+    name: ${{ matrix.node == 24 && format('verify ({0}, node 24)', matrix.os) || (matrix.os == 'ubuntu-latest' && 'verify' || format('verify ({0})', matrix.os)) }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [22, 24]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15 # testing.md: every run has a finite clock; a room re-sizes this from its own measured suite time
     steps:
@@ -45,7 +49,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: ${{ matrix.node }}
 
       - name: Unit-test every scripts/*.test.mjs (enumerated, fails loud on a missing file)
         shell: bash
@@ -99,13 +103,13 @@ jobs:
                       templates/overlay-coal-skill/scripts/prune-release-zips.test.mjs
 
       - name: Secret scan (the tracked tree; the pushed range runs in the pre-push hook — UMB-282 (a))
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 22
         run: node scripts/secret-gate.mjs
 
       - name: Doc references (every markdown link resolves — UMB-057)
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 22
         run: node scripts/doc-refs.mjs
 
       - name: Verify the landing (no-Thai · org-row · dated)
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 22
         run: node scripts/verify-landing.mjs
