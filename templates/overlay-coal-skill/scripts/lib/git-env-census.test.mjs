@@ -184,8 +184,10 @@ test('a helper with a bare return, or one whose body can end without returning, 
     'function mk() { if (process.argv[2]) return gitEnv(); }',
     'function mk() { if (process.argv[2]) return; return gitEnv(); }',
     'const mk = () => { if (process.argv[2]) return gitEnv(); };',
+    'function mk() {\n  return\n  gitEnv();\n}', // t346 F15: a line break after return ends the statement (ASI), so mk returns undefined
+    'const mk = () => {\n  return\n  {};\n};',
   ]) assert.ok(scan(head + fn + '\n' + call).findings.length >= 1, `passed: ${fn}`);
-  for (const fn of ['function mk() { return gitEnv(); }', 'function mk() { if (process.argv[2]) return gitEnv(); return gitEnv(); }', 'const mk = () => gitEnv();']) {
+  for (const fn of ['function mk() { return gitEnv(); }', 'function mk() { if (process.argv[2]) return gitEnv(); return gitEnv(); }', 'const mk = () => gitEnv();', 'function mk() {\n  return gitEnv(\n  );\n}']) {
     const r = scan(head + fn + '\n' + call);
     assert.deepEqual([r.findings, r.safe], [[], 1], `refused: ${fn}`);
   }
