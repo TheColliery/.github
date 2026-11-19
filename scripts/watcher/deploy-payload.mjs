@@ -26,7 +26,13 @@ export function loadInstance(instance, dir = HERE) {
   return { 'worker.mjs': lf(path.join(dir, 'worker.mjs')), 'watcher.mjs': lf(path.join(dir, 'watcher.mjs')), 'sources.mjs': lf(path.join(dir, 'sources', instance + '.mjs')) };
 }
 
-export function buildPayload({ files, name, from, cron = '17 * * * *', kvId = null }) {
+// server: the Cloudflare MCP server that runs the payload, by name (20a). 'claude-ai', the claude.ai Cloudflare connector, takes the upload with contentType and rawBody (main's Coal
+// redeploy, 2026-11-20); 'cloudflare-api', the Cloudflare API MCP server, needed the same Content-Type in headers too (the LLM chief's Kolwen redeploy). createKv: a missing KV
+// namespace is created only when asked; by default it answers "nothing written", so a run on the wrong account or under a drifted name mints no second, empty state store.
+export const SERVERS = ['claude-ai', 'cloudflare-api'];
+export function buildPayload({ files, name, from, cron = '17 * * * *', kvId = null, server = 'claude-ai', createKv = false }) {
+  if (!SERVERS.includes(server)) throw new Error('server must be claude-ai or cloudflare-api');
+  if (typeof createKv !== 'boolean') throw new Error('createKv must be true or false');
   if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(name ?? '')) throw new Error('name must be a lowercase worker name (letters, digits, hyphens)');
   if (!/^(\S+\s+){4}\S+$/.test(cron ?? '') || /[^0-9*/,\-\sA-Za-z]/.test(cron)) throw new Error('cron must be five fields, for example "17 * * * *"');
   if (!/^[^\s@"'\\]+@[^\s@"'\\]+\.[^\s@"'\\]+$/.test(from ?? '')) throw new Error('from must be a sender address such as antenna-coal@your-domain');
@@ -36,6 +42,8 @@ export function buildPayload({ files, name, from, cron = '17 * * * *', kvId = nu
   const texts = ${JSON.stringify(files)};
   const expected = ${JSON.stringify(expected)};
   const NAME = ${JSON.stringify(name)};
+  const SERVER = ${JSON.stringify(server)};
+  const CREATE_KV = ${JSON.stringify(createKv)};
   const blobs = {};
   for (const [part, t] of Object.entries(texts)) {
     const bytes = new TextEncoder().encode(t);
@@ -54,6 +62,7 @@ export function buildPayload({ files, name, from, cron = '17 * * * *', kvId = nu
     const list = await cloudflare.request({ method: 'GET', path: acct + '/storage/kv/namespaces', query: { per_page: 100 } });
     const found = (list.result || []).find(n => n.title === NAME + '-state');
     if (found) kvId = found.id;
+    else if (!CREATE_KV) return { stage: 'no KV namespace "' + NAME + '-state" on this account, and createKv was not given: nothing written', blobs };
     else {
       const made = await cloudflare.request({ method: 'POST', path: acct + '/storage/kv/namespaces', body: { title: NAME + '-state' } });
       if (!made.success) return { stage: 'kv namespace not created', errors: made.errors, blobs };
@@ -76,7 +85,8 @@ export function buildPayload({ files, name, from, cron = '17 * * * *', kvId = nu
   const parts = ['--' + b, 'Content-Disposition: form-data; name="metadata"', 'Content-Type: application/json', '', JSON.stringify(metadata)];
   for (const [part, t] of Object.entries(texts)) parts.push('--' + b, 'Content-Disposition: form-data; name="' + part + '"; filename="' + part + '"', 'Content-Type: application/javascript+module', '', t);
   parts.push('--' + b + '--', '');
-  const up = await cloudflare.request({ method: 'PUT', path: acct + '/workers/scripts/' + NAME, contentType: 'multipart/form-data; boundary=' + b, body: parts.join('\\r\\n'), rawBody: true });
+  const ctype = 'multipart/form-data; boundary=' + b;
+  const up = await cloudflare.request({ method: 'PUT', path: acct + '/workers/scripts/' + NAME, contentType: ctype, ...(SERVER === 'cloudflare-api' ? { headers: { 'Content-Type': ctype } } : {}), body: parts.join('\\r\\n'), rawBody: true });
   const out = { blobs, kv: { reused }, upload: { ok: up.success, status: up.status, errors: up.errors } };
   if (!up.success) return out;
   const sch = await cloudflare.request({ method: 'PUT', path: acct + '/workers/scripts/' + NAME + '/schedules', body: [{ cron: ${JSON.stringify(cron)} }] });
@@ -91,10 +101,12 @@ export function buildPayload({ files, name, from, cron = '17 * * * *', kvId = nu
 }`;
 }
 
-const USAGE = `usage: node scripts/watcher/deploy-payload.mjs <instance> --from <sender> [--name <worker>] [--cron "<5 fields>"] [--kv-id <32 hex>] [--out <file>]
+const USAGE = `usage: node scripts/watcher/deploy-payload.mjs <instance> --from <sender> [--name <worker>] [--cron "<5 fields>"] [--kv-id <32 hex>] [--server claude-ai|cloudflare-api] [--create-kv] [--out <file>]
   Prints the body of the Cloudflare MCP execute call that deploys a change-watcher instance (the modules embedded, a git blob guard, the KV namespace
   found or created, the schedule set, workers.dev switched off, bindings and schedule read back). Instances: ${INSTANCES.join(', ')}.
   --name defaults to <instance>-change-watcher; --cron to "17 * * * *" (hourly). With --out the payload goes to that file and stdout carries one summary line.
+  --server names the MCP server that runs it: claude-ai (default, the claude.ai Cloudflare connector) or cloudflare-api (the Cloudflare API MCP server, which also needs the
+  upload's Content-Type in headers). --create-kv lets it create a missing <name>-state KV namespace; without it a missing one answers "nothing written".
   example: node scripts/watcher/deploy-payload.mjs kolwen --from antenna-llm@kolwen.com --out payload.js
   exit 0 done · 1 refused · 64 usage error`;
 
@@ -102,9 +114,10 @@ function main() {
   const args = process.argv.slice(2);
   if (args.includes('-h') || args.includes('--help')) { console.log(USAGE); return; }
   const opts = {}; let instance = null;
-  const flags = { '--from': 'from', '--name': 'name', '--cron': 'cron', '--kv-id': 'kvId', '--out': 'out' };
+  const flags = { '--from': 'from', '--name': 'name', '--cron': 'cron', '--kv-id': 'kvId', '--out': 'out', '--server': 'server' };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
+    if (a === '--create-kv') { opts.createKv = true; continue; }
     if (flags[a]) { opts[flags[a]] = args[++i]; if (opts[flags[a]] === undefined) { console.error(`deploy-payload: ${a} needs a value\n${USAGE}`); process.exitCode = 1; return; } }
     else if (a.startsWith('-')) { console.error(`deploy-payload: unknown flag ${a}\n${USAGE}`); process.exitCode = 1; return; }
     else if (instance === null) instance = a;
@@ -114,7 +127,7 @@ function main() {
   if (!opts.from) { console.error(`deploy-payload: --from <sender address> is required\n${USAGE}`); process.exitCode = 1; return; }
   try {
     const files = loadInstance(instance);
-    const code = buildPayload({ files, name: opts.name ?? `${instance}-change-watcher`, from: opts.from, cron: opts.cron, kvId: opts.kvId ?? null });
+    const code = buildPayload({ files, name: opts.name ?? `${instance}-change-watcher`, from: opts.from, cron: opts.cron, kvId: opts.kvId ?? null, server: opts.server ?? 'claude-ai', createKv: opts.createKv === true });
     if (opts.out) {
       fs.writeFileSync(opts.out, code, 'utf8');
       console.log(`deploy-payload: ${instance}, ${code.length} characters written to ${opts.out}; blob ids ${Object.entries(files).map(([k, t]) => `${k}=${gitBlobId(t)}`).join(' ')}`);

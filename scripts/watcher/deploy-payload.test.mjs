@@ -51,8 +51,8 @@ test('gitBlobId equals git hash-object for the same bytes (probed: skipped visib
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 
-test('the payload is one async arrow function that finds-or-creates the KV namespace, uploads the three modules, sets the schedule, switches workers.dev off and reads back', async () => {
-  const code = buildPayload({ files: FILES, ...ARGS });
+test('the payload is one async arrow function that finds-or-creates the KV namespace (create only with createKv), uploads the three modules, sets the schedule, switches workers.dev off and reads back', async () => {
+  const code = buildPayload({ files: FILES, ...ARGS, createKv: true });
   const fake = fakeCloudflare();
   const out = await runPayload(code, fake);
   const seq = fake.calls.map((c) => `${c.method} ${c.path.replace(/^\/accounts\/acct/, '')}`);
@@ -70,7 +70,7 @@ test('the payload is one async arrow function that finds-or-creates the KV names
 
 test('the uploaded multipart carries each module byte for byte, and the metadata binds STATE, EMAIL, DIGEST_TO and DIGEST_FROM by name and type', async () => {
   const fake = fakeCloudflare();
-  await runPayload(buildPayload({ files: FILES, ...ARGS }), fake);
+  await runPayload(buildPayload({ files: FILES, ...ARGS, createKv: true }), fake);
   const put = fake.calls.find((c) => c.method === 'PUT' && /scripts\/demo-change-watcher$/.test(c.path));
   assert.strictEqual(put.rawBody, true);
   const boundary = /boundary=(.+)$/.exec(put.contentType)[1];
@@ -89,7 +89,7 @@ test('the uploaded multipart carries each module byte for byte, and the metadata
 // so a change that drops either one makes the upload fail or turns the platform's invocation record back on.
 test('the metadata sets observability on, every run kept, and the platform invocation record OFF with the pair the API requires', async () => {
   const fake = fakeCloudflare();
-  await runPayload(buildPayload({ files: FILES, ...ARGS }), fake);
+  await runPayload(buildPayload({ files: FILES, ...ARGS, createKv: true }), fake);
   const put = fake.calls.find((c) => c.method === 'PUT' && /scripts\/demo-change-watcher$/.test(c.path));
   const boundary = /boundary=(.+)$/.exec(put.contentType)[1];
   const part = put.body.split('--' + boundary).find((p) => p.includes('name="metadata"'));
@@ -98,7 +98,7 @@ test('the metadata sets observability on, every run kept, and the platform invoc
 });
 
 test('the destination address never appears in what the payload returns', async () => {
-  const out = await runPayload(buildPayload({ files: FILES, ...ARGS }), fakeCloudflare());
+  const out = await runPayload(buildPayload({ files: FILES, ...ARGS, createKv: true }), fakeCloudflare());
   assert.ok(!JSON.stringify(out).includes(ADDRESS));
   assert.ok(!JSON.stringify(out).includes('example.invalid'));
 });
@@ -127,7 +127,7 @@ test('no verified destination address stops before the upload, and a failed uplo
   assert.match(a.stage, /no verified destination/);
   assert.ok(!none.calls.some((c) => c.method === 'PUT' || c.method === 'POST'), 'a missing precondition writes nothing, not even the KV namespace');
   const bad = fakeCloudflare({ uploadOk: false });
-  const b = await runPayload(buildPayload({ files: FILES, ...ARGS }), bad);
+  const b = await runPayload(buildPayload({ files: FILES, ...ARGS, createKv: true }), bad);
   assert.strictEqual(b.upload.ok, false);
   assert.ok(!bad.calls.some((c) => c.path.endsWith('/schedules') || c.path.endsWith('/subdomain')));
 });
@@ -223,4 +223,49 @@ test('deploy-payload.mjs started through a link to its folder runs instead of ex
 test('deploy-payload.mjs imported with an argv path that does not exist does not run: the entry guard fails closed -- RED before 16m', () => {
   const r = spawnSync(process.execPath, ['--max-old-space-size=512', '--input-type=module', '-e', `await import(${JSON.stringify(new URL('./deploy-payload.mjs', import.meta.url).href)})`, 'nosuchfile'], { encoding: 'utf8', timeout: 60000, cwd: os.tmpdir(), env: { ...process.env, PAT_TOKEN: '' } });
   assert.strictEqual(r.stdout + r.stderr, '', 'the import ran the script: ' + (r.stdout + r.stderr).slice(0, 120));
+});
+
+// 20a: two readings of the upload call to reconcile. The claude.ai Cloudflare connector took the call with contentType and rawBody (main's Coal redeploy, 2026-11-20); the Cloudflare
+// API MCP server needed a Content-Type in headers as well (the LLM chief's Kolwen redeploy). Whether one shape serves both servers is unmeasured, so the generator takes the server by name
+// (server: 'claude-ai', the default, or 'cloudflare-api'). And a namespace is created only when asked: a missing KV namespace answers "nothing written" by default, so a payload run on
+// the wrong account, or with a name that drifted, cannot mint an empty state store beside the real one.
+const uploadOf = (fake) => fake.calls.find((c) => c.method === 'PUT' && /\/workers\/scripts\/[^/]+$/.test(c.path));
+test('the upload call takes the server\'s shape: claude-ai sends contentType and rawBody and no headers, cloudflare-api adds the same Content-Type in headers -- RED before 20a', async () => {
+  const plain = fakeCloudflare({ existing: [{ id: 'b'.repeat(32), title: 'demo-change-watcher-state' }] });
+  await runPayload(buildPayload({ files: FILES, ...ARGS }), plain);
+  const a = uploadOf(plain);
+  assert.match(a.contentType, /^multipart\/form-data; boundary=/);
+  assert.strictEqual(a.rawBody, true);
+  assert.strictEqual(a.headers, undefined, 'the claude.ai shape carries no headers');
+  const api = fakeCloudflare({ existing: [{ id: 'b'.repeat(32), title: 'demo-change-watcher-state' }] });
+  await runPayload(buildPayload({ files: FILES, ...ARGS, server: 'cloudflare-api' }), api);
+  const b = uploadOf(api);
+  assert.deepStrictEqual(b.headers, { 'Content-Type': b.contentType }, 'the Cloudflare API MCP shape names the same Content-Type in headers');
+  assert.strictEqual(b.rawBody, true);
+  assert.throws(() => buildPayload({ files: FILES, ...ARGS, server: 'other' }), /server must be claude-ai or cloudflare-api/);
+});
+
+test('a KV namespace is created only when asked: by default a missing one answers "nothing written" before any write -- RED before 20a', async () => {
+  const fake = fakeCloudflare();
+  const out = await runPayload(buildPayload({ files: FILES, ...ARGS }), fake);
+  assert.match(out.stage, /no KV namespace "demo-change-watcher-state" on this account, and createKv was not given: nothing written/);
+  assert.deepStrictEqual(fake.calls.map((c) => c.method).filter((m) => m !== 'GET'), [], 'no POST and no PUT');
+  const made = fakeCloudflare();
+  const ok = await runPayload(buildPayload({ files: FILES, ...ARGS, createKv: true }), made);
+  assert.strictEqual(ok.kv.reused, false);
+  assert.ok(made.calls.some((c) => c.method === 'POST' && c.path.endsWith('/storage/kv/namespaces')));
+});
+
+test('CLI: --server takes claude-ai or cloudflare-api and --create-kv asks for the create; any other server is exit 1 naming the flag -- RED before 20a', () => {
+  const cliRun = (...a) => spawnSync(process.execPath, ['--max-old-space-size=256', SCRIPT, 'thecolliery', '--from', 'antenna-coal@thecolliery.org', ...a], { encoding: 'utf8', timeout: 30000, env: { PATH: process.env.PATH } });
+  const api = cliRun('--server', 'cloudflare-api', '--create-kv');
+  assert.strictEqual(api.status, 0, api.stderr);
+  assert.match(api.stdout, /const SERVER = "cloudflare-api";/);
+  assert.match(api.stdout, /const CREATE_KV = true;/);
+  const plain = cliRun();
+  assert.match(plain.stdout, /const SERVER = "claude-ai";/);
+  assert.match(plain.stdout, /const CREATE_KV = false;/);
+  const bad = cliRun('--server', 'nope');
+  assert.strictEqual(bad.status, 1);
+  assert.match(bad.stderr, /server must be claude-ai or cloudflare-api/);
 });

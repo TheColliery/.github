@@ -1104,7 +1104,8 @@ test('a re-read that fails leaves nothing half read: the tree is reported NOT sc
   const log = path.join(SANDBOX, 'spawn-' + Math.random().toString(36).slice(2) + '.log');
   const r = run(repo([{ 'wide.bin': witPlain(), 'other.txt': 'id ' + KEY + '\n' }]), [], '', { NODE_OPTIONS: `--import ${pathToFileURL(FAKE_PRELOAD).href}`, FAKE_CATFILE_MODE: 'second-exit1', FAKE_SPAWN_LOG: log }, 120000);
   assert.strictEqual(r.code, 1, r.out + r.err);
-  assert.match(r.out, /FAIL SECRETS: git could not read the staged files \(exit 1\); the tree was NOT scanned/);
+  // 20a (t352): the line names the file whose re-read failed; the gate still refuses the whole tree (exit 1, nothing reported as scanned), as it did before
+  assert.match(r.out, /FAIL SECRETS: git could not re-read "wide\.bin" \(exit 1\); the tree was NOT scanned/);
   assert.doesNotMatch(r.out, /tree "/, 'no file of a tree reported NOT scanned is reported as scanned or matched: ' + r.out);
   assert.doesNotMatch(r.out + r.err, /\n\s+at |TypeError/, 'no stack trace');
   assert.strictEqual(fs.readFileSync(log, 'utf8').split('\n').filter(Boolean).length, 2, 'the stream ran, then the one re-read that failed');
@@ -1139,4 +1140,17 @@ test('a staged entry whose value reaches the scan as anything but its bytes fail
   assert.strictEqual(r.code, 1, r.out + r.err);
   assert.match(r.out, /FAIL SECRETS: "odd\.txt" reached the scan as something other than its bytes \(an internal error\); it was NOT scanned/);
   assert.doesNotMatch(r.out, /PASS SECRETS/);
+});
+
+// 20a (t352, the CoalWash reviewer's witness): the raw reading and a decoded reading can find one key a different number of times. In UTF-16LE text that opens with U+4161, the raw
+// reading with its NULs removed glues "aA" to the first token, which then fails its boundary: the raw reading finds only the SECOND occurrence, on line 2, and the decoded reading finds
+// both. Matching by ordinal gave that one raw hit the decoded FIRST occurrence's line, 1. A raw hit now takes a decoded line only when both readings found the key equally often.
+test('a raw hit keeps its own line when the decoded reading found the key a different number of times; equal counts still take the decoded lines -- RED before 20a (t352)', async () => {
+  const { scanBytes } = await import(pathToFileURL(LIB).href);
+  const T = 'gh' + 'p_' + 'A'.repeat(36);
+  const uneven = scanBytes(Buffer.from(String.fromCharCode(0x4161) + T + '\n' + T, 'utf16le'), 'w.txt');
+  assert.deepStrictEqual(uneven.map((h) => [h.line, h.pattern]), [[2, 'github-token']], 'the one raw hit is the second occurrence, on line 2');
+  // the equal-count control: U+0A41 is the bytes 41 0A, a line break to the raw reading only; both readings find the key once, so the raw hit (line 2) takes the decoded line, 1
+  const even = scanBytes(Buffer.from(String.fromCharCode(0x0A41) + T, 'utf16le'), 'w.txt');
+  assert.deepStrictEqual(even.map((h) => [h.line, h.pattern]), [[1, 'github-token']], 'equal counts still take the decoded line');
 });

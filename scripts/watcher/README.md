@@ -45,6 +45,8 @@ The payload finds or creates the KV namespace `<name>-state`, uploads `worker.mj
 | `thecolliery` | `node scripts/watcher/deploy-payload.mjs thecolliery --from antenna-coal@thecolliery.org` | TheColliery |
 | `kolwen` | `node scripts/watcher/deploy-payload.mjs kolwen --from antenna-llm@kolwen.com` | Kolwen |
 
+`--server` names the MCP server that runs the payload: `claude-ai` (the default, the claude.ai Cloudflare connector, which took the upload with `contentType` and `rawBody` on 2026-11-20) or `cloudflare-api` (the Cloudflare API MCP server, which also needed the upload's Content-Type in `headers`). A missing `<name>-state` KV namespace is created only with `--create-kv`; without it the payload answers "nothing written", so a run on the wrong account or under a drifted name cannot mint a second, empty state store.
+
 Bindings of the deployed Worker: `STATE` (KV namespace), `EMAIL` (`send_email`, restricted to the verified destination address), `DIGEST_TO` (secret text, that address), `DIGEST_FROM` (plain text, the sender).
 
 Free-plan budget, from Cloudflare's docs read 2026-10-04: 10 ms CPU per Cron run, 50 external subrequests per run, KV 1,000 writes a day, 5 Cron Triggers per account. `validateConfig` keeps `maxPerRun` at 45 or less, and a test holds that no hour of the week asks for more.
