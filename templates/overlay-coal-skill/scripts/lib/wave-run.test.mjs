@@ -505,8 +505,8 @@ test('the stdout preload switches BOTH pipes, stdout and stderr, to blocking (a 
 
 // 2026-10-16 (CoalWash PR #23, run 38774701714, the Windows leg: [FAIL, FAIL] where [FAIL, PASS] was expected, 4.8 s): the clock is the wall clock of EVERY file the run starts, so a fixed 2,000 ms also killed the
 // PASSING file whenever a loaded runner took more than two seconds to start it (a node child with a heap cap and the stdout preload). Reproduced here by making every node start take 2.5 s (a preload that sleeps,
-// NODE_OPTIONS=--import=<it>): the old test read [FAIL, FAIL] in 4.7 s, the runner's own figure. The clock this test uses is now SIZED from a measured solo run of the passing file on this very machine under this very load,
-// four times it plus a second (never below the old 2,000 ms), so the hang is still killed by the clock and the passing file has four times its own measured start to spare.
+// NODE_OPTIONS=--import=<it>): the old test read [FAIL, FAIL] in 4.7 s, the runner's own figure. The clock was then sized from a measured solo run of the passing file; since 19c (UMB4-048) no test sizes a
+// wall clock: the test below fires an injected clock from the run's own events.
 // 19c (UMB4-048, the F5 ticket): the clock's POLICY is tested with no wall time at all. runWaves takes its file clock from an injectable timer pair (`timers`); this test's clock fires only
 // when the test fires it: as soon as the hanging file starts, and again after the run, when the passing file has ended. So a file still running at its clock is killed and named, a file that ended
 // before its clock is spared (its timer was cleared at its exit and the late firing does nothing), and the next file still runs, whatever the load. The command-line tests below keep only
@@ -579,7 +579,7 @@ test('the command line: --file-clock-ms is accepted, shown in the usage, and kil
 // slow start, let the passing file through; since 19c (UMB4-048) no test sizes a wall clock: a solo run timed under load and the sized run after it saw different loads, so the pair flaked.
 // 2026-11-07c: the sized run no longer carries the hang. A hang is killed only AT the clock, so it held this run for the whole sized clock (about 30 s under the slow start, 41 s for the test, the
 // file 74 to 79 s on Node 24): past the 60 s that Node 22 gives a whole file when a room passes --test-timeout=60000, CoalGob's red after the 07b re-copy. The kill of a hang under the slow start
-// is the fixed run's witness, the kill at a sized clock is the --file-clock-ms test's above, and what only this run can show is that the sized clock spares the passing file.
+// is the fixed run's witness; since 19c a passing file spared by its clock is the injected-clock test's above, so this run keeps only the fixed clock that kills both files.
 test('the command line under a slow node start: a fixed file clock below the node start kills the hang and the passing file too (the flake a wall clock causes; the policy is the injected-clock test above)', () => {
   const fixed = cli(['--heap-mb', '512', '--file-timeout-ms', '20000', '--deadline-ms', '40000', '--file-clock-ms', '1000', '--serial', '--', ...fx('hang-top', 'pass')], SLOW_START_ENV);
   assert.equal(fixed.status, 1, fixed.stdout + fixed.stderr);

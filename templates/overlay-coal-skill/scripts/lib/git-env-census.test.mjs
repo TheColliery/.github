@@ -257,4 +257,11 @@ test('a finding names its line counting every line terminator once: LF, CRLF, a 
     assert.equal(r.findings.length, 1, label + ': ' + JSON.stringify(r.findings));
     assert.match(r.findings[0], /^fixture\.mjs:7 /, label + ': ' + r.findings[0]);
   }
+  // 19d (the a00b4d8 review's L1): inside a template literal too: a lone CR, and a backslash continuation over CRLF, each start a line, so the spawn after the template sits on line 6
+  for (const [label, tpl] of [['a lone CR inside a template', 'const t = `one\rtwo`;'], ['a backslash and a lone CR inside a template', 'const t = `one' + String.fromCharCode(92) + String.fromCharCode(13) + 'two`;'], ['a backslash and CRLF inside a template', 'const t = `one' + String.fromCharCode(92) + '\r\ntwo`;']]) {
+    const fixture = [head, tpl, 'const c = 3;', '', SP + "('git', ['status']);"].join('\n') + '\n';
+    const r = scan(fixture);
+    assert.equal(r.findings.length, 1, label + ': ' + JSON.stringify(r.findings));
+    assert.match(r.findings[0], /^fixture\.mjs:6 /, label + ': ' + r.findings[0]);
+  }
 });

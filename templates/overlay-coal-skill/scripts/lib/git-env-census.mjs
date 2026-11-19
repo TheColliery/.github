@@ -184,7 +184,7 @@ export function lexAmb(text, force = null) {
   // lone CR after a return, so the census read the next line as its value)
   const isNL = (j) => { const d = text[j]; return d === '\n' || (d === '\r' && text[j + 1] !== '\n') || (LINE_TERMINATORS.has(d) && d !== '\r'); };
   // Where a regex body that starts at `from` ends: the index of its closing slash (outside a [class], a backslash escaping the next character), or -1 when a
-  // line feed or the end comes first. Computed for every start in one backward pass the first time it is asked, so a line of slashes that never close is not
+  // line terminator (LF, CR, U+2028, U+2029: a regex literal holds none) or the end comes first. Computed for every start in one backward pass the first time it is asked, so a line of slashes that never close is not
   // searched again from every later slash (quadratic, Deep Scan 2026-11-01). close[2*j + s] = the answer from j with s = 1 inside a class.
   let reClose = null;
   const regexClose = (from) => {
@@ -196,7 +196,7 @@ export function lexAmb(text, force = null) {
         CENSUS_WORK.steps++;
         const d = text[j];
         let out, inn;
-        if (d === '\n') { out = -1; inn = -1; }
+        if (LINE_TERMINATORS.has(d)) { out = -1; inn = -1; }
         else if (d === '\\') { out = at(j + 2, 0); inn = at(j + 2, 1); }
         else if (d === '[') { out = at(j + 1, 1); inn = out; }
         else if (d === ']') { out = at(j + 1, 0); inn = out; }
@@ -229,7 +229,8 @@ export function lexAmb(text, force = null) {
     let j = from;
     while (j < text.length) {
       const d = text[j];
-      if (d === '\\') { if (isNL(j + 1)) line++; else if (text[j + 1] === '\r' && text[j + 2] === '\n') { line++; j++; } j += 2; continue; }
+      // a backslash before a line terminator continues the template on the next line; before a CRLF it skips the CR here and the LF is counted on the next turn
+      if (d === '\\') { if (isNL(j + 1)) line++; j += 2; continue; }
       if (d === '`') { push('tpl', text.slice(from, j), from); i = j + 1; return; }
       if (d === '$' && text[j + 1] === '{') { push('tpl', text.slice(from, j), from); push('tplopen', '${', j); holes.push(braces); i = j + 2; return; }
       if (isNL(j)) line++;
