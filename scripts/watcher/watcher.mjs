@@ -22,7 +22,11 @@ const TITLE_CAP = 200; // a title in the mail and in state; a feed entry can car
 const UNSAFE = new RegExp('[\\x00-\\x20\\x7f-\\x9f' + String.fromCharCode(0x2028, 0x2029) + ']', 'g');
 const oneLine = (s) => String(s).replace(UNSAFE, ' ').replace(/ +/g, ' ').trim();
 const KINDS = ['atom', 'rss', 'headings', 'raw', 'incidents'];
-const SOURCE_FIELDS = ['id', 'name', 'url', 'kind', 'everyHours', 'ignoreTitle', 'tier', 'keyPattern'];
+const SOURCE_FIELDS = ['id', 'name', 'url', 'kind', 'everyHours', 'ignoreTitle', 'tier', 'keyPattern', 'until'];
+const DAY_MS = 86400000;
+// until: 'YYYY-MM-DD', the last UTC day the cron reads a source (a dated drop, 19c): the row stays in the registry and pickRun leaves it from the next day on
+const untilEnd = (s) => Date.parse(s.until + 'T00:00:00Z') + DAY_MS;
+const isCalendarDate = (v) => { if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false; const ms = Date.parse(v + 'T00:00:00Z'); return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === v; };
 export const TIERS = ['hot', 'cold']; // a COLD source stays in the registry and leaves the cron: scripts/watcher/cold-read.mjs reads it by hand (the owner 2026-11-10: hot data and cold data)
 
 const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
@@ -133,7 +137,7 @@ const remember = (prev, key) => {
 // stateless cadence: a source with everyHours=n is due when (hour + its list index) % n === 0, so a list spreads over the hours by construction.
 export const isDue = (source, index, hourNumber) => (hourNumber + index) % (source.everyHours || 1) === 0;
 export function pickRun(sources, hourNumber, max) {
-  const due = sources.filter((s, i) => s.tier !== 'cold' && isDue(s, i, hourNumber)); // the list index stays the stagger slot, cold or not
+  const due = sources.filter((s, i) => s.tier !== 'cold' && !(s.until && hourNumber * 3600000 >= untilEnd(s)) && isDue(s, i, hourNumber)); // the list index stays the stagger slot, cold, dated out or not
   return { run: due.slice(0, max), deferred: due.slice(max) };
 }
 
@@ -171,7 +175,9 @@ export async function fetchSource(source, prev, fetchFn) {
     if (RECALL_KINDS.has(source.kind) && prev.seen?.includes(found.key)) return { ...base, status: 'same', returning: true };
     // a feed that mints a new id on every render but shows the same title at the same link has no news (a raw file or a heading list has no such pair: its key IS its content)
     if ((source.kind === 'atom' || source.kind === 'rss') && prev.title === base.to && (prev.link === undefined || prev.link === base.link)) return { ...base, status: 'same' };
-    return { ...base, status: 'changed', from: prev.title || '' };
+    // a page keyed on its CONTENT whose newest heading held still: still a change (an entry was edited or a section added below it), but its line cannot read "X -> X" or "? -> ?" (19c)
+    const sameTitle = (source.kind === 'raw' || source.kind === 'headings') && (prev.title || '') === base.to;
+    return { ...base, status: 'changed', from: prev.title || '', ...(sameTitle ? { sameTitle: true } : {}) };
   } catch (e) {
     return { source, status: 'error', error: oneLine(e?.message ?? e).slice(0, 120) };
   }
@@ -185,7 +191,7 @@ export function buildDigest({ at, instance, results }) {
   const lines = [`${instance} change watcher, ${at}`, ''];
   if (changed.length) {
     lines.push(`Changed (${changed.length}):`);
-    for (const r of changed) { lines.push(`  ${r.source.name}: ${r.from || '?'} -> ${r.to || '?'}`); if (r.link) lines.push(`    ${r.link}`); else lines.push(`    ${r.source.url}`); }
+    for (const r of changed) { lines.push(r.sameTitle ? `  ${r.source.name}: ${r.to ? `the page changed, its newest heading still "${r.to}"` : 'the page changed (no heading to name what is new)'}` : `  ${r.source.name}: ${r.from || '?'} -> ${r.to || '?'}`); if (r.link) lines.push(`    ${r.link}`); else lines.push(`    ${r.source.url}`); }
     lines.push('');
   }
   if (baselined.length) lines.push(`Baselined ${baselined.length} source(s), no earlier state to compare: ${baselined.map((r) => `${r.source.name} (${r.to || 'seen'})`).join(', ')}`, '');
@@ -336,6 +342,7 @@ export function validateConfig(config) {
     if (!KINDS.includes(s.kind)) return `${s.id}: kind must be one of ${KINDS.join(', ')}`;
     if (s.everyHours !== undefined && (!Number.isInteger(s.everyHours) || s.everyHours < 1 || s.everyHours > 24)) return `${s.id}: everyHours must be an integer 1-24`;
     if (s.tier !== undefined && !TIERS.includes(s.tier)) return `${s.id}: tier must be one of ${TIERS.join(', ')}`;
+    if (s.until !== undefined && !isCalendarDate(s.until)) return `${s.id}: until must be a calendar date, YYYY-MM-DD`;
     if (s.keyPattern !== undefined) {
       if (s.kind !== 'raw') return `${s.id}: keyPattern belongs to a raw source`;
       try { new RegExp(s.keyPattern); } catch { return `${s.id}: keyPattern is not a valid pattern`; }

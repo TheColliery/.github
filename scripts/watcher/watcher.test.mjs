@@ -1090,3 +1090,54 @@ test('no watcher doc or registry header pins a number of sources: a count in pro
   assert.deepStrictEqual(offenders, [], 'a pinned count of sources');
   assert.ok(SHAPE.test('(63 sources; the chief deploys it)') && SHAPE.test('// 64 sources;') && !SHAPE.test('the sources of the week'), 'positive control: the check reads the shapes it is meant to');
 });
+
+// ---- 19c (UMB4-051 (d) (e), UMB4-052 (b)) ----
+// A page keyed on its CONTENT (a raw page without keyPattern, a heading list) moves its key when anything in it moves, while the title the digest prints is its newest heading. When that heading
+// held still the line read "X -> X", and when the page has no heading at all "? -> ?" (Windsurf before b015e83, Antigravity, Devin and Kiro since): a line that names nothing new. Such a change
+// is still reported (an entry was edited or a section added below the newest heading), and its line now says what is known: the page changed, and its newest heading stayed.
+test('a content-keyed change under the same newest heading says so, never "X -> X" or "? -> ?"; a real change keeps "from -> to" -- RED before 19c', async () => {
+  const fetchOf = (body) => async () => new Response(body);
+  const ag = await fetchSource({ id: 'antigravity', name: 'Google Antigravity', url: 'https://example.invalid/ag.md', kind: 'raw', everyHours: 1 }, { key: 'old', title: 'Antigravity App', link: '' }, fetchOf('# Changelog\n## Antigravity App\n- a new line\n'));
+  const bare = await fetchSource({ id: 'bare', name: 'Bare page', url: 'https://example.invalid/bare.md', kind: 'raw', everyHours: 1 }, { key: 'old', title: '', link: '' }, fetchOf('no heading here, only text that moved\n'));
+  const kiro = await fetchSource({ id: 'kiro', name: 'Kiro', url: 'https://example.invalid/kiro/', kind: 'headings', everyHours: 1 }, { key: 'Changelog | Terminal in Kiro Web | A', title: 'Terminal in Kiro Web', link: '' }, fetchOf('<h1>Changelog</h1><h2>Terminal in Kiro Web</h2><h2>B</h2>'));
+  const real = await fetchSource({ id: 'devin', name: 'Devin', url: 'https://example.invalid/devin.md', kind: 'raw', everyHours: 1 }, { key: 'old', title: 'Sessions', link: '' }, fetchOf('## Security\n- x\n'));
+  for (const r of [ag, bare, kiro, real]) assert.strictEqual(r.status, 'changed', r.source.id + ' is still reported');
+  const d = buildDigest({ at: '2026-11-19T04:17:00.000Z', instance: 'thecolliery', results: [ag, bare, kiro, real] });
+  assert.match(d.text, /^ {2}Google Antigravity: the page changed, its newest heading still "Antigravity App"$/m);
+  assert.match(d.text, /^ {2}Bare page: the page changed \(no heading to name what is new\)$/m);
+  assert.match(d.text, /^ {2}Kiro: the page changed, its newest heading still "Terminal in Kiro Web"$/m);
+  assert.match(d.text, /^ {2}Devin: Sessions -> Security$/m, 'a heading that moved is still from -> to');
+  assert.doesNotMatch(d.text, /\? -> \?|Antigravity App -> Antigravity App|Terminal in Kiro Web -> Terminal in Kiro Web/);
+});
+
+// The Coal* editor's survey (2026-11-19a): Jules leaves after 2026-12-31. The row carries the date (a dated drop, not a deletion today): pickRun stops picking a source the hour after its
+// `until` day ends (UTC), and validateConfig takes only a real calendar date.
+test('a source with until is picked through its last day (UTC) and never after; validateConfig refuses an until that is not a calendar date -- RED before 19c', () => {
+  const s = { id: 'jules', name: 'Google Jules', url: 'https://example.invalid/j.md', kind: 'raw', everyHours: 1, until: '2026-12-31' };
+  const hourOf = (iso) => Math.floor(Date.parse(iso) / 3600000);
+  assert.deepStrictEqual(pickRun([s], hourOf('2026-12-31T23:00:00Z'), 10).run.map((x) => x.id), ['jules'], 'still read in the last hour of its day');
+  assert.deepStrictEqual(pickRun([s], hourOf('2027-01-01T00:00:00Z'), 10).run, [], 'not read the hour after');
+  const cfgOf = (until) => ({ instance: 'x', maxPerRun: 5, sources: [{ ...s, until }] });
+  assert.strictEqual(validateConfig(cfgOf('2026-12-31')), null);
+  for (const bad of ['soon', '2026-13-01', '2026-02-30', '2026-12-31T00:00:00Z', 20261231]) assert.match(validateConfig(cfgOf(bad)) ?? '', /until must be a calendar date/, String(bad));
+});
+
+test('thecolliery.mjs, the editor\'s survey of 2026-11-19: Claude Code\'s raw CHANGELOG keyed on its newest version heading; Jules dated out after 2026-12-31; OpenCode, Kilo Code and Goose drop their side tags -- RED before 19c', async () => {
+  const c = await load('thecolliery.mjs');
+  const by = (id) => c.sources.find((s) => s.id === id);
+  const cc = by('claude-code-changelog');
+  assert.ok(cc, 'the raw CHANGELOG row exists');
+  assert.strictEqual(cc.url, 'https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md');
+  assert.strictEqual(cc.kind, 'raw'); assert.notStrictEqual(cc.tier, 'cold', 'read by the cron: the releases feed (cold) omits the hook and -p lines');
+  assert.strictEqual(idsOf(c).indexOf('claude-code-changelog'), c.sources.length - 1, 'appended at the end (the stagger rule)');
+  const k = await keyFor(cc, '# Changelog\n\n## 2.1.328\n\n- Added a hook line\n\n## 2.1.327\n- older\n');
+  assert.strictEqual(k.title, '## 2.1.328');
+  assert.strictEqual((await keyFor(cc, '# Changelog\n\n## 2.1.328\n\n- Added a hook line, edited\n')).key, k.key, 'an edit inside the newest entry is not a new version');
+  assert.strictEqual(by('windsurf').url, 'https://docs.devin.ai/desktop/changelog.md', 'Devin Desktop is already read by its first bold version line (b015e83)');
+  assert.strictEqual(by('jules').until, '2026-12-31');
+  const skips = (id, title) => new RegExp(by(id).ignoreTitle, 'i').test(title);
+  for (const title of ['process-daemon v0.6.0', 'process-daemon-v0.5.1']) assert.ok(skips('opencode', title), title);
+  for (const title of ['JetBrains 7.2.1-rc.8', 'jetbrains/v7.2.1-rc.5: Merge pull request #16138 from Kilo-Org/glowing-badger']) assert.ok(skips('kilo-code', title), title);
+  assert.ok(skips('goose', 'gdk-v0.1.0-alpha.14: chore(GDK): release v0.1.0-alpha.14 (#13468)'));
+  for (const [id, title] of [['opencode', 'v2.3.2'], ['kilo-code', 'v7.8.27 (release)'], ['goose', 'v1.60.1']]) assert.ok(!skips(id, title), id + ' still reads ' + title);
+});

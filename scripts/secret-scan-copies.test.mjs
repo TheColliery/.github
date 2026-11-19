@@ -80,3 +80,17 @@ test('the scanner drops the trailing TAB of a +++ path without a regular-express
   const hits = scanPatch(patch);
   assert.deepStrictEqual(hits.map((h) => h.file), ['my file.txt'], 'the one TAB git writes after a name with a space is not part of the name');
 });
+
+// 19c (the CI gate proposed at 19a): the gate restates the scanner's wide-text count rule (WIDE_MIN_NULS, WIDE_SKEW) to judge a dropped binary-named blob by its NUL totals. If the two
+// declarations ever differ, the gate re-reads (or drops) by a rule the scanner does not apply, and the oracle test in secret-gate.test.mjs sees it only on the inputs it happens to build.
+// This compares the declarations themselves, in every carrier; it runs in verify-landing, which already lists this file.
+test('the secret gate\'s wide-text constants equal the scanner\'s, in the org repo and in both public templates', () => {
+  const constOf = (rel, name) => {
+    const m = new RegExp('^const ' + name + ' = (\\d+);', 'm').exec(read(rel));
+    assert.ok(m, rel + ' declares ' + name + ' as a plain integer');
+    return Number(m[1]);
+  };
+  for (const c of CARRIERS) {
+    for (const name of ['WIDE_MIN_NULS', 'WIDE_SKEW']) assert.equal(constOf(c + 'scripts/secret-gate.mjs', name), constOf(c + 'scripts/lib/secret-scan.mjs', name), `${c || '(org repo) '}${name}: the gate and the scanner disagree`);
+  }
+});

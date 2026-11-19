@@ -22,9 +22,9 @@ export default {
     { id: 'augment', name: 'Augment Code', url: 'https://www.augmentcode.com/changelog', kind: 'headings', everyHours: 6 },
     { id: 'goose', name: 'Goose', url: 'https://github.com/aaif-goose/goose/releases.atom', kind: 'atom', everyHours: 6, ignoreTitle: '^gdk-|^windows-installer-test' },
     { id: 'amp', name: 'Amp', url: 'https://ampcode.com/news.rss', kind: 'rss', everyHours: 6 },
-    { id: 'opencode', name: 'OpenCode', url: 'https://github.com/anomalyco/opencode/releases.atom', kind: 'atom', everyHours: 2, ignoreTitle: '^vscode-|^github-v' },
+    { id: 'opencode', name: 'OpenCode', url: 'https://github.com/anomalyco/opencode/releases.atom', kind: 'atom', everyHours: 2, ignoreTitle: '^vscode-|^github-v|^process-daemon' },
     { id: 'roo-code', name: 'Roo Code', url: 'https://github.com/RooCodeInc/Roo-Code/releases.atom', kind: 'atom', everyHours: 6 },
-    { id: 'kilo-code', name: 'Kilo Code', url: 'https://github.com/Kilo-Org/kilocode/releases.atom', kind: 'atom', everyHours: 6, ignoreTitle: '^kilo-v2-checkpoints' },
+    { id: 'kilo-code', name: 'Kilo Code', url: 'https://github.com/Kilo-Org/kilocode/releases.atom', kind: 'atom', everyHours: 6, ignoreTitle: '^kilo-v2-checkpoints|^jetbrains\\b' },
     { id: 'continue', name: 'Continue', url: 'https://github.com/continuedev/continue/releases.atom', kind: 'atom', everyHours: 12 },
     { id: 'aider', name: 'Aider', url: 'https://github.com/Aider-AI/aider/releases.atom', kind: 'atom', everyHours: 12, ignoreTitle: 'dev' },
     { id: 'qwen-code', name: 'Qwen Code', url: 'https://registry.npmjs.org/@qwen-code/qwen-code/latest', kind: 'raw', everyHours: 6 },
@@ -32,7 +32,8 @@ export default {
     { id: 'mistral-vibe', name: 'Mistral Vibe', url: 'https://github.com/mistralai/mistral-vibe/releases.atom', kind: 'atom', everyHours: 6, tier: 'cold' },
     { id: 'crush', name: 'Crush', url: 'https://github.com/charmbracelet/crush/releases.atom', kind: 'atom', everyHours: 12, ignoreTitle: 'nightly' },
     { id: 'zed', name: 'Zed', url: 'https://github.com/zed-industries/zed/releases.atom', kind: 'atom', everyHours: 12, ignoreTitle: 'nightly|staging|-pre|^[a-z]+-v' },
-    { id: 'jules', name: 'Google Jules', url: 'https://jules.google/docs/changelog.md', kind: 'raw', everyHours: 12 },
+    // the Coal* editor's survey (2026-11-19a): Jules leaves after 2026-12-31, a dated drop (the cron stops reading it on 2027-01-01; the row is deleted later)
+    { id: 'jules', name: 'Google Jules', url: 'https://jules.google/docs/changelog.md', kind: 'raw', everyHours: 12, until: '2026-12-31' },
     // UMB2-014: GitHub's own changelog, one feed per label the Coal* beat follows (each holds the last 10 entries). The sixth label, copilot, is already `copilot-changelog` above.
     { id: 'github-changelog-actions', name: 'GitHub changelog (Actions)', url: 'https://github.blog/changelog/label/actions/feed/', kind: 'rss', everyHours: 2 },
     { id: 'github-changelog-application-security', name: 'GitHub changelog (application security)', url: 'https://github.blog/changelog/label/application-security/feed/', kind: 'rss', everyHours: 2 },
@@ -49,5 +50,7 @@ export default {
     { id: 'mcp-spec', name: 'Model Context Protocol specification releases', url: 'https://github.com/modelcontextprotocol/modelcontextprotocol/releases.atom', kind: 'atom', everyHours: 24, tier: 'cold' },
     { id: 'nodejs-security', name: 'Node.js security releases', url: 'https://nodejs.org/en/feed/vulnerability.xml', kind: 'rss', everyHours: 24, tier: 'cold' },
     { id: 'gitbook-changelog', name: 'GitBook changelog', url: 'https://gitbook.com/docs/changelog/rss.xml', kind: 'rss', everyHours: 24, tier: 'cold' },
+    // the Coal* editor's survey (2026-11-19a): the releases feed (claude-code, cold) omits the hook and -p lines that CHANGELOG.md carries; keyed on its newest version heading, so an edit inside an entry is no news
+    { id: 'claude-code-changelog', name: 'Claude Code (CHANGELOG.md)', url: 'https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md', kind: 'raw', keyPattern: '## \\d+\\.\\d+\\.\\d+', everyHours: 24 },
   ],
 };
