@@ -653,6 +653,17 @@ test('release-notes.mjs back-fill: a tag tree that HAS the heading uses its own 
   assert.doesNotMatch(res.stdout, /default branch/);
 });
 
+test('release-notes.mjs back-fill: on a dispatch the entry in the tag tree is found by its exact heading, so a newer entry of the same package above it does not stop the run; the push path keeps the top-entry check -- RED before 19a (t346 F17)', () => {
+  const own = '## [py 0.0.2] - 2026-11-04\n\nA newer py.\n\n### Added\n- newer\n\n## [py 0.0.1] - 2026-11-02\n\nThe tag\'s own words.\n\n### Added\n- own\n';
+  const dir = backfillDir(own);
+  const res = run(dir, { GITHUB_REF_NAME: 'py-v0.0.1', ...FALLBACK });
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  assert.equal(fs.readFileSync(path.join(dir, 'release-title.txt'), 'utf8'), 'py v0.0.1 - the tag\'s own words');
+  assert.match(res.stdout, /release-notes: source: the tag's own CHANGELOG\.md/);
+  const push = run(backfillDir(own), { GITHUB_REF_NAME: 'py-v0.0.1' });
+  assert.equal(push.status, 1, 'a push still refuses a tag that is not the top entry: ' + push.stdout + push.stderr);
+});
+
 test('release-notes.mjs back-fill: the PUSH path never falls back -- no CHANGELOG_FALLBACK, a tag tree without the heading is refused as before -- RED before UMB3-193 round 3 (only the log line)', () => {
   const dir = backfillDir(TAG_TREE_NO_ENTRY);
   const res = run(dir, { GITHUB_REF_NAME: 'py-v0.0.1' });
