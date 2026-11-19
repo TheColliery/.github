@@ -884,7 +884,7 @@ test('the bytes held for staged text are bounded: a text blob past the ceiling i
   const dir = repo([{ 'dump.sql': big, 'README.md': 'hello\n' }]);
   const lowered = run(dir, [], '', { SECRET_GATE_MAX_HELD_BYTES: '100000' });
   assert.strictEqual(lowered.code, 1, lowered.out + lowered.err);
-  assert.match(lowered.out, /FAIL SECRETS: "dump\.sql" is too large to hold: more than 100000 bytes of staged text would be held in memory at once; the tree was NOT scanned/);
+  assert.match(lowered.out, /FAIL SECRETS: "dump\.sql" is too large to hold: more than 100000 bytes of staged text would be held in memory at once; the tree was NOT scanned\. Keep the file out of the repository, or track it with Git LFS$/m, 'the line names the next step (19b L3)');
   assert.doesNotMatch(lowered.out + lowered.err, /\n\s+at |RangeError|ERR_/, 'no stack trace');
   assert.strictEqual(run(dir).code, 0, 'with no variable the same tree passes');
   assert.strictEqual(run(dir, [], '', { SECRET_GATE_MAX_HELD_BYTES: '999999999999' }).code, 0, 'a higher value is ignored: it cannot weaken the ceiling');
@@ -1071,8 +1071,9 @@ test('a binary-named blob that reads as wide text but is larger than the held-by
   realBin[1] = 7;
   const r = run(repo([{ 'predrop.bin': witPredrop(), 'real.png': realBin }]), [], '', { SECRET_GATE_MAX_HELD_BYTES: '300000' }, 120000);
   assert.strictEqual(r.code, 1, r.out + r.err);
-  assert.match(r.out, /FAIL SECRETS: "predrop\.bin" reads as UTF-16 or UTF-32 text by its NUL counts, but holding its 400000 bytes would put more than 300000 bytes of staged text in memory at once, so it was NOT scanned/);
+  assert.match(r.out, /FAIL SECRETS: "predrop\.bin" reads as UTF-16 or UTF-32 text by its NUL counts, but holding its 400000 bytes would put more than 300000 bytes of staged text in memory at once, so it was NOT scanned; keep the file out of the repository, or track it with Git LFS$/m, 'the line names the next step (19b L3)');
   assert.doesNotMatch(r.out, /real\.png/, 'a real binary is still skipped');
+  assert.doesNotMatch(r.out, /reached the scan as something other than its bytes/, 'the blob that cannot be held is set aside before the scan loop, never handed to it (19b)');
   assert.ok(!r.out.includes(KEY) && !r.err.includes(KEY), 'the value is never printed');
   const binOnly = run(repo([{ 'real.png': realBin }]), [], '', { SECRET_GATE_MAX_HELD_BYTES: '300000' }, 120000);
   assert.strictEqual(binOnly.code, 0, 'a real binary past the ceiling holds nothing and passes: ' + binOnly.out + binOnly.err);
@@ -1084,12 +1085,18 @@ test('the held-bytes ceiling bounds the first read and every re-read together: a
   const tight = run(dir, [], '', { SECRET_GATE_MAX_HELD_BYTES: '500000' }, 120000);
   assert.strictEqual(tight.code, 1, tight.out + tight.err);
   assert.match(tight.out, /FAIL SECRETS: "wide\.bin" reads as UTF-16 or UTF-32 text by its NUL counts, but holding its 400000 bytes would put more than 500000 bytes of staged text in memory at once/);
-  const roomy = run(dir, [], '', { SECRET_GATE_MAX_HELD_BYTES: '700000' }, 120000);
-  assert.strictEqual(roomy.code, 0, 'both fit together under a higher ceiling: ' + roomy.out + roomy.err);
-  const two = run(repo([{ 'data.txt': text, 'wide.bin': witPlain(), 'wide2.bin': witPredrop('r'.repeat(KEY.length)) }]), [], '', { SECRET_GATE_MAX_HELD_BYTES: '700000' }, 120000);
+  // 19b (L6 and the boundary): the ceilings below are derived from the fixture's own text (the gate and its scanner are tracked in it, beside data.txt), so a file that grows moves them;
+  // `exact` is the first read's text plus the one wide blob, the budget to the byte: it passes, and one byte less fails (a `>=` for `>` on the budget is caught).
+  const exact = fs.statSync(GATE).size + fs.statSync(LIB).size + text.length + WIT_SIZE;
+  const roomy = run(dir, [], '', { SECRET_GATE_MAX_HELD_BYTES: String(exact) }, 120000);
+  assert.strictEqual(roomy.code, 0, 'both fit together at exactly the budget: ' + roomy.out + roomy.err);
+  const under = run(dir, [], '', { SECRET_GATE_MAX_HELD_BYTES: String(exact - 1) }, 120000);
+  assert.strictEqual(under.code, 1, 'one byte under the budget fails: ' + under.out + under.err);
+  assert.match(under.out, /FAIL SECRETS: "wide\.bin" reads as UTF-16 or UTF-32 text by its NUL counts/);
+  const two = run(repo([{ 'data.txt': text, 'wide.bin': witPlain(), 'wide2.bin': witPredrop('r'.repeat(KEY.length)) }]), [], '', { SECRET_GATE_MAX_HELD_BYTES: String(exact) }, 120000);
   assert.strictEqual(two.code, 1, 'two wide blobs that each fit beside the text but not together: ' + two.out + two.err);
   assert.match(two.out, /FAIL SECRETS: "wide2?\.bin" reads as UTF-16 or UTF-32 text by its NUL counts/, 'an earlier re-read counts against the ceiling too');
-  const keyed = run(repo([{ 'data.txt': text, 'wide.bin': witPredrop() }]), [], '', { SECRET_GATE_MAX_HELD_BYTES: '700000' }, 120000);
+  const keyed = run(repo([{ 'data.txt': text, 'wide.bin': witPredrop() }]), [], '', { SECRET_GATE_MAX_HELD_BYTES: String(exact) }, 120000);
   assert.ok(keyed.out.includes('tree "wide.bin":2 aws-access-key-id'), 'the wide blob is scanned when it fits: ' + keyed.out);
 });
 
@@ -1107,11 +1114,29 @@ test('a probed blob is charged only its 8,000-byte prefix before the probe decid
   const realBin = Buffer.alloc(100000, 0);
   realBin[1] = 7;
   const dir = repo([{ 'zz.png': realBin, 'README.md': 'hello\n' }]);
-  // zz.png sorts after the scripts, so it streams after the fixture's own text is held (cat-file answers in path order). The ceiling leaves room for that text (the gate and its scanner are tracked in it) plus the 8,000-byte prefix, and not for a 32 KiB first piece
-  const ceiling = fs.statSync(GATE).size + fs.statSync(LIB).size + 'hello\n'.length + 12000;
+  // zz.png sorts after the scripts, so it streams after the fixture's own text is held (cat-file answers in path order). The ceiling leaves room for that text (the gate and its scanner are tracked in it) plus EXACTLY the 8,000-byte prefix (19b L1: with any more slack, a limit that forgot the bytes the blob already holds passed), and not for a 32 KiB first piece
+  const PROBE_BYTES = 8000; // the gate's own constant: the scanner's looksBinary reads this many first bytes
+  const ceiling = fs.statSync(GATE).size + fs.statSync(LIB).size + 'hello\n'.length + PROBE_BYTES;
   assert.strictEqual(run(dir, [], '', { SECRET_GATE_MAX_HELD_BYTES: String(ceiling) }, 120000).code, 0, 'pieces as git hands them');
   for (const chunk of [1001, 32768]) {
     const r = run(dir, [], '', { NODE_OPTIONS: `--import ${pathToFileURL(FAKE_PRELOAD).href}`, FAKE_CATFILE_MODE: 'rechunk', FAKE_CHUNK: String(chunk), SECRET_GATE_MAX_HELD_BYTES: String(ceiling) }, 120000);
     assert.strictEqual(r.code, 0, 'pieces of ' + chunk + ': ' + r.out + r.err);
   }
+});
+
+// 19b (L2): the scan loop treats only a Buffer as bytes. Before, a value that was neither null nor the binary marker was scanned as the text "[object Object]" and counted as a clean file;
+// the F18 branch's own marker replacement was the only wall. A preload stands in for a future path that stores some other value: Map.prototype.get hands back an object in place of the one
+// blob whose size is FAKE_NONBUFFER_SIZE.
+const NONBUFFER_PRELOAD = path.join(SANDBOX, 'nonbuffer.preload.mjs');
+fs.writeFileSync(NONBUFFER_PRELOAD, [
+  'const n = Number(process.env.FAKE_NONBUFFER_SIZE);',
+  'const get = Map.prototype.get;',
+  'Map.prototype.get = function (k) { const v = get.call(this, k); return Buffer.isBuffer(v) && v.length === n ? { notBytes: true } : v; };',
+].join('\n'));
+test('a staged entry whose value reaches the scan as anything but its bytes fails by name and is never counted as scanned -- RED before 19b (L2)', () => {
+  const odd = 'x'.repeat(776) + '\n'; // 777 bytes, a size no other file in the fixture has
+  const r = run(repo([{ 'odd.txt': odd, 'README.md': 'hello\n' }]), [], '', { NODE_OPTIONS: `--import ${pathToFileURL(NONBUFFER_PRELOAD).href}`, FAKE_NONBUFFER_SIZE: String(odd.length) });
+  assert.strictEqual(r.code, 1, r.out + r.err);
+  assert.match(r.out, /FAIL SECRETS: "odd\.txt" reached the scan as something other than its bytes \(an internal error\); it was NOT scanned/);
+  assert.doesNotMatch(r.out, /PASS SECRETS/);
 });

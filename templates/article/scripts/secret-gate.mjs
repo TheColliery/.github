@@ -242,7 +242,7 @@ async function main() {
       for (const [id, v] of first) {
         if (!v || v === BINARY_BLOB || v.rereadBytes === undefined) continue;
         if (heldNow + v.rereadBytes > heldCeiling()) {
-          fails.push(`${esc(nameOf.get(id) || id)} reads as UTF-16 or UTF-32 text by its NUL counts, but holding its ${v.rereadBytes} bytes would put more than ${heldCeiling()} bytes of staged text in memory at once, so it was NOT scanned`);
+          fails.push(`${esc(nameOf.get(id) || id)} reads as UTF-16 or UTF-32 text by its NUL counts, but holding its ${v.rereadBytes} bytes would put more than ${heldCeiling()} bytes of staged text in memory at once, so it was NOT scanned; keep the file out of the repository, or track it with Git LFS`);
           staged.set(id, BINARY_BLOB); // already failed by name above; the scan loop passes over it
           continue;
         }
@@ -253,7 +253,7 @@ async function main() {
       }
       blobs = staged;
     } catch (e) {
-      fails.push(e && e.code === 'EHELD' ? `${e.message}; the tree was NOT scanned` : `git could not read the staged files (${e && e.code ? e.code : 'cat-file error'}); the tree was NOT scanned`);
+      fails.push(e && e.code === 'EHELD' ? `${e.message}; the tree was NOT scanned. Keep the file out of the repository, or track it with Git LFS` : `git could not read the staged files (${e && e.code ? e.code : 'cat-file error'}); the tree was NOT scanned`);
     }
   }
   // A binary-looking NAME only marks a blob for the content probe: it is skipped when its bytes are binary too (a NUL in its first bytes,
@@ -263,6 +263,8 @@ async function main() {
     const bytes = blobs.get(e.sha);
     if (bytes === null) { unreadable.push(esc(e.name)); return; }
     if (bytes === BINARY_BLOB) return; // binary-named at every path and binary by its first bytes, dropped while it streamed
+    // only a Buffer is bytes (19b L2): anything else (a marker that leaked, an undefined) fails by name and is never counted as scanned or read as text
+    if (!Buffer.isBuffer(bytes)) { fails.push(`${esc(e.name)} reached the scan as something other than its bytes (an internal error); it was NOT scanned`); return; }
     // a binary-looking name with NUL-bearing bytes is still text when the scanner's wide-text rule reads its first bytes as UTF-16 or UTF-32 (the bytes the stream probe judged)
     if (BINARY.test(e.name) && scan.looksBinary(bytes) && !scan.wideKinds(bytes).length) return;
     scanned++;
