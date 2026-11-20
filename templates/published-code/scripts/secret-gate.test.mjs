@@ -1363,3 +1363,25 @@ test('the failure message says where each kind of hit is acknowledged: a tree hi
   assert.ok(r.out.includes('committed where the gate reads it: for a "tree" hit in HEAD (the commit checked out), for a "pushed" hit in the pushed commit'), r.out);
   assert.ok(!r.out.includes('the branch you push'), r.out);
 });
+
+// 21b (the 21a review's M1): the test above cuts words at the OLD window edge (1 MiB), where the longer windows of 21a already save them, so a scanner that dropped the
+// owner rule (every window reporting every match it sees) still passed. A window's text now ENDS at its start + 1 MiB + 16 KiB, and only the owner rule keeps a word cut
+// there out: the next window owns it and sees it whole. The reviewer's vector, a 304-character word of github shape (past the pattern's 255 cap, so not a key), cut at the
+// first and second windows' text ends, in all four wide spellings. RED against the owner rule dropped (newedge.mjs, the 21a review).
+test('a wide-spelled word cut at a window\'s text end (1 MiB + 16 KiB past its start) is judged by the window that owns it, whole: not reported -- RED against the owner rule dropped', async () => {
+  const { spelledHits, spelledProbe } = await import(pathToFileURL(LIB).href);
+  const W = 1 << 20;
+  const END = W + 16384; // the first window's text end; the second's is W + END
+  const word = ' ' + 'g' + 'hp_' + 'aB3d'.repeat(75) + ' ';
+  const u32 = (s, little) => { const b = Buffer.alloc(s.length * 4); [...s].forEach((c, k) => (little ? b.writeUInt32LE(c.charCodeAt(0), k * 4) : b.writeUInt32BE(c.charCodeAt(0), k * 4))); return b; };
+  const spell = { LE16: Buffer.from(word, 'utf16le'), BE16: Buffer.from(word, 'utf16le').swap16(), LE32: u32(word, true), BE32: u32(word, false) };
+  const probe = (b) => { const r = spelledProbe(); for (let i = 0; i < b.length; i += 65536) r.feed(b.subarray(i, i + 65536)); r.end(); return r.found(); };
+  for (const [name, w] of Object.entries(spell)) {
+    for (const end of [END, W + END]) {
+      const b = Buffer.alloc(2 * W + END + 4096); // zeros: a NUL-bearing file that holds no run of its own
+      w.copy(b, end - 200); // 200 bytes of the word before the text end, the rest after
+      assert.deepStrictEqual(spelledHits(b, 'f.bin'), [], name + ', cut at ' + end + ': not reported');
+      assert.strictEqual(probe(b), false, name + ', cut at ' + end + ': the gate probe agrees');
+    }
+  }
+});
