@@ -519,45 +519,67 @@ function spelledIn(text, onMatch) {
     }
   }
 }
-// The search over bytes that arrive in order, a piece at a time: each piece is searched in a window that opens SPELL_CARRY bytes before it, so a key cut by
-// a piece edge is seen whole and keeps the character before it, and a window holds at most SPELL_WINDOW + SPELL_CARRY bytes, whatever the file's size. A
-// window with no NUL, or no character a spelling can hold, is skipped (a run of zeros costs one scan for each). onMatch gets offsets in the whole stream; a
-// key that sits inside two windows is reported twice, so the caller keys by offset.
-const SPELL_CARRY = 16384; // four bytes a character: past any provider key the patterns accept whole, and the character before it
+/// The search over bytes in windows of SPELL_WINDOW + SPELL_CARRY bytes, each starting SPELL_WINDOW after the one before, so neighbours overlap by SPELL_CARRY
+// and a window holds a bounded number of bytes whatever the file's size. 21a (Bankfire PR 70: CodeRabbit Verify's false rejection, and the fingerprint of a
+// key cut by a window): a match is reported by ONE window, the one that OWNS its first byte. A window owns from SPELL_EDGE bytes past its start (the first
+// owns from 0) up to SPELL_EDGE bytes past the next window's start (the last owns to the end), so the owners tile the file. The window's text runs on past
+// what it owns by SPELL_CARRY - SPELL_EDGE bytes, longer than any provider key the patterns accept whole: a match it owns ends inside its text, so a word cut
+// by the window's end (the end of the text satisfying a pattern's closing boundary) is never reported, and a key that crosses an edge is fingerprinted whole.
+// SPELL_EDGE bytes before what a window owns keep the character before a key in view, so a glued key is refused as anywhere. A window with no NUL, or no
+// character a spelling can hold, is skipped (a run of zeros costs one scan for each). Named gap (21a, reading 1): a match longer than SPELL_CARRY - SPELL_EDGE
+// bytes (an open-ended pattern run past 4,094 UTF-32 or 8,188 UTF-16 characters) is cut at its owner's text end, so it can be missed or fingerprinted short.
+const SPELL_CARRY = 16384;
 const SPELL_WINDOW = 1 << 20;
+const SPELL_EDGE = 8; // a UTF-32 unit and the character before it
 const SPELL_ANY = new RegExp(SPELL_CH);
-function spelledStream(onMatch) {
-  let carry = '';
-  let base = 0; // the stream offset of the window's first byte
-  return (piece) => {
-    for (let at = 0; at < piece.length; at += SPELL_WINDOW) {
-      const text = carry + piece.toString('latin1', at, Math.min(piece.length, at + SPELL_WINDOW));
-      const from = base;
-      if (text.indexOf(NUL) >= 0 && SPELL_ANY.test(text)) spelledIn(text, (pattern, value, pos) => onMatch(pattern, value, from + pos));
-      carry = text.slice(-SPELL_CARRY);
-      base = from + text.length - carry.length;
-    }
-  };
+// One window: text is its latin1 view, base its offset in the stream; first and last say whether it opens or closes the stream.
+function spelledWindow(text, base, first, last, onMatch) {
+  if (text.indexOf(NUL) < 0 || !SPELL_ANY.test(text)) return;
+  const from = first ? 0 : SPELL_EDGE;
+  const to = last ? text.length : SPELL_WINDOW + SPELL_EDGE;
+  spelledIn(text, (pattern, value, pos) => { if (pos >= from && pos < to) onMatch(pattern, value, base + pos); });
 }
-// The wide-spelled keys of one run of bytes that is not read as wide text: [{ line, pattern, fp }], each key once per place, in file order.
+// The wide-spelled keys of one run of bytes that is not read as wide text: [{ line, pattern, fp }], each key once, in file order.
 export function spelledHits(bytes, file = '') {
   if (bytes.indexOf(0) < 0) return [];
-  const found = new Map();
-  spelledStream((pattern, value, pos) => {
-    const k = pattern + NUL + pos;
-    if (!found.has(k)) found.set(k, { pattern, value, pos });
-  })(bytes);
-  if (!found.size) return [];
+  const seen = new Map(); // one hit a pattern and an offset: the 16-bit spellings overlap (big-endian text read one byte on is little-endian)
+  for (let at = 0; ; at += SPELL_WINDOW) {
+    const last = at + SPELL_WINDOW + SPELL_CARRY >= bytes.length;
+    spelledWindow(bytes.toString('latin1', at, last ? bytes.length : at + SPELL_WINDOW + SPELL_CARRY), at, at === 0, last, (pattern, value, pos) => {
+      const k = pattern + NUL + pos;
+      if (!seen.has(k)) seen.set(k, { pattern, value, pos });
+    });
+    if (last) break;
+  }
+  const found = [...seen.values()];
+  if (!found.length) return [];
   const breaks = [];
   for (let i = bytes.indexOf(0x0a); i >= 0; i = bytes.indexOf(0x0a, i + 1)) breaks.push(i);
   const lineAt = (pos) => { let lo = 0, hi = breaks.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (breaks[mid] < pos) lo = mid + 1; else hi = mid; } return lo + 1; };
-  return [...found.values()].sort((a, b) => a.pos - b.pos).map((h) => ({ line: lineAt(h.pos), pattern: h.pattern, fp: fingerprint(file, h.pattern, h.value) }));
+  return found.sort((a, b) => a.pos - b.pos).map((h) => ({ line: lineAt(h.pos), pattern: h.pattern, fp: fingerprint(file, h.pattern, h.value) }));
 }
-// The same search over a stream, for the gate: feed(piece) in order from the blob's first byte, then found() says whether any key was seen. No value leaves.
+// The same search over a stream, for the gate: feed(piece) in order from the blob's first byte, end() when the blob ends, then found() says whether any key
+// was seen. The windows are spelledHits' own, so the verdict equals spelledHits' on the whole blob; at most SPELL_WINDOW + SPELL_CARRY bytes and one piece
+// are held. No value leaves.
 export function spelledProbe() {
   let found = false;
-  const feed = spelledStream(() => { found = true; });
-  return { feed: (piece) => { if (!found) feed(piece); }, end() {}, found: () => found };
+  let pend = '';
+  let base = 0;
+  const hit = () => { found = true; };
+  return {
+    feed(piece) {
+      if (found) return;
+      pend += piece.toString('latin1');
+      // a window is run only once a byte past it has arrived, so it is known not to be the last
+      while (pend.length > SPELL_WINDOW + SPELL_CARRY && !found) {
+        spelledWindow(pend.slice(0, SPELL_WINDOW + SPELL_CARRY), base, base === 0, false, hit);
+        pend = pend.slice(SPELL_WINDOW);
+        base += SPELL_WINDOW;
+      }
+    },
+    end() { if (!found && (pend.length || base === 0)) spelledWindow(pend, base, base === 0, true, hit); pend = ''; },
+    found: () => found,
+  };
 }
 // extra: kinds the caller knows from the file's own committed mark (see scanPatch's bomOf); they count even where the bytes alone do not show them.
 export function wideKinds(bytes, extra = []) {

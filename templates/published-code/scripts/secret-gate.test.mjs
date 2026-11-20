@@ -1292,3 +1292,35 @@ test('binaries whose small 16-bit values run in both byte orders (a PE string ta
   const r = run(repo([{ 'pe-like.dll': peLike }]));
   assert.strictEqual(r.code, 0, 'the gate passes the PE-shaped file: ' + r.out + r.err);
 });
+
+// 21a (Bankfire PR 70: CodeRabbit Verify's "false rejection of a longer UTF-16LE word at the 1 MiB window boundary", and CodeRabbit's thread on a key cut by a
+// window): the wide-spelled search runs in windows, and a window's text END satisfied a pattern's closing boundary, so a word too long to be a key, cut by the end,
+// was reported; and a key across the edge was reported at its shorter first sighting, a fingerprint an acknowledgment of the whole value never matches. Each match
+// now belongs to the one window that owns its first byte, and that window's text runs past it. The gate's stream probe uses the same windows.
+test('a wide-spelled word cut by a scan window is judged whole: a word too long to be a key is not reported, and a key across the edge keeps its whole fingerprint -- RED before 21a', async () => {
+  const { spelledHits, spelledProbe, fingerprint } = await import(pathToFileURL(LIB).href);
+  let seed = 5;
+  // bytes with no NUL and no character a spelling can hold, then a balanced sprinkle of NULs: not wide text, and no spelled run of their own
+  const fill = (n) => { const b = Buffer.alloc(n); for (let i = 0; i < n; i++) { seed = (seed * 1103515245 + 12345) >>> 0; b[i] = 0x80 | ((seed >>> 24) & 0x7f); } for (let q = 64; q < n; q += 97) b[q] = 0; return b; };
+  const le = (s) => Buffer.from(s, 'utf16le');
+  const W = 1 << 20;
+  const at = (chars, word) => Buffer.concat([fill(W - 2 * chars), le(word), Buffer.from([0x0a]), fill(4000)]); // the window edge falls after `chars` characters
+  const probe = (b) => { const r = spelledProbe(); for (let i = 0; i < b.length; i += 65536) r.feed(b.subarray(i, i + 65536)); r.end(); return r.found(); };
+  const long = 'AK' + 'IA' + 'ABCDEFGHIJKLMNOPQ'; // 17 body characters: one more than an AWS key id holds, so not a key
+  for (const chars of [20, 21, 4]) {
+    const b = at(chars, long);
+    assert.deepStrictEqual(spelledHits(b, 'f.bin'), [], 'a word too long to be a key, cut after ' + chars + ' characters, is not reported');
+    assert.strictEqual(probe(b), false, 'the gate probe agrees, cut after ' + chars);
+  }
+  const key = 'gl' + 'pat-' + 'aB3'.repeat(10);
+  const whole = fingerprint('f.bin', 'gitlab-pat', key);
+  for (const chars of [28, 30, 7]) {
+    const b = at(chars, key);
+    assert.deepStrictEqual(spelledHits(b, 'f.bin').map((h) => [h.line, h.pattern, h.fp]), [[1, 'gitlab-pat', whole]], 'a key across the edge after ' + chars + ' characters keeps its whole fingerprint');
+    assert.strictEqual(probe(b), true, 'the gate probe finds it, cut after ' + chars);
+  }
+  // inside one window, and in a file of one window, nothing changes
+  const small = Buffer.concat([fill(5000), le(key), Buffer.from([0x0a]), fill(4000)]);
+  assert.deepStrictEqual(spelledHits(small, 'f.bin').map((h) => h.fp), [whole]);
+  assert.strictEqual(probe(small), true);
+});
