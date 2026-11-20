@@ -771,7 +771,7 @@ function scanPatchWide(bytes, opts) {
     if (l.startsWith('\0COMMIT ')) { flush(); commit = l.slice(8).trim(); file = null; inHeader = false; fileHunks = 0; continue; }
     if (l.startsWith('diff --git ') || l.startsWith('diff --cc ')) { flush(); file = null; inHeader = true; fileHunks = 0; continue; }
     if (inHeader && l.startsWith('+++ ')) {
-      const p = Buffer.from(dropOneTab(l.slice(4)), 'latin1').toString('utf8');
+      const p = utf8Path(Buffer.from(dropOneTab(l.slice(4)), 'latin1'));
       file = p === '/dev/null' ? null : unquotePath(p).replace(/^b\//, '');
       if (file !== null && skip && skip(file)) file = null;
       continue;
@@ -819,7 +819,15 @@ function unquotePath(p) {
     for (const x of Buffer.from(ch, 'utf8')) bytes.push(x);
     i += ch.length;
   }
-  return Buffer.from(bytes).toString('utf8');
+  return utf8Path(Buffer.from(bytes));
+}
+// A path's bytes as text, or an EPATHBYTES error naming them when they are not UTF-8 (21a, Bankfire PR 70): decoded, two such paths would become one name, and their
+// hits one fingerprint that one acknowledgment clears for both. The caller (the gate's push scan) turns the error into a failure that names the path.
+function utf8Path(bytes) {
+  const s = bytes.toString('utf8');
+  if (Buffer.from(s, 'utf8').equals(bytes)) return s;
+  const name = bytes[0] === 0x62 && bytes[1] === 0x2f ? bytes.subarray(2) : bytes; // without the b/ of a diff header
+  throw Object.assign(new Error('a path is not valid UTF-8'), { code: 'EPATHBYTES', path: Buffer.from(name) });
 }
 
 // The probe for "binary" by content, git's own text-or-binary rule (xdiff buffer_is_binary): a NUL byte among the first 8,000 bytes.

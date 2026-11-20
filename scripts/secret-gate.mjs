@@ -48,6 +48,8 @@ const known = (a) => a === '--pre-push' || a.startsWith('--remote=');
 // text in a terminal is escaped BY CATEGORY (Cc, Cf, Zl, Zp), never by a list (CWE-117, log injection).
 const unit4 = (c) => `${BACKSLASH}u${c.charCodeAt(0).toString(16).padStart(4, '0')}`;
 const esc = (s) => JSON.stringify(String(s)).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, (c) => c.split('').map(unit4).join(''));
+// A path whose bytes are not UTF-8, shown as bytes (21a): printable ASCII as it is, every other byte, a backslash and a quote as \xNN. The result is plain ASCII.
+const showBytes = (b) => [...b].map((x) => (x >= 0x20 && x <= 0x7e && x !== 0x5c && x !== 0x22 ? String.fromCharCode(x) : `${BACKSLASH}x${x.toString(16).padStart(2, '0')}`)).join('');
 // A hook runs with GIT_DIR, GIT_WORK_TREE, GIT_PREFIX and others that aim git at the repository the hook was started for.
 // Every git call here drops them (the gate runs from the repository root and finds its repository from there), except
 // GIT_INDEX_FILE, which names the index a commit is made from and is the thing commit mode must read, and GIT_CEILING_DIRECTORIES, which only NARROWS where git
@@ -183,12 +185,24 @@ async function main() {
   const remoteArg = (args.find((a) => a.startsWith('--remote=')) || '').slice('--remote='.length);
   const fails = [];
   let tracked;
+  // 21a (Bankfire PR 70, CodeRabbit): the listing is split as BYTES, and a path that does not survive a round trip through UTF-8 is set aside and named, never
+  // decoded to U+FFFD: two such paths would become one name, and their hits one fingerprint that one acknowledgment clears for both
+  const oddPaths = [];
   try {
-    tracked = gitIn(['ls-files', '-s', '-z']).split('\0').filter(Boolean).map((e) => {
-      const m = /^(\d+) ([0-9a-f]{40,64}) (\d)\t([\s\S]*)$/.exec(e);
+    const listing = gitIn(['ls-files', '-s', '-z'], { buffer: true });
+    tracked = [];
+    for (let s = 0; s < listing.length;) {
+      let e = listing.indexOf(0, s);
+      if (e < 0) e = listing.length;
+      const entry = listing.subarray(s, e);
+      s = e + 1;
+      if (!entry.length) continue;
+      const text = entry.toString('utf8');
+      const m = /^(\d+) ([0-9a-f]{40,64}) (\d)\t([\s\S]*)$/.exec(text);
       if (!m) throw new Error('unreadable index entry');
-      return { mode: m[1], sha: m[2], name: m[4] };
-    });
+      if (!Buffer.from(text, 'utf8').equals(entry)) { oddPaths.push(showBytes(entry.subarray(entry.indexOf(9) + 1))); continue; }
+      tracked.push({ mode: m[1], sha: m[2], name: m[4] });
+    }
   } catch (e) {
     const err = String((e && e.stderr) || '');
     // git words "no repository above here" two ways, each with a parenthetical (the upward walk reached the root, or stopped
@@ -288,6 +302,7 @@ async function main() {
     for (const h of scan.scanBytes(bytes, e.name)) keep(h, `tree ${esc(e.name)}:${h.line}`, headAcks);
   });
   if (unreadable.length) fails.push(`${unreadable.length} tracked file(s) could not be read, so were NOT scanned: ${unreadable.slice(0, 3).join('; ')}`);
+  if (oddPaths.length) fails.push(`${oddPaths.length} staged path(s) are not valid UTF-8, so their hits could not get a fingerprint of their own; they were NOT scanned. Rename them: ${oddPaths.slice(0, 3).join('; ')}${oddPaths.length > 3 ? ' ...' : ''}`);
 
   let rangeNote = 'no pushed range (tree mode)';
   if (prePush) {
@@ -302,7 +317,9 @@ async function main() {
         ? `pushed range: ${r.refs} ref(s), ${r.commits} commit(s) with their messages, ${r.tags} annotated tag message(s)`
         : 'pushed range: no refs on stdin, nothing to scan';
     } catch (e) {
-      if (e && e.code === 'ENONCOMMIT') {
+      if (e && e.code === 'EPATHBYTES') {
+        fails.push(`a pushed file's path is not valid UTF-8 (${showBytes(e.path)}), so its hits could not get a fingerprint of their own; the added lines of this push were NOT scanned. Rename the file`);
+      } else if (e && e.code === 'ENONCOMMIT') {
         for (const r of e.refs) fails.push(`${esc(r.ref)} pushes a non-commit object (${/^[a-z]+$/.test(r.type) ? r.type : esc(r.type)}), which the range scan cannot read`);
       } else {
         fails.push(`the pushed range could not be read (${e && e.code ? e.code : 'git or stdin error'}); the added lines of this push were NOT scanned`);

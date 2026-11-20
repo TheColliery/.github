@@ -889,7 +889,10 @@ test('the bytes held for staged text are bounded: a text blob past the ceiling i
   assert.strictEqual(run(dir).code, 0, 'with no variable the same tree passes');
   assert.strictEqual(run(dir, [], '', { SECRET_GATE_MAX_HELD_BYTES: '999999999999' }).code, 0, 'a higher value is ignored: it cannot weaken the ceiling');
   const binary = repo([{ 'logo.png': Buffer.concat([Buffer.from([0, 1, 2, 3]), Buffer.alloc(300000, 7)]).toString('latin1'), 'README.md': 'hello\n' }]);
-  assert.strictEqual(run(binary, [], '', { SECRET_GATE_MAX_HELD_BYTES: '100000' }).code, 0, 'a binary-named binary blob is dropped as it streams and holds nothing');
+  // 21a: the ceiling is the tree's own text (the gate and the scanner this fixture commits, and README.md) plus the 8,000-byte probe, as in the held-bytes test below,
+  // never a fixed number the canon files can outgrow (100000 fell under them at 21a); a binary blob held whole would still cross it by 300 KB
+  const textOnly = fs.statSync(GATE).size + fs.statSync(LIB).size + 'hello\n'.length + 8000;
+  assert.strictEqual(run(binary, [], '', { SECRET_GATE_MAX_HELD_BYTES: String(textOnly) }).code, 0, 'a binary-named binary blob is dropped as it streams and holds nothing');
 });
 
 // t343 F5 (2026-11-18): a binary-looking NAME and a first 8,000 bytes without a NUL pattern read as wide were enough to skip a UTF-16 file whose wide text starts later: one ASCII character, then CJK text with no
@@ -1323,4 +1326,31 @@ test('a wide-spelled word cut by a scan window is judged whole: a word too long 
   const small = Buffer.concat([fill(5000), le(key), Buffer.from([0x0a]), fill(4000)]);
   assert.deepStrictEqual(spelledHits(small, 'f.bin').map((h) => h.fp), [whole]);
   assert.strictEqual(probe(small), true);
+});
+
+// 21a (Bankfire PR 70, CodeRabbit on the gate's index listing): a path that is not valid UTF-8 was decoded to U+FFFD, so two such paths holding one key became one
+// string, one hit and one fingerprint, and one acknowledgment cleared both; the push side's patch headers decoded the same way. Such a path now fails the gate by
+// name, at commit and at push, and its hits are never given a fingerprint another path shares. A path that is valid UTF-8 keeps its fingerprint.
+test('a staged or pushed path that is not valid UTF-8 fails the gate by name instead of sharing a fingerprint with another path -- RED before 21a', () => {
+  const KEY2 = 'gh' + 'p_' + 'Q7w'.repeat(12);
+  const dir = repo([{ 'README.md': 'plain\n' }]);
+  const gitIn = (args, input) => execFileSync('git', [...GIT_IDENTITY, '-C', dir, ...args], { input, timeout: 60000, env: gitEnv() }).toString().trim();
+  const sha = gitIn(['hash-object', '-w', '--stdin'], Buffer.from('token = ' + KEY2 + '\n'));
+  const odd = (x) => Buffer.concat([Buffer.from('a'), Buffer.from([x]), Buffer.from('.txt')]);
+  const entry = (pathBytes) => Buffer.concat([Buffer.from('100644 ' + sha + ' 0\t'), pathBytes, Buffer.from('\n')]);
+  gitIn(['update-index', '--index-info'], Buffer.concat([entry(odd(0xff)), entry(odd(0xfe)), entry(Buffer.from('ok.txt'))]));
+  const r = run(dir);
+  assert.strictEqual(r.code, 1, r.out + r.err);
+  assert.ok(/2 staged path\(s\) are not valid UTF-8/.test(r.out), 'both paths named as unreadable: ' + r.out);
+  assert.ok(r.out.includes('a\\xff.txt') && r.out.includes('a\\xfe.txt'), 'each named by its bytes: ' + r.out);
+  assert.ok(!r.out.includes(String.fromCharCode(0xfffd)), 'no path is shown decoded to U+FFFD: ' + r.out);
+  assert.ok(r.out.includes('tree "ok.txt":1 github-token'), 'a valid path beside them is still scanned: ' + r.out);
+  // the same two files pushed in a commit
+  const tree = gitIn(['write-tree']);
+  const commit = gitIn(['commit-tree', tree, '-p', 'HEAD', '-m', 'odd names']);
+  gitIn(['update-ref', 'refs/heads/main', commit]);
+  const pushed = run(dir, ['--pre-push'], 'refs/heads/main ' + commit + ' refs/heads/main ' + ZERO + '\n');
+  assert.strictEqual(pushed.code, 1, pushed.out + pushed.err);
+  assert.ok(/a pushed file's path is not valid UTF-8 \(a\\x[ef][ef]\.txt\)/.test(pushed.out), 'the push names the path: ' + pushed.out);
+  assert.ok(!pushed.out.includes(String.fromCharCode(0xfffd)), 'no path is shown decoded to U+FFFD: ' + pushed.out);
 });
