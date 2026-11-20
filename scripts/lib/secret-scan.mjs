@@ -731,6 +731,9 @@ export function scanBytes(bytes, file = '') {
   };
   return mergeWide(hits, wideTexts(bytes).map((text) => scanText(text, file)), (h) => `${h.pattern} ${h.fp}`, lineOf);
 }
+// The patch is a --unified=0 stream (scanPatch's contract; the push scan's own `git show --unified=0`): a hunk holds no context line, so its added lines are
+// contiguous from the hunk's + line and an added line's number is that line plus its index among them, here and in scanPatchText (21a, reading 4: a patch with context
+// lines is outside the contract and would be numbered from its first context line).
 // The wide reading of a patch held as BYTES: the added lines of each hunk are joined back into the byte run they were cut from (git cuts at every
 // 0x0A byte, even inside a wide character, and marks a last line with no line break with a "\ No newline" line), and each run the rule reads as
 // wide text is decoded and scanned, and its UTF-8 reading scanned again with its NULs removed; a run past WIDE_DECODE_MAX_BYTES gets the
