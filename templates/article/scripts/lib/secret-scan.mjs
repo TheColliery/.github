@@ -659,7 +659,7 @@ function decodedLineMap(bytes, breaks, { width, offset, le }) {
 }
 // The merge of one raw reading's hits with the wide readings' hits (readings in order, best first). Every raw hit keeps its pattern, fingerprint and place in the list, and is reported
 // at the line in the DECODED text where its bytes sit (20b): its raw line mapped through the reading that first holds its key, or through the best reading when none does, and
-// through the byte-order mark's reading whenever the file has a mark (lineOf, built by scanBytes; 20d). No
+// through the byte-order mark's reading when the file has a mark that fits it (lineOf, built by scanBytes, states the rule once; 20d, 20e). No
 // pairing by count or by ordinal: 20a's equal-count rule and the ordinal before it each named a wrong line in some shape (t352; the da5b7e9 review's two cases), because the raw
 // and the decoded readings can find different occurrences of one key. A key only a wide reading found is added once, at that reading's line, as before. The count and the
 // fingerprint of every raw hit are unchanged.
@@ -699,9 +699,10 @@ export function scanBytes(bytes, file = '') {
   for (let i = 0; i < bytes.length; i++) if (bytes[i] === 0x0a) breaks.push(i);
   const maps = new Map(); // one line map per reading, built when a hit first needs it
   const mapOf = (ri) => { if (!maps.has(ri)) maps.set(ri, decodedLineMap(bytes, breaks, layouts[ri])); return maps.get(ri); };
-  // Which reading a raw hit's line is mapped through. A file with a byte-order mark: the mark's reading, for EVERY raw hit (20d, CodeRabbit on Kolwen PR 197: the first
-  // reading that holds a key can be one the file is not written in, little-endian bytes appended to a big-endian file, and a little-endian reading counts none of its
-  // newlines). A file with no mark: the reading that first holds the key (a UTF-32 file shifted off its grid by a stray byte is decoded only at its own offset), and for a
+  // Which reading a raw hit's line is mapped through (lineOf, below, is the rule; this says why). A file with a byte-order mark: the mark's reading (20d, CodeRabbit on
+  // Kolwen PR 197: the first reading that holds a key can be one the file is not written in, little-endian bytes appended to a big-endian file, and a little-endian reading
+  // counts none of its newlines), EXCEPT where the reading that holds the key decodes MORE newlines than the mark's (20e: a mark that lies about the body, or a stray byte
+  // after a true mark); then the key's reading names the line. A file with no mark: the reading that first holds the key (a UTF-32 file shifted off its grid by a stray byte is decoded only at its own offset), and for a
   // key no reading holds (20c, the re-check's N1), of the readings at offset 0 (a file starts on a character), the one that decodes the most newlines (the first of a tie); a
   // reading at another offset can count a 0x0A inside a character as a newline. Named gap: a file with NO mark that mixes byte orders still takes its key's first reading.
   let marked;
