@@ -1184,6 +1184,21 @@ test('a reported line is the decoded line where the occurrence sits, whatever th
   assert.deepStrictEqual(lines(Buffer.concat([Buffer.from([0xfe, 0xff]), w('x' + String.fromCharCode(0x0a00).repeat(4) + 'y\nm\n ').swap16(), fakeFromBytes, w('\nend').swap16()])), [[3, 'github-token']], 'the mark decides');
   // (sixteen more letters on line 2, so the rule reads it as wide text by its NULs alone; the readings at offset 1 would count the 0x0A inside U+410A as a newline)
   assert.deepStrictEqual(lines(Buffer.concat([w('x' + String.fromCharCode(0x410a) + 'y\n' + 'm'.repeat(17) + '\n ').swap16(), fakeFromBytes, w('\nend').swap16()])), [[3, 'github-token']], 'A7 without a mark');
+  // 20d (CodeRabbit on Kolwen PR 197, thread 4642988514): a key held by a reading that does NOT fit the file (little-endian bytes appended to a big-endian file, which the
+  // little-endian reading, first in order, decodes) took that reading's line map, which counts none of the file's newlines: both occurrences were named line 1. Every raw hit is now
+  // mapped through the byte-order mark's reading whenever the file has one. UTF-16BE and UTF-32BE with a mark; the little-endian mirrors were already right, because a
+  // little-endian reading comes first. A file with NO mark keeps its key's first reading (the UTF-32 file shifted off its grid needs it), a named gap for mixed byte orders.
+  const T2 = 'gh' + 'p_' + 'A'.repeat(36);
+  const u32 = (s, little) => { const cps = [...s].map((c) => c.codePointAt(0)); const b = Buffer.alloc(cps.length * 4); cps.forEach((cp, k) => (little ? b.writeUInt32LE(cp, k * 4) : b.writeUInt32BE(cp, k * 4))); return b; };
+  const MARK = String.fromCharCode(0xfeff);
+  assert.deepStrictEqual(lines(Buffer.concat([Buffer.from([0xfe, 0xff]), w('\n ' + T2 + '\n ').swap16(), w(T2)])), [[2, 'github-token'], [3, 'github-token']], 'UTF-16BE with little-endian bytes appended');
+  assert.deepStrictEqual(lines(Buffer.concat([u32(MARK + '\n ' + T2 + '\n ', false), u32(T2, true)])), [[2, 'github-token'], [3, 'github-token']], 'UTF-32BE with little-endian bytes appended');
+  assert.deepStrictEqual(lines(Buffer.concat([BOM, w('\n ' + T2 + '\n '), w(T2).swap16()])), [[2, 'github-token'], [3, 'github-token']], 'the UTF-16LE mirror');
+  assert.deepStrictEqual(lines(Buffer.concat([u32(MARK + '\n ' + T2 + '\n ', true), u32(T2, false)])), [[2, 'github-token'], [3, 'github-token']], 'the UTF-32LE mirror');
+  // 20e (the 6ea2246 review's L1): the mark wins only where it fits at least as well as the key's own reading, by the newlines each decodes. A big-endian mark over a
+  // little-endian body (V5), and a true mark followed by one stray byte (V9, the body at an odd offset), decode fewer newlines than the key's reading: its line stands.
+  assert.deepStrictEqual(lines(Buffer.concat([Buffer.from([0xfe, 0xff]), w('top\nmid\n ' + T2 + '\nend\n')])), [[3, 'github-token']], 'V5, a mark that lies about the body');
+  assert.deepStrictEqual(lines(Buffer.concat([BOM, Buffer.from([0x20]), w('top\n ' + T2 + '\nmid\n ' + T2 + '\n')])), [[2, 'github-token'], [4, 'github-token']], 'V9, a stray byte after a true mark');
   // big-endian: a decoded newline is the bytes 00 0A, its 0x0A byte LAST; U+0A41 is 0A 41 there, a raw break only
   assert.deepStrictEqual(lines(Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from('x' + NL + 'y\nreal ' + TOK + '\nmid\n', 'utf16le').swap16()])), [[2, 'github-token']]);
 });
