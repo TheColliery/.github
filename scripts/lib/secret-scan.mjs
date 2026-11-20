@@ -472,6 +472,40 @@ function bomKinds(b) {
   if (b.length >= 2 && ((b[0] === 0xff && b[1] === 0xfe) || (b[0] === 0xfe && b[1] === 0xff))) return ['utf16'];
   return [];
 }
+// The run state wideKinds' balanced-order test reads (20e), fed one byte at a time with its offset in the file, so the gate can carry it across the pieces
+// of a stream: offsets must come in order from 0. both16: runs of both two-byte shapes; both32: runs of three-NUL units at two places for the other byte.
+export function wideRuns() {
+  let prev = false;
+  let side = -1;
+  let run16 = 0;
+  const got16 = [false, false];
+  let quad = 0;
+  let hole = -1;
+  let pos32 = -1;
+  let run32 = 0;
+  const got32 = [false, false, false, false];
+  return {
+    add(at, nul) {
+      if (at & 1) {
+        const s = prev && !nul ? 0 : !prev && nul ? 1 : -1;
+        run16 = s >= 0 && s === side ? run16 + 1 : s >= 0 ? 1 : 0;
+        side = s;
+        if (run16 >= WIDE_MIN_NULS) got16[s] = true;
+      }
+      prev = nul;
+      if ((at & 3) === 0) { quad = 0; hole = -1; }
+      if (nul) quad++; else hole = at & 3;
+      if ((at & 3) === 3) {
+        const p = quad === 3 ? hole : -1;
+        run32 = p >= 0 && p === pos32 ? run32 + 1 : p >= 0 ? 1 : 0;
+        pos32 = p;
+        if (run32 >= WIDE_MIN_NULS) got32[p] = true;
+      }
+    },
+    both16: () => got16[0] && got16[1],
+    both32: () => got32.filter(Boolean).length >= 2,
+  };
+}
 // extra: kinds the caller knows from the file's own committed mark (see scanPatch's bomOf); they count even where the bytes alone do not show them.
 export function wideKinds(bytes, extra = []) {
   const b = bytes;
@@ -484,6 +518,18 @@ export function wideKinds(bytes, extra = []) {
   for (let k = 0; k < 4; k++) {
     const high = Math.min(z[(k + 1) & 3], z[(k + 2) & 3], z[(k + 3) & 3]);
     if (high >= WIDE_MIN_NULS && high >= WIDE_SKEW * z[k]) { kinds.add('utf32'); break; }
+  }
+  // 20e (the 6ea2246 review's M1): text of both byte orders in one file balances the NULs across positions, so the skew test above sees nothing. Such a
+  // file is told by RUNS of both orders: WIDE_MIN_NULS two-byte units in a row with the NUL first ([0,c]) AND as many in a row with it second ([c,0]); for
+  // UTF-32, WIDE_MIN_NULS four-byte units in a row with exactly three NULs, at two different places for the one non-NUL byte. A key in wide text is such a
+  // run (ASCII, at least 15 characters), and two parts whose units had the same shape would have skewed the NULs. Text of one order stays with the skew
+  // test, as before. Random bytes give a two-byte unit of each shape about once in 128 units, so a run of 12 is out of reach, and a run of zeros has two or
+  // four NULs per unit. One pass, only when a kind is still missing and the file holds the NULs.
+  if ((!kinds.has('utf16') || !kinds.has('utf32')) && z[0] + z[1] + z[2] + z[3] >= WIDE_MIN_NULS) {
+    const runs = wideRuns();
+    for (let i = 0; i < b.length; i++) runs.add(i, b[i] === 0);
+    if (runs.both16()) kinds.add('utf16');
+    if (runs.both32()) kinds.add('utf32');
   }
   return [...kinds];
 }

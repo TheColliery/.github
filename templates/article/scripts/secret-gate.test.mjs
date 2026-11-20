@@ -1202,3 +1202,47 @@ test('a reported line is the decoded line where the occurrence sits, whatever th
   // big-endian: a decoded newline is the bytes 00 0A, its 0x0A byte LAST; U+0A41 is 0A 41 there, a raw break only
   assert.deepStrictEqual(lines(Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from('x' + NL + 'y\nreal ' + TOK + '\nmid\n', 'utf16le').swap16()])), [[2, 'github-token']]);
 });
+
+// 20e (the 6ea2246 review's M1, older than 6ea2246): a file with no byte-order mark whose big-endian part and appended little-endian part are near equal in size puts as many
+// NULs on even positions as on odd ones, so the skew test read it as no wide text at all, the scanner read it as UTF-8 with its NULs left in, and it reported NOTHING: the gate passed
+// a file that holds the key twice. A file whose units show runs of BOTH byte orders (twelve two-byte units in a row with the NUL first, twelve with it second; for UTF-32, twelve
+// three-NUL units in a row at two places for the other byte) is now read in the wide readings. Controls: random bytes, a run of zeros, a UTF-8 file with NULs on both parities and
+// text of ONE order whose NULs do not skew (left to the skew test, as before) stay plain.
+test('a file with no mark that balances big-endian and little-endian text is still read as wide text: its keys are reported and the gate refuses -- RED before 20e', async () => {
+  const { scanBytes, wideKinds } = await import(pathToFileURL(LIB).href);
+  const T = 'gh' + 'p_' + 'A'.repeat(36);
+  const le16 = (s) => Buffer.from(s, 'utf16le');
+  const be16 = (s) => Buffer.from(s, 'utf16le').swap16();
+  const u32 = (s, little) => { const cps = [...s].map((c) => c.codePointAt(0)); const b = Buffer.alloc(cps.length * 4); cps.forEach((cp, k) => (little ? b.writeUInt32LE(cp, k * 4) : b.writeUInt32BE(cp, k * 4))); return b; };
+  const mixed16 = Buffer.concat([be16('\n ' + T + '\n '), le16(T)]);
+  assert.deepStrictEqual(scanBytes(mixed16, 'f.txt').map((h) => h.pattern), ['github-token', 'github-token'], 'UTF-16, balanced orders: both keys reported');
+  const mixed32 = Buffer.concat([u32('\n ' + T + '\n ', false), u32(T, true)]);
+  assert.ok(scanBytes(mixed32, 'f.txt').some((h) => h.pattern === 'github-token'), 'UTF-32, balanced orders: the key is reported');
+  // the gate refuses the balanced file
+  const r = run(repo([{ 'mixed.txt': mixed16 }]));
+  assert.strictEqual(r.code, 1, r.out + r.err);
+  assert.ok(r.out.includes('tree "mixed.txt"') && r.out.includes('github-token'), r.out);
+  // a binary-named file whose first 8,000 bytes read as binary and not wide, with the balanced text after them: the gate drops it by its prefix and
+  // judges it by the stream's counters, so those counters carry the run too (RED against a gate that kept only the NUL totals)
+  const head = Buffer.alloc(9000, 0x41);
+  for (let p = 100; p < 9000; p += 101) head[p] = 0; // NULs on both parities, no run: binary by the prefix, not wide
+  const big = Buffer.concat([head, mixed16]);
+  assert.deepStrictEqual(wideKinds(head), [], 'the prefix alone is not wide text');
+  const rb = run(repo([{ 'mixed.bin': big }]));
+  assert.strictEqual(rb.code, 1, rb.out + rb.err);
+  assert.ok(rb.out.includes('tree "mixed.bin"') && rb.out.includes('github-token'), rb.out);
+  // controls
+  let seed = 7;
+  const rnd = Buffer.alloc(200000);
+  for (let i = 0; i < rnd.length; i++) { seed = (seed * 1103515245 + 12345) >>> 0; rnd[i] = seed >>> 24; }
+  assert.deepStrictEqual(wideKinds(rnd), [], 'pseudo-random bytes are not wide text');
+  assert.deepStrictEqual(wideKinds(Buffer.concat([Buffer.alloc(100000, 0), Buffer.from('id ' + T + '\n')])), [], 'a run of zeros is not wide text');
+  // 17-byte lines put the NULs on both parities, so the skew test is silent and only the unit test could misread it
+  const utf8 = Buffer.from(('plain text line' + String.fromCharCode(0) + '\n').repeat(40), 'utf8');
+  assert.deepStrictEqual(wideKinds(utf8), [], 'UTF-8 with a few NULs is not wide text');
+  const N = String.fromCharCode(0);
+  // 20 even NULs (10 at offset 0 mod 4, 10 at 2) against the key's 40 odd ones: under 4 to 1, and no three of four positions full
+  const oneOrder = Buffer.concat([Buffer.from((N + 'abcde' + N + 'f').repeat(10), 'latin1'), le16(T)]);
+  assert.ok(scanBytes(oneOrder, 'f.txt').length === 0, 'the premise: this file is missed by the skew test today (a known limit, not this unit)');
+  assert.deepStrictEqual(wideKinds(oneOrder), [], 'one order whose NULs do not skew stays with the skew test');
+});

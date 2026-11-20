@@ -84,7 +84,11 @@ const PROBE_BYTES = 8000; // the scanner's looksBinary reads this many first byt
 // (the scanner's source repository, its own constants); a test compares this verdict with the scanner's on the whole buffer.
 const WIDE_MIN_NULS = 12;
 const WIDE_SKEW = 4;
-const wideByCounts = (z) => {
+// 20e (the 6ea2246 review's M1): wideKinds also reads a file of both byte orders, whose totals balance, by runs of units of both orders. That test is the
+// scanner's own state (wideRuns, passed in by the caller, never restated here), fed every byte of the stream at its blob offset beside the totals.
+const newCounts = (newRuns) => ({ z: [0, 0, 0, 0], runs: newRuns ? newRuns() : null });
+const wideByCounts = ({ z, runs }) => {
+  if (runs && (runs.both16() || runs.both32())) return true;
   const even = z[0] + z[2];
   const odd = z[1] + z[3];
   if (Math.max(even, odd) >= WIDE_MIN_NULS && Math.max(even, odd) >= WIDE_SKEW * Math.min(even, odd)) return true;
@@ -94,8 +98,14 @@ const wideByCounts = (z) => {
   }
   return false;
 };
-const countNuls = (z, piece, offset) => { for (let i = 0; i < piece.length; i++) if (piece[i] === 0) z[(offset + i) & 3]++; };
-function readBlobs(shas, probe, looksBinary, nameOf = new Map()) {
+const countNuls = (c, piece, offset) => {
+  for (let i = 0; i < piece.length; i++) {
+    const nul = piece[i] === 0;
+    if (nul) c.z[(offset + i) & 3]++;
+    if (c.runs) c.runs.add(offset + i, nul);
+  }
+};
+function readBlobs(shas, probe, looksBinary, nameOf = new Map(), newRuns = null) {
   const ids = [...new Set(shas)];
   const ceiling = heldCeiling();
   let held = 0;
@@ -150,7 +160,7 @@ function readBlobs(shas, probe, looksBinary, nameOf = new Map()) {
           const size = Number(parts[2]);
           if (!Number.isSafeInteger(size) || size < 0) return stop('cat-file output was malformed');
           if (!probe.has(id) && held + size > ceiling) return tooBig(id, 'is too large to hold'); // a header already says it: refused before one byte is held
-          cur = { id, left: size, size, keep: probe.has(id) ? null : true, parts: [], have: 0, z: probe.has(id) ? [0, 0, 0, 0] : null };
+          cur = { id, left: size, size, keep: probe.has(id) ? null : true, parts: [], have: 0, z: probe.has(id) ? newCounts(newRuns) : null };
         }
       }
     });
@@ -231,7 +241,7 @@ async function main() {
     const nameOf = new Map(wanted.map((e) => [e.sha, e.name]));
     const prefixBinary = (b) => scan.looksBinary(b) && !scan.wideKinds(b).length;
     try {
-      const first = await readBlobs(wanted.map((e) => e.sha), probe, prefixBinary, nameOf);
+      const first = await readBlobs(wanted.map((e) => e.sha), probe, prefixBinary, nameOf, scan.wideRuns);
       // A blob whose NUL totals read as wide text is read again, one at a time, and judged on its whole bytes. It is text by the gate's own rule, so the held-bytes
       // ceiling binds it as it binds text: the first read's buffers and every earlier re-read's count against the same ceiling (t346 F19), and one that cannot be held is a
       // FAIL line that names it, never a skip as binary (t346 F18: a wide file past the ceiling passed unscanned). The results are staged and become `blobs` only when every
