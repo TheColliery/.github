@@ -1175,6 +1175,15 @@ test('a reported line is the decoded line where the occurrence sits, whatever th
   assert.deepStrictEqual(lines(Buffer.concat([BOM, w('x' + String.fromCharCode(0x410a) + 'y\nreal ' + TOK + '\n')])), [[2, 'github-token']]);
   // a 0A 00 pair that straddles two units (U+0A41 then U+4100, the bytes 41 0A 00 41) is no decoded newline: only an aligned unit counts
   assert.deepStrictEqual(lines(Buffer.concat([BOM, w('x' + String.fromCharCode(0x0a41, 0x4100) + 'y\nreal ' + TOK + '\n')])), [[2, 'github-token']]);
+  // 20c (the re-check's N1): a key no decoded reading holds (token-shaped bytes that decode as CJK) is mapped through the reading that fits the file: its byte-order mark's, so a
+  // UTF-16BE file names line 3 where the bytes sit (A7; reading 0, little-endian, saw no newline and named line 1); the same shape in UTF-16LE stays on line 3 (A6)
+  assert.deepStrictEqual(lines(Buffer.concat([BOM, w('x' + NL + 'y\nm\n '), fakeFromBytes, w('\nend')])), [[3, 'github-token']], 'A6, little-endian');
+  assert.deepStrictEqual(lines(Buffer.concat([Buffer.from([0xfe, 0xff]), w('x' + String.fromCharCode(0x410a) + 'y\nm\n ').swap16(), fakeFromBytes, w('\nend').swap16()])), [[3, 'github-token']], 'A7, big-endian');
+  // with no byte-order mark, the reading that decodes the most newlines: the same big-endian bytes without their mark still name line 3
+  // the mark wins over a newline count: in this big-endian file four U+0A00 (the bytes 0A 00) would be newlines to a little-endian reading, which would then decode the most
+  assert.deepStrictEqual(lines(Buffer.concat([Buffer.from([0xfe, 0xff]), w('x' + String.fromCharCode(0x0a00).repeat(4) + 'y\nm\n ').swap16(), fakeFromBytes, w('\nend').swap16()])), [[3, 'github-token']], 'the mark decides');
+  // (sixteen more letters on line 2, so the rule reads it as wide text by its NULs alone; the readings at offset 1 would count the 0x0A inside U+410A as a newline)
+  assert.deepStrictEqual(lines(Buffer.concat([w('x' + String.fromCharCode(0x410a) + 'y\n' + 'm'.repeat(17) + '\n ').swap16(), fakeFromBytes, w('\nend').swap16()])), [[3, 'github-token']], 'A7 without a mark');
   // big-endian: a decoded newline is the bytes 00 0A, its 0x0A byte LAST; U+0A41 is 0A 41 there, a raw break only
   assert.deepStrictEqual(lines(Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from('x' + NL + 'y\nreal ' + TOK + '\nmid\n', 'utf16le').swap16()])), [[2, 'github-token']]);
 });
