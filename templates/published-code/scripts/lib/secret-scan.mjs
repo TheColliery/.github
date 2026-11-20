@@ -549,7 +549,8 @@ function decodedLineMap(bytes, breaks, { width, offset, le }) {
   return map;
 }
 // The merge of one raw reading's hits with the wide readings' hits (readings in order, best first). Every raw hit keeps its pattern, fingerprint and place in the list, and is reported
-// at the line in the DECODED text where its bytes sit (20b): its raw line mapped through the reading that first holds its key, or through the best reading when none does. No
+// at the line in the DECODED text where its bytes sit (20b): its raw line mapped through the reading that first holds its key, or through the best reading when none does, and
+// through the byte-order mark's reading whenever the file has a mark (lineOf, built by scanBytes; 20d). No
 // pairing by count or by ordinal: 20a's equal-count rule and the ordinal before it each named a wrong line in some shape (t352; the da5b7e9 review's two cases), because the raw
 // and the decoded readings can find different occurrences of one key. A key only a wide reading found is added once, at that reading's line, as before. The count and the
 // fingerprint of every raw hit are unchanged.
@@ -588,20 +589,28 @@ export function scanBytes(bytes, file = '') {
   for (let i = 0; i < bytes.length; i++) if (bytes[i] === 0x0a) breaks.push(i);
   const maps = new Map(); // one line map per reading, built when a hit first needs it
   const mapOf = (ri) => { if (!maps.has(ri)) maps.set(ri, decodedLineMap(bytes, breaks, layouts[ri])); return maps.get(ri); };
-  // A key no decoded reading holds is mapped through the reading that fits the file's own layout (20c, the re-check's N1; a fixed reading 0, little-endian at offset 0, sees no
-  // newline in a big-endian file and named line 1): the byte-order mark's reading when there is one, else, of the readings at offset 0 (a file starts on a character), the one
-  // that decodes the most newlines (the first of a tie); a reading at another offset can count a 0x0A inside a character as a newline.
-  let fit = null;
-  const fitting = () => {
-    if (fit !== null) return fit;
+  // Which reading a raw hit's line is mapped through. A file with a byte-order mark: the mark's reading, for EVERY raw hit (20d, CodeRabbit on Kolwen PR 197: the first
+  // reading that holds a key can be one the file is not written in, little-endian bytes appended to a big-endian file, and a little-endian reading counts none of its
+  // newlines). A file with no mark: the reading that first holds the key (a UTF-32 file shifted off its grid by a stray byte is decoded only at its own offset), and for a
+  // key no reading holds (20c, the re-check's N1), of the readings at offset 0 (a file starts on a character), the one that decodes the most newlines (the first of a tie); a
+  // reading at another offset can count a 0x0A inside a character as a newline. Named gap: a file with NO mark that mixes byte orders still takes its key's first reading.
+  let marked;
+  const markReading = () => {
+    if (marked !== undefined) return marked;
     const b = bytes;
     const mark = b[0] === 0xff && b[1] === 0xfe && b[2] === 0 && b[3] === 0 ? { width: 4, le: true } : b[0] === 0 && b[1] === 0 && b[2] === 0xfe && b[3] === 0xff ? { width: 4, le: false }
       : b[0] === 0xff && b[1] === 0xfe ? { width: 2, le: true } : b[0] === 0xfe && b[1] === 0xff ? { width: 2, le: false } : null;
-    fit = mark ? layouts.findIndex((l) => l.width === mark.width && l.offset === 0 && l.le === mark.le) : -1;
-    if (fit < 0) { fit = 0; for (let ri = 1; ri < layouts.length; ri++) if (layouts[ri].offset === 0 && mapOf(ri).newlines > mapOf(fit).newlines) fit = ri; }
-    return fit;
+    marked = mark ? layouts.findIndex((l) => l.width === mark.width && l.offset === 0 && l.le === mark.le) : -1;
+    return marked;
   };
-  const lineOf = (ri, line) => mapOf(ri < 0 ? fitting() : ri)(line);
+  let best = null;
+  const bestAtZero = () => {
+    if (best !== null) return best;
+    best = 0;
+    for (let ri = 1; ri < layouts.length; ri++) if (layouts[ri].offset === 0 && mapOf(ri).newlines > mapOf(best).newlines) best = ri;
+    return best;
+  };
+  const lineOf = (ri, line) => { const m = markReading(); return mapOf(m >= 0 ? m : ri >= 0 ? ri : bestAtZero())(line); };
   return mergeWide(hits, wideTexts(bytes).map((text) => scanText(text, file)), (h) => `${h.pattern} ${h.fp}`, lineOf);
 }
 // The wide reading of a patch held as BYTES: the added lines of each hunk are joined back into the byte run they were cut from (git cuts at every
