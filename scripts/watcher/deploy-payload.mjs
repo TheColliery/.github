@@ -103,7 +103,7 @@ export function buildPayload({ files, name, from, cron = '17 * * * *', kvId = nu
 
 const USAGE = `usage: node scripts/watcher/deploy-payload.mjs <instance> --from <sender> [--name <worker>] [--cron "<5 fields>"] [--kv-id <32 hex>] [--server claude-ai|cloudflare-api] [--create-kv] [--out <file>]
   Prints the body of the Cloudflare MCP execute call that deploys a change-watcher instance (the modules embedded, a git blob guard, the KV namespace
-  found or created, the schedule set, workers.dev switched off, bindings and schedule read back). Instances: ${INSTANCES.join(', ')}.
+  found (created only with --create-kv), the schedule set, workers.dev switched off, bindings and schedule read back). Instances: ${INSTANCES.join(', ')}.
   --name defaults to <instance>-change-watcher; --cron to "17 * * * *" (hourly). With --out the payload goes to that file and stdout carries one summary line.
   --server names the MCP server that runs it: claude-ai (default, the claude.ai Cloudflare connector) or cloudflare-api (the Cloudflare API MCP server, which also needs the
   upload's Content-Type in headers). --create-kv lets it create a missing <name>-state KV namespace; without it a missing one answers "nothing written".

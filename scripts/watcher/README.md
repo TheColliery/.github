@@ -38,7 +38,7 @@ One command prints the whole deploy as the body of a Cloudflare MCP `execute` ca
 node scripts/watcher/deploy-payload.mjs <instance> --from <sender address> [--name <worker>] [--cron "<5 fields>"] [--kv-id <32 hex>] [--out <file>]
 ```
 
-The payload finds or creates the KV namespace `<name>-state`, uploads `worker.mjs`, `watcher.mjs` and `sources/<instance>.mjs` (as `sources.mjs`), sets the schedule (default hourly, `17 * * * *`), switches the workers.dev route off, and reads the bindings and the schedule back. It reads no credential: the MCP session holds the grant, and the account's verified destination address is read inside the sandbox and never returned.
+The payload finds the KV namespace `<name>-state` (creates it only with `--create-kv`), uploads `worker.mjs`, `watcher.mjs` and `sources/<instance>.mjs` (as `sources.mjs`), sets the schedule (default hourly, `17 * * * *`), switches the workers.dev route off, and reads the bindings and the schedule back. It reads no credential: the MCP session holds the grant, and the account's verified destination address is read inside the sandbox and never returned.
 
 | Instance | Command | Account |
 | --- | --- | --- |

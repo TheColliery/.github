@@ -523,34 +523,53 @@ export function wideTexts(bytes, extra = []) {
 export const WIDE_DECODE_MAX_BYTES = 8 << 20;
 export const WIDE_TOO_LARGE = 'wide-text-too-large-to-decode';
 const tooLarge = (bytes, file) => fingerprint(file, WIDE_TOO_LARGE, createHash('sha256').update(bytes).digest('hex'));
-// The merge of one raw reading's hits with the wide readings' hits (readings in order, best first). A raw hit whose key (pattern and fingerprint, or
-// the caller's keyOf) a wide reading also found keeps its own pattern, fingerprint and place in the list, and takes that reading's LINE for the same
-// occurrence: the k-th raw hit takes the k-th wide hit when both found the key equally often; when the counts differ the raw reading missed or added an
-// occurrence (a NUL-removed token glued to its neighbour fails its boundary), the ordinal pairs the wrong ones, and every raw hit of that key keeps its own line (t352). The raw UTF-8 reading counts a 0x0A
-// byte inside a wide character as a line break, so its line is the wrong one there. A key only a wide reading found is added once, as before. The
-// first reading that holds a key gives its lines. The count and the fingerprint of every raw hit are unchanged.
-function mergeWide(raw, readings, keyOf) {
+// The layout of each of wideTexts' readings, in the same order: { width, offset, le }.
+function wideLayouts(bytes, extra = []) {
+  const out = [];
+  for (const kind of wideKinds(bytes, extra)) {
+    const width = kind === 'utf16' ? 2 : 4;
+    for (let offset = 0; offset < width; offset++) for (const le of [true, false]) out.push({ width, offset, le });
+  }
+  return out;
+}
+// For one decoded reading, the decoded line on which a raw line's bytes sit (20b, the da5b7e9 review's M1). The raw UTF-8 reading breaks a line at EVERY 0x0A byte, a 0x0A inside a
+// wide character included; a decoded newline is a code unit whose value is 0x0A, and its 0x0A byte (the unit's first byte in little-endian order, its last in big-endian) is one of
+// those raw breaks. So every raw line lies inside one decoded line, and raw line r sits on decoded line 1 + the number of decoded newlines among the r - 1 raw breaks before it.
+function decodedLineMap(bytes, breaks, { width, offset, le }) {
+  const end = offset + Math.floor((bytes.length - offset) / width) * width; // decodeUnits drops a partial last unit
+  const before = new Int32Array(breaks.length + 1); // before[i] = decoded newlines among the first i raw breaks
+  for (let i = 0; i < breaks.length; i++) {
+    const u = le ? breaks[i] : breaks[i] - (width - 1); // the unit this 0x0A byte would be the low byte of
+    let nl = u >= offset && u + width <= end && (u - offset) % width === 0;
+    for (let k = 1; nl && k < width; k++) if (bytes[le ? u + k : u + width - 1 - k] !== 0) nl = false;
+    before[i + 1] = before[i] + (nl ? 1 : 0);
+  }
+  return (line) => 1 + before[Math.min(Math.max(line - 1, 0), breaks.length)];
+}
+// The merge of one raw reading's hits with the wide readings' hits (readings in order, best first). Every raw hit keeps its pattern, fingerprint and place in the list, and is reported
+// at the line in the DECODED text where its bytes sit (20b): its raw line mapped through the reading that first holds its key, or through the best reading when none does. No
+// pairing by count or by ordinal: 20a's equal-count rule and the ordinal before it each named a wrong line in some shape (t352; the da5b7e9 review's two cases), because the raw
+// and the decoded readings can find different occurrences of one key. A key only a wide reading found is added once, at that reading's line, as before. The count and the
+// fingerprint of every raw hit are unchanged.
+function mergeWide(raw, readings, keyOf, lineOf) {
   const won = new Map();
-  for (const found of readings) {
+  readings.forEach((found, ri) => {
     const byKey = new Map();
     for (const h of found) { const k = keyOf(h); if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(h); }
-    for (const [k, list] of byKey) if (!won.has(k)) won.set(k, list);
-  }
-  const rawCount = new Map();
-  for (const h of raw) { const k = keyOf(h); rawCount.set(k, (rawCount.get(k) || 0) + 1); }
-  const taken = new Map();
+    for (const [k, list] of byKey) if (!won.has(k)) won.set(k, { list, ri });
+  });
+  const inRaw = new Set();
   const out = raw.map((h) => {
     const k = keyOf(h);
-    const j = taken.get(k) || 0;
-    taken.set(k, j + 1);
+    inRaw.add(k);
     const w = won.get(k);
-    return w && w.length === rawCount.get(k) ? { ...h, line: w[j].line } : h;
+    return { ...h, line: lineOf(w ? w.ri : 0, h.line) };
   });
-  for (const [k, list] of won) if (!taken.has(k)) out.push(list[0]);
+  for (const [k, w] of won) if (!inRaw.has(k)) out.push(w.list[0]);
   return out;
 }
 // Scan a whole blob from its bytes: the UTF-8 reading, as scanText reads it, with the NUL-removed second reading only when the rule reads the blob
-// as wide text; then each decoded reading of wide text, merged in by mergeWide (a key both readings find takes the decoded line). Bytes the rule
+// as wide text; then each decoded reading of wide text, merged in by mergeWide (every hit at the decoded line where its bytes sit). Bytes the rule
 // does not read as wide text give exactly the UTF-8 reading; wide text past WIDE_DECODE_MAX_BYTES gives the UTF-8 reading and a
 // WIDE_TOO_LARGE hit at line 1. hits: [{ line, pattern, fp }]
 export function scanBytes(bytes, file = '') {
@@ -560,7 +579,12 @@ export function scanBytes(bytes, file = '') {
   }
   const hits = scanText(bytes.toString('utf8'), file, { nulDrop: wide });
   if (!wide) return hits;
-  return mergeWide(hits, wideTexts(bytes).map((text) => scanText(text, file)), (h) => `${h.pattern} ${h.fp}`);
+  const layouts = wideLayouts(bytes);
+  const breaks = [];
+  for (let i = 0; i < bytes.length; i++) if (bytes[i] === 0x0a) breaks.push(i);
+  const maps = new Map(); // one line map per reading, built when a hit first needs it
+  const lineOf = (ri, line) => { if (!maps.has(ri)) maps.set(ri, decodedLineMap(bytes, breaks, layouts[ri])); return maps.get(ri)(line); };
+  return mergeWide(hits, wideTexts(bytes).map((text) => scanText(text, file)), (h) => `${h.pattern} ${h.fp}`, lineOf);
 }
 // The wide reading of a patch held as BYTES: the added lines of each hunk are joined back into the byte run they were cut from (git cuts at every
 // 0x0A byte, even inside a wide character, and marks a last line with no line break with a "\ No newline" line), and each run the rule reads as

@@ -1154,3 +1154,27 @@ test('a raw hit keeps its own line when the decoded reading found the key a diff
   const even = scanBytes(Buffer.from(String.fromCharCode(0x0A41) + T, 'utf16le'), 'w.txt');
   assert.deepStrictEqual(even.map((h) => [h.line, h.pattern]), [[1, 'github-token']], 'equal counts still take the decoded line');
 });
+
+// 20b (the da5b7e9 review's M1): the equal-count rule of 20a kept a RAW line wherever the counts differed, and the raw reading counts a 0x0A byte inside a wide character as a line break,
+// so a key after such a character was named one line too low. A reported line is now the line in the DECODED text where that occurrence's bytes sit, by position: every decoded newline
+// holds a 0x0A byte the raw reading also breaks on, so each raw line lies inside one decoded line, and the merge maps a raw hit's line to it. The reviewer's two cases (U+0A41, the bytes
+// 41 0A, on line 1), the t352 case and the equal-count control above stay green. A FAKE token, built in code.
+test('a reported line is the decoded line where the occurrence sits, whatever the two readings count -- the da5b7e9 review\'s two cases, RED before 20b', async () => {
+  const { scanBytes } = await import(pathToFileURL(LIB).href);
+  const TOK = 'g' + 'hp_' + 'Zx9Q'.repeat(9);
+  const BOM = Buffer.from([0xff, 0xfe]);
+  const w = (s) => Buffer.from(s, 'utf16le');
+  const fakeFromBytes = Buffer.from(TOK, 'latin1'); // the raw reading reads these bytes as the token; the decoded reading reads CJK, on line 4
+  const NL = String.fromCharCode(0x0a41);
+  const lines = (b) => scanBytes(b, 'f.txt').map((h) => [h.line, h.pattern]);
+  // raw 2, wide 1: the real token on decoded line 2, the token-shaped bytes on decoded line 4 (raw lines 3 and 5)
+  assert.deepStrictEqual(lines(Buffer.concat([BOM, w('x' + NL + 'y\nreal ' + TOK + '\nmid\n '), fakeFromBytes, w('\nend\n')])), [[2, 'github-token'], [4, 'github-token']]);
+  // raw 1, wide 2: the raw reading finds the first occurrence (decoded line 2, raw line 3); the second is glued in the raw reading
+  assert.deepStrictEqual(lines(Buffer.concat([BOM, w('x' + NL + 'y\nreal ' + TOK + '\nmid\n' + String.fromCharCode(0x4e2d) + TOK + '\nend\n')])), [[2, 'github-token']]);
+  // a 0x0A byte that is the LOW byte of a unit that is not a newline (U+410A, the bytes 0A 41) breaks only the raw line: the key stays on decoded line 2
+  assert.deepStrictEqual(lines(Buffer.concat([BOM, w('x' + String.fromCharCode(0x410a) + 'y\nreal ' + TOK + '\n')])), [[2, 'github-token']]);
+  // a 0A 00 pair that straddles two units (U+0A41 then U+4100, the bytes 41 0A 00 41) is no decoded newline: only an aligned unit counts
+  assert.deepStrictEqual(lines(Buffer.concat([BOM, w('x' + String.fromCharCode(0x0a41, 0x4100) + 'y\nreal ' + TOK + '\n')])), [[2, 'github-token']]);
+  // big-endian: a decoded newline is the bytes 00 0A, its 0x0A byte LAST; U+0A41 is 0A 41 there, a raw break only
+  assert.deepStrictEqual(lines(Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from('x' + NL + 'y\nreal ' + TOK + '\nmid\n', 'utf16le').swap16()])), [[2, 'github-token']]);
+});
