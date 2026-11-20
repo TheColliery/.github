@@ -84,7 +84,12 @@ const PROBE_BYTES = 8000; // the scanner's looksBinary reads this many first byt
 // (the scanner's source repository, its own constants); a test compares this verdict with the scanner's on the whole buffer.
 const WIDE_MIN_NULS = 12;
 const WIDE_SKEW = 4;
-const wideByCounts = (z) => {
+// 20f (the 7edf02c review's H1): a blob the totals do not read as wide text can still hold a key in a wide spelling (text of both byte orders, balancing each
+// other). The scanner's own search for those spellings (spelledProbe, passed in by the caller, never restated here) is fed every byte of the stream at its blob
+// offset beside the totals; a blob is read again only when it found a provider key, so an honest binary is never read twice or scanned as text.
+const newCounts = (newProbe) => ({ z: [0, 0, 0, 0], spelled: newProbe ? newProbe() : null });
+const spelledKey = (c) => { if (!c.spelled) return false; c.spelled.end(); return c.spelled.found(); };
+const wideByCounts = ({ z }) => {
   const even = z[0] + z[2];
   const odd = z[1] + z[3];
   if (Math.max(even, odd) >= WIDE_MIN_NULS && Math.max(even, odd) >= WIDE_SKEW * Math.min(even, odd)) return true;
@@ -94,8 +99,14 @@ const wideByCounts = (z) => {
   }
   return false;
 };
-const countNuls = (z, piece, offset) => { for (let i = 0; i < piece.length; i++) if (piece[i] === 0) z[(offset + i) & 3]++; };
-function readBlobs(shas, probe, looksBinary, nameOf = new Map()) {
+const countNuls = (c, piece, offset) => {
+  for (let i = 0; i < piece.length; i++) {
+    const nul = piece[i] === 0;
+    if (nul) c.z[(offset + i) & 3]++;
+  }
+  if (c.spelled) c.spelled.feed(piece, offset);
+};
+function readBlobs(shas, probe, looksBinary, nameOf = new Map(), newProbe = null) {
   const ids = [...new Set(shas)];
   const ceiling = heldCeiling();
   let held = 0;
@@ -135,7 +146,7 @@ function readBlobs(shas, probe, looksBinary, nameOf = new Map()) {
         } else if (cur) {
           if (data[pos] !== 10) return stop('cat-file output was malformed');
           pos++;
-          let whole = cur.z && cur.keep === false && wideByCounts(cur.z) ? { rereadBytes: cur.size } : BINARY_BLOB;
+          let whole = cur.z && cur.keep === false && (wideByCounts(cur.z) || spelledKey(cur.z)) ? { rereadBytes: cur.size } : BINARY_BLOB;
           if (cur.keep !== false) { try { whole = Buffer.concat(cur.parts); } catch { return tooBig(cur.id, 'could not be joined'); } }
           out.set(cur.id, whole);
           cur = null;
@@ -150,7 +161,7 @@ function readBlobs(shas, probe, looksBinary, nameOf = new Map()) {
           const size = Number(parts[2]);
           if (!Number.isSafeInteger(size) || size < 0) return stop('cat-file output was malformed');
           if (!probe.has(id) && held + size > ceiling) return tooBig(id, 'is too large to hold'); // a header already says it: refused before one byte is held
-          cur = { id, left: size, size, keep: probe.has(id) ? null : true, parts: [], have: 0, z: probe.has(id) ? [0, 0, 0, 0] : null };
+          cur = { id, left: size, size, keep: probe.has(id) ? null : true, parts: [], have: 0, z: probe.has(id) ? newCounts(newProbe) : null };
         }
       }
     });
@@ -221,6 +232,7 @@ async function main() {
   const headAcks = acksAt('HEAD');
 
   let scanned = 0;
+  const spelledOf = (b, name) => (typeof scan.spelledHits === 'function' ? scan.spelledHits(b, name) : []); // a scanner copy older than 20f has none
   const unreadable = [];
   const wanted = tracked.filter((e) => e.mode !== '160000'); // a gitlink is a submodule commit, not a file
   let blobs = null;
@@ -231,7 +243,7 @@ async function main() {
     const nameOf = new Map(wanted.map((e) => [e.sha, e.name]));
     const prefixBinary = (b) => scan.looksBinary(b) && !scan.wideKinds(b).length;
     try {
-      const first = await readBlobs(wanted.map((e) => e.sha), probe, prefixBinary, nameOf);
+      const first = await readBlobs(wanted.map((e) => e.sha), probe, prefixBinary, nameOf, scan.spelledProbe);
       // A blob whose NUL totals read as wide text is read again, one at a time, and judged on its whole bytes. It is text by the gate's own rule, so the held-bytes
       // ceiling binds it as it binds text: the first read's buffers and every earlier re-read's count against the same ceiling (t346 F19), and one that cannot be held is a
       // FAIL line that names it, never a skip as binary (t346 F18: a wide file past the ceiling passed unscanned). The results are staged and become `blobs` only when every
@@ -248,7 +260,7 @@ async function main() {
         }
         let again;
         try { again = (await readBlobs([id], new Set(), prefixBinary, nameOf)).get(id); } catch (e) { throw Object.assign(e ?? new Error('cat-file error'), { rereadOf: nameOf.get(id) || id }); } // the line names the file whose re-read failed (t352)
-        const kept = again && !scan.wideKinds(again).length ? BINARY_BLOB : again;
+        const kept = again && !scan.wideKinds(again).length && !spelledOf(again, nameOf.get(id) || '').length ? BINARY_BLOB : again;
         staged.set(id, kept);
         if (Buffer.isBuffer(kept)) heldNow += kept.length;
       }
@@ -267,7 +279,11 @@ async function main() {
     // only a Buffer is bytes (19b L2): anything else (a marker that leaked, an undefined) fails by name and is never counted as scanned or read as text
     if (!Buffer.isBuffer(bytes)) { fails.push(`${esc(e.name)} reached the scan as something other than its bytes (an internal error); it was NOT scanned`); return; }
     // a binary-looking name with NUL-bearing bytes is still text when the scanner's wide-text rule reads its first bytes as UTF-16 or UTF-32 (the bytes the stream probe judged)
-    if (BINARY.test(e.name) && scan.looksBinary(bytes) && !scan.wideKinds(bytes).length) return;
+    // 20f: such a blob reached here only because it holds a key in a wide spelling; only that search runs on it, never the text rules, so its noise draws no hit
+    if (BINARY.test(e.name) && scan.looksBinary(bytes) && !scan.wideKinds(bytes).length) {
+      for (const h of spelledOf(bytes, e.name)) keep(h, `tree ${esc(e.name)}:${h.line}`, headAcks);
+      return;
+    }
     scanned++;
     for (const h of scan.scanBytes(bytes, e.name)) keep(h, `tree ${esc(e.name)}:${h.line}`, headAcks);
   });
