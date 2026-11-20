@@ -38,12 +38,14 @@ One command prints the whole deploy as the body of a Cloudflare MCP `execute` ca
 node scripts/watcher/deploy-payload.mjs <instance> --from <sender address> [--name <worker>] [--cron "<5 fields>"] [--kv-id <32 hex>] [--out <file>]
 ```
 
-The payload finds or creates the KV namespace `<name>-state`, uploads `worker.mjs`, `watcher.mjs` and `sources/<instance>.mjs` (as `sources.mjs`), sets the schedule (default hourly, `17 * * * *`), switches the workers.dev route off, and reads the bindings and the schedule back. It reads no credential: the MCP session holds the grant, and the account's verified destination address is read inside the sandbox and never returned.
+The payload finds the KV namespace `<name>-state` (creates it only with `--create-kv`), uploads `worker.mjs`, `watcher.mjs` and `sources/<instance>.mjs` (as `sources.mjs`), sets the schedule (default hourly, `17 * * * *`), switches the workers.dev route off, and reads the bindings and the schedule back. It reads no credential: the MCP session holds the grant, and the account's verified destination address is read inside the sandbox and never returned.
 
 | Instance | Command | Account |
 | --- | --- | --- |
 | `thecolliery` | `node scripts/watcher/deploy-payload.mjs thecolliery --from antenna-coal@thecolliery.org` | TheColliery |
 | `kolwen` | `node scripts/watcher/deploy-payload.mjs kolwen --from antenna-llm@kolwen.com` | Kolwen |
+
+`--server` names the MCP server that runs the payload: `claude-ai` (the default, the claude.ai Cloudflare connector, which took the upload with `contentType` and `rawBody` on 2026-11-20) or `cloudflare-api` (the Cloudflare API MCP server, which also needed the upload's Content-Type in `headers`). A missing `<name>-state` KV namespace is created only with `--create-kv`; without it the payload answers "nothing written", so a run on the wrong account or under a drifted name cannot mint a second, empty state store.
 
 Bindings of the deployed Worker: `STATE` (KV namespace), `EMAIL` (`send_email`, restricted to the verified destination address), `DIGEST_TO` (secret text, that address), `DIGEST_FROM` (plain text, the sender).
 
