@@ -456,7 +456,7 @@ export function scanText(text, file = '', opts = {}) {
 // 00 00 FE FF for UTF-32), or their NULs fall on a code unit's high-byte positions at least WIDE_SKEW times as often as on the other positions
 // (ASCII in UTF-16 puts its NUL on one byte parity; in UTF-32 on three of four positions), and number at least WIDE_MIN_NULS on each high-byte
 // position. Bytes that are not text scatter their NULs over every position, so neither the decoded readings nor the NUL-removed reading is run on
-// them and neither can add a hit to them. A known gap: UTF-16 with no mark, dense with characters whose low byte is itself NUL now and then
+// them and neither can add a hit to them; only the provider keys in their wide spellings are searched in such bytes (WIDE-SPELLED KEYS, below). A known gap: UTF-16 with no mark, dense with characters whose low byte is itself NUL now and then
 // (random CJK, about 1 in 256), puts enough NULs on the other parity to defeat the skew; a byte-order mark decides such a file.
 // Every run of bytes is decoded at every alignment in both byte orders: a blob can start with a stray byte, and a hunk of added lines starts
 // wherever git's line break fell (even inside a character whose low byte is 0x0A). A reading at a wrong alignment or order can only add a hit,
@@ -472,39 +472,92 @@ function bomKinds(b) {
   if (b.length >= 2 && ((b[0] === 0xff && b[1] === 0xfe) || (b[0] === 0xfe && b[1] === 0xff))) return ['utf16'];
   return [];
 }
-// The run state wideKinds' balanced-order test reads (20e), fed one byte at a time with its offset in the file, so the gate can carry it across the pieces
-// of a stream: offsets must come in order from 0. both16: runs of both two-byte shapes; both32: runs of three-NUL units at two places for the other byte.
-export function wideRuns() {
-  let prev = false;
-  let side = -1;
-  let run16 = 0;
-  const got16 = [false, false];
-  let quad = 0;
-  let hole = -1;
-  let pos32 = -1;
-  let run32 = 0;
-  const got32 = [false, false, false, false];
-  return {
-    add(at, nul) {
-      if (at & 1) {
-        const s = prev && !nul ? 0 : !prev && nul ? 1 : -1;
-        run16 = s >= 0 && s === side ? run16 + 1 : s >= 0 ? 1 : 0;
-        side = s;
-        if (run16 >= WIDE_MIN_NULS) got16[s] = true;
+// ------------------------------------------------------------ WIDE-SPELLED KEYS (20f)
+// A file with no mark whose NULs the skew test does not read as wide text (big-endian and little-endian text in one file, balancing each other; or text
+// of one order beside other NUL-bearing bytes) is NOT guessed to be wide text: a guess from the shape of the NULs reads fonts and PE files as text
+// (the 7edf02c review's H1). Its raw bytes are searched instead for the PATTERNS' keys in their four wide spellings: each character followed by one
+// NUL (UTF-16LE) or preceded by one (UTF-16BE), followed by three (UTF-32LE) or preceded by three (UTF-32BE), at every byte offset. Only the
+// provider patterns run on what is found, never the generic high-entropy rule: a binary's bytes match a provider key's prefix and body only when it
+// holds the key. A run of such characters (printable ASCII or a tab) holds no line break, so it is one line; a match is reported at the raw line where
+// its first character sits. The character before a run, when it is one, stays in front of it, so a key glued to a word is refused here as anywhere.
+const SPELL_CH = '[\t\x20-\x7e]';
+// A run of at least WIDE_MIN_NULS units; the first unit is written out ahead of the repeat, which V8 scans about four times faster than a repeated group alone.
+const spelling = (unit, w, lead) => ({ re: new RegExp(`${unit}(?:${unit}){${WIDE_MIN_NULS - 1},}`, 'g'), w, lead });
+const SPELLINGS = [
+  spelling(`${SPELL_CH}\0`, 2, 0), // UTF-16LE: [c, 0]
+  spelling(`\0${SPELL_CH}`, 2, 1), // UTF-16BE: [0, c]
+  spelling(`${SPELL_CH}\0\0\0`, 4, 0), // UTF-32LE: [c, 0, 0, 0]
+  spelling(`\0\0\0${SPELL_CH}`, 4, 3), // UTF-32BE: [0, 0, 0, c]
+];
+// The literal every match of each pattern holds, by pattern name (split like the patterns, so this file holds no key-shaped text). A run without any of
+// them is skipped before the patterns run: most wide runs in a binary are its own strings. A pattern with no entry here turns the skip off for every
+// run, so a rule added to PATTERNS is never passed over here.
+const SPELL_LITERAL = {
+  'aws-access-key-id': AWS_PREFIX, 'github-token': b`gh[pousr]_`, 'github-fine-grained-pat': b`github` + b`_pat_`, 'gitlab-pat': b`gl` + b`pat-`,
+  'sendgrid-api-key': b`S` + b`G\.`, 'square-access-token': b`sq0` + b`atp-`, 'square-oauth-secret': b`sq0` + b`csp-`, 'anthropic-api-key': b`sk` + b`-ant-`,
+  'openai-style-api-key': b`sk` + b`-`, 'slack-token': b`xo` + b`x`, 'stripe-live-key': STRIPE_HEAD, 'google-api-key': GOOGLE_PREFIX, 'private-key-pem': DASH5 + b`BEGIN `,
+};
+const SPELL_GATE = PATTERNS.every((p) => SPELL_LITERAL[p.name]) ? new RegExp(PATTERNS.map((p) => `(?:${SPELL_LITERAL[p.name]})`).join('|')) : null;
+// The keys in wide spellings in a latin1 view of bytes: onMatch(pattern, value, offset of the key's first character in the view). Native regex passes, no loop a byte.
+function spelledIn(text, onMatch) {
+  for (const { re, w, lead } of SPELLINGS) {
+    re.lastIndex = 0;
+    for (const run of text.matchAll(re)) {
+      const first = run.index + lead; // the run's first character
+      let chars = '';
+      for (let i = lead; i < run[0].length; i += w) chars += run[0][i];
+      const before = text.charCodeAt(first - w); // the character one unit before, when it is one
+      const ctx = first - w >= 0 && ((before >= 0x20 && before <= 0x7e) || before === 9) ? 1 : 0;
+      const line = ctx ? text[first - w] + chars : chars;
+      if (SPELL_GATE && !SPELL_GATE.test(line)) continue;
+      for (const p of GLOBAL) {
+        for (const m of line.matchAll(p.re)) {
+          if (m.index < ctx || (p.check && !p.check(m[0]))) continue;
+          onMatch(p.name, m[0], first + (m.index - ctx) * w);
+        }
       }
-      prev = nul;
-      if ((at & 3) === 0) { quad = 0; hole = -1; }
-      if (nul) quad++; else hole = at & 3;
-      if ((at & 3) === 3) {
-        const p = quad === 3 ? hole : -1;
-        run32 = p >= 0 && p === pos32 ? run32 + 1 : p >= 0 ? 1 : 0;
-        pos32 = p;
-        if (run32 >= WIDE_MIN_NULS) got32[p] = true;
-      }
-    },
-    both16: () => got16[0] && got16[1],
-    both32: () => got32.filter(Boolean).length >= 2,
+    }
+  }
+}
+// The search over bytes that arrive in order, a piece at a time: each piece is searched in a window that opens SPELL_CARRY bytes before it, so a key cut by
+// a piece edge is seen whole and keeps the character before it, and a window holds at most SPELL_WINDOW + SPELL_CARRY bytes, whatever the file's size. A
+// window with no NUL, or no character a spelling can hold, is skipped (a run of zeros costs one scan for each). onMatch gets offsets in the whole stream; a
+// key that sits inside two windows is reported twice, so the caller keys by offset.
+const SPELL_CARRY = 16384; // four bytes a character: past any provider key the patterns accept whole, and the character before it
+const SPELL_WINDOW = 1 << 20;
+const SPELL_ANY = new RegExp(SPELL_CH);
+function spelledStream(onMatch) {
+  let carry = '';
+  let base = 0; // the stream offset of the window's first byte
+  return (piece) => {
+    for (let at = 0; at < piece.length; at += SPELL_WINDOW) {
+      const text = carry + piece.toString('latin1', at, Math.min(piece.length, at + SPELL_WINDOW));
+      const from = base;
+      if (text.indexOf(NUL) >= 0 && SPELL_ANY.test(text)) spelledIn(text, (pattern, value, pos) => onMatch(pattern, value, from + pos));
+      carry = text.slice(-SPELL_CARRY);
+      base = from + text.length - carry.length;
+    }
   };
+}
+// The wide-spelled keys of one run of bytes that is not read as wide text: [{ line, pattern, fp }], each key once per place, in file order.
+export function spelledHits(bytes, file = '') {
+  if (bytes.indexOf(0) < 0) return [];
+  const found = new Map();
+  spelledStream((pattern, value, pos) => {
+    const k = pattern + NUL + pos;
+    if (!found.has(k)) found.set(k, { pattern, value, pos });
+  })(bytes);
+  if (!found.size) return [];
+  const breaks = [];
+  for (let i = bytes.indexOf(0x0a); i >= 0; i = bytes.indexOf(0x0a, i + 1)) breaks.push(i);
+  const lineAt = (pos) => { let lo = 0, hi = breaks.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (breaks[mid] < pos) lo = mid + 1; else hi = mid; } return lo + 1; };
+  return [...found.values()].sort((a, b) => a.pos - b.pos).map((h) => ({ line: lineAt(h.pos), pattern: h.pattern, fp: fingerprint(file, h.pattern, h.value) }));
+}
+// The same search over a stream, for the gate: feed(piece) in order from the blob's first byte, then found() says whether any key was seen. No value leaves.
+export function spelledProbe() {
+  let found = false;
+  const feed = spelledStream(() => { found = true; });
+  return { feed: (piece) => { if (!found) feed(piece); }, end() {}, found: () => found };
 }
 // extra: kinds the caller knows from the file's own committed mark (see scanPatch's bomOf); they count even where the bytes alone do not show them.
 export function wideKinds(bytes, extra = []) {
@@ -518,18 +571,6 @@ export function wideKinds(bytes, extra = []) {
   for (let k = 0; k < 4; k++) {
     const high = Math.min(z[(k + 1) & 3], z[(k + 2) & 3], z[(k + 3) & 3]);
     if (high >= WIDE_MIN_NULS && high >= WIDE_SKEW * z[k]) { kinds.add('utf32'); break; }
-  }
-  // 20e (the 6ea2246 review's M1): text of both byte orders in one file balances the NULs across positions, so the skew test above sees nothing. Such a
-  // file is told by RUNS of both orders: WIDE_MIN_NULS two-byte units in a row with the NUL first ([0,c]) AND as many in a row with it second ([c,0]); for
-  // UTF-32, WIDE_MIN_NULS four-byte units in a row with exactly three NULs, at two different places for the one non-NUL byte. A key in wide text is such a
-  // run (ASCII, at least 15 characters), and two parts whose units had the same shape would have skewed the NULs. Text of one order stays with the skew
-  // test, as before. Random bytes give a two-byte unit of each shape about once in 128 units, so a run of 12 is out of reach, and a run of zeros has two or
-  // four NULs per unit. One pass, only when a kind is still missing and the file holds the NULs.
-  if ((!kinds.has('utf16') || !kinds.has('utf32')) && z[0] + z[1] + z[2] + z[3] >= WIDE_MIN_NULS) {
-    const runs = wideRuns();
-    for (let i = 0; i < b.length; i++) runs.add(i, b[i] === 0);
-    if (runs.both16()) kinds.add('utf16');
-    if (runs.both32()) kinds.add('utf32');
   }
   return [...kinds];
 }
@@ -630,7 +671,7 @@ export function scanBytes(bytes, file = '') {
     return [...scanText(bytes.toString('utf8'), file, { nulDrop: false }), { line: 1, pattern: WIDE_TOO_LARGE, fp: tooLarge(bytes, file) }];
   }
   const hits = scanText(bytes.toString('utf8'), file, { nulDrop: wide });
-  if (!wide) return hits;
+  if (!wide) return [...hits, ...spelledHits(bytes, file)]; // 20f: not wide text, so its keys are searched in their wide spellings, never decoded
   const layouts = wideLayouts(bytes);
   const breaks = [];
   for (let i = 0; i < bytes.length; i++) if (bytes[i] === 0x0a) breaks.push(i);
@@ -697,6 +738,7 @@ function scanPatchWide(bytes, opts) {
       else {
         const decoded = wideTexts(runBytes, mark.kinds);
         const texts = decoded.length ? [...decoded, runBytes.toString('utf8')] : [];
+        if (!decoded.length) for (const h of spelledHits(runBytes, file)) hits.push({ commit, file, line: start + h.line - 1, pattern: h.pattern, fp: h.fp }); // 20f, as scanBytes
         for (const text of texts) for (const h of scanText(text, file)) hits.push({ commit, file, line: start + h.line - 1, pattern: h.pattern, fp: h.fp });
       }
     }

@@ -968,18 +968,21 @@ test('a binary-named blob whose wide-text evidence is split across pieces, each 
 });
 
 test('the gate\'s verdict on a binary-named blob equals the whole-buffer verdict across the wide-text rule\'s thresholds and chunk edges (the oracle) -- RED before 18b', async () => {
-  const { wideKinds, looksBinary, scanBytes } = await import(pathToFileURL(LIB).href);
-  const make = (opposing, keyAt, later) => {
+  const { wideKinds, looksBinary, scanBytes, spelledHits } = await import(pathToFileURL(LIB).href);
+  const make = (opposing, keyAt, later, secret = KEY) => {
     const b = Buffer.alloc(300000, 0x41);
     b[3] = 0; // one NUL in the prefix: git's rule calls the blob binary
     for (let i = 0; i < opposing; i++) b[200 + i * 100 + (i % 2) * 2] = 0; // even positions, split between offsets 0 and 2 mod 4
-    Buffer.from('\nid ' + KEY + '\n', 'utf16le').copy(b, keyAt);
+    Buffer.from('\nid ' + secret + '\n', 'utf16le').copy(b, keyAt);
     for (let k = 0; k < later; k++) { const p = 70000 + k * 6200; b[p] = 0x7a; b[p + 1] = 0; }
     return b;
   };
   const files = {};
   for (const opposing of [0, 7, 11, 12]) for (const keyAt of [8000, 131048]) for (const later of [0, 37]) files[`b-${opposing}-${keyAt}-${later}.bin`] = make(opposing, keyAt, later);
-  const verdict = (b) => (looksBinary(b) && !wideKinds(b).length ? false : scanBytes(b, 'x').length > 0);
+  // 20f: a binary-named blob that is binary and not wide text is still searched for keys in their wide spellings, so every keyed blob above is found; keyless
+  // twins (the same bytes with a non-key in the key's place) keep the grid's other outcome
+  for (const opposing of [0, 7, 11, 12]) for (const keyAt of [8000, 131048]) files[`n-${opposing}-${keyAt}.bin`] = make(opposing, keyAt, 0, 'x'.repeat(KEY.length));
+  const verdict = (b) => (looksBinary(b) && !wideKinds(b).length ? spelledHits(b, 'x').length > 0 : scanBytes(b, 'x').length > 0);
   const names = Object.keys(files);
   const outs = {};
   for (let i = 0; i < names.length; i += 4) { // four blobs a run: the gate lists at most five matches
@@ -1205,27 +1208,48 @@ test('a reported line is the decoded line where the occurrence sits, whatever th
 
 // 20e (the 6ea2246 review's M1, older than 6ea2246): a file with no byte-order mark whose big-endian part and appended little-endian part are near equal in size puts as many
 // NULs on even positions as on odd ones, so the skew test read it as no wide text at all, the scanner read it as UTF-8 with its NULs left in, and it reported NOTHING: the gate passed
-// a file that holds the key twice. A file whose units show runs of BOTH byte orders (twelve two-byte units in a row with the NUL first, twelve with it second; for UTF-32, twelve
-// three-NUL units in a row at two places for the other byte) is now read in the wide readings. Controls: random bytes, a run of zeros, a UTF-8 file with NULs on both parities and
-// text of ONE order whose NULs do not skew (left to the skew test, as before) stay plain.
-test('a file with no mark that balances big-endian and little-endian text is still read as wide text: its keys are reported and the gate refuses -- RED before 20e', async () => {
+// a file that holds the key twice. 20f (the 7edf02c review's H1): such a file is NOT guessed to be wide text (a guess from NUL runs read fonts and PE files as text); its raw bytes
+// are searched for the provider keys in their four wide spellings, and only the provider patterns run on what is found. Controls: random bytes, a run of zeros, a UTF-8 file with
+// NULs on both parities, and the shapes that fooled 7edf02c, stay plain.
+test('a key in a wide spelling is reported in a file with no mark whose NULs do not skew (both byte orders balanced, or one order beside other NULs), and the gate refuses it -- RED before 20e', async () => {
   const { scanBytes, wideKinds } = await import(pathToFileURL(LIB).href);
   const T = 'gh' + 'p_' + 'A'.repeat(36);
   const le16 = (s) => Buffer.from(s, 'utf16le');
   const be16 = (s) => Buffer.from(s, 'utf16le').swap16();
   const u32 = (s, little) => { const cps = [...s].map((c) => c.codePointAt(0)); const b = Buffer.alloc(cps.length * 4); cps.forEach((cp, k) => (little ? b.writeUInt32LE(cp, k * 4) : b.writeUInt32BE(cp, k * 4))); return b; };
+  const lines = (b) => scanBytes(b, 'f.txt').map((h) => [h.line, h.pattern]);
   const mixed16 = Buffer.concat([be16('\n ' + T + '\n '), le16(T)]);
-  assert.deepStrictEqual(scanBytes(mixed16, 'f.txt').map((h) => h.pattern), ['github-token', 'github-token'], 'UTF-16, balanced orders: both keys reported');
+  assert.deepStrictEqual(lines(mixed16), [[2, 'github-token'], [3, 'github-token']], 'UTF-16, balanced orders: both keys, each on the raw line where it sits');
   const mixed32 = Buffer.concat([u32('\n ' + T + '\n ', false), u32(T, true)]);
-  assert.ok(scanBytes(mixed32, 'f.txt').some((h) => h.pattern === 'github-token'), 'UTF-32, balanced orders: the key is reported');
+  assert.deepStrictEqual(lines(mixed32), [[2, 'github-token'], [3, 'github-token']], 'UTF-32, balanced orders: both keys');
+  // the reviewer's M-a (the 7edf02c review's M2): the big-endian part holds only short ASCII runs (a CJK character every 8 units), the key sits in the little-endian part
+  const shortWords = (n) => Array.from({ length: n }, (_, i) => 'word' + (i % 10) + 'ab' + String.fromCharCode(0x4e2d)).join('');
+  const ma = Buffer.concat([be16(shortWords(60) + '\n'), le16('\n ' + T + '\n' + 'pad '.repeat(40))]);
+  assert.deepStrictEqual(wideKinds(ma), [], 'M-a: the skew test does not read it');
+  assert.deepStrictEqual(lines(ma), [[3, 'github-token']], 'M-a: the key is reported');
+  const N = String.fromCharCode(0);
+  // one order beside other NULs: 20 even NULs (10 at offset 0 mod 4, 10 at 2) against the key's 40 odd ones, under 4 to 1, and no three of four positions full
+  const oneOrder = Buffer.concat([Buffer.from((N + 'abcde' + N + 'f').repeat(10), 'latin1'), le16(T)]);
+  assert.deepStrictEqual(wideKinds(oneOrder), [], 'one order whose NULs do not skew: not read as wide text');
+  assert.deepStrictEqual(lines(oneOrder), [[1, 'github-token']], 'one order whose NULs do not skew: the key is reported');
+  // a key glued to a word in its own spelling is not a key, here as anywhere
+  // the search runs in 1 MiB windows that overlap: a key across a window edge is found once, at its line
+  const { spelledHits } = await import(pathToFileURL(LIB).href);
+  for (const shift of [-80, -2, 0, 2]) {
+    const head = Buffer.alloc((1 << 20) + shift, 0x41);
+    for (let q = 0; q < head.length; q += 2) head[q] = 0;
+    assert.deepStrictEqual(spelledHits(Buffer.concat([head, le16(' ' + T + '\n')]), 'f').map((h) => [h.line, h.pattern]), [[1, 'github-token']], 'window edge, shift ' + shift);
+  }
+  const glued = Buffer.concat([be16('\n ' + 'pad '.repeat(10)), le16('x' + T)]); // balanced, so not read as wide text: the spelled search alone judges it
+  assert.deepStrictEqual([wideKinds(glued), lines(glued)], [[], []], 'a glued key in a wide spelling is refused like a glued plain one');
   // the gate refuses the balanced file
   const r = run(repo([{ 'mixed.txt': mixed16 }]));
   assert.strictEqual(r.code, 1, r.out + r.err);
   assert.ok(r.out.includes('tree "mixed.txt"') && r.out.includes('github-token'), r.out);
   // a binary-named file whose first 8,000 bytes read as binary and not wide, with the balanced text after them: the gate drops it by its prefix and
-  // judges it by the stream's counters, so those counters carry the run too (RED against a gate that kept only the NUL totals)
+  // judges it by the stream's counters, so those counters carry the spelled search too (RED against a gate that kept only the NUL totals)
   const head = Buffer.alloc(9000, 0x41);
-  for (let p = 100; p < 9000; p += 101) head[p] = 0; // NULs on both parities, no run: binary by the prefix, not wide
+  for (let q = 100; q < 9000; q += 101) head[q] = 0; // NULs on both parities: binary by the prefix, not wide
   const big = Buffer.concat([head, mixed16]);
   assert.deepStrictEqual(wideKinds(head), [], 'the prefix alone is not wide text');
   const rb = run(repo([{ 'mixed.bin': big }]));
@@ -1233,16 +1257,38 @@ test('a file with no mark that balances big-endian and little-endian text is sti
   assert.ok(rb.out.includes('tree "mixed.bin"') && rb.out.includes('github-token'), rb.out);
   // controls
   let seed = 7;
-  const rnd = Buffer.alloc(200000);
-  for (let i = 0; i < rnd.length; i++) { seed = (seed * 1103515245 + 12345) >>> 0; rnd[i] = seed >>> 24; }
-  assert.deepStrictEqual(wideKinds(rnd), [], 'pseudo-random bytes are not wide text');
+  const rnd = (n) => { const b = Buffer.alloc(n); for (let i = 0; i < n; i++) { seed = (seed * 1103515245 + 12345) >>> 0; b[i] = seed >>> 24; } return b; };
+  const noise = rnd(200000);
+  assert.deepStrictEqual([wideKinds(noise), scanBytes(noise, 'f.bin').length], [[], 0], 'pseudo-random bytes: plain, no hit');
   assert.deepStrictEqual(wideKinds(Buffer.concat([Buffer.alloc(100000, 0), Buffer.from('id ' + T + '\n')])), [], 'a run of zeros is not wide text');
-  // 17-byte lines put the NULs on both parities, so the skew test is silent and only the unit test could misread it
-  const utf8 = Buffer.from(('plain text line' + String.fromCharCode(0) + '\n').repeat(40), 'utf8');
-  assert.deepStrictEqual(wideKinds(utf8), [], 'UTF-8 with a few NULs is not wide text');
-  const N = String.fromCharCode(0);
-  // 20 even NULs (10 at offset 0 mod 4, 10 at 2) against the key's 40 odd ones: under 4 to 1, and no three of four positions full
-  const oneOrder = Buffer.concat([Buffer.from((N + 'abcde' + N + 'f').repeat(10), 'latin1'), le16(T)]);
-  assert.ok(scanBytes(oneOrder, 'f.txt').length === 0, 'the premise: this file is missed by the skew test today (a known limit, not this unit)');
-  assert.deepStrictEqual(wideKinds(oneOrder), [], 'one order whose NULs do not skew stays with the skew test');
+  // 17-byte lines put the NULs on both parities, so the skew test is silent
+  const utf8 = Buffer.from(('plain text line' + N + '\n').repeat(40), 'utf8');
+  assert.deepStrictEqual([wideKinds(utf8), scanBytes(utf8, 'f.txt').length], [[], 0], 'UTF-8 with a few NULs: plain, no hit');
+});
+
+// 20f (the 7edf02c review's H1): the shapes that made 7edf02c read real binaries as wide text, built in code (the suite runs on three systems and reads no system file).
+// PE-LIKE stands for kernel32.dll and shell32.dll: UTF-16LE resource strings (words with no key) beside a table of small big-endian 16-bit values, both in runs of far
+// more than 12 units, in random bytes. FONT-LIKE stands for msyh.ttc: big-endian name and metric tables of small values and little-endian runs, past the 8 MiB decode
+// bound. 7edf02c read both as UTF-16 and drew a "wide text too large" refusal on the second; each must stay plain, with no hit, and the gate must pass them.
+test('binaries whose small 16-bit values run in both byte orders (a PE string table, a font collection) stay plain: no wide reading, no hit, no refusal -- RED against 7edf02c', async () => {
+  const { scanBytes, wideKinds, WIDE_TOO_LARGE } = await import(pathToFileURL(LIB).href);
+  let seed = 11;
+  const rnd = (n) => { const b = Buffer.alloc(n); for (let i = 0; i < n; i++) { seed = (seed * 1103515245 + 12345) >>> 0; b[i] = seed >>> 24; } return b; };
+  const smallBE = (n) => { const b = Buffer.alloc(n * 2); for (let k = 0; k < n; k++) b.writeUInt16BE(1 + (k % 200), k * 2); return b; };
+  const strLE = (s) => Buffer.from(s, 'utf16le');
+  const peLike = Buffer.concat([rnd(20000), strLE('FileDescriptionWindowsShellCommonDll'.repeat(4)), rnd(3000), smallBE(400), rnd(20000), strLE('CompanyNameMicrosoftCorporation'.repeat(3)), smallBE(300), rnd(9000)]);
+  const fontLike = Buffer.alloc((8 << 20) + 65536);
+  for (let off = 0; off + 4096 <= fontLike.length; off += 4096) {
+    rnd(2048).copy(fontLike, off);
+    smallBE(512).copy(fontLike, off + 2048, 0, 1024);
+    strLE('Regular'.repeat(20)).copy(fontLike, off + 3072, 0, 1024);
+  }
+  for (const [name, b] of [['pe-like.dll', peLike], ['font-like.ttc', fontLike]]) {
+    assert.deepStrictEqual(wideKinds(b), [], name + ': not read as wide text');
+    const hits = scanBytes(b, name);
+    assert.ok(!hits.some((h) => h.pattern === WIDE_TOO_LARGE), name + ': no "too large to decode" refusal');
+    assert.strictEqual(hits.length, 0, name + ': no hit: ' + JSON.stringify(hits.map((h) => h.pattern)));
+  }
+  const r = run(repo([{ 'pe-like.dll': peLike }]));
+  assert.strictEqual(r.code, 0, 'the gate passes the PE-shaped file: ' + r.out + r.err);
 });

@@ -1560,7 +1560,7 @@ const readText = (rel) => fs.readFileSync(path.join(ROOT, ...rel.split('/')), 'u
 // The canon secret gate keeps GIT_INDEX_FILE BY DESIGN (commit mode reads the commit's own index, which a hook names through that variable), and GIT_INDEX_FILE is outside the three
 // GIT_ names the rule allows, so its two git spawns are findings the census is right to give. It is the ONE pinned carrier, at this blob; any edit spends the pin. The Bankfire source test was
 // the second until Bankfire returned gitEnv()'s literal alone (bd328f2e, 2026-10-09): it now passes the census with no pin, like the gate test.
-const GATE_PIN = { rel: 'scripts/secret-gate.mjs', blob: '0e779c9d73bb22edc3b210a5b1fbfa326a91baa1', why: 'canon secret gate: keeps GIT_INDEX_FILE and GIT_CEILING_DIRECTORIES by design (its gitEnv() copies process.env minus the other GIT_ names); the census counts gitIn\'s execFileSync, the one finding, and the streamed cat-file child (started by spawn, which the census does not count, its rule 5) takes the same gitEnv()' };
+const GATE_PIN = { rel: 'scripts/secret-gate.mjs', blob: 'a37baee100e1794b75b27a295b4f8ebfae878fc5', why: 'canon secret gate: keeps GIT_INDEX_FILE and GIT_CEILING_DIRECTORIES by design (its gitEnv() copies process.env minus the other GIT_ names); the census counts gitIn\'s execFileSync, the one finding, and the streamed cat-file child (started by spawn, which the census does not count, its rule 5) takes the same gitEnv()' };
 
 test('the canon secret-gate test passes the canon census with no pin: it builds every git environment from named keys, in all three places it lives -- RED before 08d D3', () => {
   for (const dir of CARRIER_DIRS) {
@@ -2129,7 +2129,7 @@ const { scanChildEnv } = await import(pathToFileURL(path.join(TEMPLATES, 'overla
 const { collectScriptsMjs } = await import(pathToFileURL(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', 'git-env-census.mjs')).href);
 const SCANNER_WHY = 'byte-equal copy of the Bankfire-sourced scanner gate test: its scratch repo gets HOME and USERPROFILE only. Its fix is made at the Bankfire source (the secret-scan test already points TEMP, TMP and TMPDIR at the sandbox since Bankfire 557a2e6) and re-copied into all three places.';
 const CHILD_ENV_PINS = [
-  ['scripts/secret-gate.test.mjs', '013287bf411980a27c18179e3b7f665e48778629'], ['templates/article/scripts/secret-gate.test.mjs', '013287bf411980a27c18179e3b7f665e48778629'], ['templates/published-code/scripts/secret-gate.test.mjs', '013287bf411980a27c18179e3b7f665e48778629'],
+  ['scripts/secret-gate.test.mjs', '4d22ecd4b58ee03f6c83e44f4b037a68fff06b9d'], ['templates/article/scripts/secret-gate.test.mjs', '4d22ecd4b58ee03f6c83e44f4b037a68fff06b9d'], ['templates/published-code/scripts/secret-gate.test.mjs', '4d22ecd4b58ee03f6c83e44f4b037a68fff06b9d'],
 ].map(([rel, blob]) => ({ rel, blob, why: SCANNER_WHY }));
 function childEnvFiles() {
   const files = [];
