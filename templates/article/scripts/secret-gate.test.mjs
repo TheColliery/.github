@@ -1195,6 +1195,10 @@ test('a reported line is the decoded line where the occurrence sits, whatever th
   assert.deepStrictEqual(lines(Buffer.concat([u32(MARK + '\n ' + T2 + '\n ', false), u32(T2, true)])), [[2, 'github-token'], [3, 'github-token']], 'UTF-32BE with little-endian bytes appended');
   assert.deepStrictEqual(lines(Buffer.concat([BOM, w('\n ' + T2 + '\n '), w(T2).swap16()])), [[2, 'github-token'], [3, 'github-token']], 'the UTF-16LE mirror');
   assert.deepStrictEqual(lines(Buffer.concat([u32(MARK + '\n ' + T2 + '\n ', true), u32(T2, false)])), [[2, 'github-token'], [3, 'github-token']], 'the UTF-32LE mirror');
+  // 20e (the 6ea2246 review's L1): the mark wins only where it fits at least as well as the key's own reading, by the newlines each decodes. A big-endian mark over a
+  // little-endian body (V5), and a true mark followed by one stray byte (V9, the body at an odd offset), decode fewer newlines than the key's reading: its line stands.
+  assert.deepStrictEqual(lines(Buffer.concat([Buffer.from([0xfe, 0xff]), w('top\nmid\n ' + T2 + '\nend\n')])), [[3, 'github-token']], 'V5, a mark that lies about the body');
+  assert.deepStrictEqual(lines(Buffer.concat([BOM, Buffer.from([0x20]), w('top\n ' + T2 + '\nmid\n ' + T2 + '\n')])), [[2, 'github-token'], [4, 'github-token']], 'V9, a stray byte after a true mark');
   // big-endian: a decoded newline is the bytes 00 0A, its 0x0A byte LAST; U+0A41 is 0A 41 there, a raw break only
   assert.deepStrictEqual(lines(Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from('x' + NL + 'y\nreal ' + TOK + '\nmid\n', 'utf16le').swap16()])), [[2, 'github-token']]);
 });

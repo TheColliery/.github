@@ -570,6 +570,7 @@ function mergeWide(raw, readings, keyOf, lineOf) {
     const w = won.get(k);
     return { ...h, line: lineOf(w ? w.ri : -1, h.line) };
   });
+  // Named gap (UMB4-048, the 6ea2246 review's L2): a key only a decoded reading holds keeps that reading's own line, so in a file that mixes byte orders it can name line 1.
   for (const [k, w] of won) if (!inRaw.has(k)) out.push(w.list[0]);
   return out;
 }
@@ -610,7 +611,14 @@ export function scanBytes(bytes, file = '') {
     for (let ri = 1; ri < layouts.length; ri++) if (layouts[ri].offset === 0 && mapOf(ri).newlines > mapOf(best).newlines) best = ri;
     return best;
   };
-  const lineOf = (ri, line) => { const m = markReading(); return mapOf(m >= 0 ? m : ri >= 0 ? ri : bestAtZero())(line); };
+  // 20e (the 6ea2246 review's L1): the mark's reading is used only where it fits the file at least as well as the reading that holds the key, measured by the newlines each
+  // decodes. A mark that lies about the body (a big-endian mark over little-endian text), or a stray byte after a true mark (the body at an odd offset), decodes fewer
+  // newlines than the reading that holds the key, and that reading's line stands.
+  const lineOf = (ri, line) => {
+    const m = markReading();
+    if (ri < 0) return mapOf(m >= 0 ? m : bestAtZero())(line);
+    return mapOf(m >= 0 && m !== ri && mapOf(m).newlines >= mapOf(ri).newlines ? m : ri)(line);
+  };
   return mergeWide(hits, wideTexts(bytes).map((text) => scanText(text, file)), (h) => `${h.pattern} ${h.fp}`, lineOf);
 }
 // The wide reading of a patch held as BYTES: the added lines of each hunk are joined back into the byte run they were cut from (git cuts at every
