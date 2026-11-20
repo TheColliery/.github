@@ -331,7 +331,7 @@ async function main() {
   const tooLarge = [...tooLargeHits];
   const matches = [...hits];
   if (tooLarge.length) fails.push(`${tooLarge.length} file(s) the scanner reads as UTF-16 or UTF-32 text are larger than ${scan.WIDE_DECODE_MAX_BYTES >> 20} MiB, so their wide text was NOT decoded or scanned. Check each for keys first: acknowledging its fingerprint in ${ACKS} lets those exact bytes pass without the wide-text scan: ${tooLarge.slice(0, 5).join('; ')}${tooLarge.length > 5 ? ' ...' : ''}`);
-  if (matches.length) fails.push(`${matches.length} secret-shaped match(es), values never printed. Remove each and rotate it if it was real, or acknowledge a known public value by fingerprint in ${ACKS}, committed on the branch you push: ${matches.slice(0, 5).join('; ')}${matches.length > 5 ? ' ...' : ''}`);
+  if (matches.length) fails.push(`${matches.length} secret-shaped match(es), values never printed. Remove each and rotate it if it was real, or acknowledge a known public value by fingerprint in ${ACKS}, committed where the gate reads it: for a "tree" hit in HEAD (the commit checked out), for a "pushed" hit in the pushed commit: ${matches.slice(0, 5).join('; ')}${matches.length > 5 ? ' ...' : ''}`);
   if (fails.length) {
     for (const f of fails) console.log(`FAIL SECRETS: ${f}`);
     process.exitCode = 1;
