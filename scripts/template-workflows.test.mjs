@@ -1610,12 +1610,12 @@ test('the canon release-notes.mjs and its test (the list\'s P1 and P2) read clea
   }
 });
 
-test('the three places a secret-scan or secret-gate file lives hold the same bytes, and the secret-scan test is the Bankfire source\'s (blob 663dd5ac, Bankfire PR #61 0cd9e5c): the scanner parity contract -- RED before 08d D3', () => {
+test('the three places a secret-scan or secret-gate file lives hold the same bytes, and the secret-scan test is the canon\'s carried file (blob 663dd5ac; a room adds its own cases in a file of its own name, 21j): the scanner parity contract -- RED before 08d D3', () => {
   for (const name of ['secret-scan.test.mjs', 'secret-gate.test.mjs', 'secret-gate.mjs']) {
     const blobs = CARRIER_DIRS.map((d) => gitBlobId(readText(`${d}/${name}`)));
     assert.equal(new Set(blobs).size, 1, `${name} differs between the three places: ${blobs.join(' ')}`);
   }
-  assert.ok(gitBlobId(readText('scripts/secret-scan.test.mjs')).startsWith('663dd5ac'), 'the Bankfire source test moved: re-copy it byte for byte into the three places (scripts/scanner-parity.mjs reads it)');
+  assert.ok(gitBlobId(readText('scripts/secret-scan.test.mjs')).startsWith('663dd5ac'), 'the carried secret-scan test changed: the canon owns it, so move this pin in the same unit and re-copy it byte for byte into the three places');
 });
 
 test('the public hooks say what the secret scan does NOT catch, including a token header with a scheme word: the answer to CoalMine LOW-1 -- the scan-limit sentence', () => {
