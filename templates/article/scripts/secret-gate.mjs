@@ -26,6 +26,7 @@
 // ack only works if it travels in the push, where a reviewer sees it. A hit never prints its value.
 //
 // Usage:   node scripts/secret-gate.mjs [--pre-push [--remote=<name>]]
+//          node scripts/secret-gate.mjs --rename-odd=<path as hex>:<blob> --to=<new name>   (the rename a refusal prints, 21j)
 // Example: node scripts/secret-gate.mjs
 // Exit:    0 clean · 1 a hit, or a scan that could not run · 64 usage error
 // Report a problem: TheColliery/.github issues. Zero dependencies: node builtins only.
@@ -33,8 +34,9 @@
 import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 
-const USAGE = 'usage: node scripts/secret-gate.mjs [--pre-push [--remote=<name>]] | -h\n'
+const USAGE = 'usage: node scripts/secret-gate.mjs [--pre-push [--remote=<name>]] | --rename-odd=<hex>:<blob> --to=<new name> | -h\n'
   + '  scans the staged files (the index); with --pre-push also every commit being pushed (git\'s ref lines on stdin)\n'
+  + '  --rename-odd renames, in the index only, the one staged path that is not valid UTF-8 named by its bytes as hex and its blob (a refusal prints it)\n'
   + '  example: node scripts/secret-gate.mjs\n'
   + '  exit 0 clean · 1 a hit or a scan that could not run · 64 usage error';
 const ACKS = 'secret-scan.acks';
@@ -42,7 +44,7 @@ const BINARY = /\.(png|jpe?g|gif|webp|ico|pdf|zip|gz|tgz|7z|woff2?|ttf|otf|eot|m
 const BACKSLASH = String.fromCharCode(92);
 
 const args = process.argv.slice(2);
-const known = (a) => a === '--pre-push' || a.startsWith('--remote=');
+const known = (a) => a === '--pre-push' || a.startsWith('--remote=') || a.startsWith('--rename-odd=') || a.startsWith('--to=');
 
 // JSON.stringify neutralises CR, LF, controls, quotes and backslashes; every other character that can forge a line or hide
 // text in a terminal is escaped BY CATEGORY (Cc, Cf, Zl, Zp), never by a list (CWE-117, log injection).
@@ -55,12 +57,7 @@ const asciiOf = (b, keep, other) => [...b].map((x) => (keep(x) ? String.fromChar
 const PRINTABLE = (x) => x >= 0x20 && x <= 0x7e;
 // shown: printable ASCII as it is, every other byte, a backslash and a quote as \xNN
 const showBytes = (b) => asciiOf(b, (x) => PRINTABLE(x) && x !== 0x5c && x !== 0x22, (x) => `${BACKSLASH}x${x.toString(16).padStart(2, '0')}`);
-// as a git wildcard the user can type in any shell between double quotes (21b): a letter, digit or one of " ._/+,=@~-" as it is; an ASCII character a shell or git's
-// wildcards could read ($ % ! " ` \ * ? [ ]) is ? (any one byte); every byte outside printable ASCII, of a valid UTF-8 character or not, is [^ -~] (one byte outside
-// printable ASCII, so a neighbour one ordinary character apart, such as ab.txt beside a\xff.txt, is not matched; measured with git for Windows). The printed advice
-// lists the matches first, so a wider match is seen before anything is removed.
-const SAFE_GLOB = /[A-Za-z0-9 ._/+,=@~-]/;
-const globOf = (b) => asciiOf(b, (x) => PRINTABLE(x) && SAFE_GLOB.test(String.fromCharCode(x)), (x) => (PRINTABLE(x) ? '?' : '[^ -~]'));
+// as hex (21j): the rename a refusal prints names the path by its exact bytes, ASCII only, so it pastes in any shell; the wildcard of 21b to 21i also matched a valid name
 // A hook runs with GIT_DIR, GIT_WORK_TREE, GIT_PREFIX and others that aim git at the repository the hook was started for.
 // Every git call here drops them (the gate runs from the repository root and finds its repository from there), except
 // GIT_INDEX_FILE, which names the index a commit is made from and is the thing commit mode must read, and GIT_CEILING_DIRECTORIES, which only NARROWS where git
@@ -76,7 +73,7 @@ if (process.platform === 'win32') process.env.NoDefaultCurrentDirectoryInExePath
 // sends. Every git call here reads objects as they are stored.
 const NO_REPLACE = '--no-replace-objects';
 // The scanner asks for one answer as bytes ({ buffer: true }: a commit's patch, to decode wide text in it); every other answer is a string.
-const gitIn = (a, o) => execFileSync('git', [NO_REPLACE, ...a], { encoding: o && o.buffer ? 'buffer' : 'utf8', maxBuffer: 256 << 20, timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'], env: gitEnv() });
+const gitIn = (a, o) => execFileSync('git', [NO_REPLACE, ...a], { encoding: o && o.buffer ? 'buffer' : 'utf8', maxBuffer: 256 << 20, timeout: 60000, stdio: [o && o.input ? 'pipe' : 'ignore', 'pipe', 'pipe'], input: o && o.input, env: gitEnv() }); // input: bytes for git's stdin (21j)
 // Reads blobs in one STREAMED process: "<sha> <type> <size>\n<bytes>\n" per object, "<sha> missing\n" for one git does not have. Each distinct id
 // is asked for once, however many paths stage it. An id in `probe` (every path that stages it has a binary-looking name) is judged on its first
 // bytes as they arrive and, when they are binary, dropped as it streams past, never held: a binary blob of any size costs no memory. Every other
@@ -222,7 +219,7 @@ async function main() {
       const text = entry.toString('utf8');
       const m = /^(\d+) ([0-9a-f]{40,64}) (\d)\t([\s\S]*)$/.exec(text);
       if (!m) throw new Error('unreadable index entry');
-      if (!Buffer.from(text, 'utf8').equals(entry)) { const raw = entry.subarray(entry.indexOf(9) + 1); oddPaths.push({ shown: showBytes(raw), glob: globOf(raw), mode: m[1], sha: m[2] }); continue; }
+      if (!Buffer.from(text, 'utf8').equals(entry)) { const raw = entry.subarray(entry.indexOf(9) + 1); oddPaths.push({ shown: showBytes(raw), hex: raw.toString('hex'), mode: m[1], sha: m[2] }); continue; }
       tracked.push({ mode: m[1], sha: m[2], name: m[4] });
     }
   } catch (e) {
@@ -326,9 +323,9 @@ async function main() {
   if (unreadable.length) fails.push(`${unreadable.length} tracked file(s) could not be read, so were NOT scanned: ${unreadable.slice(0, 3).join('; ')}`);
   // 21b (the 21a review's L2): the refusal stands, and it says it is about the path, not a key, and how to rename such a path in the index. git mv cannot name it (its
   // quoted form is not unquoted, and a Windows command line cannot carry the byte), so the commands use the blob id and a wildcard, each checked on a real repository.
-  // 21i (CodeRabbit on two carriers): the old entries are removed BEFORE the new name is added, so a new name of the same byte shape is never matched by the
-  // wildcard, and the removal is forced (-f), because git refuses an entry whose staged blob differs from HEAD and the file; the staged blob is added back by id.
-  if (oddPaths.length) fails.push(`${oddPaths.length} staged path(s) are not valid UTF-8, so the gate cannot give their hits a fingerprint of their own and did NOT scan them. This refusal is about the path, not about a key in it. Rename them in the index (git mv cannot name such a path): list what the wildcard matches, remove those entries from the index (it removes every entry it lists, before any new name exists to match it), then add the same blob under a new name for every entry it listed: ${oddPaths.slice(0, 3).map((o) => `${o.shown}: git ls-files -s -- "${o.glob}" ; git rm --cached -f -q -- "${o.glob}" ; git update-index --add --cacheinfo ${o.mode},${o.sha},<new name>`).join(' | ')}${oddPaths.length > 3 ? ' ...' : ''}`);
+  // 21j (the 21i INSPECT's HIGH): no wildcard. A wildcard of such a path also matched a valid name of the same byte shape, and the forced removal of 21i dropped that
+  // name's staged change; the gate's own --rename-odd (renameOdd, below) removes exactly the entry it named, by its bytes and its blob, in one index update.
+  if (oddPaths.length) fails.push(`${oddPaths.length} staged path(s) are not valid UTF-8, so the gate cannot give their hits a fingerprint of their own and did NOT scan them. This refusal is about the path, not about a key in it. Rename each in the index with the command printed for it (git mv cannot name such a path, and a wildcard can also match a valid name): it removes exactly that entry, found by its bytes and its blob, and stages the same blob under the new name; the working tree is not touched: ${oddPaths.slice(0, 3).map((o) => `${o.shown}: node scripts/secret-gate.mjs --rename-odd=${o.hex}:${o.sha} --to="<new name>"`).join(' | ')}${oddPaths.length > 3 ? ' ...' : ''}`);
 
   let rangeNote = 'no pushed range (tree mode)';
   if (prePush) {
@@ -366,8 +363,40 @@ async function main() {
   console.log(`PASS SECRETS: tree scan of ${scanned} tracked text file(s) clean; ${rangeNote}${acked ? `, ${acked} acknowledged hit(s) via ${ACKS}` : ''}`);
 }
 
+// --rename-odd=<hex>:<blob> --to=<new name> (21j): the one staged entry whose path bytes are <hex>, which is not valid UTF-8, and whose blob is <blob> is removed and the
+// same blob is staged under <new name> with the same mode, in ONE git update-index --index-info call fed from these bytes (mode 0 removes an entry). Nothing else in
+// the index moves and the working tree is not touched. It refuses a path that is valid UTF-8, a blob that does not match, a new name already in the index or one with
+// a line break or NUL, and an index it cannot read; every refusal is a sentence, exit 1, and nothing is written.
+function renameOdd(spec, to) {
+  const m = /^((?:[0-9a-f]{2})+):([0-9a-f]{40,64})$/.exec(spec);
+  if (!m) { console.error(`secret-gate: --rename-odd takes <path as hex>:<blob>, as the refusal prints it, not ${esc(spec)}`); process.exitCode = 64; return; }
+  if (typeof to !== 'string' || !to || /[\0\r\n]/.test(to)) { console.error('secret-gate: --rename-odd needs --to=<new name>, one line, not empty'); process.exitCode = 64; return; }
+  const raw = Buffer.from(m[1], 'hex');
+  const fail = (why) => { console.log(`FAIL RENAME: ${why}; nothing was changed`); process.exitCode = 1; };
+  if (Buffer.from(raw.toString('utf8'), 'utf8').equals(raw)) return fail(`${esc(raw.toString('utf8'))} is valid UTF-8: rename it with git mv`);
+  const listing = gitIn(['ls-files', '-s', '-z'], { buffer: true });
+  let mode = null;
+  for (let s = 0; s < listing.length;) {
+    let e = listing.indexOf(0, s);
+    if (e < 0) e = listing.length;
+    const entry = listing.subarray(s, e);
+    s = e + 1;
+    const tab = entry.indexOf(9);
+    if (tab < 0) continue;
+    const head = entry.subarray(0, tab).toString('latin1').split(' ');
+    const name = entry.subarray(tab + 1);
+    if (name.equals(Buffer.from(to, 'utf8'))) return fail(`${esc(to)} is already in the index: choose another name`);
+    if (name.equals(raw)) { if (head[1] !== m[2] || head[2] !== '0') return fail(`${showBytes(raw)} is staged with blob ${head[1].slice(0, 12)} (stage ${head[2]}), not ${m[2].slice(0, 12)}: run the gate again and use the command it prints now`); mode = head[0]; }
+  }
+  if (mode === null) return fail(`no staged path ${showBytes(raw)}`);
+  const NUL = Buffer.from([0]);
+  gitIn(['update-index', '-z', '--index-info'], { input: Buffer.concat([Buffer.from(`0 ${m[2]}\t`), raw, NUL, Buffer.from(`${mode} ${m[2]}\t${to}`, 'utf8'), NUL]) });
+  console.log(`secret-gate: renamed ${showBytes(raw)} to ${esc(to)} in the index (blob ${m[2].slice(0, 12)}); the working tree is not touched`);
+}
+const renameArg = args.find((a) => a.startsWith('--rename-odd='));
 const unknown = args.filter((a) => !known(a));
 if (args.includes('-h') || args.includes('--help')) console.log(USAGE);
 else if (unknown.length) { console.error(`secret-gate: unknown argument ${JSON.stringify(unknown[0])}
 ${USAGE}`); process.exitCode = 64; }
+else if (renameArg) { try { renameOdd(renameArg.slice('--rename-odd='.length), (args.find((a) => a.startsWith('--to=')) ?? '').slice('--to='.length) || undefined); } catch (e) { console.error(`secret-gate: the rename could not run (${e && e.code ? e.code : 'git error'}); nothing was changed`); process.exitCode = 1; } }
 else main().catch((e) => { console.error(`secret-gate: ${e && e.message ? e.message : e}`); process.exitCode = 1; });
