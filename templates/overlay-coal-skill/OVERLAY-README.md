@@ -87,6 +87,11 @@ The set is derived from the workflow, so the list cannot rot. The files it names
     (`TheColliery/MEMORY.md`'s 2026-08-08 entry), not a day-one requirement; port
     `CoalMine/scripts/lib/config-paths.mjs` later if a room needs multi-agent-dir
     discovery.
+  - `scripts/lib/repo-fs.mjs` — the config's file routes for `configure.mjs` (21d),
+    ported from `CoalFace/scripts/lib/repo-fs.mjs`: the write goes through a temp
+    file and a rename, so a link at the config is replaced, never written through,
+    and a kill mid-write leaves the old config whole. `configure.test.mjs` runs a copy
+    of `configure.mjs` against a one-key stub schema to prove it.
   - `scripts/lib/config-keys.mjs` — the documentation-vs-schema drift gate
     (`checkConfigKeys` + `checkConfigReadPath`), wired into `verify.mjs`. Mechanism
     copied verbatim from `CoalMine/scripts/lib/config-keys.mjs` (CWK-059/CWK-061);

@@ -17,6 +17,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { CONFIG_SCHEMA, validateValue } from './lib/config-schema.mjs';
+import { writeFileAtomic, RepoWriteRefused } from './lib/repo-fs.mjs';
 
 function findGitRoot(startDir) {
   let dir = path.resolve(startDir);
@@ -135,7 +136,12 @@ function main() {
 
   try {
     fs.mkdirSync(path.dirname(readPath), { recursive: true });
-    fs.writeFileSync(readPath, JSON.stringify(cfg, null, 2) + '\n', 'utf8');
+    // 21d: through a temp file and a rename (lib/repo-fs.mjs), never in place: a link at the config is replaced, not written through, and a kill mid-write leaves the old one
+    try { writeFileAtomic(readPath, JSON.stringify(cfg, null, 2) + '\n'); } catch (e) {
+      if (!(e instanceof RepoWriteRefused)) throw e;
+      console.error(`FAIL ${e.message}`);
+      process.exit(1);
+    }
     console.log(`Successfully updated configuration in: ${readPath}`);
     console.log(JSON.stringify(cfg, null, 2));
   } catch (e) {
