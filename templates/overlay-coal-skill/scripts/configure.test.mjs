@@ -175,3 +175,17 @@ test('an existing config that is read-only is refused by name before anything is
   assert.strictEqual(rm.code, 1, rm.out);
   assert.ok(!fs.existsSync(m.cfg + '.bak'), 'no backup is made of a config the run will not replace');
 });
+
+// 21e item 4 (the 21d review's LOWs): an unknown flag is an error, so its usage goes to stderr with a non-zero exit and stdout stays empty (coding-style, User-Invoked CLI
+// Surface); --help still prints usage to stdout and exits 0.
+test('an unknown flag prints its usage on stderr and exits 1, with nothing on stdout; --help prints on stdout and exits 0 -- RED before 21e', () => {
+  const { dir } = project();
+  const cli = (args) => spawnSync(process.execPath, ['--max-old-space-size=256', path.join('scripts', 'configure.mjs'), ...args], { cwd: dir, encoding: 'utf8', timeout: 30000, env: { ...process.env, HOME: dir, USERPROFILE: dir } });
+  const bad = cli(['--no-such-flag']);
+  assert.strictEqual(bad.status, 1, bad.stdout + bad.stderr);
+  assert.strictEqual(bad.stdout, '', 'nothing on stdout: ' + bad.stdout);
+  assert.ok(bad.stderr.includes("Unrecognized option '--no-such-flag'") && bad.stderr.includes('Usage:'), bad.stderr);
+  const help = cli(['--help']);
+  assert.strictEqual(help.status, 0);
+  assert.ok(help.stdout.includes('Usage:'), help.stdout);
+});

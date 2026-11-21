@@ -30,7 +30,8 @@ function findGitRoot(startDir) {
   return startDir;
 }
 
-function printHelp() {
+// usage goes to stdout when asked for (--help), to stderr when it answers an error (21e: an unknown flag; coding-style, User-Invoked CLI Surface)
+function printHelp(out = console.log) {
   const lines = [
     '{{TOOL}} Configurator Utility',
     'Usage: node scripts/configure.mjs [options]',
@@ -43,7 +44,7 @@ function printHelp() {
   }
   lines.push(`  ${'--global'.padEnd(48)} Write ~/.claude/.{{TOOL}}.json (the global layer) instead of the project config`);
   lines.push(`  ${'--help, -h'.padEnd(48)} Show this help message`);
-  console.log(lines.join('\n'));
+  out(lines.join('\n'));
 }
 
 // Parse one raw CLI value against a spec. Returns { value } or { error }.
@@ -162,7 +163,7 @@ function main() {
     const spec = flagMap.get(args[i]);
     if (!spec) {
       console.error(`Error: Unrecognized option '${args[i]}'`);
-      printHelp();
+      printHelp(console.error);
       process.exit(1);
     }
     const parsed = parseValue(spec, args[++i]);

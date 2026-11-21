@@ -71,7 +71,7 @@ export function writeFileAtomic(target, content, modeFrom = target) {
       fs.writeFileSync(fd, content);
     } finally { fs.closeSync(fd); }
     try { fs.renameSync(temp, target); renamed = true; } catch (e) {
-      throw new RepoWriteRefused(target, `it could not be replaced (${e.code}); an older copy is kept`, 'close whatever holds that file open, or make it a regular file');
+      throw new RepoWriteRefused(target, `it could not be replaced (${e.code}); an older copy is kept`, 'make it writable if it is read-only, or close whatever holds it open, or make it a regular file');
     }
   } catch (e) {
     if (e instanceof RepoWriteRefused) throw e;
