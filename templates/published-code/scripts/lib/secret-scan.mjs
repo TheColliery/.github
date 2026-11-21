@@ -799,7 +799,13 @@ function scanPatchWide(bytes, opts) {
         const decoded = wideTexts(runBytes, mark.kinds);
         const texts = decoded.length ? [...decoded, runBytes.toString('utf8')] : [];
         if (!decoded.length) for (const h of spelledHits(runBytes, file)) hits.push({ commit, file, line: start + h.line - 1, pattern: h.pattern, fp: h.fp }); // 20f, as scanBytes
-        for (const text of texts) for (const h of scanText(text, file)) hits.push({ commit, file, line: start + h.line - 1, pattern: h.pattern, fp: h.fp });
+        // 21i (21h D13): with the committed file's line map, a decoded reading's line counts from the decoded line where the hunk starts, and the UTF-8 reading's
+        // raw line is mapped as a whole; with none (a run that holds line 1, or a file with no mark) the lines are git's, as before
+        const at = (raw) => (mark.lineOf ? mark.lineOf(raw) : raw);
+        texts.forEach((text, i) => {
+          const utf8 = i === texts.length - 1;
+          for (const h of scanText(text, file)) hits.push({ commit, file, line: utf8 ? at(start + h.line - 1) : at(start) + h.line - 1, pattern: h.pattern, fp: h.fp });
+        });
       }
     }
     run = [];
@@ -1030,7 +1036,12 @@ export function scanPushed(stdinText, git, opts = {}) {
     if (!Buffer.isBuffer(head)) { const e = new Error('the committed file could not be read as bytes'); e.code = 'EBOMREAD'; throw e; }
     const kinds = bomKinds(head);
     if (kinds.length && head.length > WIDE_DECODE_MAX_BYTES) return { tooLarge: createHash('sha256').update(head).digest('hex') }; // 21i: the tree scan's key for the same bytes
-    return { kinds };
+    if (!kinds.length) return { kinds };
+    // 21i (21h D13): a hunk's start is git's line number, which counts every 0x0A byte, one inside a wide character too, so it can sit past the decoded line a reader
+    // sees. The mark gives the file's layout; its line map turns a raw line of the committed file into the decoded line where its bytes sit (as scanBytes maps a raw hit).
+    const breaks = [];
+    for (let i = head.indexOf(0x0a); i >= 0; i = head.indexOf(0x0a, i + 1)) breaks.push(i);
+    return { kinds, lineOf: decodedLineMap(head, breaks, { width: kinds[0] === 'utf32' ? 4 : 2, offset: 0, le: head[0] === 0xff }) };
   };
   // FAIL CLOSED on a pushed object that is not a commit. `rev-list` returns NOTHING, with no error,
   // for a blob, a tree, or a tag of either, so a range scan would pass it unread

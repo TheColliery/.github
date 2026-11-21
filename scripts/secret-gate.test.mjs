@@ -1552,3 +1552,21 @@ test('a wide-spelled key longer than a window\'s carry, starting just before the
     assert.strictEqual(probe(b), true, 'the probe finds it, ' + before);
   }
 });
+
+// 21i P4 (CodeRabbit on a carrier, 21h D13): a pushed wide hunk past line 1 was numbered git's start line plus its decoded offset. Git counts every 0x0A byte as a
+// line, one inside a wide character too (U+0E0A is bytes 0A 0E in UTF-16LE), so a later hunk named a line past the one a reader sees. With a mark, the committed
+// file's own line map now turns the hunk's start into its decoded line, as the tree scan maps a raw hit.
+test('a key in a later pushed hunk of a marked wide file is reported on the decoded line the tree scan names -- RED before 21i', async () => {
+  const { scanBytes, scanPushed } = await import(pathToFileURL(LIB).href);
+  const KEY4 = 'gh' + 'p_' + 'Qw7'.repeat(12);
+  const v1 = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('x' + String.fromCharCode(0x0e0a) + 'y\nline2\nline3\n', 'utf16le')]);
+  const v2 = Buffer.concat([v1, Buffer.from('id ' + KEY4 + '\n', 'utf16le')]);
+  const dir = repo([{ 'w.txt': v1 }, { 'w.txt': v2 }]);
+  const gitBytes = (args, o = {}) => execFileSync('git', [...GIT_IDENTITY, '-C', dir, ...args], { encoding: o.buffer ? 'buffer' : 'utf8', maxBuffer: 64 << 20, timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'], env: gitEnv() });
+  const base = gitBytes(['rev-parse', 'HEAD~1']).trim();
+  const tip = gitBytes(['rev-parse', 'HEAD']).trim();
+  const tree = scanBytes(v2, 'w.txt').filter((h) => h.pattern === 'github-token').map((h) => h.line);
+  const pushed = scanPushed(`refs/heads/main ${tip} refs/heads/main ${base}\n`, gitBytes).hits.filter((h) => h.pattern === 'github-token').map((h) => h.line);
+  assert.deepStrictEqual(tree, [4], 'the tree scan names decoded line 4');
+  assert.deepStrictEqual([...new Set(pushed)], [4], 'the push names the same line, not git\'s raw line 5');
+});
