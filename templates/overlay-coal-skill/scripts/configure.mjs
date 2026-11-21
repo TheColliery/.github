@@ -123,9 +123,11 @@ function main() {
   // 21e (the 21d review's MEDIUM on read-only configs), ruled REFUSE: the write is a rename, which replaces the directory entry, so a config its user made read-only
   // would be replaced on POSIX where the old in-place write refused (and on Windows the rename failed with a sentence that did not name the cause). An existing config that is
   // not writable is refused here, before anything is backed up or written; accessSync(W_OK) sees the read-only bits on POSIX and the read-only attribute on Windows.
+  // 21i (the 21d review's LOW): on Windows accessSync sees only the read-only attribute, never an ACL that denies write, and the rename needs DELETE, not WRITE, so the
+  // file is also opened for writing (r+: nothing created, nothing truncated, closed at once), which an ACL deny refuses.
   if (rawBytes !== null) {
-    try { fs.accessSync(readPath, fs.constants.W_OK); } catch {
-      console.error(`FAIL ${readPath}: it is read-only -- make it writable (chmod u+w on Linux and macOS, clear the read-only attribute on Windows) and re-run; nothing was written`);
+    try { fs.accessSync(readPath, fs.constants.W_OK); fs.closeSync(fs.openSync(readPath, 'r+')); } catch {
+      console.error(`FAIL ${readPath}: it is read-only -- make it writable (chmod u+w on Linux and macOS, clear the read-only attribute or a write deny in its permissions on Windows) and re-run; nothing was written`);
       process.exit(1);
     }
   }
