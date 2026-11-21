@@ -2506,7 +2506,9 @@ test('release-notes.mjs and its test describe the previous stable tag the way th
 // the public kinds' templates (published-code, article and the two overlays) and their repo-settings files, plus every canon script under scripts/ that one of those templates
 // carries a copy of (found by path, so a new carried pair is covered without a list). WHERE THE NAMES COME FROM: the org's private repositories, a hand-kept list (no canon
 // file holds them as data; the wizard and the private-working kind name them in prose), matched without case, so Bankfire also covers Bankfire-gate.
-const PRIVATE_REPOS = ['Bankfire', 'Pithead', 'Chotmeter', 'ChotUnitDatum'];
+// 21i: also the community files GitHub serves as the org's defaults on every public repository (this repository's .github/, less its own workflows/ and dependabot.yml)
+// and the org profile (profile/). A canon file outside scripts/ that has a byte-equal template twin is covered through that twin, which is the copy carried (F2).
+const PRIVATE_REPOS = ['Bankfire', 'Pithead', 'Chotmeter', 'ChotUnitDatum', 'template-private-working'];
 const PUBLIC_KINDS = ['published-code', 'article', 'overlay-coal-skill', 'overlay-llm-deploy'];
 function publicCarriedFiles(root) {
   const out = new Set();
@@ -2519,6 +2521,7 @@ function publicCarriedFiles(root) {
   };
   for (const kind of PUBLIC_KINDS) {
     const base = path.join(root, 'templates', kind);
+    if (!fs.existsSync(base)) continue; // the fixture tree holds one kind; the real tree's kinds are asserted present by the test below
     walk(base);
     const scripts = path.join(base, 'scripts');
     if (!fs.existsSync(scripts)) continue;
@@ -2527,16 +2530,52 @@ function publicCarriedFiles(root) {
     collect(scripts);
     for (const rel of carried) { const canon = path.join(root, 'scripts', rel); if (fs.existsSync(canon)) out.add(canon); }
   }
-  for (const kind of ['published-code', 'article']) out.add(path.join(root, 'templates', `repo-settings.${kind}.json`));
+  for (const kind of ['published-code', 'article']) { const p = path.join(root, 'templates', `repo-settings.${kind}.json`); if (fs.existsSync(p)) out.add(p); }
+  const served = path.join(root, '.github');
+  if (fs.existsSync(served)) for (const e of fs.readdirSync(served, { withFileTypes: true })) if (e.name !== 'workflows' && e.name !== 'dependabot.yml') { const p = path.join(served, e.name); if (e.isDirectory()) walk(p); else out.add(p); }
+  if (fs.existsSync(path.join(root, 'profile'))) walk(path.join(root, 'profile'));
   return [...out].sort();
+}
+// The hits of the names in the files: in each file's path, and in its text, read as UTF-16 when it opens with a UTF-16 byte-order mark (21i, the 21f INSPECT's F3).
+function privateNameHits(root, files, names = PRIVATE_REPOS) {
+  const hits = [];
+  for (const f of files) {
+    const rel = path.relative(root, f).split(path.sep).join('/');
+    for (const name of names) if (rel.toLowerCase().includes(name.toLowerCase())) hits.push(`${rel} (path) ${name}`);
+    const bytes = fs.readFileSync(f);
+    const bom = bytes.length >= 2 && ((bytes[0] === 0xff && bytes[1] === 0xfe) || (bytes[0] === 0xfe && bytes[1] === 0xff)) ? bytes[0] : 0;
+    const text = bom === 0xff ? bytes.toString('utf16le') : bom === 0xfe ? Buffer.from(bytes).swap16().toString('utf16le') : bytes.toString('utf8');
+    text.split(/\r?\n/).forEach((l, i) => { for (const name of names) if (l.toLowerCase().includes(name.toLowerCase())) hits.push(`${rel}:${i + 1} ${name}`); });
+  }
+  return hits;
 }
 test('no file a public repository is born with or copies names a private repository of the org -- RED before 21f', () => {
   const files = publicCarriedFiles(ROOT);
   assert.ok(files.includes(path.join(ROOT, 'scripts', 'lib', 'secret-scan.mjs')) && files.includes(path.join(ROOT, 'scripts', 'secret-gate.mjs')), 'the carried canon scanner and gate are in the set (not vacuous)');
-  const hits = [];
-  for (const f of files) {
-    const lines = fs.readFileSync(f, 'utf8').split(/\r?\n/);
-    lines.forEach((l, i) => { for (const name of PRIVATE_REPOS) if (l.toLowerCase().includes(name.toLowerCase())) hits.push(`${path.relative(ROOT, f)}:${i + 1} ${name}`); });
-  }
-  assert.deepStrictEqual(hits, [], 'a private repository is named in a file a public repository receives: tell the provenance in words');
+  assert.ok(files.includes(path.join(ROOT, '.github', 'SECURITY.md')) && files.includes(path.join(ROOT, 'profile', 'README.md')), 'the org-default community files and the org profile are in the set (21i)');
+  for (const kind of PUBLIC_KINDS) assert.ok(fs.existsSync(path.join(ROOT, 'templates', kind)), `the public kind ${kind} exists, so the walk never skips it here`);
+  assert.deepStrictEqual(privateNameHits(ROOT, files), [], 'a private repository is named in a file a public repository receives: tell the provenance in words');
+});
+// 21i (the 21f INSPECT's four MEDIUM gaps): the set missed the org-default community files GitHub shows on every public repository and the org profile (F1); the match
+// read only text as UTF-8, so a name in a file's PATH or a UTF-16 file passed (F3); the list lacked template-private-working (F4). Proved on a built tree; F2 is a comment.
+test('the private-name wall reads the org-default community files and the profile, a file\'s path and UTF-16 text, and lists template-private-working -- RED before 21i', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'private-wall-'));
+  try {
+    const put = (rel, data) => { const p = path.join(root, ...rel.split('/')); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, data); };
+    const secret = 'Pit' + 'head'; // built from parts, as every fake value here
+    put('templates/article/README.md', 'clean\n');
+    put(`templates/article/${secret.toLowerCase()}-notes.md`, 'clean\n'); // F3: the name in the path only
+    put('templates/article/wide.txt', Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(`from ${secret}\n`, 'utf16le')])); // F3: UTF-16 text
+    put('.github/SECURITY.md', `see ${secret}\n`); // F1
+    put('.github/workflows/ci.yml', `${secret}\n`); // this repository's own CI, served to no other repository: not in the set
+    put('profile/README.md', `${secret}\n`); // F1
+    put('templates/article/x.md', 'built from the template-private-working kind\n'); // F4
+    const files = publicCarriedFiles(root);
+    assert.ok(!files.includes(path.join(root, '.github', 'workflows', 'ci.yml')), 'the repository\'s own workflows are not served to other repositories');
+    const hits = privateNameHits(root, files);
+    for (const want of [`templates/article/${secret.toLowerCase()}-notes.md (path) ${secret}`, `templates/article/wide.txt:1 ${secret}`, `.github/SECURITY.md:1 ${secret}`, `profile/README.md:1 ${secret}`, 'templates/article/x.md:1 template-private-working']) {
+      assert.ok(hits.includes(want), `${want} is found: ${JSON.stringify(hits)}`);
+    }
+    assert.ok(PRIVATE_REPOS.includes('template-private-working'), 'the list names the private template repository');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
