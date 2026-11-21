@@ -149,6 +149,37 @@ test('a malformed config is backed up from the bytes the bounded read holds, nev
   assert.strictEqual(fs.readFileSync(cfg + '.bak', 'utf8'), '{oops', 'the backup holds the bytes that failed to parse: ' + r.out);
 });
 
+// 21i P11 (the 21d review's LOW, confirmed on Windows): accessSync(W_OK) sees only the read-only attribute on Windows, never an ACL, and the rename needs DELETE on the
+// target, not WRITE, so a config its user denied write to (icacls /deny <user>:(WD)) was replaced. Windows only; elsewhere the read-only test above is the same case.
+test('an existing config whose owner is denied write by an ACL is refused like a read-only one -- RED before 21i', (t) => {
+  if (process.platform !== 'win32') { t.skip('an ACL deny is a Windows leg; the read-only test covers POSIX'); return; }
+  const { dir, cfg } = project();
+  const body = '{"keep":1,"mode":"off"}\n';
+  fs.writeFileSync(cfg, body);
+  const icacls = (...a) => spawnSync('icacls', [cfg, ...a], { timeout: 30000, stdio: 'ignore', env: { SystemRoot: process.env.SystemRoot, PATH: process.env.PATH } });
+  icacls('/deny', `${os.userInfo().username}:(WD)`);
+  let r;
+  try { r = run(dir, ['--mode', 'auto']); } finally { icacls('/remove:d', os.userInfo().username); }
+  assert.strictEqual(r.code, 1, r.out);
+  assert.ok(r.out.includes('nothing was written'), r.out);
+  assert.strictEqual(fs.readFileSync(cfg, 'utf8'), body, 'the config is left byte for byte');
+  assert.ok(!fs.existsSync(cfg + '.bak'), 'and no backup is made');
+});
+
+// 21i P11 (the 21d review's LOW): a junction at the config path (a folder link any user may make on Windows) was handled, refused with nothing written outside, but no
+// test held it. The junction points at a folder outside the project; after the run that folder holds only what it held, and no temp file is left beside the config.
+test('a junction at the config path is refused, and nothing is written through it or left beside it', () => {
+  const { dir, cfg } = project();
+  const outside = tmp('junction-target');
+  fs.writeFileSync(path.join(outside, 'held.txt'), 'held\n');
+  fs.symlinkSync(outside, cfg, 'junction');
+  const before = fs.readdirSync(path.dirname(cfg)).sort();
+  const r = run(dir, ['--mode', 'auto']);
+  assert.strictEqual(r.code, 1, r.out);
+  assert.deepStrictEqual(fs.readdirSync(outside), ['held.txt'], 'nothing was written through the junction');
+  assert.deepStrictEqual(fs.readdirSync(path.dirname(cfg)).sort(), before, 'no temp file or backup is left beside the config');
+});
+
 // 21e item 3 (the 21d review's MEDIUM, suspected on POSIX), ruled: REFUSE. A rename replaces the directory entry, so a config its user made read-only was replaced on POSIX,
 // where the old in-place write refused; on Windows the rename failed with a sentence that did not name the cause. An existing config that is not writable is now refused
 // with a sentence before anything is backed up or written, on every system: accessSync(W_OK) sees the read-only bits on POSIX and the read-only attribute on Windows. The

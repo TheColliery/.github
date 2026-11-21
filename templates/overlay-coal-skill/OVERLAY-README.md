@@ -92,7 +92,8 @@ The set is derived from the workflow, so the list cannot rot. The files it names
     file and a rename, so a link at the config is replaced, never written through,
     and a kill mid-write leaves the old config whole. `configure.test.mjs` runs a copy
     of `configure.mjs` against a one-key stub schema to prove it. It refuses, writing
-    nothing, a config it cannot read and a config that is read-only (21e): only a
+    nothing, a config it cannot read and a config that is read-only (21e), or whose
+    owner an ACL denies write on Windows (21i): only a
     missing file starts a new config. A HARD kill (the process ended between making
     the temp file and renaming it) leaves `.{{TOOL}}.json.tmp-<pid>` beside the config;
     the old config is intact, and a later run is not blocked (its temp has its own

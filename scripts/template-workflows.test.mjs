@@ -1560,7 +1560,7 @@ const readText = (rel) => fs.readFileSync(path.join(ROOT, ...rel.split('/')), 'u
 // The canon secret gate keeps GIT_INDEX_FILE BY DESIGN (commit mode reads the commit's own index, which a hook names through that variable), and GIT_INDEX_FILE is outside the three
 // GIT_ names the rule allows, so its two git spawns are findings the census is right to give. It is the ONE pinned carrier, at this blob; any edit spends the pin. The Bankfire source test was
 // the second until Bankfire returned gitEnv()'s literal alone (bd328f2e, 2026-10-09): it now passes the census with no pin, like the gate test.
-const GATE_PIN = { rel: 'scripts/secret-gate.mjs', blob: '235bf5b5b4dffaa814c07b7c56b5499232937b2b', why: 'canon secret gate: keeps GIT_INDEX_FILE and GIT_CEILING_DIRECTORIES by design (its gitEnv() copies process.env minus the other GIT_ names); the census counts gitIn\'s execFileSync, the one finding, and the streamed cat-file child (started by spawn, which the census does not count, its rule 5) takes the same gitEnv()' };
+const GATE_PIN = { rel: 'scripts/secret-gate.mjs', blob: '57b1a00200edd09f825bedae880f272bb7c2812b', why: 'canon secret gate: keeps GIT_INDEX_FILE and GIT_CEILING_DIRECTORIES by design (its gitEnv() copies process.env minus the other GIT_ names); the census counts gitIn\'s execFileSync, the one finding, and the streamed cat-file child (started by spawn, which the census does not count, its rule 5) takes the same gitEnv()' };
 
 test('the canon secret-gate test passes the canon census with no pin: it builds every git environment from named keys, in all three places it lives -- RED before 08d D3', () => {
   for (const dir of CARRIER_DIRS) {
@@ -1610,12 +1610,12 @@ test('the canon release-notes.mjs and its test (the list\'s P1 and P2) read clea
   }
 });
 
-test('the three places a secret-scan or secret-gate file lives hold the same bytes, and the secret-scan test is the Bankfire source\'s (blob 663dd5ac, Bankfire PR #61 0cd9e5c): the scanner parity contract -- RED before 08d D3', () => {
+test('the three places a secret-scan or secret-gate file lives hold the same bytes, and the secret-scan test is the canon\'s carried file (blob 663dd5ac; a room adds its own cases in a file of its own name, 21j): the scanner parity contract -- RED before 08d D3', () => {
   for (const name of ['secret-scan.test.mjs', 'secret-gate.test.mjs', 'secret-gate.mjs']) {
     const blobs = CARRIER_DIRS.map((d) => gitBlobId(readText(`${d}/${name}`)));
     assert.equal(new Set(blobs).size, 1, `${name} differs between the three places: ${blobs.join(' ')}`);
   }
-  assert.ok(gitBlobId(readText('scripts/secret-scan.test.mjs')).startsWith('663dd5ac'), 'the Bankfire source test moved: re-copy it byte for byte into the three places (scripts/scanner-parity.mjs reads it)');
+  assert.ok(gitBlobId(readText('scripts/secret-scan.test.mjs')).startsWith('663dd5ac'), 'the carried secret-scan test changed: the canon owns it, so move this pin in the same unit and re-copy it byte for byte into the three places');
 });
 
 test('the public hooks say what the secret scan does NOT catch, including a token header with a scheme word: the answer to CoalMine LOW-1 -- the scan-limit sentence', () => {
@@ -2122,15 +2122,13 @@ test('prev-stable step behaviour (UMB3-193): a stretch of tag-less commits betwe
 });
 
 // UMB3-193 round 5 (2026-11-09): the CI check for the class "a test hands a child process the real environment" (main's ruling on CodeRabbit's three cries in one CoalWash review).
-// The canon holds instances, so it is a RATCHET: the three files below are the Bankfire-sourced scanner gate tests (byte-equal copies in scripts/ and the two templates; the scanner-gate test
-// still gives its scratch repo HOME and USERPROFILE only, the secret-scan test no longer does since the 2026-11-12 re-copy), pinned by blob id with the reason; an edit to one spends the pin and the file is read again. Everything else
-// in scripts/ and templates/ must be clean: a new test with `env: process.env`, or HOME and USERPROFILE without TEMP, TMP and TMPDIR, fails here.
+// The canon held instances, so it is a RATCHET: a file that cannot be fixed yet is pinned here by blob id with its reason ({ rel, blob, why }); an edit to it spends the
+// pin and the file is read again. The ratchet closed at 21i: the scanner gate test (scripts/ and its two template copies) writes TEMP, TMP and TMPDIR out in its gate
+// environment, so no pin is left. Everything in scripts/ and templates/ must be clean: a new test with `env: process.env`, or HOME and USERPROFILE without TEMP, TMP and
+// TMPDIR, fails here.
 const { scanChildEnv } = await import(pathToFileURL(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', 'child-env-census.mjs')).href);
 const { collectScriptsMjs } = await import(pathToFileURL(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', 'git-env-census.mjs')).href);
-const SCANNER_WHY = 'byte-equal copy of the Bankfire-sourced scanner gate test: its scratch repo gets HOME and USERPROFILE only. Its fix is made at the Bankfire source (the secret-scan test already points TEMP, TMP and TMPDIR at the sandbox since Bankfire 557a2e6) and re-copied into all three places.';
-const CHILD_ENV_PINS = [
-  ['scripts/secret-gate.test.mjs', 'bcd5ce799c8d37ca304bda13df47fdc9e70eb94a'], ['templates/article/scripts/secret-gate.test.mjs', 'bcd5ce799c8d37ca304bda13df47fdc9e70eb94a'], ['templates/published-code/scripts/secret-gate.test.mjs', 'bcd5ce799c8d37ca304bda13df47fdc9e70eb94a'],
-].map(([rel, blob]) => ({ rel, blob, why: SCANNER_WHY }));
+const CHILD_ENV_PINS = [];
 function childEnvFiles() {
   const files = [];
   for (const root of ['', 'templates/overlay-coal-skill', 'templates/article', 'templates/published-code', 'templates/private-working', 'templates/overlay-llm-deploy']) {
@@ -2141,7 +2139,7 @@ function childEnvFiles() {
   return files;
 }
 
-test('the canon\'s own tests start no child with the real environment: the child-env census over scripts/ and templates/ finds nothing beyond the three pinned scanner-gate copies -- RED before UMB3-193 round 5', () => {
+test('the canon\'s own tests start no child with the real environment: the child-env census over scripts/ and templates/ finds nothing beyond its pins (none since 21i) -- RED before UMB3-193 round 5', () => {
   const files = childEnvFiles();
   assert.ok(files.length >= 40, 'the walk finds the tests it polices: ' + files.length);
   const r = scanChildEnv(files, CHILD_ENV_PINS);
@@ -2150,7 +2148,13 @@ test('the canon\'s own tests start no child with the real environment: the child
   assert.ok(r.calls >= 80 && r.withEnv >= 60 && r.ok >= 40, 'the census reads the spawns it polices: ' + JSON.stringify({ calls: r.calls, withEnv: r.withEnv, ok: r.ok }));
 });
 
-test('the child-env pins hold only while the file is the pinned blob: the three files ARE those blobs today, and one added byte spends the pin -- RED before UMB3-193 round 5', () => {
+test('a child-env pin holds only while the file is the pinned blob, and one added byte spends it: proved on a built fixture now that no pin is left (21i) -- RED before UMB3-193 round 5', () => {
+  // the fixture hands a child the real environment; pinned by its own blob it is exempted, and one more byte reads it again
+  const text = "import { spawnSync } from 'node:child_process';\nspawnSync(process.execPath, ['-v'], { timeout: 1000, env: process.env });\n";
+  const pin = { rel: 'scripts/fixture.test.mjs', blob: gitBlobId(text), why: 'a built fixture' };
+  assert.ok(scanChildEnv([{ rel: pin.rel, text }], []).findings.length >= 1, 'the fixture is a real finding without its pin');
+  assert.equal(scanChildEnv([{ rel: pin.rel, text }], [pin]).exempted, 1, 'pinned by its blob, it is exempted');
+  assert.ok(scanChildEnv([{ rel: pin.rel, text: text + '\n' }], [pin]).findings.length >= 1, 'one added byte spends the pin');
   const files = childEnvFiles();
   for (const p of CHILD_ENV_PINS) {
     const f = files.find((x) => x.rel === p.rel);
@@ -2502,7 +2506,11 @@ test('release-notes.mjs and its test describe the previous stable tag the way th
 // the public kinds' templates (published-code, article and the two overlays) and their repo-settings files, plus every canon script under scripts/ that one of those templates
 // carries a copy of (found by path, so a new carried pair is covered without a list). WHERE THE NAMES COME FROM: the org's private repositories, a hand-kept list (no canon
 // file holds them as data; the wizard and the private-working kind name them in prose), matched without case, so Bankfire also covers Bankfire-gate.
-const PRIVATE_REPOS = ['Bankfire', 'Pithead', 'Chotmeter', 'ChotUnitDatum'];
+// 21i: also the community files GitHub serves as the org's defaults on every public repository (this repository's .github/, less its own workflows/ and dependabot.yml)
+// and the org profile (profile/). A canon file outside scripts/ that has a byte-equal template twin is covered through that twin, which is the copy carried (F2).
+// 21i P13: the names are data with one owner, private-repos.json at the root (read here, outside every carried set, which the wall test asserts).
+const PRIVATE_REPOS_FILE = path.join(ROOT, 'private-repos.json');
+const PRIVATE_REPOS = (() => { const raw = fs.readFileSync(PRIVATE_REPOS_FILE, 'utf8'); return JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw).repos; })();
 const PUBLIC_KINDS = ['published-code', 'article', 'overlay-coal-skill', 'overlay-llm-deploy'];
 function publicCarriedFiles(root) {
   const out = new Set();
@@ -2515,6 +2523,7 @@ function publicCarriedFiles(root) {
   };
   for (const kind of PUBLIC_KINDS) {
     const base = path.join(root, 'templates', kind);
+    if (!fs.existsSync(base)) continue; // the fixture tree holds one kind; the real tree's kinds are asserted present by the test below
     walk(base);
     const scripts = path.join(base, 'scripts');
     if (!fs.existsSync(scripts)) continue;
@@ -2523,16 +2532,63 @@ function publicCarriedFiles(root) {
     collect(scripts);
     for (const rel of carried) { const canon = path.join(root, 'scripts', rel); if (fs.existsSync(canon)) out.add(canon); }
   }
-  for (const kind of ['published-code', 'article']) out.add(path.join(root, 'templates', `repo-settings.${kind}.json`));
+  for (const kind of ['published-code', 'article']) { const p = path.join(root, 'templates', `repo-settings.${kind}.json`); if (fs.existsSync(p)) out.add(p); }
+  const served = path.join(root, '.github');
+  if (fs.existsSync(served)) for (const e of fs.readdirSync(served, { withFileTypes: true })) if (e.name !== 'workflows' && e.name !== 'dependabot.yml') { const p = path.join(served, e.name); if (e.isDirectory()) walk(p); else out.add(p); }
+  if (fs.existsSync(path.join(root, 'profile'))) walk(path.join(root, 'profile'));
+  // 21j (the 21i INSPECT's LOW): GitHub also serves the org's default community files from this repository's root and docs/ (its list of names: CODE_OF_CONDUCT,
+  // CONTRIBUTING, FUNDING.yml, GOVERNANCE, SECURITY, SUPPORT, the issue, pull request and discussion templates), so those places are read too, by that list of names
+  const COMMUNITY = /^(CODE_OF_CONDUCT|CONTRIBUTING|GOVERNANCE|SECURITY|SUPPORT|PULL_REQUEST_TEMPLATE)(\.(md|txt|rst))?$|^FUNDING\.yml$|^(ISSUE_TEMPLATE|DISCUSSION_TEMPLATE|PULL_REQUEST_TEMPLATE)$/i;
+  for (const base of [root, path.join(root, 'docs')]) {
+    if (!fs.existsSync(base)) continue;
+    for (const e of fs.readdirSync(base, { withFileTypes: true })) if (COMMUNITY.test(e.name)) { const p = path.join(base, e.name); if (e.isDirectory()) walk(p); else out.add(p); }
+  }
   return [...out].sort();
+}
+// The hits of the names in the files: in each file's path, and in its text, read as UTF-16 when it opens with a UTF-16 byte-order mark (21i, the 21f INSPECT's F3).
+function privateNameHits(root, files, names = PRIVATE_REPOS) {
+  const hits = [];
+  for (const f of files) {
+    const rel = path.relative(root, f).split(path.sep).join('/');
+    for (const name of names) if (rel.toLowerCase().includes(name.toLowerCase())) hits.push(`${rel} (path) ${name}`);
+    const bytes = fs.readFileSync(f);
+    const bom = bytes.length >= 2 && ((bytes[0] === 0xff && bytes[1] === 0xfe) || (bytes[0] === 0xfe && bytes[1] === 0xff)) ? bytes[0] : 0;
+    const text = bom === 0xff ? bytes.toString('utf16le') : bom === 0xfe ? Buffer.from(bytes).swap16().toString('utf16le') : bytes.toString('utf8');
+    text.split(/\r?\n/).forEach((l, i) => { for (const name of names) if (l.toLowerCase().includes(name.toLowerCase())) hits.push(`${rel}:${i + 1} ${name}`); });
+  }
+  return hits;
 }
 test('no file a public repository is born with or copies names a private repository of the org -- RED before 21f', () => {
   const files = publicCarriedFiles(ROOT);
   assert.ok(files.includes(path.join(ROOT, 'scripts', 'lib', 'secret-scan.mjs')) && files.includes(path.join(ROOT, 'scripts', 'secret-gate.mjs')), 'the carried canon scanner and gate are in the set (not vacuous)');
-  const hits = [];
-  for (const f of files) {
-    const lines = fs.readFileSync(f, 'utf8').split(/\r?\n/);
-    lines.forEach((l, i) => { for (const name of PRIVATE_REPOS) if (l.toLowerCase().includes(name.toLowerCase())) hits.push(`${path.relative(ROOT, f)}:${i + 1} ${name}`); });
-  }
-  assert.deepStrictEqual(hits, [], 'a private repository is named in a file a public repository receives: tell the provenance in words');
+  assert.ok(files.includes(path.join(ROOT, '.github', 'SECURITY.md')) && files.includes(path.join(ROOT, 'profile', 'README.md')), 'the org-default community files and the org profile are in the set (21i)');
+  assert.ok(files.includes(path.join(ROOT, 'FUNDING.yml')), 'the root FUNDING.yml, an org default GitHub serves, is in the set (21j)');
+  for (const kind of PUBLIC_KINDS) assert.ok(fs.existsSync(path.join(ROOT, 'templates', kind)), `the public kind ${kind} exists, so the walk never skips it here`);
+  assert.ok(Array.isArray(PRIVATE_REPOS) && PRIVATE_REPOS.length >= 5 && PRIVATE_REPOS.every((n) => typeof n === 'string' && n.length >= 3), 'private-repos.json lists the names (not vacuous)');
+  assert.ok(!files.includes(PRIVATE_REPOS_FILE), 'the list itself is in no carried set');
+  assert.deepStrictEqual(privateNameHits(ROOT, files), [], 'a private repository is named in a file a public repository receives: tell the provenance in words');
+});
+// 21i (the 21f INSPECT's four MEDIUM gaps): the set missed the org-default community files GitHub shows on every public repository and the org profile (F1); the match
+// read only text as UTF-8, so a name in a file's PATH or a UTF-16 file passed (F3); the list lacked template-private-working (F4). Proved on a built tree; F2 is a comment.
+test('the private-name wall reads the org-default community files and the profile, a file\'s path and UTF-16 text, and lists template-private-working -- RED before 21i', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'private-wall-'));
+  try {
+    const put = (rel, data) => { const p = path.join(root, ...rel.split('/')); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, data); };
+    const secret = 'Pit' + 'head'; // built from parts, as every fake value here
+    put('templates/article/README.md', 'clean\n');
+    put(`templates/article/${secret.toLowerCase()}-notes.md`, 'clean\n'); // F3: the name in the path only
+    put('templates/article/wide.txt', Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(`from ${secret}\n`, 'utf16le')])); // F3: UTF-16 text
+    put('.github/SECURITY.md', `see ${secret}\n`); // F1
+    put('.github/workflows/ci.yml', `${secret}\n`); // this repository's own CI, served to no other repository: not in the set
+    put('profile/README.md', `${secret}\n`); // F1
+    put('FUNDING.yml', `github: ${secret}\n`); // 21j: a default community file at the root, which GitHub serves as well as the ones in .github/
+    put('templates/article/x.md', 'built from the template-private-working kind\n'); // F4
+    const files = publicCarriedFiles(root);
+    assert.ok(!files.includes(path.join(root, '.github', 'workflows', 'ci.yml')), 'the repository\'s own workflows are not served to other repositories');
+    const hits = privateNameHits(root, files);
+    for (const want of [`templates/article/${secret.toLowerCase()}-notes.md (path) ${secret}`, `templates/article/wide.txt:1 ${secret}`, `.github/SECURITY.md:1 ${secret}`, `profile/README.md:1 ${secret}`, `FUNDING.yml:1 ${secret}`, 'templates/article/x.md:1 template-private-working']) {
+      assert.ok(hits.includes(want), `${want} is found: ${JSON.stringify(hits)}`);
+    }
+    assert.ok(PRIVATE_REPOS.includes('template-private-working'), 'the list names the private template repository');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

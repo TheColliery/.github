@@ -190,7 +190,7 @@ test('a helper with a bare return, or one whose body can end without returning, 
     'function mk() { return\r  gitEnv(); }',
     'function mk() { return\u2028  gitEnv(); }',
     'function mk() { return\u2029  gitEnv(); }',
-    'function mk() { /* a\r comment */ return\r  gitEnv(); }',
+    'function mk() { return /* a\r comment */  gitEnv(); }', // 21i (21h D6): the CR is inside the comment only, so only the comment can end the return
   ]) assert.ok(scan(head + fn + '\n' + call).findings.length >= 1, `passed: ${fn}`);
   for (const fn of ['function mk() { return gitEnv(); }', 'function mk() { if (process.argv[2]) return gitEnv(); return gitEnv(); }', 'const mk = () => gitEnv();', 'function mk() {\n  return gitEnv(\n  );\n}', 'function mk() {\r\n  return gitEnv();\r\n}', 'function mk() {\r\n  const s = \'a\\\r\nb\';\r\n  return gitEnv();\r\n}']) {
     const r = scan(head + fn + '\n' + call);
@@ -263,5 +263,19 @@ test('a finding names its line counting every line terminator once: LF, CRLF, a 
     const r = scan(fixture);
     assert.equal(r.findings.length, 1, label + ': ' + JSON.stringify(r.findings));
     assert.match(r.findings[0], /^fixture\.mjs:6 /, label + ': ' + r.findings[0]);
+  }
+});
+
+// 21i (CodeRabbit on a carrier, 21h D8): U+2028 and U+2029 may stand raw inside a quoted string and still start a line for a reader, but the string loop passed over them
+// without counting, so a finding after such a string named a line one short. A raw separator counts once; a backslash before it (a continuation) counts once too.
+test('a raw U+2028 or U+2029 inside a quoted string counts as a line, once, raw or after a backslash -- RED before 21i', () => {
+  const head = "import { spawnSync } from 'node:child_process';";
+  for (const cp of [0x2028, 0x2029]) {
+    const sep = String.fromCharCode(cp);
+    for (const [label, str] of [['raw', "const s = 'one" + sep + "two';"], ['after a backslash', "const s = 'one" + String.fromCharCode(92) + sep + "two';"]]) {
+      const r = scan([head, str, SP + "('git', ['status']);"].join('\n') + '\n');
+      assert.equal(r.findings.length, 1, `U+${cp.toString(16)} ${label}: ` + JSON.stringify(r.findings));
+      assert.match(r.findings[0], /^fixture\.mjs:4 /, `U+${cp.toString(16)} ${label}: ` + r.findings[0]);
+    }
   }
 });

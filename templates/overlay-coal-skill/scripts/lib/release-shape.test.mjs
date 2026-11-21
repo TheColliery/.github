@@ -372,3 +372,16 @@ test('extractChangelogEntry exact: the entry of THAT version is read from below 
   assert.equal(extractChangelogEntry(two, '0.0.1', { exact: true, pkg: 'py' }).summary, 'The py one.');
   assert.throws(() => extractChangelogEntry(two, '0.0.1', { pkg: 'py' }), /first \[py\] entry is \[py 0\.0\.3\] but the pushed tag is py-v0\.0\.1/);
 });
+
+// 21i P10 (CodeRabbit on a carrier, 21h D11): a heading inside a fenced example of a newer entry was read as a heading, so an exact lookup took the example as the
+// entry, and the example's own `##` line cut the newer entry short. A fence holds literal text: no heading inside one is read.
+test('a heading inside a fenced example is literal text: the exact lookup finds the real entry, hasEntryHeading ignores it, and the newer entry is read whole -- RED before 21i', async () => {
+  const { hasEntryHeading } = await import('./release-shape.mjs');
+  const fence = '`'.repeat(3);
+  const text = ['# Changelog', '', '## [1.3.0] - 2026-11-21', '', 'The newer entry, which shows an example.', '', '### Changed', '- A heading looks like this:', '', fence + 'markdown', '## [1.2.0] - 2026-01-01', '', 'Example summary.', '## [0.9.0] - 2026-01-01', fence, '- And the list goes on.', '', '## [1.2.0] - 2026-10-01', '', 'The real summary of 1.2.0.', '', '### Fixed', '- x', ''].join('\n');
+  assert.equal(extractChangelogEntry(text, '1.2.0', { exact: true }).summary, 'The real summary of 1.2.0.');
+  assert.equal(hasEntryHeading(text, '0.9.0'), false, 'a heading only inside a fence is no entry');
+  const top = extractChangelogEntry(text, '1.3.0', { previousStable: '1.2.0' });
+  assert.match(top.sectionsBody, /And the list goes on\./, 'the newer entry runs past its fenced example');
+  assert.ok(top.sectionsBody.includes(fence + 'markdown'), 'and keeps the example as written');
+});

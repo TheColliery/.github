@@ -87,7 +87,8 @@
 //      finding.
 //  12. a second argument of the spawn held in a variable (spawnSync('git', a, { env: gitEnv() })) is passed: node reads a non-array object there as
 //      the options and never looks at the third argument (CoalWash C6, runtime-proved), and the census cannot tell an array from an options
-//      object. The canon's own control P9 passes this idiom, so the guard is the room's own test of the helper that holds it (R6).
+//      object. The canon's own control P9 passes this idiom, so the guard is the room's own test of the helper that holds it (R6). Since 21i a name declared once
+//      with an object literal is told apart and refused (CT-21i); a parameter or any other name stays passed.
 //  13. a name is trusted as a helper only while the file never WRITES it (an assignment, a compound or logical assignment, ++ or --, a
 //      destructuring target) and never BINDS it again as a parameter, a catch binding or a destructured name (09f: CoalLedger F39 A5 A7,
 //      CoalBoard 126 129 NEW-b, CoalWash C5 N8). A write through Object.prototype refuses the whole file; a READ of a prototype method
@@ -257,7 +258,7 @@ export function lexAmb(text, force = null) {
       const s = i;
       i++;
       // a string ends at LF or CR (U+2028 and U+2029 are allowed inside one); a backslash before a line terminator (CRLF as one) continues it on the next line
-      while (i < text.length && text[i] !== c && text[i] !== '\n' && text[i] !== '\r') { if (text[i] === '\\') { if (text[i + 1] === '\r' && text[i + 2] === '\n') { line++; i++; } else if (isNL(i + 1)) line++; i++; } i++; }
+      while (i < text.length && text[i] !== c && text[i] !== '\n' && text[i] !== '\r') { if (text[i] === '\\') { if (text[i + 1] === '\r' && text[i + 2] === '\n') { line++; i++; } else if (isNL(i + 1)) line++; i++; } else if (isNL(i)) line++; i++; } // 21i (21h D8): a raw U+2028 or U+2029 inside the string starts a line too
       push('str', text.slice(s + 1, i), s);
       if (text[i] === c) i++;
       continue;
@@ -1062,6 +1063,14 @@ function scanOne(rel, ctx, accept) {
     const args = [];
     for (let ca = open + 1; ca < close;) { const ce = Math.min(exprEnd(ctx, ca, false), close); args.push([ca, ce]); ca = ce + 1; }
     const isObjArg = (x) => !!x && isP(toks[x[0]], '{') && m.get(x[0]) === x[1] - 1;
+    // 21i (21h D9): a second argument that is a name declared once with an object literal is the options, and node ignores the third argument; rule 12 keeps
+    // every other name (a parameter, an array) passed, as before
+    const a1 = args[1];
+    const d1 = a1 && a1[1] - a1[0] === 1 && isId(toks[a1[0]]) ? ctx.decls.get(toks[a1[0]].v) || [] : [];
+    if (d1.length === 1 && d1[0].init >= 0 && isP(toks[d1[0].init], '{') && m.get(d1[0].init) === exprEnd(ctx, d1[0].init, true) - 1) {
+      findings.push(`${rel}:${t.ln} ${t.v}('git', ${toks[a1[0]].v}, ...) passes an object as its second argument: node reads it as the options and ignores the third argument, so its env never reaches git -- pass the options as the second argument, or the args array first`);
+      continue;
+    }
     const optArg = isObjArg(args[1]) ? args[1] : args[2];
     // an env in an object argument Node ignores is refused by itself: it proves nothing, and a reader takes it for the options (F48)
     const decoy = args.find((x) => x !== optArg && isObjArg(x) && toks.slice(x[0] + 1, x[1] - 1).some((tk, k) => (isId(tk, 'env') || (tk.k === 'str' && tk.v === 'env')) && nearestOpener(ctx, x[0] + 1 + k) === x[0]));

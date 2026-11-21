@@ -432,7 +432,10 @@ const clockedLimits = (clock) => ({ ...LIMITS, fileTimeoutMs: clock * 2, deadlin
 // A loaded runner stood in for: a preload that makes EVERY node of the tree (the runner's children included) sleep before it runs, handed on NODE_OPTIONS, which the runner carries into each child.
 // 1,500 ms (2,500 until 2026-11-07c): every node of a slow-start run pays it, so it is the largest cost of the test that uses it; any start above the fixed clock below makes the witness.
 const SLOW_START_MS = 1500;
-fs.writeFileSync(path.join(SANDBOX, 'slow-start.preload.mjs'), 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ' + SLOW_START_MS + ');' + String.fromCharCode(10));
+// 21i (21h D10): the preload also writes its node's arguments to a log, so the slow-start test can prove the preload reached the file's own node and its kill is not
+// only a slow runner's.
+const SLOW_START_LOG = path.join(SANDBOX, 'slow-start.log');
+fs.writeFileSync(path.join(SANDBOX, 'slow-start.preload.mjs'), "import fs from 'node:fs';" + String.fromCharCode(10) + 'fs.appendFileSync(' + JSON.stringify(SLOW_START_LOG) + ', JSON.stringify(process.argv.slice(1)) + String.fromCharCode(10));' + String.fromCharCode(10) + 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ' + SLOW_START_MS + ');' + String.fromCharCode(10));
 const SLOW_START_ENV = { NODE_OPTIONS: '--import ' + pathToFileURL(path.join(SANDBOX, 'slow-start.preload.mjs')).href };
 const STDOUT_SYNC_URL = pathToFileURL(path.join(HERE, 'stdout-sync.mjs')).href;
 
@@ -582,7 +585,12 @@ test('the command line: --file-clock-ms is accepted, shown in the usage, and kil
 // file 74 to 79 s on Node 24): past the 60 s that Node 22 gives a whole file when a room passes --test-timeout=60000, CoalGob's red after the 07b re-copy. The kill of a hang under the slow start
 // is the fixed run's witness; since 19c a passing file spared by its clock is the injected-clock test's above, so this run keeps only the fixed clock that kills both files.
 test('the command line under a slow node start: a fixed file clock below the node start kills the hang and the passing file too (the flake a wall clock causes; the policy is the injected-clock test above)', () => {
+  fs.rmSync(SLOW_START_LOG, { force: true });
   const fixed = cli(['--heap-mb', '512', '--file-timeout-ms', '20000', '--deadline-ms', '40000', '--file-clock-ms', '1000', '--serial', '--', ...fx('hang-top', 'pass')], SLOW_START_ENV);
+  const started = fs.existsSync(SLOW_START_LOG) ? fs.readFileSync(SLOW_START_LOG, 'utf8').split(String.fromCharCode(10)).map((l) => l.trim()).filter(Boolean) : [];
+  // a node whose script IS the passing file (node takes the runner's --test flags as its own, so its arguments are the file alone), never the command line's node,
+  // whose script is wave-run.mjs and whose arguments name the file too
+  assert.ok(started.map((l) => JSON.parse(l)).some((a) => String(a[0]).endsWith('pass.fixture.mjs')), 'the preload reached the node of the passing file, so the slow start is its own: ' + JSON.stringify(started));
   assert.equal(fixed.status, 1, fixed.stdout + fixed.stderr);
   assert.match(fixed.stdout, /^FAIL .*hang-top\.fixture\.mjs: killed at the file clock \(1000 ms\)/m, fixed.stdout);
   assert.match(fixed.stdout, /^FAIL .*pass\.fixture\.mjs: killed at the file clock \(1000 ms\)/m, 'the slow start did not reach the children, so this witness proves nothing: ' + fixed.stdout);
@@ -705,4 +713,16 @@ test('every file that ran carries its wall time, and a green run prints one TIME
   const cliRun = cli(['--heap-mb', '512', '--file-timeout-ms', '20000', '--deadline-ms', '60000', '--serial', '--', ...fx('pass')]);
   assert.equal(cliRun.status, 0, cliRun.stdout + cliRun.stderr);
   assert.match(cliRun.stdout, /^TIME .*pass\.fixture\.mjs: \d+\.\d s\nwave-run: 1 file · pass 1 /m, 'the command line prints the TIME line on a green run, before the summary');
+});
+
+// 21i P9 (CodeRabbit on three carriers, 21h D1): the default file clock was Date.now, the time of day, so a clock stepped back during a file printed a negative TIME.
+// Here the time of day runs BACKWARDS a second at each reading; the default clock measures the interval, so every time is a finite number at or above zero.
+test('with no clock handed in, a file\'s time is measured as an interval: a time of day stepping backwards never makes it negative -- RED before 21i', async () => {
+  const realNow = Date.now;
+  let back = 0;
+  Date.now = () => realNow() - (back += 1000);
+  try {
+    const r = await runWaves({ files: fx('pass', 'fail'), cwd: SANDBOX, env: SANDBOX_ENV, ...LIMITS, serial: true, read: scripted('BREATHE') });
+    for (const x of r.results) assert.ok(Number.isFinite(x.ms) && x.ms >= 0, `${x.name}: ${x.ms} ms`);
+  } finally { Date.now = realNow; }
 });

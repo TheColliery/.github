@@ -93,7 +93,11 @@ function check(args) {
   let changelog;
   try { changelog = readChangelog(); } catch (e) { console.error('release-notes --check: could not read CHANGELOG.md: ' + e.message); process.exitCode = 1; return; }
   // the top label is "X.Y.Z", or "<pkg> X.Y.Z" in a multi-package repository (UMB3-193): the package rides into the tag and the title
-  const [, pkg = '', version = ''] = /^(?:([a-z][a-z0-9]*) )?(.*)$/.exec(/^##\s*\[([^\]]+)\]/m.exec(changelog)?.[1] ?? '');
+  const label = /^##\s*\[([^\]]+)\]/m.exec(changelog)?.[1] ?? '';
+  // a line break inside the label leaves the second regex nothing to match (21i, 21h D18): a named failure, never a destructured null
+  const parts = /^(?:([a-z][a-z0-9]*) )?(.*)$/.exec(label);
+  if (!parts) { console.error('release-notes --check: the top CHANGELOG heading label "' + label.replace(/\s+/g, ' ') + '" holds a line break; write it on one line'); process.exitCode = 1; return; }
+  const [, pkg = '', version = ''] = parts;
   try {
     const { summary } = extractChangelogEntry(changelog, version, { pkg });
     const title = buildReleaseTitle(version, summary, pkg);
