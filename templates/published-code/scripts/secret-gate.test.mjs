@@ -1662,3 +1662,89 @@ test('--rename-odd adds the new entry first and reads the index back: after it, 
   assert.deepStrictEqual(rows(index()), [...before.filter((x) => x !== oldRow), '100644 ' + odd + ' 0\trenamed.txt'].sort(), 'only the named entry moved');
   assert.match(r.out, /renamed a\\xff\\xfe\.txt to "renamed\.txt"/, 'the success line names the old bytes and the new path: ' + r.out);
 });
+
+// 21l (the 21i INSPECT's re-check of 21k: the truth of the messages). Once the add has succeeded, no message may say "nothing was changed": a failure after it says the
+// new name is staged beside the old one on the same blob, nothing lost, and prints the one command that finishes the rename and the one that undoes it, each naming
+// its entry by exact bytes. A re-run refused because the new name is already staged that way says why. A read-back that finds more than the one new entry names every
+// extra one. An unmerged odd entry is refused for its stage. The faults are made in the gate child by a preload (the child keeps its heap cap and kill-timeout).
+const faultPreload = (name, body) => {
+  const p = path.join(SANDBOX, name);
+  fs.writeFileSync(p, [
+    "import cp from 'node:child_process';", "import fs from 'node:fs';", "import path from 'node:path';", "import { syncBuiltinESMExports } from 'node:module';",
+    'const real = cp.execFileSync;',
+    'cp.execFileSync = function (file, args, opts) {', body, '  return real.call(this, file, args, opts);', '};', 'syncBuiltinESMExports();', '',
+  ].join('\n'));
+  return { NODE_OPTIONS: '--import ' + pathToFileURL(p).href };
+};
+// git's own lock: the removal after the add meets an index.lock that another git holds, and fails as git fails
+const lockedRemoval = () => faultPreload('lock-removal.preload.mjs', [
+  "  if (file === 'git' && Array.isArray(args) && args.includes('--index-info') && !args.includes('--add')) {",
+  "    const lock = path.join(process.cwd(), '.git', 'index.lock');",
+  "    fs.writeFileSync(lock, '');",
+  '    try { return real.call(this, file, args, opts); } finally { fs.rmSync(lock, { force: true }); }',
+  '  }',
+].join('\n'));
+const printedCommands = (out) => [...out.matchAll(/^\s*(?:Finish|Undo)[^:]*: (node scripts\/secret-gate\.mjs \S+)$/gm)].map((m) => m[1]);
+test('a failure after the add says the new name is staged beside the old one, never "nothing was changed", and its finish command completes the rename -- RED before 21l', () => {
+  const { dir, odd, index } = renameFixture();
+  const rows = () => index().toString('latin1').split(String.fromCharCode(0)).filter(Boolean).sort();
+  const before = rows();
+  const oldRow = before.find((x) => x.endsWith('\t' + oddName.toString('latin1')));
+  const r = run(dir, ['--rename-odd=' + oddName.toString('hex') + ':' + odd, '--to=renamed.txt'], '', lockedRemoval());
+  assert.notStrictEqual(r.code, 0, r.out + r.err);
+  assert.doesNotMatch(r.out + r.err, /nothing was changed/, 'the add happened, so this is never said: ' + r.out + r.err);
+  assert.match(r.out, /renamed\.txt.* staged beside a\\xff\\xfe\.txt.*nothing is lost/s, 'it says what the index now holds: ' + r.out);
+  assert.deepStrictEqual(rows(), [...before, '100644 ' + odd + ' 0\trenamed.txt'].sort(), 'both names are staged on the one blob');
+  const [finish, undo] = printedCommands(r.out);
+  assert.ok(finish && undo, 'the finish and the undo commands are printed: ' + r.out);
+  assert.ok(finish.includes('--drop-twin=' + oddName.toString('hex') + ':' + odd) && undo.includes('--drop-twin=' + Buffer.from('renamed.txt').toString('hex') + ':' + odd), 'each names its entry by exact bytes: ' + r.out);
+  // the re-run of the printed rename says why it is refused, and points at the same two commands
+  const again = run(dir, ['--rename-odd=' + oddName.toString('hex') + ':' + odd, '--to=renamed.txt']);
+  assert.notStrictEqual(again.code, 0, again.out);
+  assert.match(again.out, /half-finished earlier run/, again.out);
+  assert.deepStrictEqual(printedCommands(again.out), [finish, undo], 'the same two commands');
+  // pasting the finish command leaves only the new entry
+  const done = run(dir, finish.split(' ').slice(2));
+  assert.strictEqual(done.code, 0, done.out + done.err);
+  assert.deepStrictEqual(rows(), [...before.filter((x) => x !== oldRow), '100644 ' + odd + ' 0\trenamed.txt'].sort(), 'only the new entry is left');
+});
+test('the undo command removes the new entry and leaves the old one; --drop-twin refuses an entry whose blob no other staged entry holds -- 21l', () => {
+  const { dir, odd, index } = renameFixture();
+  const before = index();
+  const r = run(dir, ['--rename-odd=' + oddName.toString('hex') + ':' + odd, '--to=renamed.txt'], '', lockedRemoval());
+  const [, undo] = printedCommands(r.out);
+  assert.ok(undo, r.out);
+  assert.strictEqual(run(dir, undo.split(' ').slice(2)).code, 0);
+  assert.ok(index().equals(before), 'the index is as it was before the rename');
+  const alone = run(dir, ['--drop-twin=' + oddName.toString('hex') + ':' + odd]);
+  assert.strictEqual(alone.code, 1, alone.out);
+  assert.match(alone.out, /no other staged entry holds/, alone.out);
+  assert.ok(index().equals(before), 'and nothing was removed');
+});
+test('a read-back that finds more than the one new entry names every extra one, says another run may have touched the index, and never prints success -- RED before 21l', () => {
+  const { dir, odd, index } = renameFixture();
+  const env = faultPreload('second-run.preload.mjs', [
+    "  if (file === 'git' && Array.isArray(args) && args.includes('--cacheinfo')) {",
+    '    const r = real.call(this, file, args, opts);',
+    "    const [mode, sha] = args[args.indexOf('--cacheinfo') + 1].split(',');",
+    "    real.call(this, file, [args[0], 'update-index', '--add', '--cacheinfo', mode + ',' + sha + ',two.txt'], opts);",
+    '    return r;',
+    '  }',
+  ].join('\n'));
+  const r = run(dir, ['--rename-odd=' + oddName.toString('hex') + ':' + odd, '--to=one.txt'], '', env);
+  assert.notStrictEqual(r.code, 0, r.out + r.err);
+  assert.match(r.out, /"two\.txt"/, 'the extra entry is named: ' + r.out);
+  assert.match(r.out, /another run may have touched the index/, r.out);
+  assert.doesNotMatch(r.out, /^secret-gate: renamed /m, 'no success line');
+  assert.ok(index().toString('latin1').includes('\t' + oddName.toString('latin1')), 'the old entry is still staged');
+});
+test('an unmerged odd entry is refused for its stage, not for a blob it does hold -- RED before 21l', () => {
+  const dir = repo([{ 'README.md': 'plain\n' }]);
+  const gitIn = (args, input) => execFileSync('git', [...GIT_IDENTITY, '-C', dir, ...args], { input, timeout: 60000, env: gitEnv() }).toString().trim();
+  const odd = gitIn(['hash-object', '-w', '--stdin'], Buffer.from('odd file\n'));
+  gitIn(['update-index', '--index-info'], Buffer.concat([Buffer.from('100644 ' + odd + ' 1\t'), oddName, Buffer.from('\n')]));
+  const r = run(dir, ['--rename-odd=' + oddName.toString('hex') + ':' + odd, '--to=x.txt']);
+  assert.strictEqual(r.code, 1, r.out);
+  assert.match(r.out, /unmerged \(stage 1\)/, r.out);
+  assert.doesNotMatch(r.out, new RegExp('not ' + odd.slice(0, 12)), 'the blob is not given as the reason: ' + r.out);
+});

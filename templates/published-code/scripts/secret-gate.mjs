@@ -34,9 +34,11 @@
 import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 
-const USAGE = 'usage: node scripts/secret-gate.mjs [--pre-push [--remote=<name>]] | --rename-odd=<hex>:<blob> --to=<new name> | -h\n'
+const USAGE = 'usage: node scripts/secret-gate.mjs [--pre-push [--remote=<name>]] | --rename-odd=<hex>:<blob> --to=<new name> | --drop-twin=<hex>:<blob> | -h\n'
   + '  scans the staged files (the index); with --pre-push also every commit being pushed (git\'s ref lines on stdin)\n'
   + '  --rename-odd renames, in the index only, the one staged path that is not valid UTF-8 named by its bytes as hex and its blob (a refusal prints it)\n'
+  + '  a rename stopped after its add (a kill prints nothing) leaves both names staged on one blob: run it again, and its refusal prints\n'
+  + '  the --drop-twin=<hex>:<blob> commands that finish it or undo it\n'
   + '  example: node scripts/secret-gate.mjs\n'
   + '  exit 0 clean · 1 a hit or a scan that could not run · 64 usage error';
 const ACKS = 'secret-scan.acks';
@@ -44,7 +46,7 @@ const BINARY = /\.(png|jpe?g|gif|webp|ico|pdf|zip|gz|tgz|7z|woff2?|ttf|otf|eot|m
 const BACKSLASH = String.fromCharCode(92);
 
 const args = process.argv.slice(2);
-const known = (a) => a === '--pre-push' || a.startsWith('--remote=') || a.startsWith('--rename-odd=') || a.startsWith('--to=');
+const known = (a) => a === '--pre-push' || a.startsWith('--remote=') || a.startsWith('--rename-odd=') || a.startsWith('--to=') || a.startsWith('--drop-twin=');
 
 // JSON.stringify neutralises CR, LF, controls, quotes and backslashes; every other character that can forge a line or hide
 // text in a terminal is escaped BY CATEGORY (Cc, Cf, Zl, Zp), never by a list (CWE-117, log injection).
@@ -385,6 +387,14 @@ function readIndexEntries() {
   }
   return out;
 }
+// The command that removes one staged entry, named by its exact bytes and blob, ASCII only so it pastes in any shell (21l).
+const dropTwinCmd = (bytes, sha) => `node scripts/secret-gate.mjs --drop-twin=${bytes.toString('hex')}:${sha}`;
+// What a rename stopped after its add leaves (21l): both names staged on one blob, nothing lost, and the two commands that settle it.
+const bothStaged = (raw, toBytes, sha) => [
+  `the index now holds ${esc(toBytes.toString('utf8'))} staged beside ${showBytes(raw)}, both on blob ${sha.slice(0, 12)}, so nothing is lost. Run one of these:`,
+  `  Finish the rename (remove the old entry): ${dropTwinCmd(raw, sha)}`,
+  `  Undo it (remove the new entry): ${dropTwinCmd(toBytes, sha)}`,
+].join('\n');
 function renameOdd(spec, to) {
   const m = /^((?:[0-9a-f]{2})+):([0-9a-f]{40,64})$/.exec(spec);
   if (!m) { console.error(`secret-gate: --rename-odd takes <path as hex>:<blob>, as the refusal prints it, not ${esc(spec)}`); process.exitCode = 64; return; }
@@ -395,11 +405,16 @@ function renameOdd(spec, to) {
   const before = readIndexEntries();
   const target = before.find((e) => e.name.equals(raw));
   if (!target) return fail(`no staged path ${showBytes(raw)}`);
-  if (target.sha !== m[2] || target.stage !== '0') return fail(`${showBytes(raw)} is staged with blob ${target.sha.slice(0, 12)} (stage ${target.stage}), not ${m[2].slice(0, 12)}: run the gate again and use the command it prints now`);
+  if (target.stage !== '0') return fail(`${showBytes(raw)} is unmerged (stage ${target.stage}): finish or abort the merge first, then run the gate again`);
+  if (target.sha !== m[2]) return fail(`${showBytes(raw)} is staged with blob ${target.sha.slice(0, 12)}, not ${m[2].slice(0, 12)}: run the gate again and use the command it prints now`);
   const toBytes = Buffer.from(to, 'utf8');
   const fold = to.toLowerCase();
   for (const e of before) {
-    if (e.name.equals(toBytes)) return fail(`${esc(to)} is already in the index: choose another name`);
+    if (e.name.equals(toBytes)) {
+      // 21l: the new name already staged with this blob and mode beside the old entry is what a rename stopped after its add leaves behind
+      if (e.sha === m[2] && e.mode === target.mode && e.stage === '0') return fail(`${esc(to)} is already staged with this blob, beside ${showBytes(raw)}: a half-finished earlier run (stopped or failed after its add)`, bothStaged(raw, toBytes, m[2]));
+      return fail(`${esc(to)} is already in the index: choose another name`);
+    }
     const n = e.name.toString('utf8');
     if (!Buffer.from(n, 'utf8').equals(e.name)) continue;
     const ln = n.toLowerCase();
@@ -412,23 +427,54 @@ function renameOdd(spec, to) {
     const reason = String((e && e.stderr) || (e && e.message) || 'git error').split(/\r?\n/).filter(Boolean).slice(0, 2).join(' / ');
     return fail(`git refused the new name: ${esc(reason)}`);
   }
-  // (2) read back: exactly the one new entry, nothing else changed
-  const want = Buffer.concat([Buffer.from(`${target.mode} ${m[2]} 0\t`), toBytes]).toString('hex');
-  const was = new Set(before.map((e) => e.row));
-  const now = readIndexEntries();
-  const added = now.filter((e) => !was.has(e.row)).map((e) => e.row);
-  const kept = new Set(now.map((e) => e.row));
-  const gone = before.filter((e) => !kept.has(e.row));
-  if (gone.length || added.length !== 1 || added[0] !== want) return fail(`the index after adding ${esc(to)} is not the one expected (${added.length} entries new, ${gone.length} gone)`, 'the old entry was NOT removed; check git ls-files -s');
-  // (3) only now remove the old entry, by its exact bytes, and read back again
-  gitIn(['update-index', '-z', '--index-info'], { input: Buffer.concat([Buffer.from(`0 ${m[2]}\t`), raw, Buffer.from([0])]) });
-  if (readIndexEntries().some((e) => e.name.equals(raw))) return fail(`${showBytes(raw)} is still staged after its removal`, `the new entry ${esc(to)} is staged beside it`);
+  // From here the new entry is staged: no message may say nothing was changed (21l). A failure says what the index holds and how to settle it.
+  const halfDone = (why) => fail(why, bothStaged(raw, toBytes, m[2]));
+  try {
+    // (2) read back: exactly the one new entry, nothing else changed
+    const want = Buffer.concat([Buffer.from(`${target.mode} ${m[2]} 0\t`), toBytes]).toString('hex');
+    const was = new Set(before.map((e) => e.row));
+    const now = readIndexEntries();
+    const kept = new Set(now.map((e) => e.row));
+    const extra = now.filter((e) => !was.has(e.row) && e.row !== want);
+    const gone = before.filter((e) => !kept.has(e.row));
+    if (extra.length || gone.length || !now.some((e) => e.row === want)) {
+      const named = [...extra.map((e) => `new ${showBytesOrName(e.name)}`), ...gone.map((e) => `gone ${showBytesOrName(e.name)}`)].join(', ');
+      return halfDone(`the index after adding ${esc(to)} is not the one expected (${named || 'the new entry is missing'}): another run may have touched the index, so the old entry was NOT removed`);
+    }
+    // (3) only now remove the old entry, by its exact bytes, and read back again
+    gitIn(['update-index', '-z', '--index-info'], { input: Buffer.concat([Buffer.from(`0 ${m[2]}\t`), raw, Buffer.from([0])]) });
+    if (readIndexEntries().some((e) => e.name.equals(raw))) return halfDone(`${showBytes(raw)} is still staged after its removal`);
+  } catch (e) {
+    return halfDone(`the rename stopped after its add (${e && e.code ? e.code : 'git error'})`);
+  }
   console.log(`secret-gate: renamed ${showBytes(raw)} to ${esc(to)} in the index (blob ${m[2].slice(0, 12)}); the working tree is not touched`);
 }
+// A name for a message: valid UTF-8 as a quoted string, anything else byte by byte.
+const showBytesOrName = (b) => (Buffer.from(b.toString('utf8'), 'utf8').equals(b) ? esc(b.toString('utf8')) : showBytes(b));
+// --drop-twin=<hex>:<blob> (21l): remove the one stage-0 entry whose path bytes are <hex> and whose blob is <blob>, only while ANOTHER stage-0 entry holds the same
+// blob, so the blob stays staged under that other name and nothing is lost. It finishes or undoes a rename stopped after its add (the two commands a refusal prints).
+function dropTwin(spec) {
+  const m = /^((?:[0-9a-f]{2})+):([0-9a-f]{40,64})$/.exec(spec);
+  if (!m) { console.error(`secret-gate: --drop-twin takes <path as hex>:<blob>, as the gate prints it, not ${esc(spec)}`); process.exitCode = 64; return; }
+  const raw = Buffer.from(m[1], 'hex');
+  const fail = (why) => { console.log(`FAIL DROP: ${why}; nothing was changed`); process.exitCode = 1; };
+  const before = readIndexEntries();
+  const target = before.find((e) => e.name.equals(raw) && e.stage === '0');
+  if (!target) return fail(`no staged path ${showBytesOrName(raw)}`);
+  if (target.sha !== m[2]) return fail(`${showBytesOrName(raw)} is staged with blob ${target.sha.slice(0, 12)}, not ${m[2].slice(0, 12)}`);
+  const twin = before.find((e) => e !== target && e.stage === '0' && e.sha === m[2]);
+  if (!twin) return fail(`no other staged entry holds blob ${m[2].slice(0, 12)}, so removing ${showBytesOrName(raw)} would unstage it`);
+  gitIn(['update-index', '-z', '--index-info'], { input: Buffer.concat([Buffer.from(`0 ${m[2]}\t`), raw, Buffer.from([0])]) });
+  const after = readIndexEntries();
+  if (after.some((e) => e.name.equals(raw))) { console.log(`FAIL DROP: ${showBytesOrName(raw)} is still staged after its removal`); process.exitCode = 1; return; }
+  console.log(`secret-gate: removed ${showBytesOrName(raw)} from the index; ${showBytesOrName(twin.name)} still stages blob ${m[2].slice(0, 12)}`);
+}
 const renameArg = args.find((a) => a.startsWith('--rename-odd='));
+const dropArg = args.find((a) => a.startsWith('--drop-twin='));
 const unknown = args.filter((a) => !known(a));
 if (args.includes('-h') || args.includes('--help')) console.log(USAGE);
 else if (unknown.length) { console.error(`secret-gate: unknown argument ${JSON.stringify(unknown[0])}
 ${USAGE}`); process.exitCode = 64; }
+else if (dropArg) { try { dropTwin(dropArg.slice('--drop-twin='.length)); } catch (e) { console.error(`secret-gate: the removal could not run (${e && e.code ? e.code : 'git error'}); the index is as git left it, check git ls-files -s`); process.exitCode = 1; } }
 else if (renameArg) { try { renameOdd(renameArg.slice('--rename-odd='.length), (args.find((a) => a.startsWith('--to=')) ?? '').slice('--to='.length) || undefined); } catch (e) { console.error(`secret-gate: the rename could not run (${e && e.code ? e.code : 'git error'}); nothing was changed`); process.exitCode = 1; } }
 else main().catch((e) => { console.error(`secret-gate: ${e && e.message ? e.message : e}`); process.exitCode = 1; });
