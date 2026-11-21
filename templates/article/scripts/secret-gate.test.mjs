@@ -1615,3 +1615,50 @@ test('--rename-odd refuses a wrong blob, a valid path, a taken name and a malfor
     assert.strictEqual(gitIn(['ls-files', '-s', '-z']), before, args.join(' ') + ': the index is unchanged');
   }
 });
+
+// 21k (the 21i INSPECT's re-check of 21j: two HIGHs and a MEDIUM in --rename-odd). The class: a command that edits the index must let GIT judge the new state before
+// anything is removed. One --index-info call removed the entry and then had its add line skipped ("Ignoring path", exit 0) for a name git refuses, so the entry the
+// command was run to rescue was dropped and the gate printed success; and --index-info replaced an entry that clashed with the new name as a file or a folder. The
+// rename now adds first through git (--cacheinfo, never --replace), reads the whole index back, and only then removes the old entry by its exact bytes. A refused run
+// leaves the index byte for byte as it was and exits non-zero; a name that differs from a staged one only by letter case is refused on every platform.
+const renameFixture = () => {
+  const dir = repo([{ 'README.md': 'plain\n', ['a' + String.fromCodePoint(0xe9) + '.txt']: 'v1\n' }]); // the fixture also stages scripts/secret-gate.mjs and scripts/lib/
+  const gitIn = (args, input) => execFileSync('git', [...GIT_IDENTITY, '-C', dir, ...args], { input, timeout: 60000, env: gitEnv() });
+  const neighbour = 'a' + String.fromCodePoint(0xe9) + '.txt';
+  fs.writeFileSync(path.join(dir, neighbour), 'v2-staged\n');
+  gitIn(['add', '--', neighbour]);
+  fs.writeFileSync(path.join(dir, neighbour), 'v3-worktree\n');
+  const odd = gitIn(['hash-object', '-w', '--stdin'], Buffer.from('odd file\n')).toString().trim();
+  gitIn(['update-index', '--index-info'], Buffer.concat([Buffer.from('100644 ' + odd + ' 0\t'), oddName, Buffer.from('\n')]));
+  return { dir, odd, index: () => gitIn(['ls-files', '-s', '-z']) };
+};
+test('--rename-odd refuses every name git refuses, a file/folder clash and a letter-case twin, leaving the index byte for byte and exiting non-zero -- RED before 21k', () => {
+  const { dir, odd, index } = renameFixture();
+  const spec = '--rename-odd=' + oddName.toString('hex') + ':' + odd;
+  const refused = ['../out.txt', 'a/../b.txt', 'C:/abs.txt', '.git/hooks/pre-commit', 'newdir/', 'scripts', 'README.md/x', 'readme.md'];
+  if (process.platform === 'win32') refused.push('d' + String.fromCharCode(92) + 'e.txt'); // a backslash is a folder separator to git only on Windows
+  for (const to of refused) {
+    const before = index();
+    const r = run(dir, [spec, '--to=' + to]);
+    assert.notStrictEqual(r.code, 0, `--to=${to} was accepted: ` + r.out + r.err);
+    assert.ok(index().equals(before), `--to=${to}: the index is byte for byte as it was`);
+    assert.match(r.out + r.err, /FAIL RENAME: .*nothing was changed/, `--to=${to}: a sentence, and it says nothing was changed: ` + r.out + r.err);
+    assert.doesNotMatch(r.out + r.err, /renamed /, `--to=${to}: no success line`);
+  }
+  const twin = run(dir, [spec, '--to=readme.md']);
+  assert.match(twin.out, /only by letter case/, 'the letter-case twin is named: ' + twin.out);
+  assert.match(twin.out, /README\.md/, 'with the staged entry it collides with');
+  const clash = run(dir, [spec, '--to=scripts']);
+  assert.match(clash.out, /git refused the new name: .*appears as both a file and as a directory/, 'git\'s own reason is printed: ' + clash.out);
+});
+test('--rename-odd adds the new entry first and reads the index back: after it, exactly the old entry is gone and the new one holds its blob and mode -- 21k', () => {
+  const { dir, odd, index } = renameFixture();
+  const rows = (buf) => buf.toString('latin1').split(String.fromCharCode(0)).filter(Boolean).sort();
+  const before = rows(index());
+  const r = run(dir, ['--rename-odd=' + oddName.toString('hex') + ':' + odd, '--to=renamed.txt']);
+  assert.strictEqual(r.code, 0, r.out + r.err);
+  const oldRow = before.find((x) => x.endsWith('\t' + oddName.toString('latin1')));
+  assert.ok(oldRow, 'the odd entry was there before');
+  assert.deepStrictEqual(rows(index()), [...before.filter((x) => x !== oldRow), '100644 ' + odd + ' 0\trenamed.txt'].sort(), 'only the named entry moved');
+  assert.match(r.out, /renamed a\\xff\\xfe\.txt to "renamed\.txt"/, 'the success line names the old bytes and the new path: ' + r.out);
+});

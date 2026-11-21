@@ -363,19 +363,16 @@ async function main() {
   console.log(`PASS SECRETS: tree scan of ${scanned} tracked text file(s) clean; ${rangeNote}${acked ? `, ${acked} acknowledged hit(s) via ${ACKS}` : ''}`);
 }
 
-// --rename-odd=<hex>:<blob> --to=<new name> (21j): the one staged entry whose path bytes are <hex>, which is not valid UTF-8, and whose blob is <blob> is removed and the
-// same blob is staged under <new name> with the same mode, in ONE git update-index --index-info call fed from these bytes (mode 0 removes an entry). Nothing else in
-// the index moves and the working tree is not touched. It refuses a path that is valid UTF-8, a blob that does not match, a new name already in the index or one with
-// a line break or NUL, and an index it cannot read; every refusal is a sentence, exit 1, and nothing is written.
-function renameOdd(spec, to) {
-  const m = /^((?:[0-9a-f]{2})+):([0-9a-f]{40,64})$/.exec(spec);
-  if (!m) { console.error(`secret-gate: --rename-odd takes <path as hex>:<blob>, as the refusal prints it, not ${esc(spec)}`); process.exitCode = 64; return; }
-  if (typeof to !== 'string' || !to || /[\0\r\n]/.test(to)) { console.error('secret-gate: --rename-odd needs --to=<new name>, one line, not empty'); process.exitCode = 64; return; }
-  const raw = Buffer.from(m[1], 'hex');
-  const fail = (why) => { console.log(`FAIL RENAME: ${why}; nothing was changed`); process.exitCode = 1; };
-  if (Buffer.from(raw.toString('utf8'), 'utf8').equals(raw)) return fail(`${esc(raw.toString('utf8'))} is valid UTF-8: rename it with git mv`);
+// --rename-odd=<hex>:<blob> --to=<new name> (21j, reworked at 21k): the one staged entry whose path bytes are <hex>, which is not valid UTF-8, and whose blob is
+// <blob> is renamed in the index; the working tree is not touched. 21k (the 21i INSPECT's re-check: a name git refused dropped the entry with exit 0, and a file or
+// folder clash removed another entry): GIT judges the new state before anything is removed. (1) The new entry is ADDED first, with the same mode and blob, by git
+// update-index --add --cacheinfo, never --replace, so git refuses an invalid path (.., .git, an absolute or drive path, a backslash on Windows, a trailing slash) and
+// a file/folder clash, and its own reason is printed. (2) The whole index is read back: exactly that one entry must be new and nothing else changed. (3) Only then
+// is the old entry removed, by its exact bytes (mode 0 in --index-info), and the index read back again; the success line follows. A name already staged, or one that
+// differs from a staged name or folder only by letter case (one file on Windows and macOS), is refused before git is asked. Every refusal before (3) changes nothing.
+function readIndexEntries() {
   const listing = gitIn(['ls-files', '-s', '-z'], { buffer: true });
-  let mode = null;
+  const out = [];
   for (let s = 0; s < listing.length;) {
     let e = listing.indexOf(0, s);
     if (e < 0) e = listing.length;
@@ -383,14 +380,49 @@ function renameOdd(spec, to) {
     s = e + 1;
     const tab = entry.indexOf(9);
     if (tab < 0) continue;
-    const head = entry.subarray(0, tab).toString('latin1').split(' ');
-    const name = entry.subarray(tab + 1);
-    if (name.equals(Buffer.from(to, 'utf8'))) return fail(`${esc(to)} is already in the index: choose another name`);
-    if (name.equals(raw)) { if (head[1] !== m[2] || head[2] !== '0') return fail(`${showBytes(raw)} is staged with blob ${head[1].slice(0, 12)} (stage ${head[2]}), not ${m[2].slice(0, 12)}: run the gate again and use the command it prints now`); mode = head[0]; }
+    const [mode, sha, stage] = entry.subarray(0, tab).toString('latin1').split(' ');
+    out.push({ mode, sha, stage, name: entry.subarray(tab + 1), row: entry.toString('hex') });
   }
-  if (mode === null) return fail(`no staged path ${showBytes(raw)}`);
-  const NUL = Buffer.from([0]);
-  gitIn(['update-index', '-z', '--index-info'], { input: Buffer.concat([Buffer.from(`0 ${m[2]}\t`), raw, NUL, Buffer.from(`${mode} ${m[2]}\t${to}`, 'utf8'), NUL]) });
+  return out;
+}
+function renameOdd(spec, to) {
+  const m = /^((?:[0-9a-f]{2})+):([0-9a-f]{40,64})$/.exec(spec);
+  if (!m) { console.error(`secret-gate: --rename-odd takes <path as hex>:<blob>, as the refusal prints it, not ${esc(spec)}`); process.exitCode = 64; return; }
+  if (typeof to !== 'string' || !to || /[\0\r\n]/.test(to)) { console.error('secret-gate: --rename-odd needs --to=<new name>, one line, not empty'); process.exitCode = 64; return; }
+  const raw = Buffer.from(m[1], 'hex');
+  const fail = (why, changed = 'nothing was changed') => { console.log(`FAIL RENAME: ${why}; ${changed}`); process.exitCode = 1; };
+  if (Buffer.from(raw.toString('utf8'), 'utf8').equals(raw)) return fail(`${esc(raw.toString('utf8'))} is valid UTF-8: rename it with git mv`);
+  const before = readIndexEntries();
+  const target = before.find((e) => e.name.equals(raw));
+  if (!target) return fail(`no staged path ${showBytes(raw)}`);
+  if (target.sha !== m[2] || target.stage !== '0') return fail(`${showBytes(raw)} is staged with blob ${target.sha.slice(0, 12)} (stage ${target.stage}), not ${m[2].slice(0, 12)}: run the gate again and use the command it prints now`);
+  const toBytes = Buffer.from(to, 'utf8');
+  const fold = to.toLowerCase();
+  for (const e of before) {
+    if (e.name.equals(toBytes)) return fail(`${esc(to)} is already in the index: choose another name`);
+    const n = e.name.toString('utf8');
+    if (!Buffer.from(n, 'utf8').equals(e.name)) continue;
+    const ln = n.toLowerCase();
+    if (ln === fold) return fail(`${esc(to)} differs from the staged ${esc(n)} only by letter case, one file on Windows and macOS: choose another name`);
+    // a folder or file clash by letter case only; an exact clash is git's to refuse in (1)
+    if ((ln.startsWith(fold + '/') && !n.startsWith(to + '/')) || (fold.startsWith(ln + '/') && !to.startsWith(n + '/'))) return fail(`${esc(to)} clashes with the staged ${esc(n)} by letter case only, one folder on Windows and macOS: choose another name`);
+  }
+  // (1) add first: git judges the name
+  try { gitIn(['update-index', '--add', '--cacheinfo', `${target.mode},${m[2]},${to}`]); } catch (e) {
+    const reason = String((e && e.stderr) || (e && e.message) || 'git error').split(/\r?\n/).filter(Boolean).slice(0, 2).join(' / ');
+    return fail(`git refused the new name: ${esc(reason)}`);
+  }
+  // (2) read back: exactly the one new entry, nothing else changed
+  const want = Buffer.concat([Buffer.from(`${target.mode} ${m[2]} 0\t`), toBytes]).toString('hex');
+  const was = new Set(before.map((e) => e.row));
+  const now = readIndexEntries();
+  const added = now.filter((e) => !was.has(e.row)).map((e) => e.row);
+  const kept = new Set(now.map((e) => e.row));
+  const gone = before.filter((e) => !kept.has(e.row));
+  if (gone.length || added.length !== 1 || added[0] !== want) return fail(`the index after adding ${esc(to)} is not the one expected (${added.length} entries new, ${gone.length} gone)`, 'the old entry was NOT removed; check git ls-files -s');
+  // (3) only now remove the old entry, by its exact bytes, and read back again
+  gitIn(['update-index', '-z', '--index-info'], { input: Buffer.concat([Buffer.from(`0 ${m[2]}\t`), raw, Buffer.from([0])]) });
+  if (readIndexEntries().some((e) => e.name.equals(raw))) return fail(`${showBytes(raw)} is still staged after its removal`, `the new entry ${esc(to)} is staged beside it`);
   console.log(`secret-gate: renamed ${showBytes(raw)} to ${esc(to)} in the index (blob ${m[2].slice(0, 12)}); the working tree is not touched`);
 }
 const renameArg = args.find((a) => a.startsWith('--rename-odd='));
