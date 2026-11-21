@@ -258,7 +258,7 @@ export function lexAmb(text, force = null) {
       const s = i;
       i++;
       // a string ends at LF or CR (U+2028 and U+2029 are allowed inside one); a backslash before a line terminator (CRLF as one) continues it on the next line
-      while (i < text.length && text[i] !== c && text[i] !== '\n' && text[i] !== '\r') { if (text[i] === '\\') { if (text[i + 1] === '\r' && text[i + 2] === '\n') { line++; i++; } else if (isNL(i + 1)) line++; i++; } i++; }
+      while (i < text.length && text[i] !== c && text[i] !== '\n' && text[i] !== '\r') { if (text[i] === '\\') { if (text[i + 1] === '\r' && text[i + 2] === '\n') { line++; i++; } else if (isNL(i + 1)) line++; i++; } else if (isNL(i)) line++; i++; } // 21i (21h D8): a raw U+2028 or U+2029 inside the string starts a line too
       push('str', text.slice(s + 1, i), s);
       if (text[i] === c) i++;
       continue;
