@@ -1445,6 +1445,21 @@ test('the printed rename recovery, run as printed, keeps the new name with the s
   assert.deepStrictEqual(listing().sort(), [...others, '100644 ' + staged + ' ' + fresh].sort(), 'the new name holds the staged blob and mode, the old entry is gone, nothing else moved');
 });
 
+// 21i P5 (CodeRabbit on a carrier, 21h D20): a held blob was kept as a list of pieces and joined at its end, so for that moment it was held twice while the count read
+// once, and a blob under the ceiling could take twice the ceiling's memory. A preload in the gate child records the largest Buffer.concat result: neither a text blob
+// held from its header nor one kept after its probe may be joined whole.
+test('a held blob is written into one buffer as it streams: the gate never joins a whole blob, from its header or after its probe -- RED before 21i', () => {
+  const dir = repo([{ 'big.txt': 'plain text line\n'.repeat(3 << 16), 'text.bin': 'more plain text\n'.repeat(3 << 16) }]); // 3 MiB each: one held from its header, one kept after its probe
+  const out = path.join(SANDBOX, 'concat-max.txt');
+  const pre = path.join(SANDBOX, 'concat-max.preload.mjs');
+  fs.writeFileSync(pre, "import fs from 'node:fs';\nconst real = Buffer.concat;\nlet max = 0;\nBuffer.concat = function (list, len) { const r = real.call(this, list, len); if (r.length > max) max = r.length; return r; };\nprocess.on('exit', () => fs.writeFileSync(" + JSON.stringify(out) + ", String(max)));\n");
+  fs.rmSync(out, { force: true });
+  const r = run(dir, [], '', { NODE_OPTIONS: '--import ' + pathToFileURL(pre).href });
+  assert.strictEqual(r.code, 0, r.out + r.err);
+  const max = Number(fs.readFileSync(out, 'utf8'));
+  assert.ok(max < (3 << 20) / 2, `the largest join is ${max} bytes, so no blob of ${3 << 20} bytes was joined whole`);
+});
+
 // 21i P1 (21g thread A, a carrier's pull request): the unit before a wide-spelled run was judged by ONE byte, so a key right after a non-ASCII character whose low
 // byte is a letter (Cyrillic U+0441, Latin U+0141) read as glued to a word and was dropped, while the same text read as wide text was found.
 test('a wide-spelled key right after a non-ASCII character is found in both little-endian spellings, as when the text is read as wide text -- RED before 21i', async () => {

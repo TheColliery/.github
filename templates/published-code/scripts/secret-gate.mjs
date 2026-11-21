@@ -148,19 +148,29 @@ function readBlobs(shas, probe, looksBinary, nameOf = new Map(), newProbe = null
           cur.left -= take;
           if (cur.z) countNuls(cur.z, piece, cur.size - cur.left - take); // the piece's first byte sits at blob offset size - (left + take)
           if (cur.keep === false) continue;
+          // 21i (21h D20): a held blob is written into ONE buffer of its size, counted whole when it is made, so it is never joined from pieces (which held it twice)
+          if (cur.buf) { piece.copy(cur.buf, cur.have); cur.have += take; continue; }
           cur.parts.push(piece);
           cur.have += take;
           held += take;
           if (held > ceiling) return tooBig(cur.id, 'is too large to hold');
           if (cur.keep === null && (cur.have >= PROBE_BYTES || cur.left === 0)) {
-            cur.keep = !looksBinary(Buffer.concat(cur.parts));
-            if (!cur.keep) { held -= cur.have; cur.parts = []; } else cur.z = null; // a blob kept as text needs no counters
+            const prefix = Buffer.concat(cur.parts); // at most PROBE_BYTES
+            cur.keep = !looksBinary(prefix);
+            if (!cur.keep) { held -= cur.have; cur.parts = []; } else {
+              cur.z = null; // a blob kept as text needs no counters
+              held += cur.size - cur.have;
+              if (held > ceiling) return tooBig(cur.id, 'is too large to hold');
+              try { cur.buf = Buffer.allocUnsafe(cur.size); } catch { return tooBig(cur.id, 'could not be allocated'); }
+              prefix.copy(cur.buf, 0);
+              cur.parts = [];
+            }
           }
         } else if (cur) {
           if (data[pos] !== 10) return stop('cat-file output was malformed');
           pos++;
           let whole = cur.z && cur.keep === false && (wideByCounts(cur.z) || spelledKey(cur.z)) ? { rereadBytes: cur.size } : BINARY_BLOB;
-          if (cur.keep !== false) { try { whole = Buffer.concat(cur.parts); } catch { return tooBig(cur.id, 'could not be joined'); } }
+          if (cur.keep !== false) { try { whole = cur.buf ?? Buffer.concat(cur.parts); } catch { return tooBig(cur.id, 'could not be joined'); } } // pieces only for a blob that ended before its probe read anything
           out.set(cur.id, whole);
           cur = null;
         } else {
@@ -174,7 +184,8 @@ function readBlobs(shas, probe, looksBinary, nameOf = new Map(), newProbe = null
           const size = Number(parts[2]);
           if (!Number.isSafeInteger(size) || size < 0) return stop('cat-file output was malformed');
           if (!probe.has(id) && held + size > ceiling) return tooBig(id, 'is too large to hold'); // a header already says it: refused before one byte is held
-          cur = { id, left: size, size, keep: probe.has(id) ? null : true, parts: [], have: 0, z: probe.has(id) ? newCounts(newProbe) : null };
+          cur = { id, left: size, size, keep: probe.has(id) ? null : true, parts: [], have: 0, z: probe.has(id) ? newCounts(newProbe) : null, buf: null };
+          if (cur.keep) { held += size; try { cur.buf = Buffer.allocUnsafe(size); } catch { return tooBig(id, 'could not be allocated'); } }
         }
       }
     });
