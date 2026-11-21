@@ -1505,3 +1505,38 @@ test('the second of two glued wide-spelled keys starting just past a scan window
   const word = Buffer.concat([pad(W + 8 - 2 * 30), Buffer.from('w'.repeat(30) + aws2 + '\n', 'utf16le'), pad(65536)]);
   assert.deepStrictEqual(spelledHits(word, 'f.bin'), [], 'a key glued to a word that starts before the edge stays refused');
 });
+
+// 21i P3 (CodeRabbit on a carrier, 21h D14): an edited wide file whose committed version is past the decode bound was keyed at push by its git blob id, while the
+// tree scan keys the same bytes by their SHA-256. One file asked for two acknowledgments. The push path now hashes the bytes it already holds, as the tree scan does.
+// (The scanner's own test file is the source room's, pinned by blob, so the scanner's 21i tests live here.)
+test('an edited wide file past the decode bound gets the same fingerprint at push as in the tree scan -- RED before 21i', async () => {
+  const { scanBytes, scanPushed, WIDE_DECODE_MAX_BYTES, WIDE_TOO_LARGE } = await import(pathToFileURL(LIB).href);
+  const line = Buffer.from('a line of wide text\n', 'utf16le');
+  const body = Buffer.alloc(WIDE_DECODE_MAX_BYTES + line.length * 4);
+  for (let i = 0; i + line.length <= body.length; i += line.length) line.copy(body, i);
+  const first = Buffer.concat([Buffer.from([0xff, 0xfe]), body]);
+  const edited = Buffer.concat([first, Buffer.from('one more line\n', 'utf16le')]);
+  const dir = repo([{ 'w.txt': first }, { 'w.txt': edited }]);
+  const gitBytes = (args, o = {}) => execFileSync('git', [...GIT_IDENTITY, '-C', dir, ...args], { encoding: o.buffer ? 'buffer' : 'utf8', maxBuffer: 64 << 20, timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'], env: gitEnv() });
+  const base = gitBytes(['rev-parse', 'HEAD~1']).trim();
+  const tip = gitBytes(['rev-parse', 'HEAD']).trim();
+  const tree = scanBytes(edited, 'w.txt').filter((h) => h.pattern === WIDE_TOO_LARGE).map((h) => h.fp);
+  const pushed = scanPushed(`refs/heads/main ${tip} refs/heads/main ${base}\n`, gitBytes).hits.filter((h) => h.pattern === WIDE_TOO_LARGE).map((h) => h.fp);
+  assert.strictEqual(tree.length, 1, 'the tree scan gives the file one too-large hit');
+  assert.deepStrictEqual([...new Set(pushed)], tree, 'the push gives the same fingerprint, so one acknowledgment covers both');
+});
+
+// 21i P3 (the 21a round's named gap): a wide-spelled match longer than a window's carry, starting near the end of what its window owns, was cut at the window's text end,
+// so it was fingerprinted on the cut value (an acknowledgment of the whole value never matched it). The search now reads on until the match ends inside its text.
+test('a wide-spelled key longer than a window\'s carry, starting just before the window\'s owned end, keeps its whole fingerprint -- RED before 21i', async () => {
+  const { spelledHits, spelledProbe, fingerprint } = await import(pathToFileURL(LIB).href);
+  const W = 1 << 20;
+  const pad = (n) => { const b = Buffer.alloc(n, 0x81); for (let q = 64; q < n; q += 97) b[q] = 0; return b; };
+  const key = 'gl' + 'pat-' + 'aB3d'.repeat(2500); // 10,006 characters: 20,012 bytes in UTF-16, past the 16 KiB carry
+  const probe = (b) => { const r = spelledProbe(); for (let i = 0; i < b.length; i += 65536) r.feed(b.subarray(i, i + 65536)); r.end(); return r.found(); };
+  for (const before of [100, 2, 4000]) {
+    const b = Buffer.concat([pad(W - before), Buffer.from(' ' + key + '\n', 'utf16le'), pad(65536)]);
+    assert.deepStrictEqual(spelledHits(b, 'f.bin').map((h) => [h.pattern, h.fp]), [['gitlab-pat', fingerprint('f.bin', 'gitlab-pat', key)]], `starting ${before} bytes before the window's end: the whole value`);
+    assert.strictEqual(probe(b), true, 'the probe finds it, ' + before);
+  }
+});
