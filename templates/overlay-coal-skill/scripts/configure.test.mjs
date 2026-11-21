@@ -148,3 +148,30 @@ test('a malformed config is backed up from the bytes the bounded read holds, nev
   const r = run(dir, ['--mode', 'auto'], pre);
   assert.strictEqual(fs.readFileSync(cfg + '.bak', 'utf8'), '{oops', 'the backup holds the bytes that failed to parse: ' + r.out);
 });
+
+// 21e item 3 (the 21d review's MEDIUM, suspected on POSIX), ruled: REFUSE. A rename replaces the directory entry, so a config its user made read-only was replaced on POSIX,
+// where the old in-place write refused; on Windows the rename failed with a sentence that did not name the cause. An existing config that is not writable is now refused
+// with a sentence before anything is backed up or written, on every system: accessSync(W_OK) sees the read-only bits on POSIX and the read-only attribute on Windows. The
+// test skips visibly only where the owner writes past the bits anyway (root).
+test('an existing config that is read-only is refused by name before anything is backed up or written -- RED before 21e', (t) => {
+  const { dir, cfg } = project();
+  fs.writeFileSync(cfg, '{"mode":"off"}\n');
+  fs.chmodSync(cfg, 0o444);
+  let writable = true;
+  try { fs.accessSync(cfg, fs.constants.W_OK); } catch { writable = false; }
+  if (writable) { fs.chmodSync(cfg, 0o644); t.skip('the owner writes past read-only bits here (root)'); return; }
+  let r;
+  try { r = run(dir); } finally { fs.chmodSync(cfg, 0o644); }
+  assert.strictEqual(r.code, 1, r.out);
+  assert.ok(r.out.includes(': it is read-only -- make it writable'), r.out);
+  assert.ok(r.out.includes('nothing was written'), r.out);
+  assert.strictEqual(fs.readFileSync(cfg, 'utf8'), '{"mode":"off"}\n', 'the read-only config is left byte for byte');
+
+  const m = project(); // a read-only MALFORMED config: refused before a read-only .bak is made
+  fs.writeFileSync(m.cfg, '{oops');
+  fs.chmodSync(m.cfg, 0o444);
+  let rm;
+  try { rm = run(m.dir); } finally { fs.chmodSync(m.cfg, 0o644); }
+  assert.strictEqual(rm.code, 1, rm.out);
+  assert.ok(!fs.existsSync(m.cfg + '.bak'), 'no backup is made of a config the run will not replace');
+});

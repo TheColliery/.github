@@ -119,6 +119,15 @@ function main() {
       process.exit(1);
     }
   }
+  // 21e (the 21d review's MEDIUM on read-only configs), ruled REFUSE: the write is a rename, which replaces the directory entry, so a config its user made read-only
+  // would be replaced on POSIX where the old in-place write refused (and on Windows the rename failed with a sentence that did not name the cause). An existing config that is
+  // not writable is refused here, before anything is backed up or written; accessSync(W_OK) sees the read-only bits on POSIX and the read-only attribute on Windows.
+  if (rawBytes !== null) {
+    try { fs.accessSync(readPath, fs.constants.W_OK); } catch {
+      console.error(`FAIL ${readPath}: it is read-only -- make it writable (chmod u+w on Linux and macOS, clear the read-only attribute on Windows) and re-run; nothing was written`);
+      process.exit(1);
+    }
+  }
   if (rawConfig !== null) {
     try {
       const parsed = JSON.parse(rawConfig);
