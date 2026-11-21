@@ -1363,10 +1363,10 @@ test('a staged or pushed path that is not valid UTF-8 fails the gate by name ins
 
 // 21a (CodeRabbit on a carrier's pull request, on the gate's failure message): "committed on the branch you push" sent a user whose staged tree held a match to the pushed branch,
 // while the tree scan reads acknowledgments from HEAD. The message now names the tree each kind of hit is acknowledged in.
-test('the failure message says where each kind of hit is acknowledged: a tree hit in HEAD, a pushed hit in the pushed commit -- RED before 21a', () => {
+test('the failure message says where each kind of hit is acknowledged: a tree hit in HEAD, a pushed hit in the tip of the ref pushed -- RED before 21a', () => {
   const r = run(repo([{ 'k.txt': 'token = ' + 'gh' + 'p_' + 'Q7w'.repeat(12) + '\n' }]));
   assert.strictEqual(r.code, 1, r.out + r.err);
-  assert.ok(r.out.includes('committed where the gate reads it: for a "tree" hit in HEAD (the commit checked out), for a "pushed" hit in the pushed commit'), r.out);
+  assert.ok(r.out.includes('committed where the gate reads it: for a "tree" hit in HEAD (the commit checked out), for a "pushed" hit in the tip of the ref you push (21i)'), r.out);
   assert.ok(!r.out.includes('the branch you push'), r.out);
 });
 
