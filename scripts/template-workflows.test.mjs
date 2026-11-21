@@ -2496,3 +2496,43 @@ test('release-notes.mjs and its test describe the previous stable tag the way th
     assert.doesNotMatch(readText(rel), /git describe/, rel);
   }
 });
+
+// 21f (the LLM chief's pointer from a public room's surface check): the 21a round put a private repository's name back into comments of the scanner, gate and test that every
+// public carrier copies, against the 18f ruling that nothing held. This test holds it. WHICH FILES: everything a public repository is born with or copies, i.e. every file under
+// the public kinds' templates (published-code, article and the two overlays) and their repo-settings files, plus every canon script under scripts/ that one of those templates
+// carries a copy of (found by path, so a new carried pair is covered without a list). WHERE THE NAMES COME FROM: the org's private repositories, a hand-kept list (no canon
+// file holds them as data; the wizard and the private-working kind name them in prose), matched without case, so Bankfire also covers Bankfire-gate.
+const PRIVATE_REPOS = ['Bankfire', 'Pithead', 'Chotmeter', 'ChotUnitDatum'];
+const PUBLIC_KINDS = ['published-code', 'article', 'overlay-coal-skill', 'overlay-llm-deploy'];
+function publicCarriedFiles(root) {
+  const out = new Set();
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === 'node_modules' || e.name === '.git') continue;
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p); else out.add(p);
+    }
+  };
+  for (const kind of PUBLIC_KINDS) {
+    const base = path.join(root, 'templates', kind);
+    walk(base);
+    const scripts = path.join(base, 'scripts');
+    if (!fs.existsSync(scripts)) continue;
+    const carried = [];
+    const collect = (dir) => { for (const e of fs.readdirSync(dir, { withFileTypes: true })) { const p = path.join(dir, e.name); if (e.isDirectory()) collect(p); else carried.push(path.relative(scripts, p)); } };
+    collect(scripts);
+    for (const rel of carried) { const canon = path.join(root, 'scripts', rel); if (fs.existsSync(canon)) out.add(canon); }
+  }
+  for (const kind of ['published-code', 'article']) out.add(path.join(root, 'templates', `repo-settings.${kind}.json`));
+  return [...out].sort();
+}
+test('no file a public repository is born with or copies names a private repository of the org -- RED before 21f', () => {
+  const files = publicCarriedFiles(ROOT);
+  assert.ok(files.includes(path.join(ROOT, 'scripts', 'lib', 'secret-scan.mjs')) && files.includes(path.join(ROOT, 'scripts', 'secret-gate.mjs')), 'the carried canon scanner and gate are in the set (not vacuous)');
+  const hits = [];
+  for (const f of files) {
+    const lines = fs.readFileSync(f, 'utf8').split(/\r?\n/);
+    lines.forEach((l, i) => { for (const name of PRIVATE_REPOS) if (l.toLowerCase().includes(name.toLowerCase())) hits.push(`${path.relative(ROOT, f)}:${i + 1} ${name}`); });
+  }
+  assert.deepStrictEqual(hits, [], 'a private repository is named in a file a public repository receives: tell the provenance in words');
+});
