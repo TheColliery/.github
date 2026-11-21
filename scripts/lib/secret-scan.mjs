@@ -536,12 +536,13 @@ function spelledIn(text, onMatch) {
 // its owner's text end) is closed in spelledHits at 21i: a window whose owned match reaches its text end is read again further, so the match keeps its whole value.
 // The gate's probe needs no such read: a cut match of an open-ended pattern still matches, and the probe keeps no value, only whether a key was seen.
 // FINGERPRINTS THAT MOVED at 21i, for a room that committed an acknowledgment of one: a wide-spelled match longer than SPELL_CARRY - SPELL_EDGE bytes that
-// starts in a window's owned range near its end (a file not read as wide text and larger than 1 MiB) was fingerprinted on the cut value and is now
-// fingerprinted on the whole value. No other fingerprint moved.
+// runs past its window's text end (it starts in the window's owned range, wherever, and start + length passes the window's start + 1 MiB + 16 KiB; a file not
+// read as wide text and larger than 1 MiB) was fingerprinted on the cut value and is now fingerprinted on the whole value (measured by the 21i INSPECT: a
+// 48,000-byte match starting 30,000 bytes before the owned end moved too). No other fingerprint moved.
 // FINGERPRINTS THAT MOVED at 21a (7f15919), for a room that committed an acknowledgment of one: in a file that is not read as wide text and is larger than 1 MiB, a
 // wide-spelled match that crosses an offset k x 1 MiB (k >= 1) and whose cut prefix already matched a pattern (an open-ended or long body: openai-style, glpat, slack,
 // square) was fingerprinted on the cut value and is now fingerprinted on the whole value; and a match longer than SPELL_CARRY - SPELL_EDGE bytes that starts within
-// SPELL_EDGE bytes after such an offset was whole and is now cut (the named gap above). Every other fingerprint is unchanged; a 40-character github key across an
+// SPELL_EDGE bytes after such an offset was whole and was then cut (the gap 21a named, whole again since 21i). Every other fingerprint is unchanged; a 40-character github key across an
 // edge never moved, because its cut prefix never matched.
 // 21i (21g thread B, a carrier's pull request): SPELL_EDGE bytes of view before what a window owns held the one character a word boundary reads, but not the WHOLE
 // previous key a glued key's start guard asks for, so the second of two glued keys starting just past a window's first owned byte was dropped. Every window
