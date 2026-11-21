@@ -109,3 +109,30 @@ test('the config is read bounded, and a folder at its path is refused with a rea
   assert.strictEqual(run(bom.dir).code, 0);
   assert.deepStrictEqual(JSON.parse(fs.readFileSync(bom.cfg, 'utf8')), { keep: 1, mode: 'auto' }, 'a leading byte-order mark is still read past');
 });
+
+// 21e item 1 (the 21d review's HIGH, present at 3202fef too): every read error but "too large" was swallowed, so a config that exists but cannot be read was REPLACED,
+// exit 0, with only the flag just set: every other key lost. Only "the file does not exist" means an empty config; any other read failure is refused. The witness takes
+// read access from the file's owner (icacls on Windows, mode 000 elsewhere) and skips visibly where the owner can still read it (root, or no icacls).
+const denyRead = (file) => {
+  if (process.platform === 'win32') spawnSync('icacls', [file, '/deny', `${os.userInfo().username}:(RD)`], { timeout: 30000, stdio: 'ignore', env: { SystemRoot: process.env.SystemRoot, PATH: process.env.PATH } });
+  else fs.chmodSync(file, 0o000);
+};
+const allowRead = (file) => {
+  if (process.platform === 'win32') spawnSync('icacls', [file, '/remove:d', os.userInfo().username], { timeout: 30000, stdio: 'ignore', env: { SystemRoot: process.env.SystemRoot, PATH: process.env.PATH } });
+  else fs.chmodSync(file, 0o600);
+};
+test('a config that exists but cannot be read is refused by name, never replaced: exit 1, nothing written, no backup -- RED before 21e', (t) => {
+  const { dir, cfg } = project();
+  const body = '{"keep":1,"other":"x"}\n';
+  fs.writeFileSync(cfg, body);
+  denyRead(cfg);
+  let readable = true;
+  try { fs.readFileSync(cfg); } catch { readable = false; }
+  if (readable) { allowRead(cfg); t.skip('the owner can still read a file denied to it here (root, or no icacls)'); return; }
+  let r;
+  try { r = run(dir); } finally { allowRead(cfg); }
+  assert.strictEqual(r.code, 1, r.out);
+  assert.ok(/FAIL .*: it exists but could not be read \(E[A-Z]+\) -- .*; nothing was written/.test(r.out), r.out);
+  assert.strictEqual(fs.readFileSync(cfg, 'utf8'), body, 'the config is left byte for byte');
+  assert.ok(!fs.existsSync(cfg + '.bak'), 'and no backup is made');
+});

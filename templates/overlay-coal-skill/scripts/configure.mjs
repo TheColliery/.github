@@ -110,6 +110,12 @@ function main() {
       console.error(`FAIL ${readPath}: config is larger than 1 MiB, so it is not read; nothing was written`);
       process.exit(1);
     }
+    // 21e: only "the file does not exist" means an empty config. Any other read failure (no permission, a file that is not a regular file) is refused: a config
+    // that cannot be read must never be replaced by one holding only the flag just set, which would lose every other key it held
+    if (e.code !== 'ENOENT') {
+      console.error(`FAIL ${readPath}: it exists but could not be read (${e.code || 'error'}) -- give yourself read permission on it, or move it away to start a new config, and re-run; nothing was written`);
+      process.exit(1);
+    }
   }
   if (rawConfig !== null) {
     try {
