@@ -105,10 +105,15 @@ function main() {
     } catch (e) {
       process.exitCode = 1;
       try {
-        fs.copyFileSync(readPath, readPath + '.bak');
+        // 21d: the backup goes through the same temp-then-rename route as the config (lib/repo-fs.mjs), never a copyFileSync that writes through a link at the
+        // destination; it takes the mode of the config it copies, as copyFileSync gave it
+        writeFileAtomic(readPath + '.bak', fs.readFileSync(readPath), readPath);
         console.warn(`Warning: existing config is malformed — backed it up to ${readPath}.bak and rebuilding.`);
-      } catch {
-        console.warn('Warning: existing config is malformed. Overwriting.');
+      } catch (e2) {
+        // a config that cannot be backed up is NOT overwritten: the malformed original may be the only copy the user can repair
+        const why = e2 instanceof RepoWriteRefused ? e2.message : `${readPath}.bak: the backup could not be written (${e2 && e2.code ? e2.code : e2.message}) -- free that path and re-run`;
+        console.error(`FAIL ${why}; the malformed config ${readPath} was left untouched and nothing was written`);
+        process.exit(1);
       }
     }
   }

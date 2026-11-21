@@ -67,3 +67,23 @@ test('a symlink at the config is replaced, never written through (skips where th
   assert.strictEqual(r.code, 0, r.out);
   assert.strictEqual(fs.readFileSync(outside, 'utf8'), '{"keep":true}\n');
 });
+
+test('a malformed config is backed up through the same temp-and-rename route: a hard link at the .bak is replaced, and a config that cannot be backed up is never overwritten -- RED before 21d', () => {
+  const { dir, cfg } = project();
+  const outside = path.join(tmp('outside'), 'outside.txt');
+  fs.writeFileSync(outside, 'outside\n');
+  fs.writeFileSync(cfg, '{oops');
+  fs.linkSync(outside, cfg + '.bak');
+  const r = run(dir);
+  assert.strictEqual(fs.readFileSync(outside, 'utf8'), 'outside\n', 'the file a link at the .bak shares is untouched: ' + r.out);
+  assert.strictEqual(fs.readFileSync(cfg + '.bak', 'utf8'), '{oops', 'the .bak holds the malformed config');
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(cfg, 'utf8')), { mode: 'auto' }, 'and the config is rebuilt');
+
+  const b = project();
+  fs.writeFileSync(b.cfg, '{oops');
+  fs.mkdirSync(b.cfg + '.bak'); // the backup cannot be written
+  const blocked = run(b.dir);
+  assert.strictEqual(blocked.code, 1, blocked.out);
+  assert.strictEqual(fs.readFileSync(b.cfg, 'utf8'), '{oops', 'a config that cannot be backed up is left byte for byte');
+  assert.ok(/FAIL .*\.bak: .*the malformed config .* was left untouched and nothing was written/.test(blocked.out), blocked.out);
+});
