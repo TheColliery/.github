@@ -1345,6 +1345,11 @@ test('a staged or pushed path that is not valid UTF-8 fails the gate by name ins
   assert.ok(r.out.includes('a\\xff.txt') && r.out.includes('a\\xfe.txt'), 'each named by its bytes: ' + r.out);
   assert.ok(!r.out.includes(String.fromCharCode(0xfffd)), 'no path is shown decoded to U+FFFD: ' + r.out);
   assert.ok(r.out.includes('tree "ok.txt":1 github-token'), 'a valid path beside them is still scanned: ' + r.out);
+  // 21b (the 21a review's L2): the message says the refusal is about the path and gives the rename that works for such a path in the index; the commands are run
+  // here as printed (a wildcard that matches only the byte that is not UTF-8, and the blob id), and the renamed index then passes the path check
+  assert.ok(r.out.includes('This refusal is about the path, not about a key in it.'), r.out);
+  assert.ok(r.out.includes('a\\xff.txt: git ls-files -s -- "a[^ -~].txt" ; git update-index --add --cacheinfo 100644,' + sha + ',<new name> ; git rm --cached -q -- "a[^ -~].txt"'), r.out);
+  assert.strictEqual(gitIn(['ls-files', '--', 'a[^ -~].txt']).split('\n').length, 2, 'the printed wildcard matches the two such paths and not ok.txt');
   // the same two files pushed in a commit
   const tree = gitIn(['write-tree']);
   const commit = gitIn(['commit-tree', tree, '-p', 'HEAD', '-m', 'odd names']);

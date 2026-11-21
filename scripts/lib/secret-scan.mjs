@@ -519,7 +519,7 @@ function spelledIn(text, onMatch) {
     }
   }
 }
-/// The search over bytes in windows of SPELL_WINDOW + SPELL_CARRY bytes, each starting SPELL_WINDOW after the one before, so neighbours overlap by SPELL_CARRY
+// The search over bytes in windows of SPELL_WINDOW + SPELL_CARRY bytes, each starting SPELL_WINDOW after the one before, so neighbours overlap by SPELL_CARRY
 // and a window holds a bounded number of bytes whatever the file's size. 21a (Bankfire PR 70: CodeRabbit Verify's false rejection, and the fingerprint of a
 // key cut by a window): a match is reported by ONE window, the one that OWNS its first byte. A window owns from SPELL_EDGE bytes past its start (the first
 // owns from 0) up to SPELL_EDGE bytes past the next window's start (the last owns to the end), so the owners tile the file. The window's text runs on past
@@ -528,6 +528,11 @@ function spelledIn(text, onMatch) {
 // SPELL_EDGE bytes before what a window owns keep the character before a key in view, so a glued key is refused as anywhere. A window with no NUL, or no
 // character a spelling can hold, is skipped (a run of zeros costs one scan for each). Named gap (21a, reading 1): a match longer than SPELL_CARRY - SPELL_EDGE
 // bytes (an open-ended pattern run past 4,094 UTF-32 or 8,188 UTF-16 characters) is cut at its owner's text end, so it can be missed or fingerprinted short.
+// FINGERPRINTS THAT MOVED at 21a (7f15919), for a room that committed an acknowledgment of one: in a file that is not read as wide text and is larger than 1 MiB, a
+// wide-spelled match that crosses an offset k x 1 MiB (k >= 1) and whose cut prefix already matched a pattern (an open-ended or long body: openai-style, glpat, slack,
+// square) was fingerprinted on the cut value and is now fingerprinted on the whole value; and a match longer than SPELL_CARRY - SPELL_EDGE bytes that starts within
+// SPELL_EDGE bytes after such an offset was whole and is now cut (the named gap above). Every other fingerprint is unchanged; a 40-character github key across an
+// edge never moved, because its cut prefix never matched.
 const SPELL_CARRY = 16384;
 const SPELL_WINDOW = 1 << 20;
 const SPELL_EDGE = 8; // a UTF-32 unit and the character before it

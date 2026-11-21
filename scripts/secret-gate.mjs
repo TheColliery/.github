@@ -50,6 +50,30 @@ const unit4 = (c) => `${BACKSLASH}u${c.charCodeAt(0).toString(16).padStart(4, '0
 const esc = (s) => JSON.stringify(String(s)).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, (c) => c.split('').map(unit4).join(''));
 // A path whose bytes are not UTF-8, shown as bytes (21a): printable ASCII as it is, every other byte, a backslash and a quote as \xNN. The result is plain ASCII.
 const showBytes = (b) => [...b].map((x) => (x >= 0x20 && x <= 0x7e && x !== 0x5c && x !== 0x22 ? String.fromCharCode(x) : `${BACKSLASH}x${x.toString(16).padStart(2, '0')}`)).join('');
+// The same path as a git wildcard the user can type in any shell between double quotes (21b): a byte that is not UTF-8 is [^ -~] (one byte outside printable ASCII,
+// so a neighbour such as ab.txt beside a\xff.txt is not matched; measured with git for Windows), a valid UTF-8 character stays, and an ASCII character a shell or
+// git's wildcards could read ($ % ! " ` \ * ? [ ]) is ? (any one byte). The printed advice lists the matches first, so a wider match is seen before anything is removed.
+const UTF8_LEN = (b, i) => {
+  const c = b[i];
+  if (c < 0x80) return 1;
+  const n = c >= 0xc2 && c <= 0xdf ? 2 : c >= 0xe0 && c <= 0xef ? 3 : c >= 0xf0 && c <= 0xf4 ? 4 : 0;
+  if (!n || i + n > b.length) return 0;
+  for (let k = 1; k < n; k++) if ((b[i + k] & 0xc0) !== 0x80) return 0;
+  const d = b[i + 1];
+  if ((c === 0xe0 && d < 0xa0) || (c === 0xed && d > 0x9f) || (c === 0xf0 && d < 0x90) || (c === 0xf4 && d > 0x8f)) return 0;
+  return n;
+};
+const globOf = (b) => {
+  let out = '';
+  for (let i = 0; i < b.length;) {
+    const n = UTF8_LEN(b, i);
+    if (!n) { out += '[^ -~]'; i++; continue; }
+    const ch = b.subarray(i, i + n).toString('utf8');
+    out += n === 1 && !/[A-Za-z0-9 ._/+,=@~-]/.test(ch) ? '?' : ch;
+    i += n;
+  }
+  return out;
+};
 // A hook runs with GIT_DIR, GIT_WORK_TREE, GIT_PREFIX and others that aim git at the repository the hook was started for.
 // Every git call here drops them (the gate runs from the repository root and finds its repository from there), except
 // GIT_INDEX_FILE, which names the index a commit is made from and is the thing commit mode must read, and GIT_CEILING_DIRECTORIES, which only NARROWS where git
@@ -200,7 +224,7 @@ async function main() {
       const text = entry.toString('utf8');
       const m = /^(\d+) ([0-9a-f]{40,64}) (\d)\t([\s\S]*)$/.exec(text);
       if (!m) throw new Error('unreadable index entry');
-      if (!Buffer.from(text, 'utf8').equals(entry)) { oddPaths.push(showBytes(entry.subarray(entry.indexOf(9) + 1))); continue; }
+      if (!Buffer.from(text, 'utf8').equals(entry)) { const raw = entry.subarray(entry.indexOf(9) + 1); oddPaths.push({ shown: showBytes(raw), glob: globOf(raw), mode: m[1], sha: m[2] }); continue; }
       tracked.push({ mode: m[1], sha: m[2], name: m[4] });
     }
   } catch (e) {
@@ -302,7 +326,9 @@ async function main() {
     for (const h of scan.scanBytes(bytes, e.name)) keep(h, `tree ${esc(e.name)}:${h.line}`, headAcks);
   });
   if (unreadable.length) fails.push(`${unreadable.length} tracked file(s) could not be read, so were NOT scanned: ${unreadable.slice(0, 3).join('; ')}`);
-  if (oddPaths.length) fails.push(`${oddPaths.length} staged path(s) are not valid UTF-8, so their hits could not get a fingerprint of their own; they were NOT scanned. Rename them: ${oddPaths.slice(0, 3).join('; ')}${oddPaths.length > 3 ? ' ...' : ''}`);
+  // 21b (the 21a review's L2): the refusal stands, and it says it is about the path, not a key, and how to rename such a path in the index. git mv cannot name it (its
+  // quoted form is not unquoted, and a Windows command line cannot carry the byte), so the commands use the blob id and a wildcard, each checked on a real repository.
+  if (oddPaths.length) fails.push(`${oddPaths.length} staged path(s) are not valid UTF-8, so the gate cannot give their hits a fingerprint of their own and did NOT scan them. This refusal is about the path, not about a key in it. Rename them in the index (git mv cannot name such a path): list what the wildcard matches, add the same blob under a new name for every entry it lists, then remove the old entries with the same wildcard (it removes every entry it lists): ${oddPaths.slice(0, 3).map((o) => `${o.shown}: git ls-files -s -- "${o.glob}" ; git update-index --add --cacheinfo ${o.mode},${o.sha},<new name> ; git rm --cached -q -- "${o.glob}"`).join(' | ')}${oddPaths.length > 3 ? ' ...' : ''}`);
 
   let rangeNote = 'no pushed range (tree mode)';
   if (prePush) {
@@ -318,7 +344,7 @@ async function main() {
         : 'pushed range: no refs on stdin, nothing to scan';
     } catch (e) {
       if (e && e.code === 'EPATHBYTES') {
-        fails.push(`a pushed file's path is not valid UTF-8 (${showBytes(e.path)}), so its hits could not get a fingerprint of their own; the added lines of this push were NOT scanned. Rename the file`);
+        fails.push(`a pushed file's path is not valid UTF-8 (${showBytes(e.path)}), so its hits cannot get a fingerprint of their own; the added lines of this push were NOT scanned. This refusal is about the path, not about a key in it. Rename the file in the unpushed commit that adds it: run the gate without --pre-push while the path is in the index, follow the rename it prints, then git commit --amend (or rebase, for an older commit)`);
       } else if (e && e.code === 'ENONCOMMIT') {
         for (const r of e.refs) fails.push(`${esc(r.ref)} pushes a non-commit object (${/^[a-z]+$/.test(r.type) ? r.type : esc(r.type)}), which the range scan cannot read`);
       } else {
