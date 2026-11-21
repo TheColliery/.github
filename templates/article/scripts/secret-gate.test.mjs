@@ -482,6 +482,16 @@ test('git\'s own diagnostic is escaped in the report: a path in it that carries 
 });
 
 // A node child this file starts is capped like any harness child: a heap cap and a kill-timeout, so one runaway cannot take the machine.
+// 21i (21h D19): the word `timeout` anywhere in the call (a comment) passed; the option is read now: `timeout:` with a value other than 0, or the shorthand `timeout`,
+// in the call with its comments removed.
+const hasKillTimeout = (call) => /(?:[{,]\s*)timeout\s*(?::\s*(?!0\b)[\w.]|[,}])/.test(call.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, ''));
+test('the kill-timeout check reads the option, not the word -- RED before 21i', () => {
+  assert.equal(hasKillTimeout("{ encoding: 'utf8', timeout: 60000 })"), true);
+  assert.equal(hasKillTimeout('{ cwd: dir, input, timeout,\n env })'), true);
+  assert.equal(hasKillTimeout("{ encoding: 'utf8' /* timeout */ })"), false, 'a comment is not the option');
+  assert.equal(hasKillTimeout("{ encoding: 'utf8' } // no timeout here\n)"), false, 'a line comment is not the option');
+  assert.equal(hasKillTimeout('{ timeout: 0 })'), false, 'zero is no clock');
+});
 test('every node child this test file starts carries a heap cap and a kill-timeout', () => {
   const src = fs.readFileSync(fileURLToPath(import.meta.url), 'utf8');
   const calls = [...src.matchAll(/(?:execFileSync|spawnSync|spawn)\(process\.execPath, /g)];
@@ -490,7 +500,7 @@ test('every node child this test file starts carries a heap cap and a kill-timeo
     const call = src.slice(m.index, src.indexOf('});', m.index) + 3);
     const line = src.slice(0, m.index).split('\n').length;
     assert.ok(call.includes('--max-old-space-size='), `line ${line}: no heap cap`);
-    assert.ok(/\btimeout\b/.test(call), `line ${line}: no kill-timeout`);
+    assert.ok(hasKillTimeout(call), `line ${line}: no kill-timeout`);
   }
 });
 
@@ -1057,7 +1067,7 @@ test('one line of 4,000 distinct key-shaped tokens with NULs between their chara
     "const hits = scanText(line, 'f.txt');",
     "console.log(JSON.stringify({ n: hits.length, distinct: new Set(hits.map((h) => h.fp)).size, visited }));",
   ].join('\n');
-  const r = spawnSync(process.execPath, ['--max-old-space-size=256', '--input-type=module', '-e', code], { encoding: 'utf8', timeout: 60000, env: { PATH: process.env.PATH } });
+  const r = spawnSync(process.execPath, ['--max-old-space-size=256', '--input-type=module', '-e', code], { encoding: 'utf8', timeout: 60000, cwd: SANDBOX, env: gitEnv() }); // 21i (21h D16): the sandbox, not PATH alone
   assert.strictEqual(r.signal, null, 'the child was killed by the safety timeout: ' + (r.error ? r.error.code : r.signal));
   assert.strictEqual(r.status, 0, r.stderr);
   const out = JSON.parse(r.stdout);
@@ -1275,7 +1285,7 @@ test('a key in a wide spelling is reported in a file with no mark whose NULs do 
 // more than 12 units, in random bytes. FONT-LIKE stands for msyh.ttc: big-endian name and metric tables of small values and little-endian runs, past the 8 MiB decode
 // bound. 7edf02c read both as UTF-16 and drew a "wide text too large" refusal on the second; each must stay plain, with no hit, and the gate must pass them.
 test('binaries whose small 16-bit values run in both byte orders (a PE string table, a font collection) stay plain: no wide reading, no hit, no refusal -- RED against 7edf02c', async () => {
-  const { scanBytes, wideKinds, WIDE_TOO_LARGE } = await import(pathToFileURL(LIB).href);
+  const { scanBytes, wideKinds, looksBinary, WIDE_TOO_LARGE } = await import(pathToFileURL(LIB).href);
   let seed = 11;
   const rnd = (n) => { const b = Buffer.alloc(n); for (let i = 0; i < n; i++) { seed = (seed * 1103515245 + 12345) >>> 0; b[i] = seed >>> 24; } return b; };
   const smallBE = (n) => { const b = Buffer.alloc(n * 2); for (let k = 0; k < n; k++) b.writeUInt16BE(1 + (k % 200), k * 2); return b; };
@@ -1293,8 +1303,10 @@ test('binaries whose small 16-bit values run in both byte orders (a PE string ta
     assert.ok(!hits.some((h) => h.pattern === WIDE_TOO_LARGE), name + ': no "too large to decode" refusal');
     assert.strictEqual(hits.length, 0, name + ': no hit: ' + JSON.stringify(hits.map((h) => h.pattern)));
   }
-  const r = run(repo([{ 'pe-like.dll': peLike }]));
-  assert.strictEqual(r.code, 0, 'the gate passes the PE-shaped file: ' + r.out + r.err);
+  // 21i (21h D21): .dll is not on the gate's BINARY list, so the gate scanned the blob as text and the binary-name path was never run; .bin is, and the prefix is binary
+  assert.ok(looksBinary(peLike.subarray(0, 8000)), 'the PE-shaped prefix reads as binary');
+  const r = run(repo([{ 'pe-like.bin': peLike }]));
+  assert.strictEqual(r.code, 0, 'the gate passes the PE-shaped file on its binary-name path: ' + r.out + r.err);
 });
 
 // 21a (a carrier's pull request: CodeRabbit Verify's "false rejection of a longer UTF-16LE word at the 1 MiB window boundary", and CodeRabbit's thread on a key cut by a
