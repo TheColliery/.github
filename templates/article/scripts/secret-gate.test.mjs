@@ -1434,3 +1434,30 @@ test('a wide-spelled key right after a non-ASCII character is found in both litt
   }
   assert.deepStrictEqual(scanBytes(Buffer.from(String.fromCodePoint(0x441) + T + '\n', 'utf16le'), 'f.txt').map((h) => h.pattern), ['github-token'], 'the same text read as wide text (the parity this keeps)');
 });
+
+// 21i P2 (21g thread B, a carrier's pull request): a window held SPELL_EDGE bytes before what it owns, enough for the one character a word boundary reads, not
+// for the WHOLE previous key a glued key's start guard asks for. So the second of two glued keys, starting just past a window's first owned byte, was dropped.
+test('the second of two glued wide-spelled keys starting just past a scan window edge is found, by the search and by the gate probe -- RED before 21i', async () => {
+  const { spelledHits, spelledProbe, fingerprint } = await import(pathToFileURL(LIB).href);
+  const W = 1 << 20;
+  const pad = (n) => { const b = Buffer.alloc(n, 0x81); for (let q = 64; q < n; q += 97) b[q] = 0; return b; };
+  const unit32 = (s) => Buffer.concat([...s].map((ch) => { const b = Buffer.alloc(4); b.writeUInt32LE(ch.codePointAt(0)); return b; }));
+  const probe = (b) => { const r = spelledProbe(); for (let i = 0; i < b.length; i += 65536) r.feed(b.subarray(i, i + 65536)); r.end(); return r.found(); };
+  const aws1 = 'AK' + 'IA' + 'ABCDEFGHIJKLMNOP', aws2 = 'AK' + 'IA' + 'QRSTUVWXYZ234567';
+  const gh1 = 'gh' + 'p_' + 'Ab1'.repeat(85), gh2 = 'gh' + 'p_' + 'Cd2'.repeat(85); // 255-character bodies: the longest lookbehind a github key asks for
+  const cases = [['utf16 aws', (s) => Buffer.from(s, 'utf16le'), aws1, aws2, 'aws-access-key-id'], ['utf32 aws', unit32, aws1, aws2, 'aws-access-key-id'], ['utf32 github, 259 characters', unit32, gh1, gh2, 'github-token']];
+  for (const [name, enc, k1, k2, pattern] of cases) {
+    const fp2 = fingerprint('f.bin', pattern, k2);
+    for (const off of [8, 10, 24, 200]) {
+      const first = enc(k1);
+      const b = Buffer.concat([pad(W + off - first.length), first, enc(k2 + '\n'), pad(65536)]); // the second key starts `off` bytes past the second window's start
+      const fps = spelledHits(b, 'f.bin').map((h) => h.fp);
+      assert.ok(fps.includes(fp2), `${name}: the second key at W+${off} is found`);
+      assert.strictEqual(fps.length, 2, `${name}: both keys, once each, at W+${off}`);
+      assert.strictEqual(probe(b), true, `${name}: the probe finds a key, at W+${off}`);
+    }
+  }
+  // a key alone just past the edge, and a key glued to a word across it, are judged as anywhere
+  const word = Buffer.concat([pad(W + 8 - 2 * 30), Buffer.from('w'.repeat(30) + aws2 + '\n', 'utf16le'), pad(65536)]);
+  assert.deepStrictEqual(spelledHits(word, 'f.bin'), [], 'a key glued to a word that starts before the edge stays refused');
+});

@@ -539,16 +539,23 @@ function spelledIn(text, onMatch) {
 // square) was fingerprinted on the cut value and is now fingerprinted on the whole value; and a match longer than SPELL_CARRY - SPELL_EDGE bytes that starts within
 // SPELL_EDGE bytes after such an offset was whole and is now cut (the named gap above). Every other fingerprint is unchanged; a 40-character github key across an
 // edge never moved, because its cut prefix never matched.
+// 21i (21g thread B, a carrier's pull request): SPELL_EDGE bytes of view before what a window owns held the one character a word boundary reads, but not the WHOLE
+// previous key a glued key's start guard asks for, so the second of two glued keys starting just past a window's first owned byte was dropped. Every window
+// after the first now also holds SPELL_LEAD bytes before its start, read only as context: ownership is unchanged, so no fingerprint moves; a glued key that was
+// dropped there is now found. SPELL_LEAD is more than four bytes for each of the 265 characters the longest start guard reads (a stripe key: its 8-character head,
+// 256-character body and a joining `_`).
 const SPELL_CARRY = 16384;
 const SPELL_WINDOW = 1 << 20;
 const SPELL_EDGE = 8; // a UTF-32 unit and the character before it
+const SPELL_LEAD = 2048;
 const SPELL_ANY = new RegExp(SPELL_CH);
-// One window: text is its latin1 view, base its offset in the stream; first and last say whether it opens or closes the stream.
-function spelledWindow(text, base, first, last, onMatch) {
+// One window: text is its latin1 view, of which the first `lead` bytes are context before the window's start; base is the window's start in the stream;
+// first and last say whether it opens or closes the stream.
+function spelledWindow(text, base, lead, first, last, onMatch) {
   if (text.indexOf(NUL) < 0 || !SPELL_ANY.test(text)) return;
-  const from = first ? 0 : SPELL_EDGE;
-  const to = last ? text.length : SPELL_WINDOW + SPELL_EDGE;
-  spelledIn(text, (pattern, value, pos) => { if (pos >= from && pos < to) onMatch(pattern, value, base + pos); });
+  const from = lead + (first ? 0 : SPELL_EDGE);
+  const to = last ? text.length : lead + SPELL_WINDOW + SPELL_EDGE;
+  spelledIn(text, (pattern, value, pos) => { if (pos >= from && pos < to) onMatch(pattern, value, base + pos - lead); });
 }
 // The wide-spelled keys of one run of bytes that is not read as wide text: [{ line, pattern, fp }], each key once, in file order.
 export function spelledHits(bytes, file = '') {
@@ -556,7 +563,8 @@ export function spelledHits(bytes, file = '') {
   const seen = new Map(); // one hit a pattern and an offset: the 16-bit spellings overlap (big-endian text read one byte on is little-endian)
   for (let at = 0; ; at += SPELL_WINDOW) {
     const last = at + SPELL_WINDOW + SPELL_CARRY >= bytes.length;
-    spelledWindow(bytes.toString('latin1', at, last ? bytes.length : at + SPELL_WINDOW + SPELL_CARRY), at, at === 0, last, (pattern, value, pos) => {
+    const lead = at === 0 ? 0 : SPELL_LEAD;
+    spelledWindow(bytes.toString('latin1', at - lead, last ? bytes.length : at + SPELL_WINDOW + SPELL_CARRY), at, lead, at === 0, last, (pattern, value, pos) => {
       const k = pattern + NUL + pos;
       if (!seen.has(k)) seen.set(k, { pattern, value, pos });
     });
@@ -570,25 +578,27 @@ export function spelledHits(bytes, file = '') {
   return found.sort((a, b) => a.pos - b.pos).map((h) => ({ line: lineAt(h.pos), pattern: h.pattern, fp: fingerprint(file, h.pattern, h.value) }));
 }
 // The same search over a stream, for the gate: feed(piece) in order from the blob's first byte, end() when the blob ends, then found() says whether any key
-// was seen. The windows are spelledHits' own, so the verdict equals spelledHits' on the whole blob; at most SPELL_WINDOW + SPELL_CARRY bytes and one piece
-// are held. No value leaves.
+// was seen. The windows are spelledHits' own, so the verdict equals spelledHits' on the whole blob; at most SPELL_LEAD + SPELL_WINDOW + SPELL_CARRY bytes and
+// one piece are held. No value leaves.
 export function spelledProbe() {
   let found = false;
-  let pend = '';
+  let pend = ''; // from the current window's start less its lead
   let base = 0;
+  let lead = 0;
   const hit = () => { found = true; };
   return {
     feed(piece) {
       if (found) return;
       pend += piece.toString('latin1');
       // a window is run only once a byte past it has arrived, so it is known not to be the last
-      while (pend.length > SPELL_WINDOW + SPELL_CARRY && !found) {
-        spelledWindow(pend.slice(0, SPELL_WINDOW + SPELL_CARRY), base, base === 0, false, hit);
-        pend = pend.slice(SPELL_WINDOW);
+      while (pend.length > lead + SPELL_WINDOW + SPELL_CARRY && !found) {
+        spelledWindow(pend.slice(0, lead + SPELL_WINDOW + SPELL_CARRY), base, lead, base === 0, false, hit);
+        pend = pend.slice(lead + SPELL_WINDOW - SPELL_LEAD); // the next window starts SPELL_WINDOW on and keeps SPELL_LEAD bytes before it
         base += SPELL_WINDOW;
+        lead = SPELL_LEAD;
       }
     },
-    end() { if (!found && (pend.length || base === 0)) spelledWindow(pend, base, base === 0, true, hit); pend = ''; },
+    end() { if (!found && (pend.length > lead || base === 0)) spelledWindow(pend, base, lead, base === 0, true, hit); pend = ''; },
     found: () => found,
   };
 }
