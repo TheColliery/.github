@@ -1560,7 +1560,7 @@ const readText = (rel) => fs.readFileSync(path.join(ROOT, ...rel.split('/')), 'u
 // The canon secret gate keeps GIT_INDEX_FILE BY DESIGN (commit mode reads the commit's own index, which a hook names through that variable), and GIT_INDEX_FILE is outside the three
 // GIT_ names the rule allows, so its two git spawns are findings the census is right to give. It is the ONE pinned carrier, at this blob; any edit spends the pin. The Bankfire source test was
 // the second until Bankfire returned gitEnv()'s literal alone (bd328f2e, 2026-10-09): it now passes the census with no pin, like the gate test.
-const GATE_PIN = { rel: 'scripts/secret-gate.mjs', blob: 'ba20e84cc03eb6efd9394a13e88587321ea4ecec', why: 'canon secret gate: keeps GIT_INDEX_FILE and GIT_CEILING_DIRECTORIES by design (its gitEnv() copies process.env minus the other GIT_ names); the census counts gitIn\'s execFileSync, the one finding, and the streamed cat-file child (started by spawn, which the census does not count, its rule 5) takes the same gitEnv()' };
+const GATE_PIN = { rel: 'scripts/secret-gate.mjs', blob: '235bf5b5b4dffaa814c07b7c56b5499232937b2b', why: 'canon secret gate: keeps GIT_INDEX_FILE and GIT_CEILING_DIRECTORIES by design (its gitEnv() copies process.env minus the other GIT_ names); the census counts gitIn\'s execFileSync, the one finding, and the streamed cat-file child (started by spawn, which the census does not count, its rule 5) takes the same gitEnv()' };
 
 test('the canon secret-gate test passes the canon census with no pin: it builds every git environment from named keys, in all three places it lives -- RED before 08d D3', () => {
   for (const dir of CARRIER_DIRS) {
@@ -2129,7 +2129,7 @@ const { scanChildEnv } = await import(pathToFileURL(path.join(TEMPLATES, 'overla
 const { collectScriptsMjs } = await import(pathToFileURL(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', 'git-env-census.mjs')).href);
 const SCANNER_WHY = 'byte-equal copy of the Bankfire-sourced scanner gate test: its scratch repo gets HOME and USERPROFILE only. Its fix is made at the Bankfire source (the secret-scan test already points TEMP, TMP and TMPDIR at the sandbox since Bankfire 557a2e6) and re-copied into all three places.';
 const CHILD_ENV_PINS = [
-  ['scripts/secret-gate.test.mjs', '9fb8551fd106fde25a2dc9b915e7632e5f3f7003'], ['templates/article/scripts/secret-gate.test.mjs', '9fb8551fd106fde25a2dc9b915e7632e5f3f7003'], ['templates/published-code/scripts/secret-gate.test.mjs', '9fb8551fd106fde25a2dc9b915e7632e5f3f7003'],
+  ['scripts/secret-gate.test.mjs', 'bcd5ce799c8d37ca304bda13df47fdc9e70eb94a'], ['templates/article/scripts/secret-gate.test.mjs', 'bcd5ce799c8d37ca304bda13df47fdc9e70eb94a'], ['templates/published-code/scripts/secret-gate.test.mjs', 'bcd5ce799c8d37ca304bda13df47fdc9e70eb94a'],
 ].map(([rel, blob]) => ({ rel, blob, why: SCANNER_WHY }));
 function childEnvFiles() {
   const files = [];
@@ -2495,4 +2495,44 @@ test('release-notes.mjs and its test describe the previous stable tag the way th
   for (const rel of ['templates/overlay-coal-skill/scripts/release-notes.mjs', 'templates/overlay-coal-skill/scripts/release-notes.test.mjs', 'templates/article/scripts/release-notes.mjs']) {
     assert.doesNotMatch(readText(rel), /git describe/, rel);
   }
+});
+
+// 21f (the LLM chief's pointer from a public room's surface check): the 21a round put a private repository's name back into comments of the scanner, gate and test that every
+// public carrier copies, against the 18f ruling that nothing held. This test holds it. WHICH FILES: everything a public repository is born with or copies, i.e. every file under
+// the public kinds' templates (published-code, article and the two overlays) and their repo-settings files, plus every canon script under scripts/ that one of those templates
+// carries a copy of (found by path, so a new carried pair is covered without a list). WHERE THE NAMES COME FROM: the org's private repositories, a hand-kept list (no canon
+// file holds them as data; the wizard and the private-working kind name them in prose), matched without case, so Bankfire also covers Bankfire-gate.
+const PRIVATE_REPOS = ['Bankfire', 'Pithead', 'Chotmeter', 'ChotUnitDatum'];
+const PUBLIC_KINDS = ['published-code', 'article', 'overlay-coal-skill', 'overlay-llm-deploy'];
+function publicCarriedFiles(root) {
+  const out = new Set();
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === 'node_modules' || e.name === '.git') continue;
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p); else out.add(p);
+    }
+  };
+  for (const kind of PUBLIC_KINDS) {
+    const base = path.join(root, 'templates', kind);
+    walk(base);
+    const scripts = path.join(base, 'scripts');
+    if (!fs.existsSync(scripts)) continue;
+    const carried = [];
+    const collect = (dir) => { for (const e of fs.readdirSync(dir, { withFileTypes: true })) { const p = path.join(dir, e.name); if (e.isDirectory()) collect(p); else carried.push(path.relative(scripts, p)); } };
+    collect(scripts);
+    for (const rel of carried) { const canon = path.join(root, 'scripts', rel); if (fs.existsSync(canon)) out.add(canon); }
+  }
+  for (const kind of ['published-code', 'article']) out.add(path.join(root, 'templates', `repo-settings.${kind}.json`));
+  return [...out].sort();
+}
+test('no file a public repository is born with or copies names a private repository of the org -- RED before 21f', () => {
+  const files = publicCarriedFiles(ROOT);
+  assert.ok(files.includes(path.join(ROOT, 'scripts', 'lib', 'secret-scan.mjs')) && files.includes(path.join(ROOT, 'scripts', 'secret-gate.mjs')), 'the carried canon scanner and gate are in the set (not vacuous)');
+  const hits = [];
+  for (const f of files) {
+    const lines = fs.readFileSync(f, 'utf8').split(/\r?\n/);
+    lines.forEach((l, i) => { for (const name of PRIVATE_REPOS) if (l.toLowerCase().includes(name.toLowerCase())) hits.push(`${path.relative(ROOT, f)}:${i + 1} ${name}`); });
+  }
+  assert.deepStrictEqual(hits, [], 'a private repository is named in a file a public repository receives: tell the provenance in words');
 });
