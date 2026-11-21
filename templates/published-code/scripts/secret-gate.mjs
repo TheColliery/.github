@@ -395,6 +395,20 @@ const bothStaged = (raw, toBytes, sha) => [
   `  Finish the rename (remove the old entry): ${dropTwinCmd(raw, toBytes, sha)}`,
   `  Undo it (remove the new entry): ${dropTwinCmd(toBytes, raw, sha)}`,
 ].join('\n');
+// 21n (a red on main's POSIX runners): a name any of the three platforms a carrier builds on refuses is refused on EVERY platform, as the letter-case twin is, because a
+// carrier's CI runs Windows, macOS and Linux (C:/abs.txt is a legal path to git on Linux). The rules are Windows' own (node/runtime.md section 4, Microsoft Learn,
+// Naming Files, Paths, and Namespaces) applied to each segment: no reserved character (< > : " \ | ? * or codes 0-31), no reserved device name before the first period
+// in any case (CON PRN AUX NUL, COM1-COM9, LPT1-LPT9 and their superscript forms), and no segment ending in a space or a period. null when the name passes.
+const RESERVED_CHAR = /[<>:"\\|?*\u0000-\u001f]/;
+const DEVICE = /^(con|prn|aux|nul|com[1-9\u00b9\u00b2\u00b3]|lpt[1-9\u00b9\u00b2\u00b3])$/i;
+function windowsRefuses(name) {
+  for (const seg of name.split('/')) {
+    if (RESERVED_CHAR.test(seg)) return `${esc(seg)} holds a character Windows reserves (< > : " \\ | ? * or a control character)`;
+    if (DEVICE.test(seg.split('.')[0])) return `${esc(seg)} is a device name Windows reserves (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9)`;
+    if (/[ .]$/.test(seg)) return `${esc(seg)} ends in a space or a period, which Windows drops`;
+  }
+  return null;
+}
 function renameOdd(spec, to) {
   const m = /^((?:[0-9a-f]{2})+):([0-9a-f]{40,64})$/.exec(spec);
   if (!m) { console.error(`secret-gate: --rename-odd takes <path as hex>:<blob>, as the refusal prints it, not ${esc(spec)}`); process.exitCode = 64; return; }
@@ -407,6 +421,8 @@ function renameOdd(spec, to) {
   if (!target) return fail(`no staged path ${showBytes(raw)}`);
   if (target.stage !== '0') return fail(`${showBytes(raw)} is unmerged (stage ${target.stage}): finish or abort the merge first, then run the gate again`);
   if (target.sha !== m[2]) return fail(`${showBytes(raw)} is staged with blob ${target.sha.slice(0, 12)}, not ${m[2].slice(0, 12)}: run the gate again and use the command it prints now`);
+  const portable = windowsRefuses(to);
+  if (portable) return fail(`${portable}: a carrier's CI builds on Windows, macOS and Linux, so the name must be legal on all three; choose another name`);
   const toBytes = Buffer.from(to, 'utf8');
   const fold = to.toLowerCase();
   for (const e of before) {

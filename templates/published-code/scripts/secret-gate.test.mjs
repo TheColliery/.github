@@ -1634,9 +1634,11 @@ const renameFixture = () => {
 };
 test('--rename-odd refuses every name git refuses, a file/folder clash and a letter-case twin, leaving the index byte for byte and exiting non-zero -- RED before 21k', () => {
   const { dir, odd, index } = renameFixture();
+  // 21n (the red on main's POSIX runners): C:/abs.txt is a legal path to git on Linux and macOS. A name that Windows refuses is refused on every platform, because a
+  // carrier's CI builds on all three; git's own NTFS rules are turned off here so this box's git accepts them as POSIX git does, and the gate alone must refuse them
+  execFileSync('git', ['-C', dir, 'config', 'core.protectNTFS', 'false'], { timeout: 60000, env: gitEnv() });
   const spec = '--rename-odd=' + oddName.toString('hex') + ':' + odd;
-  const refused = ['../out.txt', 'a/../b.txt', 'C:/abs.txt', '.git/hooks/pre-commit', 'newdir/', 'scripts', 'README.md/x', 'readme.md'];
-  if (process.platform === 'win32') refused.push('d' + String.fromCharCode(92) + 'e.txt'); // a backslash is a folder separator to git only on Windows
+  const refused = ['../out.txt', 'a/../b.txt', 'C:/abs.txt', '.git/hooks/pre-commit', 'newdir/', 'scripts', 'README.md/x', 'readme.md', 'd' + String.fromCharCode(92) + 'e.txt', 'a:b', 'NUL.txt', 'x.', 'docs/COM1.md', 'a|b', 'x /y'];
   for (const to of refused) {
     const before = index();
     const r = run(dir, [spec, '--to=' + to]);
