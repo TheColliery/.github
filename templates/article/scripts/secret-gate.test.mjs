@@ -1349,7 +1349,7 @@ test('a staged or pushed path that is not valid UTF-8 fails the gate by name ins
   // 21b (the 21a review's L2): the message says the refusal is about the path and gives the rename that works for such a path in the index; the commands are run
   // here as printed (a wildcard that matches only the byte that is not UTF-8, and the blob id), and the renamed index then passes the path check
   assert.ok(r.out.includes('This refusal is about the path, not about a key in it.'), r.out);
-  assert.ok(r.out.includes('a\\xff.txt: git ls-files -s -- "a[^ -~].txt" ; git update-index --add --cacheinfo 100644,' + sha + ',<new name> ; git rm --cached -q -- "a[^ -~].txt"'), r.out);
+  assert.ok(r.out.includes('a\\xff.txt: git ls-files -s -- "a[^ -~].txt" ; git rm --cached -f -q -- "a[^ -~].txt" ; git update-index --add --cacheinfo 100644,' + sha + ',<new name>'), r.out); // order and -f since 21i
   assert.strictEqual(gitIn(['ls-files', '--', 'a[^ -~].txt']).split('\n').length, 2, 'the printed wildcard matches the two such paths and not ok.txt');
   // the same two files pushed in a commit
   const tree = gitIn(['write-tree']);
@@ -1414,6 +1414,35 @@ test('a path that is not valid UTF-8 and holds C1, line-separator or bidi charac
   const hits = gitIn(['ls-files', '-z', '--', glob[1]]).split(String.fromCharCode(0)).filter(Boolean);
   assert.strictEqual(hits.length, 1, 'the printed wildcard lists exactly one path: ' + JSON.stringify(hits));
   assert.ok(hits[0].endsWith('FAKE' + String.fromCodePoint(0x202e) + '.txt') && !hits[0].startsWith('xA'), 'and it is the forging path, not a neighbour one character apart');
+});
+
+// 21i P6 (CodeRabbit on two carriers, 21h D2 D3 D4): the printed rename recovery added the new name and THEN removed the old entries by wildcard, so a new name of the
+// same byte shape (a\xff\xfe.txt renamed to a + U+00E9 + .txt, two bytes each) was removed too; and `git rm --cached` refused when the staged blob differed from HEAD,
+// leaving both names. The old test checked the printed text only. Here the printed commands are RUN, as printed, in both cases.
+test('the printed rename recovery, run as printed, keeps the new name with the staged blob and removes only the old entry, also when the staged blob differs from HEAD -- RED before 21i', () => {
+  const dir = repo([{ 'README.md': 'plain\n' }]);
+  const gitIn = (args, input) => execFileSync('git', [...GIT_IDENTITY, '-C', dir, ...args], { input, timeout: 60000, env: gitEnv() }).toString().trim();
+  const blob = (s) => gitIn(['hash-object', '-w', '--stdin'], Buffer.from(s));
+  const old = Buffer.concat([Buffer.from('a'), Buffer.from([0xff, 0xfe]), Buffer.from('.txt')]);
+  const entry = (sha) => Buffer.concat([Buffer.from('100644 ' + sha + ' 0\t'), old, Buffer.from('\n')]);
+  gitIn(['update-index', '--index-info'], entry(blob('committed\n')));
+  gitIn(['update-ref', 'refs/heads/main', gitIn(['commit-tree', gitIn(['write-tree']), '-p', 'HEAD', '-m', 'odd name'])]);
+  const staged = blob('staged, not committed\n');
+  gitIn(['update-index', '--index-info'], entry(staged)); // the staged blob now differs from HEAD, and no working file exists
+  const listing = () => gitIn(['ls-files', '-s', '-z']).split(String.fromCharCode(0)).filter(Boolean).map((e) => e.replace(/ 0\t/, ' '));
+  const others = listing().filter((e) => !e.endsWith(' a' + String.fromCharCode(0xfffd, 0xfffd) + '.txt')); // every entry but the odd one (its name prints decoded)
+  assert.strictEqual(others.length, listing().length - 1, 'the odd entry is the one left out');
+  const r = run(dir);
+  assert.strictEqual(r.code, 1, r.out + r.err);
+  const line = /a\\xff\\xfe\.txt: (git ls-files .*?)(?: \| | \.\.\.|$)/m.exec(r.out);
+  assert.ok(line, 'the recovery is printed for the path: ' + r.out);
+  const fresh = 'a' + String.fromCodePoint(0xe9) + '.txt'; // two UTF-8 bytes after the a, as the old name has two bytes
+  for (const cmd of line[1].split(' ; ')) {
+    const argv = [...cmd.replace('<new name>', fresh).matchAll(/"([^"]*)"|(\S+)/g)].map((m) => m[1] ?? m[2]);
+    assert.strictEqual(argv[0], 'git', 'each printed command is a git command: ' + cmd);
+    spawnSync('git', [...GIT_IDENTITY, '-C', dir, ...argv.slice(1)], { timeout: 60000, env: gitEnv() }); // a refusal shows in the index below, as it would for the user
+  }
+  assert.deepStrictEqual(listing().sort(), [...others, '100644 ' + staged + ' ' + fresh].sort(), 'the new name holds the staged blob and mode, the old entry is gone, nothing else moved');
 });
 
 // 21i P1 (21g thread A, a carrier's pull request): the unit before a wide-spelled run was judged by ONE byte, so a key right after a non-ASCII character whose low
