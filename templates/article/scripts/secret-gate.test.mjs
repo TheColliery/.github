@@ -889,7 +889,10 @@ test('the bytes held for staged text are bounded: a text blob past the ceiling i
   assert.strictEqual(run(dir).code, 0, 'with no variable the same tree passes');
   assert.strictEqual(run(dir, [], '', { SECRET_GATE_MAX_HELD_BYTES: '999999999999' }).code, 0, 'a higher value is ignored: it cannot weaken the ceiling');
   const binary = repo([{ 'logo.png': Buffer.concat([Buffer.from([0, 1, 2, 3]), Buffer.alloc(300000, 7)]).toString('latin1'), 'README.md': 'hello\n' }]);
-  assert.strictEqual(run(binary, [], '', { SECRET_GATE_MAX_HELD_BYTES: '100000' }).code, 0, 'a binary-named binary blob is dropped as it streams and holds nothing');
+  // 21a: the ceiling is the tree's own text (the gate and the scanner this fixture commits, and README.md) plus the 8,000-byte probe, as in the held-bytes test below,
+  // never a fixed number the canon files can outgrow (100000 fell under them at 21a); a binary blob held whole would still cross it by 300 KB
+  const textOnly = fs.statSync(GATE).size + fs.statSync(LIB).size + 'hello\n'.length + 8000;
+  assert.strictEqual(run(binary, [], '', { SECRET_GATE_MAX_HELD_BYTES: String(textOnly) }).code, 0, 'a binary-named binary blob is dropped as it streams and holds nothing');
 });
 
 // t343 F5 (2026-11-18): a binary-looking NAME and a first 8,000 bytes without a NUL pattern read as wide were enough to skip a UTF-16 file whose wide text starts later: one ASCII character, then CJK text with no
@@ -1291,4 +1294,123 @@ test('binaries whose small 16-bit values run in both byte orders (a PE string ta
   }
   const r = run(repo([{ 'pe-like.dll': peLike }]));
   assert.strictEqual(r.code, 0, 'the gate passes the PE-shaped file: ' + r.out + r.err);
+});
+
+// 21a (Bankfire PR 70: CodeRabbit Verify's "false rejection of a longer UTF-16LE word at the 1 MiB window boundary", and CodeRabbit's thread on a key cut by a
+// window): the wide-spelled search runs in windows, and a window's text END satisfied a pattern's closing boundary, so a word too long to be a key, cut by the end,
+// was reported; and a key across the edge was reported at its shorter first sighting, a fingerprint an acknowledgment of the whole value never matches. Each match
+// now belongs to the one window that owns its first byte, and that window's text runs past it. The gate's stream probe uses the same windows.
+test('a wide-spelled word cut by a scan window is judged whole: a word too long to be a key is not reported, and a key across the edge keeps its whole fingerprint -- RED before 21a', async () => {
+  const { spelledHits, spelledProbe, fingerprint } = await import(pathToFileURL(LIB).href);
+  let seed = 5;
+  // bytes with no NUL and no character a spelling can hold, then a balanced sprinkle of NULs: not wide text, and no spelled run of their own
+  const fill = (n) => { const b = Buffer.alloc(n); for (let i = 0; i < n; i++) { seed = (seed * 1103515245 + 12345) >>> 0; b[i] = 0x80 | ((seed >>> 24) & 0x7f); } for (let q = 64; q < n; q += 97) b[q] = 0; return b; };
+  const le = (s) => Buffer.from(s, 'utf16le');
+  const W = 1 << 20;
+  const at = (chars, word) => Buffer.concat([fill(W - 2 * chars), le(word), Buffer.from([0x0a]), fill(4000)]); // the window edge falls after `chars` characters
+  const probe = (b) => { const r = spelledProbe(); for (let i = 0; i < b.length; i += 65536) r.feed(b.subarray(i, i + 65536)); r.end(); return r.found(); };
+  const long = 'AK' + 'IA' + 'ABCDEFGHIJKLMNOPQ'; // 17 body characters: one more than an AWS key id holds, so not a key
+  for (const chars of [20, 21, 4]) {
+    const b = at(chars, long);
+    assert.deepStrictEqual(spelledHits(b, 'f.bin'), [], 'a word too long to be a key, cut after ' + chars + ' characters, is not reported');
+    assert.strictEqual(probe(b), false, 'the gate probe agrees, cut after ' + chars);
+  }
+  const key = 'gl' + 'pat-' + 'aB3'.repeat(10);
+  const whole = fingerprint('f.bin', 'gitlab-pat', key);
+  for (const chars of [28, 30, 7]) {
+    const b = at(chars, key);
+    assert.deepStrictEqual(spelledHits(b, 'f.bin').map((h) => [h.line, h.pattern, h.fp]), [[1, 'gitlab-pat', whole]], 'a key across the edge after ' + chars + ' characters keeps its whole fingerprint');
+    assert.strictEqual(probe(b), true, 'the gate probe finds it, cut after ' + chars);
+  }
+  // inside one window, and in a file of one window, nothing changes
+  const small = Buffer.concat([fill(5000), le(key), Buffer.from([0x0a]), fill(4000)]);
+  assert.deepStrictEqual(spelledHits(small, 'f.bin').map((h) => h.fp), [whole]);
+  assert.strictEqual(probe(small), true);
+});
+
+// 21a (Bankfire PR 70, CodeRabbit on the gate's index listing): a path that is not valid UTF-8 was decoded to U+FFFD, so two such paths holding one key became one
+// string, one hit and one fingerprint, and one acknowledgment cleared both; the push side's patch headers decoded the same way. Such a path now fails the gate by
+// name, at commit and at push, and its hits are never given a fingerprint another path shares. A path that is valid UTF-8 keeps its fingerprint.
+test('a staged or pushed path that is not valid UTF-8 fails the gate by name instead of sharing a fingerprint with another path -- RED before 21a', () => {
+  const KEY2 = 'gh' + 'p_' + 'Q7w'.repeat(12);
+  const dir = repo([{ 'README.md': 'plain\n' }]);
+  const gitIn = (args, input) => execFileSync('git', [...GIT_IDENTITY, '-C', dir, ...args], { input, timeout: 60000, env: gitEnv() }).toString().trim();
+  const sha = gitIn(['hash-object', '-w', '--stdin'], Buffer.from('token = ' + KEY2 + '\n'));
+  const odd = (x) => Buffer.concat([Buffer.from('a'), Buffer.from([x]), Buffer.from('.txt')]);
+  const entry = (pathBytes) => Buffer.concat([Buffer.from('100644 ' + sha + ' 0\t'), pathBytes, Buffer.from('\n')]);
+  gitIn(['update-index', '--index-info'], Buffer.concat([entry(odd(0xff)), entry(odd(0xfe)), entry(Buffer.from('ok.txt'))]));
+  const r = run(dir);
+  assert.strictEqual(r.code, 1, r.out + r.err);
+  assert.ok(/2 staged path\(s\) are not valid UTF-8/.test(r.out), 'both paths named as unreadable: ' + r.out);
+  assert.ok(r.out.includes('a\\xff.txt') && r.out.includes('a\\xfe.txt'), 'each named by its bytes: ' + r.out);
+  assert.ok(!r.out.includes(String.fromCharCode(0xfffd)), 'no path is shown decoded to U+FFFD: ' + r.out);
+  assert.ok(r.out.includes('tree "ok.txt":1 github-token'), 'a valid path beside them is still scanned: ' + r.out);
+  // 21b (the 21a review's L2): the message says the refusal is about the path and gives the rename that works for such a path in the index; the commands are run
+  // here as printed (a wildcard that matches only the byte that is not UTF-8, and the blob id), and the renamed index then passes the path check
+  assert.ok(r.out.includes('This refusal is about the path, not about a key in it.'), r.out);
+  assert.ok(r.out.includes('a\\xff.txt: git ls-files -s -- "a[^ -~].txt" ; git update-index --add --cacheinfo 100644,' + sha + ',<new name> ; git rm --cached -q -- "a[^ -~].txt"'), r.out);
+  assert.strictEqual(gitIn(['ls-files', '--', 'a[^ -~].txt']).split('\n').length, 2, 'the printed wildcard matches the two such paths and not ok.txt');
+  // the same two files pushed in a commit
+  const tree = gitIn(['write-tree']);
+  const commit = gitIn(['commit-tree', tree, '-p', 'HEAD', '-m', 'odd names']);
+  gitIn(['update-ref', 'refs/heads/main', commit]);
+  const pushed = run(dir, ['--pre-push'], 'refs/heads/main ' + commit + ' refs/heads/main ' + ZERO + '\n');
+  assert.strictEqual(pushed.code, 1, pushed.out + pushed.err);
+  assert.ok(/a pushed file's path is not valid UTF-8 \(a\\x[ef][ef]\.txt\)/.test(pushed.out), 'the push names the path: ' + pushed.out);
+  assert.ok(!pushed.out.includes(String.fromCharCode(0xfffd)), 'no path is shown decoded to U+FFFD: ' + pushed.out);
+});
+
+// 21a (Bankfire PR 70, CodeRabbit on the gate's failure message): "committed on the branch you push" sent a user whose staged tree held a match to the pushed branch,
+// while the tree scan reads acknowledgments from HEAD. The message now names the tree each kind of hit is acknowledged in.
+test('the failure message says where each kind of hit is acknowledged: a tree hit in HEAD, a pushed hit in the pushed commit -- RED before 21a', () => {
+  const r = run(repo([{ 'k.txt': 'token = ' + 'gh' + 'p_' + 'Q7w'.repeat(12) + '\n' }]));
+  assert.strictEqual(r.code, 1, r.out + r.err);
+  assert.ok(r.out.includes('committed where the gate reads it: for a "tree" hit in HEAD (the commit checked out), for a "pushed" hit in the pushed commit'), r.out);
+  assert.ok(!r.out.includes('the branch you push'), r.out);
+});
+
+// 21b (the 21a review's M1): the test above cuts words at the OLD window edge (1 MiB), where the longer windows of 21a already save them, so a scanner that dropped the
+// owner rule (every window reporting every match it sees) still passed. A window's text now ENDS at its start + 1 MiB + 16 KiB, and only the owner rule keeps a word cut
+// there out: the next window owns it and sees it whole. The reviewer's vector, a 304-character word of github shape (past the pattern's 255 cap, so not a key), cut at the
+// first and second windows' text ends, in all four wide spellings. RED against the owner rule dropped (newedge.mjs, the 21a review).
+test('a wide-spelled word cut at a window\'s text end (1 MiB + 16 KiB past its start) is judged by the window that owns it, whole: not reported -- RED against the owner rule dropped', async () => {
+  const { spelledHits, spelledProbe } = await import(pathToFileURL(LIB).href);
+  const W = 1 << 20;
+  const END = W + 16384; // the first window's text end; the second's is W + END
+  const word = ' ' + 'g' + 'hp_' + 'aB3d'.repeat(75) + ' ';
+  const u32 = (s, little) => { const b = Buffer.alloc(s.length * 4); [...s].forEach((c, k) => (little ? b.writeUInt32LE(c.charCodeAt(0), k * 4) : b.writeUInt32BE(c.charCodeAt(0), k * 4))); return b; };
+  const spell = { LE16: Buffer.from(word, 'utf16le'), BE16: Buffer.from(word, 'utf16le').swap16(), LE32: u32(word, true), BE32: u32(word, false) };
+  const probe = (b) => { const r = spelledProbe(); for (let i = 0; i < b.length; i += 65536) r.feed(b.subarray(i, i + 65536)); r.end(); return r.found(); };
+  for (const [name, w] of Object.entries(spell)) {
+    for (const end of [END, W + END]) {
+      const b = Buffer.alloc(2 * W + END + 4096); // zeros: a NUL-bearing file that holds no run of its own
+      w.copy(b, end - 200); // 200 bytes of the word before the text end, the rest after
+      assert.deepStrictEqual(spelledHits(b, 'f.bin'), [], name + ', cut at ' + end + ': not reported');
+      assert.strictEqual(probe(b), false, name + ', cut at ' + end + ': the gate probe agrees');
+    }
+  }
+});
+
+// 21c (the 21b re-check's N1): the wildcard printed in the refusal kept a path's valid UTF-8 characters as they were, so a path holding U+009B (an 8-bit CSI), U+2028
+// (a line separator) or U+202E (a right-to-left override) sent them raw to the terminal, past the gate's own rule on escaping by category. The reviewer's path, built from
+// code points: every line of the output is printable ASCII, and the printed wildcard still selects that one path and not its neighbours one ordinary character apart.
+test('a path that is not valid UTF-8 and holds C1, line-separator or bidi characters prints as ASCII only, and its wildcard still selects it alone -- RED before 21c', () => {
+  const dir = repo([{ 'README.md': 'plain\n' }]);
+  const gitIn = (args, input) => execFileSync('git', [...GIT_IDENTITY, '-C', dir, ...args], { input, timeout: 60000, env: gitEnv() }).toString().trim();
+  const sha = gitIn(['hash-object', '-w', '--stdin'], Buffer.from('nothing here\n'));
+  const cp = (n) => Buffer.from(String.fromCodePoint(n), 'utf8');
+  const forging = Buffer.concat([Buffer.from('x'), Buffer.from([0xff]), cp(0x9b), Buffer.from('31m'), cp(0x2028), Buffer.from('FAKE'), cp(0x202e), Buffer.from('.txt')]);
+  const near = (c) => Buffer.concat([Buffer.from('x'), Buffer.from([0xff]), cp(0x9b), Buffer.from('31m'), cp(0x2028), Buffer.from('FAKE'), cp(0x202e), Buffer.from(c + '.txt')]);
+  const entry = (pathBytes) => Buffer.concat([Buffer.from('100644 ' + sha + ' 0\t'), pathBytes, Buffer.from('\n')]);
+  gitIn(['update-index', '--index-info'], Buffer.concat([entry(forging), entry(near('a')), entry(Buffer.concat([Buffer.from('xA'), forging.subarray(2)])), entry(Buffer.from('x1.txt'))]));
+  const r = run(dir);
+  assert.strictEqual(r.code, 1, r.out + r.err);
+  const out = r.out + r.err;
+  assert.ok(/^[\x20-\x7e\r\n]*$/.test(out), 'only printable ASCII and line ends reach the output: ' + JSON.stringify([...out].filter((c) => c < ' ' && c !== '\n' && c !== '\r' || c > '~').map((c) => 'U+' + c.codePointAt(0).toString(16))));
+  assert.strictEqual(out.trim().split(/\r?\n/).length, 1, 'one line: no path splits it');
+  const glob = /"(x\[\^ -~\][^"]*\.txt)"/.exec(r.out);
+  assert.ok(glob, 'a wildcard is printed for the path: ' + r.out);
+  const hits = gitIn(['ls-files', '-z', '--', glob[1]]).split(String.fromCharCode(0)).filter(Boolean);
+  assert.strictEqual(hits.length, 1, 'the printed wildcard lists exactly one path: ' + JSON.stringify(hits));
+  assert.ok(hits[0].endsWith('FAKE' + String.fromCodePoint(0x202e) + '.txt') && !hits[0].startsWith('xA'), 'and it is the forging path, not a neighbour one character apart');
 });

@@ -519,45 +519,72 @@ function spelledIn(text, onMatch) {
     }
   }
 }
-// The search over bytes that arrive in order, a piece at a time: each piece is searched in a window that opens SPELL_CARRY bytes before it, so a key cut by
-// a piece edge is seen whole and keeps the character before it, and a window holds at most SPELL_WINDOW + SPELL_CARRY bytes, whatever the file's size. A
-// window with no NUL, or no character a spelling can hold, is skipped (a run of zeros costs one scan for each). onMatch gets offsets in the whole stream; a
-// key that sits inside two windows is reported twice, so the caller keys by offset.
-const SPELL_CARRY = 16384; // four bytes a character: past any provider key the patterns accept whole, and the character before it
+// The search over bytes in windows of SPELL_WINDOW + SPELL_CARRY bytes, each starting SPELL_WINDOW after the one before, so neighbours overlap by SPELL_CARRY
+// and a window holds a bounded number of bytes whatever the file's size. 21a (Bankfire PR 70: CodeRabbit Verify's false rejection, and the fingerprint of a
+// key cut by a window): a match is reported by ONE window, the one that OWNS its first byte. A window owns from SPELL_EDGE bytes past its start (the first
+// owns from 0) up to SPELL_EDGE bytes past the next window's start (the last owns to the end), so the owners tile the file. The window's text runs on past
+// what it owns by SPELL_CARRY - SPELL_EDGE bytes, longer than any provider key the patterns accept whole: a match it owns ends inside its text, so a word cut
+// by the window's end (the end of the text satisfying a pattern's closing boundary) is never reported, and a key that crosses an edge is fingerprinted whole.
+// SPELL_EDGE bytes before what a window owns keep the character before a key in view, so a glued key is refused as anywhere. A window with no NUL, or no
+// character a spelling can hold, is skipped (a run of zeros costs one scan for each). Named gap (21a, reading 1): a match longer than SPELL_CARRY - SPELL_EDGE
+// bytes (an open-ended pattern run past 4,094 UTF-32 or 8,188 UTF-16 characters) is cut at its owner's text end, so it can be missed or fingerprinted short.
+// FINGERPRINTS THAT MOVED at 21a (7f15919), for a room that committed an acknowledgment of one: in a file that is not read as wide text and is larger than 1 MiB, a
+// wide-spelled match that crosses an offset k x 1 MiB (k >= 1) and whose cut prefix already matched a pattern (an open-ended or long body: openai-style, glpat, slack,
+// square) was fingerprinted on the cut value and is now fingerprinted on the whole value; and a match longer than SPELL_CARRY - SPELL_EDGE bytes that starts within
+// SPELL_EDGE bytes after such an offset was whole and is now cut (the named gap above). Every other fingerprint is unchanged; a 40-character github key across an
+// edge never moved, because its cut prefix never matched.
+const SPELL_CARRY = 16384;
 const SPELL_WINDOW = 1 << 20;
+const SPELL_EDGE = 8; // a UTF-32 unit and the character before it
 const SPELL_ANY = new RegExp(SPELL_CH);
-function spelledStream(onMatch) {
-  let carry = '';
-  let base = 0; // the stream offset of the window's first byte
-  return (piece) => {
-    for (let at = 0; at < piece.length; at += SPELL_WINDOW) {
-      const text = carry + piece.toString('latin1', at, Math.min(piece.length, at + SPELL_WINDOW));
-      const from = base;
-      if (text.indexOf(NUL) >= 0 && SPELL_ANY.test(text)) spelledIn(text, (pattern, value, pos) => onMatch(pattern, value, from + pos));
-      carry = text.slice(-SPELL_CARRY);
-      base = from + text.length - carry.length;
-    }
-  };
+// One window: text is its latin1 view, base its offset in the stream; first and last say whether it opens or closes the stream.
+function spelledWindow(text, base, first, last, onMatch) {
+  if (text.indexOf(NUL) < 0 || !SPELL_ANY.test(text)) return;
+  const from = first ? 0 : SPELL_EDGE;
+  const to = last ? text.length : SPELL_WINDOW + SPELL_EDGE;
+  spelledIn(text, (pattern, value, pos) => { if (pos >= from && pos < to) onMatch(pattern, value, base + pos); });
 }
-// The wide-spelled keys of one run of bytes that is not read as wide text: [{ line, pattern, fp }], each key once per place, in file order.
+// The wide-spelled keys of one run of bytes that is not read as wide text: [{ line, pattern, fp }], each key once, in file order.
 export function spelledHits(bytes, file = '') {
   if (bytes.indexOf(0) < 0) return [];
-  const found = new Map();
-  spelledStream((pattern, value, pos) => {
-    const k = pattern + NUL + pos;
-    if (!found.has(k)) found.set(k, { pattern, value, pos });
-  })(bytes);
-  if (!found.size) return [];
+  const seen = new Map(); // one hit a pattern and an offset: the 16-bit spellings overlap (big-endian text read one byte on is little-endian)
+  for (let at = 0; ; at += SPELL_WINDOW) {
+    const last = at + SPELL_WINDOW + SPELL_CARRY >= bytes.length;
+    spelledWindow(bytes.toString('latin1', at, last ? bytes.length : at + SPELL_WINDOW + SPELL_CARRY), at, at === 0, last, (pattern, value, pos) => {
+      const k = pattern + NUL + pos;
+      if (!seen.has(k)) seen.set(k, { pattern, value, pos });
+    });
+    if (last) break;
+  }
+  const found = [...seen.values()];
+  if (!found.length) return [];
   const breaks = [];
   for (let i = bytes.indexOf(0x0a); i >= 0; i = bytes.indexOf(0x0a, i + 1)) breaks.push(i);
   const lineAt = (pos) => { let lo = 0, hi = breaks.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (breaks[mid] < pos) lo = mid + 1; else hi = mid; } return lo + 1; };
-  return [...found.values()].sort((a, b) => a.pos - b.pos).map((h) => ({ line: lineAt(h.pos), pattern: h.pattern, fp: fingerprint(file, h.pattern, h.value) }));
+  return found.sort((a, b) => a.pos - b.pos).map((h) => ({ line: lineAt(h.pos), pattern: h.pattern, fp: fingerprint(file, h.pattern, h.value) }));
 }
-// The same search over a stream, for the gate: feed(piece) in order from the blob's first byte, then found() says whether any key was seen. No value leaves.
+// The same search over a stream, for the gate: feed(piece) in order from the blob's first byte, end() when the blob ends, then found() says whether any key
+// was seen. The windows are spelledHits' own, so the verdict equals spelledHits' on the whole blob; at most SPELL_WINDOW + SPELL_CARRY bytes and one piece
+// are held. No value leaves.
 export function spelledProbe() {
   let found = false;
-  const feed = spelledStream(() => { found = true; });
-  return { feed: (piece) => { if (!found) feed(piece); }, end() {}, found: () => found };
+  let pend = '';
+  let base = 0;
+  const hit = () => { found = true; };
+  return {
+    feed(piece) {
+      if (found) return;
+      pend += piece.toString('latin1');
+      // a window is run only once a byte past it has arrived, so it is known not to be the last
+      while (pend.length > SPELL_WINDOW + SPELL_CARRY && !found) {
+        spelledWindow(pend.slice(0, SPELL_WINDOW + SPELL_CARRY), base, base === 0, false, hit);
+        pend = pend.slice(SPELL_WINDOW);
+        base += SPELL_WINDOW;
+      }
+    },
+    end() { if (!found && (pend.length || base === 0)) spelledWindow(pend, base, base === 0, true, hit); pend = ''; },
+    found: () => found,
+  };
 }
 // extra: kinds the caller knows from the file's own committed mark (see scanPatch's bomOf); they count even where the bytes alone do not show them.
 export function wideKinds(bytes, extra = []) {
@@ -637,7 +664,7 @@ function decodedLineMap(bytes, breaks, { width, offset, le }) {
 }
 // The merge of one raw reading's hits with the wide readings' hits (readings in order, best first). Every raw hit keeps its pattern, fingerprint and place in the list, and is reported
 // at the line in the DECODED text where its bytes sit (20b): its raw line mapped through the reading that first holds its key, or through the best reading when none does, and
-// through the byte-order mark's reading whenever the file has a mark (lineOf, built by scanBytes; 20d). No
+// through the byte-order mark's reading when the file has a mark that fits it (lineOf, built by scanBytes, states the rule once; 20d, 20e). No
 // pairing by count or by ordinal: 20a's equal-count rule and the ordinal before it each named a wrong line in some shape (t352; the da5b7e9 review's two cases), because the raw
 // and the decoded readings can find different occurrences of one key. A key only a wide reading found is added once, at that reading's line, as before. The count and the
 // fingerprint of every raw hit are unchanged.
@@ -677,9 +704,10 @@ export function scanBytes(bytes, file = '') {
   for (let i = 0; i < bytes.length; i++) if (bytes[i] === 0x0a) breaks.push(i);
   const maps = new Map(); // one line map per reading, built when a hit first needs it
   const mapOf = (ri) => { if (!maps.has(ri)) maps.set(ri, decodedLineMap(bytes, breaks, layouts[ri])); return maps.get(ri); };
-  // Which reading a raw hit's line is mapped through. A file with a byte-order mark: the mark's reading, for EVERY raw hit (20d, CodeRabbit on Kolwen PR 197: the first
-  // reading that holds a key can be one the file is not written in, little-endian bytes appended to a big-endian file, and a little-endian reading counts none of its
-  // newlines). A file with no mark: the reading that first holds the key (a UTF-32 file shifted off its grid by a stray byte is decoded only at its own offset), and for a
+  // Which reading a raw hit's line is mapped through (lineOf, below, is the rule; this says why). A file with a byte-order mark: the mark's reading (20d, CodeRabbit on
+  // Kolwen PR 197: the first reading that holds a key can be one the file is not written in, little-endian bytes appended to a big-endian file, and a little-endian reading
+  // counts none of its newlines), EXCEPT where the reading that holds the key decodes MORE newlines than the mark's (20e: a mark that lies about the body, or a stray byte
+  // after a true mark); then the key's reading names the line. A file with no mark: the reading that first holds the key (a UTF-32 file shifted off its grid by a stray byte is decoded only at its own offset), and for a
   // key no reading holds (20c, the re-check's N1), of the readings at offset 0 (a file starts on a character), the one that decodes the most newlines (the first of a tie); a
   // reading at another offset can count a 0x0A inside a character as a newline. Named gap: a file with NO mark that mixes byte orders still takes its key's first reading.
   let marked;
@@ -708,6 +736,9 @@ export function scanBytes(bytes, file = '') {
   };
   return mergeWide(hits, wideTexts(bytes).map((text) => scanText(text, file)), (h) => `${h.pattern} ${h.fp}`, lineOf);
 }
+// The patch is a --unified=0 stream (scanPatch's contract; the push scan's own `git show --unified=0`): a hunk holds no context line, so its added lines are
+// contiguous from the hunk's + line and an added line's number is that line plus its index among them, here and in scanPatchText (21a, reading 4: a patch with context
+// lines is outside the contract and would be numbered from its first context line).
 // The wide reading of a patch held as BYTES: the added lines of each hunk are joined back into the byte run they were cut from (git cuts at every
 // 0x0A byte, even inside a wide character, and marks a last line with no line break with a "\ No newline" line), and each run the rule reads as
 // wide text is decoded and scanned, and its UTF-8 reading scanned again with its NULs removed; a run past WIDE_DECODE_MAX_BYTES gets the
@@ -749,7 +780,7 @@ function scanPatchWide(bytes, opts) {
     if (l.startsWith('\0COMMIT ')) { flush(); commit = l.slice(8).trim(); file = null; inHeader = false; fileHunks = 0; continue; }
     if (l.startsWith('diff --git ') || l.startsWith('diff --cc ')) { flush(); file = null; inHeader = true; fileHunks = 0; continue; }
     if (inHeader && l.startsWith('+++ ')) {
-      const p = Buffer.from(dropOneTab(l.slice(4)), 'latin1').toString('utf8');
+      const p = utf8Path(Buffer.from(dropOneTab(l.slice(4)), 'latin1'));
       file = p === '/dev/null' ? null : unquotePath(p).replace(/^b\//, '');
       if (file !== null && skip && skip(file)) file = null;
       continue;
@@ -797,7 +828,15 @@ function unquotePath(p) {
     for (const x of Buffer.from(ch, 'utf8')) bytes.push(x);
     i += ch.length;
   }
-  return Buffer.from(bytes).toString('utf8');
+  return utf8Path(Buffer.from(bytes));
+}
+// A path's bytes as text, or an EPATHBYTES error naming them when they are not UTF-8 (21a, Bankfire PR 70): decoded, two such paths would become one name, and their
+// hits one fingerprint that one acknowledgment clears for both. The caller (the gate's push scan) turns the error into a failure that names the path.
+function utf8Path(bytes) {
+  const s = bytes.toString('utf8');
+  if (Buffer.from(s, 'utf8').equals(bytes)) return s;
+  const name = bytes[0] === 0x62 && bytes[1] === 0x2f ? bytes.subarray(2) : bytes; // without the b/ of a diff header
+  throw Object.assign(new Error('a path is not valid UTF-8'), { code: 'EPATHBYTES', path: Buffer.from(name) });
 }
 
 // The probe for "binary" by content, git's own text-or-binary rule (xdiff buffer_is_binary): a NUL byte among the first 8,000 bytes.
