@@ -1138,4 +1138,17 @@ const FROM_18A = [
     `${HEAD}function h(x) { if (x) return { GIT_CONFIG_NOSYSTEM: '1' }; return {}; }\nspawnSync('git', ['status'], { env: { ...h(flag), PATH: process.env.PATH, GIT_CONFIG_NOSYSTEM: '1' } });\n`,
   ] },
 ];
-export const VECTORS = [...FROM_TIPPLE, ...ROUND3, ...FROM_FACE, ...FROM_09F, ...FROM_14H, ...FROM_18A];
+// 21i (CodeRabbit on a carrier, 21h D9): a second argument held in a name declared once as an OBJECT literal is the options, so node ignores the env of the third
+// argument; the census read it as the args array and certified the call. Such a name is now a finding; a name declared as an array literal, and a parameter
+// (rule 12), pass as before.
+const FROM_21I = [
+  { id: 'CT-21i', src: 'CoalTipple t361 #13', expect: 'fail', texts: [
+    `${HEAD}${IMPORT_HELPER}const opts = { cwd: '.' };\nspawnSync('git', opts, { env: gitEnv() });\n`,
+    `${HEAD}${IMPORT_HELPER}const opts = {};\nexecFileSync('git', opts, { env: gitEnv() });\n`,
+  ] },
+  { id: 'P-CT-21i', src: 'CoalTipple t361 #13', expect: 'pass', texts: [
+    `${HEAD}${IMPORT_HELPER}const a = ['status'];\nspawnSync('git', a, { env: gitEnv() });\n`,
+    `${HEAD}${IMPORT_HELPER}const run = (a) => spawnSync('git', a, { env: gitEnv() });\n`,
+  ] },
+];
+export const VECTORS = [...FROM_TIPPLE, ...ROUND3, ...FROM_FACE, ...FROM_09F, ...FROM_14H, ...FROM_18A, ...FROM_21I];
