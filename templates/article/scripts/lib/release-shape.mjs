@@ -78,18 +78,30 @@ export function makeLatestFlag(tagVersion, latestTag, pkg = '') {
 // UMB3-193 round 3: with `exact` the entry is found by its own label wherever it sits (the back-fill of a tag cut before its entry reads the default
 // branch's CHANGELOG, which has newer entries above that version); without it the top (or the package's first) entry must be the one.
 const headingLabel = (line) => line.match(/^##\s*\[([^\]]+)\]/)?.[1];
+// 21i (21h D11): the lines with every fenced code block blanked, the fence lines too (CommonMark: a fence of 3 or more backticks or tildes, indented up to 3 spaces, closed
+// by a fence of the same character at least as long with nothing after it). Every heading search reads these; the entry's text is still cut from the lines as written.
+function maskFences(lines) {
+  let open = null;
+  return lines.map((l) => {
+    const m = l.match(/^ {0,3}(`{3,}|~{3,})/);
+    if (open) { if (m && m[1][0] === open[0] && m[1].length >= open.length && /^ {0,3}(`+|~+)\s*$/.test(l)) open = null; return ''; }
+    if (m) { open = m[1]; return ''; }
+    return l;
+  });
+}
 
 // true when the file has a heading for exactly this version (and package): the test that decides whether the tag's own tree can be read.
 export function hasEntryHeading(changelogText, tagVersion, pkg = '') {
   const label = labelOf(pkg, tagVersion);
-  return String(changelogText).split(/\r?\n/).some((l) => headingLabel(l) === label);
+  return maskFences(String(changelogText).split(/\r?\n/)).some((l) => headingLabel(l) === label);
 }
 
 export function extractChangelogEntry(changelogText, tagVersion, { previousStable = '', pkg = '', exact = false } = {}) {
   const lines = changelogText.split(/\r?\n/);
+  const bare = maskFences(lines); // heading searches only
   const label = labelOf(pkg, tagVersion);
   const headingRe = pkg ? new RegExp(`^##\\s*\\[${pkg} `) : /^##\s*\[/;
-  const headingIdx = exact ? lines.findIndex((l) => headingLabel(l) === label) : lines.findIndex((l) => headingRe.test(l));
+  const headingIdx = exact ? bare.findIndex((l) => headingLabel(l) === label) : bare.findIndex((l) => headingRe.test(l));
   if (headingIdx === -1) {
     if (exact) throw new ChangelogShapeError(`CHANGELOG.md has no [${label}] heading ("## [${label}] - YYYY-MM-DD")`);
     throw new ChangelogShapeError(pkg ? `CHANGELOG.md has no [${pkg} X.Y.Z] heading ("## [${pkg} X.Y.Z] - YYYY-MM-DD")` : 'CHANGELOG.md has no version heading ("## [X.Y.Z] - YYYY-MM-DD")');
@@ -108,14 +120,15 @@ export function extractChangelogEntry(changelogText, tagVersion, { previousStabl
   const version = tagVersion;
 
   const rest = lines.slice(headingIdx + 1);
+  const restBare = bare.slice(headingIdx + 1);
   if (previousStable) {
     const stableRe = pkg ? new RegExp(`^##\\s*\\[${pkg} (\\d+\\.\\d+\\.\\d+)\\]`) : /^##\s*\[(\d+\.\d+\.\d+)\]/;
-    const nextStable = rest.map((l) => l.match(stableRe)).find(Boolean)?.[1];
+    const nextStable = restBare.map((l) => l.match(stableRe)).find(Boolean)?.[1];
     if (nextStable !== previousStable) {
       throw new ChangelogShapeError(`the [${label}] entry is followed by ${nextStable ? `[${labelOf(pkg, nextStable)}]` : 'no stable heading'}, but the previous stable tag is ${tagOf(pkg, previousStable)} -- an entry heading was replaced instead of inserted above, or the previous release's entry is missing`);
     }
   }
-  const nextHeadingIdx = rest.findIndex((l) => /^##\s/.test(l));
+  const nextHeadingIdx = restBare.findIndex((l) => /^##\s/.test(l));
   const body = nextHeadingIdx === -1 ? rest : rest.slice(0, nextHeadingIdx);
 
   const firstContentIdx = body.findIndex((l) => l.trim() !== '');
@@ -132,7 +145,7 @@ export function extractChangelogEntry(changelogText, tagVersion, { previousStabl
   }
 
   const afterSummary = body.slice(firstContentIdx + 1);
-  const sectionsStart = afterSummary.findIndex((l) => /^###\s/.test(l));
+  const sectionsStart = restBare.slice(firstContentIdx + 1, body.length).findIndex((l) => /^###\s/.test(l));
   const sectionsBody = sectionsStart === -1 ? '' : afterSummary.slice(sectionsStart).join('\n').trim();
   // The lead paragraph: whatever sits between the summary line and the first "### " heading. It is where a longer explanation goes, so the
   // summary (the title) can stay short; it rides into the body right after the Lead.
