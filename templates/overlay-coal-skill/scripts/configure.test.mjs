@@ -87,3 +87,25 @@ test('a malformed config is backed up through the same temp-and-rename route: a 
   assert.strictEqual(fs.readFileSync(b.cfg, 'utf8'), '{oops', 'a config that cannot be backed up is left byte for byte');
   assert.ok(/FAIL .*\.bak: .*the malformed config .* was left untouched and nothing was written/.test(blocked.out), blocked.out);
 });
+
+test('the config is read bounded, and a folder at its path is refused with a reason: a sentence, never a raw errno, and nothing written -- RED before 21d', () => {
+  const { dir, cfg } = project();
+  fs.mkdirSync(cfg);
+  const r = run(dir);
+  assert.strictEqual(r.code, 1, r.out);
+  assert.ok(r.out.includes('it is a folder, not a config file -- remove or rename that folder and re-run; nothing was written'), r.out);
+  assert.ok(!/EISDIR|EPERM/.test(r.out), 'no raw errno: ' + r.out);
+
+  const big = project();
+  const body = '{"pad":"' + 'x'.repeat(1100000) + '"}\n';
+  fs.writeFileSync(big.cfg, body);
+  const rb = run(big.dir);
+  assert.strictEqual(rb.code, 1, rb.out.slice(0, 300));
+  assert.ok(rb.out.includes('config is larger than 1 MiB, so it is not read; nothing was written'), rb.out.slice(0, 300));
+  assert.strictEqual(fs.readFileSync(big.cfg, 'utf8'), body, 'an oversize config is left byte for byte');
+
+  const bom = project();
+  fs.writeFileSync(bom.cfg, String.fromCharCode(0xfeff) + '{"keep":1}\n');
+  assert.strictEqual(run(bom.dir).code, 0);
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(bom.cfg, 'utf8')), { keep: 1, mode: 'auto' }, 'a leading byte-order mark is still read past');
+});

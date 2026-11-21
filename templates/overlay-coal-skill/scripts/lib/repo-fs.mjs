@@ -13,6 +13,38 @@ export class RepoWriteRefused extends Error {
 
 const TEMP_FIX = 'remove the leftover temp file or fix the folder';
 
+// The largest config the tool reads. A config over this size is refused before anything parses it (the exemplar's number, CoalFace's MAX_CONFIG_BYTES).
+export const MAX_CONFIG_BYTES = 1024 * 1024;
+
+// Reads a config through ONE descriptor: the file type and the size are judged on that descriptor (fstat), then the same descriptor is read, so nothing is read that was not
+// judged. A directory keeps EISDIR, a non-file gets ENOTFILE, an oversize file is refused with ECONFIGTOOLARGE and a message that names it.
+export function readConfigBounded(file) {
+  const fd = fs.openSync(file, 'r');
+  try {
+    const st = fs.fstatSync(fd);
+    if (!st.isFile()) {
+      const e = new Error(`${file}: not a regular file`);
+      e.code = st.isDirectory() ? 'EISDIR' : 'ENOTFILE';
+      throw e;
+    }
+    if (st.size > MAX_CONFIG_BYTES) {
+      const e = new Error(`${file}: config is larger than 1 MiB (${MAX_CONFIG_BYTES} bytes), so it is not read`);
+      e.code = 'ECONFIGTOOLARGE';
+      throw e;
+    }
+    const buf = Buffer.alloc(st.size);
+    let got = 0;
+    while (got < st.size) {
+      const n = fs.readSync(fd, buf, got, st.size - got, got);
+      if (n === 0) break;
+      got += n;
+    }
+    return buf.subarray(0, got).toString('utf8');
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 // node/runtime.md section 5: a state file the tool reads back later is NEVER rewritten in place. A plain writeFileSync follows a link (or a hard link) at the target and is torn
 // by a kill mid-write. This writes a per-pid temp in the SAME directory, opened O_EXCL (a brand-new name, so a link planted at the temp name is never followed), then renames it
 // over the target: a rename REPLACES the directory entry, it does not write through whatever the entry names, and a reader sees the old file or the new one. The failure branch

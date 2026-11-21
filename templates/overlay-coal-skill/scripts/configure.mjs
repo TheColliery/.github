@@ -17,7 +17,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { CONFIG_SCHEMA, validateValue } from './lib/config-schema.mjs';
-import { writeFileAtomic, RepoWriteRefused } from './lib/repo-fs.mjs';
+import { writeFileAtomic, RepoWriteRefused, readConfigBounded } from './lib/repo-fs.mjs';
 
 function findGitRoot(startDir) {
   let dir = path.resolve(startDir);
@@ -94,7 +94,23 @@ function main() {
 
   let cfg = {};
   let rawConfig = null;
-  try { rawConfig = fs.readFileSync(readPath, 'utf8').replace(/^﻿/, ''); } catch {}
+  // 21d: a folder at the config path is refused with a reason before anything is read or written (never a raw EISDIR at the write), and the read is bounded
+  // (lib/repo-fs.mjs readConfigBounded: one descriptor, its type and size judged before it is read); a leading byte-order mark is read past by its code point
+  let st = null;
+  try { st = fs.lstatSync(readPath); } catch {}
+  if (st && st.isDirectory()) {
+    console.error(`FAIL ${readPath}: it is a folder, not a config file -- remove or rename that folder and re-run; nothing was written`);
+    process.exit(1);
+  }
+  try {
+    rawConfig = readConfigBounded(readPath);
+    if (rawConfig.charCodeAt(0) === 0xfeff) rawConfig = rawConfig.slice(1);
+  } catch (e) {
+    if (e.code === 'ECONFIGTOOLARGE') {
+      console.error(`FAIL ${readPath}: config is larger than 1 MiB, so it is not read; nothing was written`);
+      process.exit(1);
+    }
+  }
   if (rawConfig !== null) {
     try {
       const parsed = JSON.parse(rawConfig);
