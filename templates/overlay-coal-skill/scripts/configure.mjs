@@ -94,6 +94,7 @@ function main() {
 
   let cfg = {};
   let rawConfig = null;
+  let rawBytes = null; // the bytes the bounded read took (21e): the backup is written from them
   // 21d: a folder at the config path is refused with a reason before anything is read or written (never a raw EISDIR at the write), and the read is bounded
   // (lib/repo-fs.mjs readConfigBounded: one descriptor, its type and size judged before it is read); a leading byte-order mark is read past by its code point
   let st = null;
@@ -103,7 +104,8 @@ function main() {
     process.exit(1);
   }
   try {
-    rawConfig = readConfigBounded(readPath);
+    rawBytes = readConfigBounded(readPath);
+    rawConfig = rawBytes.toString('utf8');
     if (rawConfig.charCodeAt(0) === 0xfeff) rawConfig = rawConfig.slice(1);
   } catch (e) {
     if (e.code === 'ECONFIGTOOLARGE') {
@@ -128,8 +130,9 @@ function main() {
       process.exitCode = 1;
       try {
         // 21d: the backup goes through the same temp-then-rename route as the config (lib/repo-fs.mjs), never a copyFileSync that writes through a link at the
-        // destination; it takes the mode of the config it copies, as copyFileSync gave it
-        writeFileAtomic(readPath + '.bak', fs.readFileSync(readPath), readPath);
+        // destination; it takes the mode of the config it copies, as copyFileSync gave it. 21e: written from the bytes the bounded read holds, never a second read
+        // by name (unbounded, through a link, and possibly other bytes than the ones that failed to parse)
+        writeFileAtomic(readPath + '.bak', rawBytes, readPath);
         console.warn(`Warning: existing config is malformed — backed it up to ${readPath}.bak and rebuilding.`);
       } catch (e2) {
         // a config that cannot be backed up is NOT overwritten: the malformed original may be the only copy the user can repair

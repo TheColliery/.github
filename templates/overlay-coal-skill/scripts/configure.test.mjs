@@ -136,3 +136,15 @@ test('a config that exists but cannot be read is refused by name, never replaced
   assert.strictEqual(fs.readFileSync(cfg, 'utf8'), body, 'the config is left byte for byte');
   assert.ok(!fs.existsSync(cfg + '.bak'), 'and no backup is made');
 });
+
+// 21e item 2 (the 21d review's MEDIUM): the backup re-read the config BY NAME, unbounded and through a link, so it could back up other bytes than the ones that failed
+// to parse. The backup is now written from the bytes the bounded read already holds. The witness stands in for a file changed between the two reads: a preload that
+// answers any by-name read of the config with other bytes; the backup must still hold the malformed bytes that were read.
+test('a malformed config is backed up from the bytes the bounded read holds, never re-read by name -- RED before 21e', () => {
+  const { dir, cfg } = project();
+  fs.writeFileSync(cfg, '{oops');
+  const pre = path.join(tmp('reread'), 'reread.mjs');
+  fs.writeFileSync(pre, "import fs from 'node:fs';\nconst orig = fs.readFileSync;\nfs.readFileSync = function (f, ...rest) {\n  if (typeof f === 'string' && f.endsWith('.json')) return Buffer.from('CHANGED');\n  return orig.call(this, f, ...rest);\n};\n");
+  const r = run(dir, ['--mode', 'auto'], pre);
+  assert.strictEqual(fs.readFileSync(cfg + '.bak', 'utf8'), '{oops', 'the backup holds the bytes that failed to parse: ' + r.out);
+});

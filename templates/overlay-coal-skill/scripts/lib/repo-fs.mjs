@@ -39,7 +39,7 @@ export function readConfigBounded(file) {
       if (n === 0) break;
       got += n;
     }
-    return buf.subarray(0, got).toString('utf8');
+    return buf.subarray(0, got); // the BYTES (21e): the caller decodes them, and a backup is written from these same bytes, never from a second read by name
   } finally {
     fs.closeSync(fd);
   }
