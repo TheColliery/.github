@@ -17,6 +17,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { CONFIG_SCHEMA, validateValue } from './lib/config-schema.mjs';
+import { writeFileAtomic, RepoWriteRefused, readConfigBounded } from './lib/repo-fs.mjs';
 
 function findGitRoot(startDir) {
   let dir = path.resolve(startDir);
@@ -29,7 +30,8 @@ function findGitRoot(startDir) {
   return startDir;
 }
 
-function printHelp() {
+// usage goes to stdout when asked for (--help), to stderr when it answers an error (21e: an unknown flag; coding-style, User-Invoked CLI Surface)
+function printHelp(out = console.log) {
   const lines = [
     '{{TOOL}} Configurator Utility',
     'Usage: node scripts/configure.mjs [options]',
@@ -42,7 +44,7 @@ function printHelp() {
   }
   lines.push(`  ${'--global'.padEnd(48)} Write ~/.claude/.{{TOOL}}.json (the global layer) instead of the project config`);
   lines.push(`  ${'--help, -h'.padEnd(48)} Show this help message`);
-  console.log(lines.join('\n'));
+  out(lines.join('\n'));
 }
 
 // Parse one raw CLI value against a spec. Returns { value } or { error }.
@@ -93,7 +95,40 @@ function main() {
 
   let cfg = {};
   let rawConfig = null;
-  try { rawConfig = fs.readFileSync(readPath, 'utf8').replace(/^﻿/, ''); } catch {}
+  let rawBytes = null; // the bytes the bounded read took (21e): the backup is written from them
+  // 21d: a folder at the config path is refused with a reason before anything is read or written (never a raw EISDIR at the write), and the read is bounded
+  // (lib/repo-fs.mjs readConfigBounded: one descriptor, its type and size judged before it is read); a leading byte-order mark is read past by its code point
+  let st = null;
+  try { st = fs.lstatSync(readPath); } catch {}
+  if (st && st.isDirectory()) {
+    console.error(`FAIL ${readPath}: it is a folder, not a config file -- remove or rename that folder and re-run; nothing was written`);
+    process.exit(1);
+  }
+  try {
+    rawBytes = readConfigBounded(readPath);
+    rawConfig = rawBytes.toString('utf8');
+    if (rawConfig.charCodeAt(0) === 0xfeff) rawConfig = rawConfig.slice(1);
+  } catch (e) {
+    if (e.code === 'ECONFIGTOOLARGE') {
+      console.error(`FAIL ${readPath}: config is larger than 1 MiB, so it is not read; nothing was written`);
+      process.exit(1);
+    }
+    // 21e: only "the file does not exist" means an empty config. Any other read failure (no permission, a file that is not a regular file) is refused: a config
+    // that cannot be read must never be replaced by one holding only the flag just set, which would lose every other key it held
+    if (e.code !== 'ENOENT') {
+      console.error(`FAIL ${readPath}: it exists but could not be read (${e.code || 'error'}) -- give yourself read permission on it, or move it away to start a new config, and re-run; nothing was written`);
+      process.exit(1);
+    }
+  }
+  // 21e (the 21d review's MEDIUM on read-only configs), ruled REFUSE: the write is a rename, which replaces the directory entry, so a config its user made read-only
+  // would be replaced on POSIX where the old in-place write refused (and on Windows the rename failed with a sentence that did not name the cause). An existing config that is
+  // not writable is refused here, before anything is backed up or written; accessSync(W_OK) sees the read-only bits on POSIX and the read-only attribute on Windows.
+  if (rawBytes !== null) {
+    try { fs.accessSync(readPath, fs.constants.W_OK); } catch {
+      console.error(`FAIL ${readPath}: it is read-only -- make it writable (chmod u+w on Linux and macOS, clear the read-only attribute on Windows) and re-run; nothing was written`);
+      process.exit(1);
+    }
+  }
   if (rawConfig !== null) {
     try {
       const parsed = JSON.parse(rawConfig);
@@ -104,10 +139,16 @@ function main() {
     } catch (e) {
       process.exitCode = 1;
       try {
-        fs.copyFileSync(readPath, readPath + '.bak');
+        // 21d: the backup goes through the same temp-then-rename route as the config (lib/repo-fs.mjs), never a copyFileSync that writes through a link at the
+        // destination; it takes the mode of the config it copies, as copyFileSync gave it. 21e: written from the bytes the bounded read holds, never a second read
+        // by name (unbounded, through a link, and possibly other bytes than the ones that failed to parse)
+        writeFileAtomic(readPath + '.bak', rawBytes, readPath);
         console.warn(`Warning: existing config is malformed — backed it up to ${readPath}.bak and rebuilding.`);
-      } catch {
-        console.warn('Warning: existing config is malformed. Overwriting.');
+      } catch (e2) {
+        // a config that cannot be backed up is NOT overwritten: the malformed original may be the only copy the user can repair
+        const why = e2 instanceof RepoWriteRefused ? e2.message : `${readPath}.bak: the backup could not be written (${e2 && e2.code ? e2.code : e2.message}) -- free that path and re-run`;
+        console.error(`FAIL ${why}; the malformed config ${readPath} was left untouched and nothing was written`);
+        process.exit(1);
       }
     }
   }
@@ -122,7 +163,7 @@ function main() {
     const spec = flagMap.get(args[i]);
     if (!spec) {
       console.error(`Error: Unrecognized option '${args[i]}'`);
-      printHelp();
+      printHelp(console.error);
       process.exit(1);
     }
     const parsed = parseValue(spec, args[++i]);
@@ -135,7 +176,12 @@ function main() {
 
   try {
     fs.mkdirSync(path.dirname(readPath), { recursive: true });
-    fs.writeFileSync(readPath, JSON.stringify(cfg, null, 2) + '\n', 'utf8');
+    // 21d: through a temp file and a rename (lib/repo-fs.mjs), never in place: a link at the config is replaced, not written through, and a kill mid-write leaves the old one
+    try { writeFileAtomic(readPath, JSON.stringify(cfg, null, 2) + '\n'); } catch (e) {
+      if (!(e instanceof RepoWriteRefused)) throw e;
+      console.error(`FAIL ${e.message}`);
+      process.exit(1);
+    }
     console.log(`Successfully updated configuration in: ${readPath}`);
     console.log(JSON.stringify(cfg, null, 2));
   } catch (e) {
