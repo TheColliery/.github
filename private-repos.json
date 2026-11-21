@@ -1,0 +1,4 @@
+{
+  "about": "The org's private repositories, the list the canon's private-name wall (scripts/template-workflows.test.mjs) reads: no file a public repository is born with or copies may name one. Kept here, outside every carried set, so the list is data with one owner and no carried file holds it. Re-derive from the org's custom property repo-kind (GET /orgs/TheColliery/properties/values, the repositories whose repo-kind is private-working) and the template repository of that kind; names are matched without case, so a name also covers a longer name that holds it.",
+  "repos": ["Bankfire", "Pithead", "Chotmeter", "ChotUnitDatum", "template-private-working"]
+}

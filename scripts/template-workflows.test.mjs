@@ -2508,7 +2508,9 @@ test('release-notes.mjs and its test describe the previous stable tag the way th
 // file holds them as data; the wizard and the private-working kind name them in prose), matched without case, so Bankfire also covers Bankfire-gate.
 // 21i: also the community files GitHub serves as the org's defaults on every public repository (this repository's .github/, less its own workflows/ and dependabot.yml)
 // and the org profile (profile/). A canon file outside scripts/ that has a byte-equal template twin is covered through that twin, which is the copy carried (F2).
-const PRIVATE_REPOS = ['Bankfire', 'Pithead', 'Chotmeter', 'ChotUnitDatum', 'template-private-working'];
+// 21i P13: the names are data with one owner, private-repos.json at the root (read here, outside every carried set, which the wall test asserts).
+const PRIVATE_REPOS_FILE = path.join(ROOT, 'private-repos.json');
+const PRIVATE_REPOS = (() => { const raw = fs.readFileSync(PRIVATE_REPOS_FILE, 'utf8'); return JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw).repos; })();
 const PUBLIC_KINDS = ['published-code', 'article', 'overlay-coal-skill', 'overlay-llm-deploy'];
 function publicCarriedFiles(root) {
   const out = new Set();
@@ -2554,6 +2556,8 @@ test('no file a public repository is born with or copies names a private reposit
   assert.ok(files.includes(path.join(ROOT, 'scripts', 'lib', 'secret-scan.mjs')) && files.includes(path.join(ROOT, 'scripts', 'secret-gate.mjs')), 'the carried canon scanner and gate are in the set (not vacuous)');
   assert.ok(files.includes(path.join(ROOT, '.github', 'SECURITY.md')) && files.includes(path.join(ROOT, 'profile', 'README.md')), 'the org-default community files and the org profile are in the set (21i)');
   for (const kind of PUBLIC_KINDS) assert.ok(fs.existsSync(path.join(ROOT, 'templates', kind)), `the public kind ${kind} exists, so the walk never skips it here`);
+  assert.ok(Array.isArray(PRIVATE_REPOS) && PRIVATE_REPOS.length >= 5 && PRIVATE_REPOS.every((n) => typeof n === 'string' && n.length >= 3), 'private-repos.json lists the names (not vacuous)');
+  assert.ok(!files.includes(PRIVATE_REPOS_FILE), 'the list itself is in no carried set');
   assert.deepStrictEqual(privateNameHits(ROOT, files), [], 'a private repository is named in a file a public repository receives: tell the provenance in words');
 });
 // 21i (the 21f INSPECT's four MEDIUM gaps): the set missed the org-default community files GitHub shows on every public repository and the org profile (F1); the match
