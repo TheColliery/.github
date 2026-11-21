@@ -151,13 +151,20 @@ test('a malformed config is backed up from the bytes the bounded read holds, nev
 
 // 21i P11 (the 21d review's LOW, confirmed on Windows): accessSync(W_OK) sees only the read-only attribute on Windows, never an ACL, and the rename needs DELETE on the
 // target, not WRITE, so a config its user denied write to (icacls /deny <user>:(WD)) was replaced. Windows only; elsewhere the read-only test above is the same case.
+// 21n (a red on main's Windows runners): the hosted Windows image disables UAC (actions/runner-images, images/windows/scripts/build/Configure-BaseImage.ps1,
+// Disable-UserAccessControl, ConsentPromptBehaviorAdmin 0) and runs the job as an administrator; there the config was replaced, so configure's own r+ open succeeded
+// after the deny: the deny did not bind that process. The leg now PROBES the capability instead of naming a platform: it runs where icacls sets a deny that an open for
+// writing then meets, and skips visibly, with the reason, where icacls is missing or the deny does not bind.
 test('an existing config whose owner is denied write by an ACL is refused like a read-only one -- RED before 21i', (t) => {
-  if (process.platform !== 'win32') { t.skip('an ACL deny is a Windows leg; the read-only test covers POSIX'); return; }
   const { dir, cfg } = project();
   const body = '{"keep":1,"mode":"off"}\n';
   fs.writeFileSync(cfg, body);
   const icacls = (...a) => spawnSync('icacls', [cfg, ...a], { timeout: 30000, stdio: 'ignore', env: { SystemRoot: process.env.SystemRoot, PATH: process.env.PATH } });
-  icacls('/deny', `${os.userInfo().username}:(WD)`);
+  const denied = icacls('/deny', `${os.userInfo().username}:(WD)`);
+  if (denied.error || denied.status !== 0) { t.skip(`no ACL deny can be set here (icacls ${denied.error ? denied.error.code : 'exit ' + denied.status}); the read-only test covers this case`); return; }
+  let binds = false;
+  try { fs.closeSync(fs.openSync(cfg, 'r+')); } catch { binds = true; }
+  if (!binds) { icacls('/remove:d', os.userInfo().username); t.skip('the ACL deny does not bind this process (an open for writing still succeeds, as for an elevated administrator on a runner with UAC disabled), so the refusal cannot be witnessed here'); return; }
   let r;
   try { r = run(dir, ['--mode', 'auto']); } finally { icacls('/remove:d', os.userInfo().username); }
   assert.strictEqual(r.code, 1, r.out);
