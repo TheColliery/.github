@@ -2536,6 +2536,13 @@ function publicCarriedFiles(root) {
   const served = path.join(root, '.github');
   if (fs.existsSync(served)) for (const e of fs.readdirSync(served, { withFileTypes: true })) if (e.name !== 'workflows' && e.name !== 'dependabot.yml') { const p = path.join(served, e.name); if (e.isDirectory()) walk(p); else out.add(p); }
   if (fs.existsSync(path.join(root, 'profile'))) walk(path.join(root, 'profile'));
+  // 21j (the 21i INSPECT's LOW): GitHub also serves the org's default community files from this repository's root and docs/ (its list of names: CODE_OF_CONDUCT,
+  // CONTRIBUTING, FUNDING.yml, GOVERNANCE, SECURITY, SUPPORT, the issue, pull request and discussion templates), so those places are read too, by that list of names
+  const COMMUNITY = /^(CODE_OF_CONDUCT|CONTRIBUTING|GOVERNANCE|SECURITY|SUPPORT|PULL_REQUEST_TEMPLATE)(\.(md|txt|rst))?$|^FUNDING\.yml$|^(ISSUE_TEMPLATE|DISCUSSION_TEMPLATE|PULL_REQUEST_TEMPLATE)$/i;
+  for (const base of [root, path.join(root, 'docs')]) {
+    if (!fs.existsSync(base)) continue;
+    for (const e of fs.readdirSync(base, { withFileTypes: true })) if (COMMUNITY.test(e.name)) { const p = path.join(base, e.name); if (e.isDirectory()) walk(p); else out.add(p); }
+  }
   return [...out].sort();
 }
 // The hits of the names in the files: in each file's path, and in its text, read as UTF-16 when it opens with a UTF-16 byte-order mark (21i, the 21f INSPECT's F3).
@@ -2555,6 +2562,7 @@ test('no file a public repository is born with or copies names a private reposit
   const files = publicCarriedFiles(ROOT);
   assert.ok(files.includes(path.join(ROOT, 'scripts', 'lib', 'secret-scan.mjs')) && files.includes(path.join(ROOT, 'scripts', 'secret-gate.mjs')), 'the carried canon scanner and gate are in the set (not vacuous)');
   assert.ok(files.includes(path.join(ROOT, '.github', 'SECURITY.md')) && files.includes(path.join(ROOT, 'profile', 'README.md')), 'the org-default community files and the org profile are in the set (21i)');
+  assert.ok(files.includes(path.join(ROOT, 'FUNDING.yml')), 'the root FUNDING.yml, an org default GitHub serves, is in the set (21j)');
   for (const kind of PUBLIC_KINDS) assert.ok(fs.existsSync(path.join(ROOT, 'templates', kind)), `the public kind ${kind} exists, so the walk never skips it here`);
   assert.ok(Array.isArray(PRIVATE_REPOS) && PRIVATE_REPOS.length >= 5 && PRIVATE_REPOS.every((n) => typeof n === 'string' && n.length >= 3), 'private-repos.json lists the names (not vacuous)');
   assert.ok(!files.includes(PRIVATE_REPOS_FILE), 'the list itself is in no carried set');
@@ -2573,11 +2581,12 @@ test('the private-name wall reads the org-default community files and the profil
     put('.github/SECURITY.md', `see ${secret}\n`); // F1
     put('.github/workflows/ci.yml', `${secret}\n`); // this repository's own CI, served to no other repository: not in the set
     put('profile/README.md', `${secret}\n`); // F1
+    put('FUNDING.yml', `github: ${secret}\n`); // 21j: a default community file at the root, which GitHub serves as well as the ones in .github/
     put('templates/article/x.md', 'built from the template-private-working kind\n'); // F4
     const files = publicCarriedFiles(root);
     assert.ok(!files.includes(path.join(root, '.github', 'workflows', 'ci.yml')), 'the repository\'s own workflows are not served to other repositories');
     const hits = privateNameHits(root, files);
-    for (const want of [`templates/article/${secret.toLowerCase()}-notes.md (path) ${secret}`, `templates/article/wide.txt:1 ${secret}`, `.github/SECURITY.md:1 ${secret}`, `profile/README.md:1 ${secret}`, 'templates/article/x.md:1 template-private-working']) {
+    for (const want of [`templates/article/${secret.toLowerCase()}-notes.md (path) ${secret}`, `templates/article/wide.txt:1 ${secret}`, `.github/SECURITY.md:1 ${secret}`, `profile/README.md:1 ${secret}`, `FUNDING.yml:1 ${secret}`, 'templates/article/x.md:1 template-private-working']) {
       assert.ok(hits.includes(want), `${want} is found: ${JSON.stringify(hits)}`);
     }
     assert.ok(PRIVATE_REPOS.includes('template-private-working'), 'the list names the private template repository');
