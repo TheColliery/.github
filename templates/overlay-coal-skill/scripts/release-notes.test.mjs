@@ -214,6 +214,16 @@ test('release-notes.mjs: the parent\'s RELEASE_TAG, PREVIOUS_STABLE_TAG, LATEST_
 // tag) and fails a summary whose announcement title would overflow GitHub's 200-character ceiling; the band stays an advisory warning.
 const checkEntry = (summaryLen) => '## [1.2.0] - 2026-10-04\n\n' + 'Word '.repeat(Math.ceil(summaryLen / 5)).slice(0, summaryLen).trimEnd() + '.\n\n### Added\n- x\n';
 
+// 21i P10 (CodeRabbit on a carrier, 21h D18): a line break inside the top `## [...]` label made the label regex return null, and destructuring it threw a raw stack.
+test('release-notes.mjs --check: a line break inside the top heading label fails by name, exit 1, with no stack trace -- RED before 21i', () => {
+  const dir = scratchWithLib();
+  fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), '## [1.2\n.0] - 2026-10-04\n\nWord.\n\n### Added\n- x\n');
+  const res = run(dir, {}, ['--check', '--repo', 'CoalBoard']);
+  assert.equal(res.status, 1, res.stdout + res.stderr);
+  assert.match(res.stderr, /^release-notes --check: /m, 'a named failure line: ' + res.stderr);
+  assert.doesNotMatch(res.stderr, /^\s+at /m, 'no stack frame: ' + res.stderr);
+});
+
 test('release-notes.mjs --check: a summary whose announcement title fits passes (exit 0) and prints what it checked', () => {
   const dir = scratchWithLib();
   fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), checkEntry(60));
