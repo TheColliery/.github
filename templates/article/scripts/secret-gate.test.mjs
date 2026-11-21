@@ -1697,7 +1697,9 @@ test('a failure after the add says the new name is staged beside the old one, ne
   assert.deepStrictEqual(rows(), [...before, '100644 ' + odd + ' 0\trenamed.txt'].sort(), 'both names are staged on the one blob');
   const [finish, undo] = printedCommands(r.out);
   assert.ok(finish && undo, 'the finish and the undo commands are printed: ' + r.out);
-  assert.ok(finish.includes('--drop-twin=' + oddName.toString('hex') + ':' + odd) && undo.includes('--drop-twin=' + Buffer.from('renamed.txt').toString('hex') + ':' + odd), 'each names its entry by exact bytes: ' + r.out);
+  // 21m: each names BOTH entries by exact bytes: the one to drop, then the one that must remain, then the blob
+  const newHex = Buffer.from('renamed.txt').toString('hex');
+  assert.ok(finish.includes('--drop-twin=' + oddName.toString('hex') + ':' + newHex + ':' + odd) && undo.includes('--drop-twin=' + newHex + ':' + oddName.toString('hex') + ':' + odd), 'each names the entry to drop and the one to keep: ' + r.out);
   // the re-run of the printed rename says why it is refused, and points at the same two commands
   const again = run(dir, ['--rename-odd=' + oddName.toString('hex') + ':' + odd, '--to=renamed.txt']);
   assert.notStrictEqual(again.code, 0, again.out);
@@ -1716,10 +1718,13 @@ test('the undo command removes the new entry and leaves the old one; --drop-twin
   assert.ok(undo, r.out);
   assert.strictEqual(run(dir, undo.split(' ').slice(2)).code, 0);
   assert.ok(index().equals(before), 'the index is as it was before the rename');
-  const alone = run(dir, ['--drop-twin=' + oddName.toString('hex') + ':' + odd]);
+  // the finish pasted after the undo names an entry to keep that is gone, so it is refused (21m)
+  const alone = run(dir, ['--drop-twin=' + oddName.toString('hex') + ':' + Buffer.from('renamed.txt').toString('hex') + ':' + odd]);
   assert.strictEqual(alone.code, 1, alone.out);
-  assert.match(alone.out, /no other staged entry holds/, alone.out);
+  assert.match(alone.out, /the entry to keep, "renamed\.txt", is not staged/, alone.out);
   assert.ok(index().equals(before), 'and nothing was removed');
+  const old = run(dir, ['--drop-twin=' + oddName.toString('hex') + ':' + odd]);
+  assert.strictEqual(old.code, 64, 'the two-part form of 21l names no entry to keep, so it is a usage error: ' + old.out + old.err);
 });
 test('a read-back that finds more than the one new entry names every extra one, says another run may have touched the index, and never prints success -- RED before 21l', () => {
   const { dir, odd, index } = renameFixture();
@@ -1747,4 +1752,57 @@ test('an unmerged odd entry is refused for its stage, not for a blob it does hol
   assert.strictEqual(r.code, 1, r.out);
   assert.match(r.out, /unmerged \(stage 1\)/, r.out);
   assert.doesNotMatch(r.out, new RegExp('not ' + odd.slice(0, 12)), 'the blob is not given as the reason: ' + r.out);
+});
+
+// 21m (the 21i INSPECT's re-check of 21l, round 4 granted by main): --drop-twin took ANY other entry holding the blob as the twin, so with an empty odd file beside an
+// empty .gitkeep (one blob, e69de29b...) the Finish and then the Undo both ran, and the rescued file was left under neither of its names. The command now names BOTH
+// entries, the one to drop and the one that must remain, and refuses unless both are staged, both hold the blob, and they are different entries, one of them a path
+// that is not valid UTF-8 (the rename's own pair). The printed Finish names (old, keep new) and the Undo (new, keep old), so whichever runs first, the other is refused.
+const emptyFixture = () => {
+  const dir = repo([{ 'README.md': 'plain\n', '.gitkeep': '' }]);
+  const gitIn = (args, input) => execFileSync('git', [...GIT_IDENTITY, '-C', dir, ...args], { input, timeout: 60000, env: gitEnv() });
+  const empty = gitIn(['hash-object', '-w', '--stdin'], Buffer.alloc(0)).toString().trim(); // the same blob as .gitkeep
+  gitIn(['update-index', '--index-info'], Buffer.concat([Buffer.from('100644 ' + empty + ' 0\t'), oddName, Buffer.from('\n')]));
+  const names = () => gitIn(['ls-files', '-s', '-z']).toString('latin1').split(String.fromCharCode(0)).filter(Boolean).map((x) => x.slice(x.indexOf('\t') + 1)).sort();
+  return { dir, empty, names };
+};
+test('an empty odd file beside an empty .gitkeep: after the Finish the Undo is refused, after the Undo the Finish is refused, and one of the two names always remains -- RED before 21m', () => {
+  for (const order of [['finish', 'undo'], ['undo', 'finish']]) {
+    const { dir, empty, names } = emptyFixture();
+    const r = run(dir, ['--rename-odd=' + oddName.toString('hex') + ':' + empty, '--to=renamed.txt'], '', lockedRemoval());
+    assert.notStrictEqual(r.code, 0, r.out);
+    const [finish, undo] = printedCommands(r.out);
+    const cmd = { finish, undo };
+    const first = run(dir, cmd[order[0]].split(' ').slice(2));
+    assert.strictEqual(first.code, 0, order[0] + ' runs: ' + first.out + first.err);
+    const second = run(dir, cmd[order[1]].split(' ').slice(2));
+    assert.strictEqual(second.code, 1, order[1] + ' after ' + order[0] + ' is refused: ' + second.out);
+    assert.match(second.out, /FAIL DROP: .*nothing was changed/, second.out);
+    const left = names();
+    const oddLatin = oddName.toString('latin1');
+    assert.strictEqual([left.includes(oddLatin), left.includes('renamed.txt')].filter(Boolean).length, 1, order.join(' then ') + ': exactly one of the two names remains: ' + JSON.stringify(left));
+    assert.ok(left.includes('.gitkeep') && left.includes('README.md'), 'and the other files are as they were');
+  }
+});
+test('--drop-twin keeps only the entry it names: another file with the same blob is no substitute, and the pair must be the rename\'s shape -- RED before 21m', () => {
+  const { dir, empty, names } = emptyFixture();
+  const odd = oddName.toString('hex');
+  const hex = (s) => Buffer.from(s).toString('hex');
+  const before = names();
+  const refused = [
+    [`--drop-twin=${odd}:${hex('renamed.txt')}:${empty}`, /the entry to keep, "renamed\.txt", is not staged/], // the named keep is gone; .gitkeep holds the blob but is not named
+    [`--drop-twin=${odd}:${hex('README.md')}:${empty}`, /"README\.md" is staged with blob/], // named, but it holds another blob
+    [`--drop-twin=${odd}:${odd}:${empty}`, /the same entry/],
+    [`--drop-twin=${hex('.gitkeep')}:${hex('README.md')}:${empty}`, /exactly one of the two is a path that is not valid UTF-8/], // both valid: not a rename's pair
+  ];
+  for (const [arg, said] of refused) {
+    const r = run(dir, [arg]);
+    assert.strictEqual(r.code, 1, arg + ': ' + r.out + r.err);
+    assert.match(r.out, said, arg + ': ' + r.out);
+    assert.deepStrictEqual(names(), before, arg + ': nothing was removed');
+  }
+  // the ruling: a pair the user names explicitly, the odd entry dropped and .gitkeep kept, is accepted: its bytes stay staged under the entry it named
+  const named = run(dir, [`--drop-twin=${odd}:${hex('.gitkeep')}:${empty}`]);
+  assert.strictEqual(named.code, 0, named.out + named.err);
+  assert.deepStrictEqual(names(), before.filter((x) => x !== oddName.toString('latin1')), 'only the named entry was dropped, and the named one kept');
 });

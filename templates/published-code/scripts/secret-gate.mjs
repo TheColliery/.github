@@ -34,11 +34,11 @@
 import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 
-const USAGE = 'usage: node scripts/secret-gate.mjs [--pre-push [--remote=<name>]] | --rename-odd=<hex>:<blob> --to=<new name> | --drop-twin=<hex>:<blob> | -h\n'
+const USAGE = 'usage: node scripts/secret-gate.mjs [--pre-push [--remote=<name>]] | --rename-odd=<hex>:<blob> --to=<new name> | --drop-twin=<drop hex>:<keep hex>:<blob> | -h\n'
   + '  scans the staged files (the index); with --pre-push also every commit being pushed (git\'s ref lines on stdin)\n'
   + '  --rename-odd renames, in the index only, the one staged path that is not valid UTF-8 named by its bytes as hex and its blob (a refusal prints it)\n'
   + '  a rename stopped after its add (a kill prints nothing) leaves both names staged on one blob: run it again, and its refusal prints\n'
-  + '  the --drop-twin=<hex>:<blob> commands that finish it or undo it\n'
+  + '  the --drop-twin=<drop hex>:<keep hex>:<blob> commands that finish it or undo it (each names the entry it removes and the one that must remain)\n'
   + '  example: node scripts/secret-gate.mjs\n'
   + '  exit 0 clean · 1 a hit or a scan that could not run · 64 usage error';
 const ACKS = 'secret-scan.acks';
@@ -388,12 +388,12 @@ function readIndexEntries() {
   return out;
 }
 // The command that removes one staged entry, named by its exact bytes and blob, ASCII only so it pastes in any shell (21l).
-const dropTwinCmd = (bytes, sha) => `node scripts/secret-gate.mjs --drop-twin=${bytes.toString('hex')}:${sha}`;
+const dropTwinCmd = (drop, keep, sha) => `node scripts/secret-gate.mjs --drop-twin=${drop.toString('hex')}:${keep.toString('hex')}:${sha}`; // 21m: names both entries
 // What a rename stopped after its add leaves (21l): both names staged on one blob, nothing lost, and the two commands that settle it.
 const bothStaged = (raw, toBytes, sha) => [
   `the index now holds ${esc(toBytes.toString('utf8'))} staged beside ${showBytes(raw)}, both on blob ${sha.slice(0, 12)}, so nothing is lost. Run one of these:`,
-  `  Finish the rename (remove the old entry): ${dropTwinCmd(raw, sha)}`,
-  `  Undo it (remove the new entry): ${dropTwinCmd(toBytes, sha)}`,
+  `  Finish the rename (remove the old entry): ${dropTwinCmd(raw, toBytes, sha)}`,
+  `  Undo it (remove the new entry): ${dropTwinCmd(toBytes, raw, sha)}`,
 ].join('\n');
 function renameOdd(spec, to) {
   const m = /^((?:[0-9a-f]{2})+):([0-9a-f]{40,64})$/.exec(spec);
@@ -451,23 +451,33 @@ function renameOdd(spec, to) {
 }
 // A name for a message: valid UTF-8 as a quoted string, anything else byte by byte.
 const showBytesOrName = (b) => (Buffer.from(b.toString('utf8'), 'utf8').equals(b) ? esc(b.toString('utf8')) : showBytes(b));
-// --drop-twin=<hex>:<blob> (21l): remove the one stage-0 entry whose path bytes are <hex> and whose blob is <blob>, only while ANOTHER stage-0 entry holds the same
-// blob, so the blob stays staged under that other name and nothing is lost. It finishes or undoes a rename stopped after its add (the two commands a refusal prints).
+// --drop-twin=<drop hex>:<keep hex>:<blob> (21l, both entries named since 21m): remove the stage-0 entry whose path bytes are <drop hex>, only while the stage-0 entry
+// whose path bytes are <keep hex> is staged with the same <blob>, so the blob stays staged under that named entry and nothing is lost. The two must be different entries
+// and the rename's own pair: exactly one of them a path that is not valid UTF-8. Another file that happens to hold the same blob (every empty file shares one) is never
+// taken in place of the named entry (the 21i INSPECT's re-check of 21l: with any same-blob entry as the twin, the Finish and the Undo both ran and the rescued file was
+// left under neither name). It finishes or undoes a rename stopped after its add: the Finish names (old, keep new), the Undo (new, keep old), so after either one the
+// other is refused, the entry it must keep being gone.
 function dropTwin(spec) {
-  const m = /^((?:[0-9a-f]{2})+):([0-9a-f]{40,64})$/.exec(spec);
-  if (!m) { console.error(`secret-gate: --drop-twin takes <path as hex>:<blob>, as the gate prints it, not ${esc(spec)}`); process.exitCode = 64; return; }
-  const raw = Buffer.from(m[1], 'hex');
+  const m = /^((?:[0-9a-f]{2})+):((?:[0-9a-f]{2})+):([0-9a-f]{40,64})$/.exec(spec);
+  if (!m) { console.error(`secret-gate: --drop-twin takes <drop hex>:<keep hex>:<blob>, as the gate prints it, not ${esc(spec)}`); process.exitCode = 64; return; }
+  const drop = Buffer.from(m[1], 'hex');
+  const keep = Buffer.from(m[2], 'hex');
+  const sha = m[3];
   const fail = (why) => { console.log(`FAIL DROP: ${why}; nothing was changed`); process.exitCode = 1; };
+  if (drop.equals(keep)) return fail(`the entry to drop and the entry to keep are the same entry, ${showBytesOrName(drop)}`);
+  const odd = (b) => !Buffer.from(b.toString('utf8'), 'utf8').equals(b);
+  if (odd(drop) === odd(keep)) return fail(`exactly one of the two is a path that is not valid UTF-8 in the pair a rename leaves; ${showBytesOrName(drop)} and ${showBytesOrName(keep)} are not that pair`);
   const before = readIndexEntries();
-  const target = before.find((e) => e.name.equals(raw) && e.stage === '0');
-  if (!target) return fail(`no staged path ${showBytesOrName(raw)}`);
-  if (target.sha !== m[2]) return fail(`${showBytesOrName(raw)} is staged with blob ${target.sha.slice(0, 12)}, not ${m[2].slice(0, 12)}`);
-  const twin = before.find((e) => e !== target && e.stage === '0' && e.sha === m[2]);
-  if (!twin) return fail(`no other staged entry holds blob ${m[2].slice(0, 12)}, so removing ${showBytesOrName(raw)} would unstage it`);
-  gitIn(['update-index', '-z', '--index-info'], { input: Buffer.concat([Buffer.from(`0 ${m[2]}\t`), raw, Buffer.from([0])]) });
+  const target = before.find((e) => e.name.equals(drop) && e.stage === '0');
+  if (!target) return fail(`no staged path ${showBytesOrName(drop)}`);
+  if (target.sha !== sha) return fail(`${showBytesOrName(drop)} is staged with blob ${target.sha.slice(0, 12)}, not ${sha.slice(0, 12)}`);
+  const kept = before.find((e) => e.name.equals(keep) && e.stage === '0');
+  if (!kept) return fail(`the entry to keep, ${showBytesOrName(keep)}, is not staged, so removing ${showBytesOrName(drop)} could leave the file under neither name`);
+  if (kept.sha !== sha) return fail(`${showBytesOrName(keep)} is staged with blob ${kept.sha.slice(0, 12)}, not ${sha.slice(0, 12)}, so it does not keep the bytes of ${showBytesOrName(drop)}`);
+  gitIn(['update-index', '-z', '--index-info'], { input: Buffer.concat([Buffer.from(`0 ${sha}\t`), drop, Buffer.from([0])]) });
   const after = readIndexEntries();
-  if (after.some((e) => e.name.equals(raw))) { console.log(`FAIL DROP: ${showBytesOrName(raw)} is still staged after its removal`); process.exitCode = 1; return; }
-  console.log(`secret-gate: removed ${showBytesOrName(raw)} from the index; ${showBytesOrName(twin.name)} still stages blob ${m[2].slice(0, 12)}`);
+  if (after.some((e) => e.name.equals(drop))) { console.log(`FAIL DROP: ${showBytesOrName(drop)} is still staged after its removal`); process.exitCode = 1; return; }
+  console.log(`secret-gate: removed ${showBytesOrName(drop)} from the index; ${showBytesOrName(keep)} still stages blob ${sha.slice(0, 12)}`);
 }
 const renameArg = args.find((a) => a.startsWith('--rename-odd='));
 const dropArg = args.find((a) => a.startsWith('--drop-twin='));
