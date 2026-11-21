@@ -1390,3 +1390,27 @@ test('a wide-spelled word cut at a window\'s text end (1 MiB + 16 KiB past its s
     }
   }
 });
+
+// 21c (the 21b re-check's N1): the wildcard printed in the refusal kept a path's valid UTF-8 characters as they were, so a path holding U+009B (an 8-bit CSI), U+2028
+// (a line separator) or U+202E (a right-to-left override) sent them raw to the terminal, past the gate's own rule on escaping by category. The reviewer's path, built from
+// code points: every line of the output is printable ASCII, and the printed wildcard still selects that one path and not its neighbours one ordinary character apart.
+test('a path that is not valid UTF-8 and holds C1, line-separator or bidi characters prints as ASCII only, and its wildcard still selects it alone -- RED before 21c', () => {
+  const dir = repo([{ 'README.md': 'plain\n' }]);
+  const gitIn = (args, input) => execFileSync('git', [...GIT_IDENTITY, '-C', dir, ...args], { input, timeout: 60000, env: gitEnv() }).toString().trim();
+  const sha = gitIn(['hash-object', '-w', '--stdin'], Buffer.from('nothing here\n'));
+  const cp = (n) => Buffer.from(String.fromCodePoint(n), 'utf8');
+  const forging = Buffer.concat([Buffer.from('x'), Buffer.from([0xff]), cp(0x9b), Buffer.from('31m'), cp(0x2028), Buffer.from('FAKE'), cp(0x202e), Buffer.from('.txt')]);
+  const near = (c) => Buffer.concat([Buffer.from('x'), Buffer.from([0xff]), cp(0x9b), Buffer.from('31m'), cp(0x2028), Buffer.from('FAKE'), cp(0x202e), Buffer.from(c + '.txt')]);
+  const entry = (pathBytes) => Buffer.concat([Buffer.from('100644 ' + sha + ' 0\t'), pathBytes, Buffer.from('\n')]);
+  gitIn(['update-index', '--index-info'], Buffer.concat([entry(forging), entry(near('a')), entry(Buffer.concat([Buffer.from('xA'), forging.subarray(2)])), entry(Buffer.from('x1.txt'))]));
+  const r = run(dir);
+  assert.strictEqual(r.code, 1, r.out + r.err);
+  const out = r.out + r.err;
+  assert.ok(/^[\x20-\x7e\r\n]*$/.test(out), 'only printable ASCII and line ends reach the output: ' + JSON.stringify([...out].filter((c) => c < ' ' && c !== '\n' && c !== '\r' || c > '~').map((c) => 'U+' + c.codePointAt(0).toString(16))));
+  assert.strictEqual(out.trim().split(/\r?\n/).length, 1, 'one line: no path splits it');
+  const glob = /"(x\[\^ -~\][^"]*\.txt)"/.exec(r.out);
+  assert.ok(glob, 'a wildcard is printed for the path: ' + r.out);
+  const hits = gitIn(['ls-files', '-z', '--', glob[1]]).split(String.fromCharCode(0)).filter(Boolean);
+  assert.strictEqual(hits.length, 1, 'the printed wildcard lists exactly one path: ' + JSON.stringify(hits));
+  assert.ok(hits[0].endsWith('FAKE' + String.fromCodePoint(0x202e) + '.txt') && !hits[0].startsWith('xA'), 'and it is the forging path, not a neighbour one character apart');
+});

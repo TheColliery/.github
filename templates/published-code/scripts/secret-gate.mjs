@@ -48,32 +48,19 @@ const known = (a) => a === '--pre-push' || a.startsWith('--remote=');
 // text in a terminal is escaped BY CATEGORY (Cc, Cf, Zl, Zp), never by a list (CWE-117, log injection).
 const unit4 = (c) => `${BACKSLASH}u${c.charCodeAt(0).toString(16).padStart(4, '0')}`;
 const esc = (s) => JSON.stringify(String(s)).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, (c) => c.split('').map(unit4).join(''));
-// A path whose bytes are not UTF-8, shown as bytes (21a): printable ASCII as it is, every other byte, a backslash and a quote as \xNN. The result is plain ASCII.
-const showBytes = (b) => [...b].map((x) => (x >= 0x20 && x <= 0x7e && x !== 0x5c && x !== 0x22 ? String.fromCharCode(x) : `${BACKSLASH}x${x.toString(16).padStart(2, '0')}`)).join('');
-// The same path as a git wildcard the user can type in any shell between double quotes (21b): a byte that is not UTF-8 is [^ -~] (one byte outside printable ASCII,
-// so a neighbour such as ab.txt beside a\xff.txt is not matched; measured with git for Windows), a valid UTF-8 character stays, and an ASCII character a shell or
-// git's wildcards could read ($ % ! " ` \ * ? [ ]) is ? (any one byte). The printed advice lists the matches first, so a wider match is seen before anything is removed.
-const UTF8_LEN = (b, i) => {
-  const c = b[i];
-  if (c < 0x80) return 1;
-  const n = c >= 0xc2 && c <= 0xdf ? 2 : c >= 0xe0 && c <= 0xef ? 3 : c >= 0xf0 && c <= 0xf4 ? 4 : 0;
-  if (!n || i + n > b.length) return 0;
-  for (let k = 1; k < n; k++) if ((b[i + k] & 0xc0) !== 0x80) return 0;
-  const d = b[i + 1];
-  if ((c === 0xe0 && d < 0xa0) || (c === 0xed && d > 0x9f) || (c === 0xf0 && d < 0x90) || (c === 0xf4 && d > 0x8f)) return 0;
-  return n;
-};
-const globOf = (b) => {
-  let out = '';
-  for (let i = 0; i < b.length;) {
-    const n = UTF8_LEN(b, i);
-    if (!n) { out += '[^ -~]'; i++; continue; }
-    const ch = b.subarray(i, i + n).toString('utf8');
-    out += n === 1 && !/[A-Za-z0-9 ._/+,=@~-]/.test(ch) ? '?' : ch;
-    i += n;
-  }
-  return out;
-};
+// A path whose bytes are not UTF-8, printed (21a, 21c): every printed form of it is built BYTE BY BYTE by one helper whose output is printable ASCII only, so no byte
+// of the path, nor any character it decodes to (a C1 control such as U+009B, a line separator, a bidi override), ever reaches the terminal raw (the CWE-117 rule above,
+// which the wildcard of 21b broke by keeping valid UTF-8 characters as they were; the 21b re-check's N1).
+const asciiOf = (b, keep, other) => [...b].map((x) => (keep(x) ? String.fromCharCode(x) : other(x))).join('');
+const PRINTABLE = (x) => x >= 0x20 && x <= 0x7e;
+// shown: printable ASCII as it is, every other byte, a backslash and a quote as \xNN
+const showBytes = (b) => asciiOf(b, (x) => PRINTABLE(x) && x !== 0x5c && x !== 0x22, (x) => `${BACKSLASH}x${x.toString(16).padStart(2, '0')}`);
+// as a git wildcard the user can type in any shell between double quotes (21b): a letter, digit or one of " ._/+,=@~-" as it is; an ASCII character a shell or git's
+// wildcards could read ($ % ! " ` \ * ? [ ]) is ? (any one byte); every byte outside printable ASCII, of a valid UTF-8 character or not, is [^ -~] (one byte outside
+// printable ASCII, so a neighbour one ordinary character apart, such as ab.txt beside a\xff.txt, is not matched; measured with git for Windows). The printed advice
+// lists the matches first, so a wider match is seen before anything is removed.
+const SAFE_GLOB = /[A-Za-z0-9 ._/+,=@~-]/;
+const globOf = (b) => asciiOf(b, (x) => PRINTABLE(x) && SAFE_GLOB.test(String.fromCharCode(x)), (x) => (PRINTABLE(x) ? '?' : '[^ -~]'));
 // A hook runs with GIT_DIR, GIT_WORK_TREE, GIT_PREFIX and others that aim git at the repository the hook was started for.
 // Every git call here drops them (the gate runs from the repository root and finds its repository from there), except
 // GIT_INDEX_FILE, which names the index a commit is made from and is the thing commit mode must read, and GIT_CEILING_DIRECTORIES, which only NARROWS where git
