@@ -72,7 +72,8 @@ function repo(commits, { withLib = true } = {}) {
 
 // The environment of the gate under test, a NODE child and not a git call: the sandbox environment, NODE_OPTIONS by name (a heap cap and a preload of the runner must reach it), a
 // HOME of its own, and whatever the test plants on top (a GIT_DIR a hook inherited).
-const gateEnv = (dir, extraEnv = {}) => ({ ...gitEnv(), NODE_OPTIONS: process.env.NODE_OPTIONS, HOME: dir, USERPROFILE: dir, ...extraEnv });
+// TEMP, TMP and TMPDIR are written out (the values gitEnv() already gives), so the canon's child-env census reads the sandbox by name (21i).
+const gateEnv = (dir, extraEnv = {}) => ({ ...gitEnv(), NODE_OPTIONS: process.env.NODE_OPTIONS, HOME: dir, USERPROFILE: dir, TEMP: SANDBOX, TMP: SANDBOX, TMPDIR: SANDBOX, ...extraEnv });
 
 function run(dir, args = [], input = '', extraEnv = {}, timeout = 60000) {
   const r = spawnSync(process.execPath, ['--max-old-space-size=512', path.join(dir, 'scripts', 'secret-gate.mjs'), ...args], {
@@ -1413,4 +1414,23 @@ test('a path that is not valid UTF-8 and holds C1, line-separator or bidi charac
   const hits = gitIn(['ls-files', '-z', '--', glob[1]]).split(String.fromCharCode(0)).filter(Boolean);
   assert.strictEqual(hits.length, 1, 'the printed wildcard lists exactly one path: ' + JSON.stringify(hits));
   assert.ok(hits[0].endsWith('FAKE' + String.fromCodePoint(0x202e) + '.txt') && !hits[0].startsWith('xA'), 'and it is the forging path, not a neighbour one character apart');
+});
+
+// 21i P1 (21g thread A, a carrier's pull request): the unit before a wide-spelled run was judged by ONE byte, so a key right after a non-ASCII character whose low
+// byte is a letter (Cyrillic U+0441, Latin U+0141) read as glued to a word and was dropped, while the same text read as wide text was found.
+test('a wide-spelled key right after a non-ASCII character is found in both little-endian spellings, as when the text is read as wide text -- RED before 21i', async () => {
+  const { spelledHits, scanBytes } = await import(pathToFileURL(LIB).href);
+  const T = 'gh' + 'p_' + 'Qw7'.repeat(12);
+  const unit32 = (s, big) => Buffer.concat([...s].map((ch) => { const b = Buffer.alloc(4); if (big) b.writeUInt32BE(ch.codePointAt(0)); else b.writeUInt32LE(ch.codePointAt(0)); return b; }));
+  const spell = { le16: (s) => Buffer.from(s, 'utf16le'), be16: (s) => Buffer.from(s, 'utf16le').swap16(), le32: (s) => unit32(s, false), be32: (s) => unit32(s, true) };
+  const pad = Buffer.alloc(400, 0x81); // no character a spelling can hold, NULs on both parities: not wide text
+  for (let q = 64; q < pad.length; q += 97) pad[q] = 0;
+  const hits = (enc, cp) => spelledHits(Buffer.concat([pad, enc(String.fromCodePoint(cp) + T + '\n'), pad]), 'f.bin').map((h) => h.pattern);
+  for (const [name, enc] of Object.entries(spell)) {
+    // big-endian: a character whose low byte is not a word byte; U+0441 and U+0141 stay refused there (the stated limit in spelledIn)
+    for (const cp of name.startsWith('le') ? [0x441, 0x141, 0x4e2d, 0x20] : [0x4e2d, 0x20]) assert.deepStrictEqual(hits(enc, cp), ['github-token'], `${name}, key after U+${cp.toString(16)}`);
+    if (name.startsWith('be')) assert.deepStrictEqual(hits(enc, 0x441), [], `${name}: the stated limit, a key after U+0441`);
+    assert.deepStrictEqual(spelledHits(Buffer.concat([pad, enc('x' + T + '\n'), pad]), 'f.bin'), [], `${name}: a key glued to an ASCII word stays refused`);
+  }
+  assert.deepStrictEqual(scanBytes(Buffer.from(String.fromCodePoint(0x441) + T + '\n', 'utf16le'), 'f.txt').map((h) => h.pattern), ['github-token'], 'the same text read as wide text (the parity this keeps)');
 });

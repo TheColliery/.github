@@ -479,7 +479,8 @@ function bomKinds(b) {
 // NUL (UTF-16LE) or preceded by one (UTF-16BE), followed by three (UTF-32LE) or preceded by three (UTF-32BE), at every byte offset. Only the
 // provider patterns run on what is found, never the generic high-entropy rule: a binary's bytes match a provider key's prefix and body only when it
 // holds the key. A run of such characters (printable ASCII or a tab) holds no line break, so it is one line; a match is reported at the raw line where
-// its first character sits. The character before a run, when it is one, stays in front of it, so a key glued to a word is refused here as anywhere.
+// its first character sits. A word in the same spelling is part of the run, so a key glued to it is refused here as anywhere; in a big-endian reading the
+// character before the run stays in front of it, for little-endian text read one byte on (spelledIn).
 const SPELL_CH = '[\t\x20-\x7e]';
 // A run of at least WIDE_MIN_NULS units; the first unit is written out ahead of the repeat, which V8 scans about four times faster than a repeated group alone.
 const spelling = (unit, w, lead) => ({ re: new RegExp(`${unit}(?:${unit}){${WIDE_MIN_NULS - 1},}`, 'g'), w, lead });
@@ -506,8 +507,13 @@ function spelledIn(text, onMatch) {
       const first = run.index + lead; // the run's first character
       let chars = '';
       for (let i = lead; i < run[0].length; i += w) chars += run[0][i];
-      const before = text.charCodeAt(first - w); // the character one unit before, when it is one
-      const ctx = first - w >= 0 && ((before >= 0x20 && before <= 0x7e) || before === 9) ? 1 : 0;
+      // The character before the run is put in front of it only in a big-endian reading (21i, 21g thread A): there the byte w before the run's first character
+      // is the character of little-endian text read one byte on ('x', NUL, 'g', NUL ... read as NUL, 'g' ...), the reading that would let a glued key through.
+      // In a little-endian reading a spelled character before the run is part of the run, so the unit before is a character a spelling cannot hold and does
+      // not glue: judged by its first byte, U+0441 (bytes 41 04) read as the letter A and the key after it was dropped. Stated limit, pinned by a test: in a
+      // big-endian reading a key after U+0441 (04 41) is still refused, because those bytes are also little-endian text with an A glued to the key.
+      const before = text.charCodeAt(first - w);
+      const ctx = lead > 0 && first - w >= 0 && ((before >= 0x20 && before <= 0x7e) || before === 9) ? 1 : 0;
       const line = ctx ? text[first - w] + chars : chars;
       if (SPELL_GATE && !SPELL_GATE.test(line)) continue;
       for (const p of GLOBAL) {

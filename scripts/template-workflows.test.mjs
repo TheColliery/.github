@@ -2122,15 +2122,13 @@ test('prev-stable step behaviour (UMB3-193): a stretch of tag-less commits betwe
 });
 
 // UMB3-193 round 5 (2026-11-09): the CI check for the class "a test hands a child process the real environment" (main's ruling on CodeRabbit's three cries in one CoalWash review).
-// The canon holds instances, so it is a RATCHET: the three files below are the Bankfire-sourced scanner gate tests (byte-equal copies in scripts/ and the two templates; the scanner-gate test
-// still gives its scratch repo HOME and USERPROFILE only, the secret-scan test no longer does since the 2026-11-12 re-copy), pinned by blob id with the reason; an edit to one spends the pin and the file is read again. Everything else
-// in scripts/ and templates/ must be clean: a new test with `env: process.env`, or HOME and USERPROFILE without TEMP, TMP and TMPDIR, fails here.
+// The canon held instances, so it is a RATCHET: a file that cannot be fixed yet is pinned here by blob id with its reason ({ rel, blob, why }); an edit to it spends the
+// pin and the file is read again. The ratchet closed at 21i: the scanner gate test (scripts/ and its two template copies) writes TEMP, TMP and TMPDIR out in its gate
+// environment, so no pin is left. Everything in scripts/ and templates/ must be clean: a new test with `env: process.env`, or HOME and USERPROFILE without TEMP, TMP and
+// TMPDIR, fails here.
 const { scanChildEnv } = await import(pathToFileURL(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', 'child-env-census.mjs')).href);
 const { collectScriptsMjs } = await import(pathToFileURL(path.join(TEMPLATES, 'overlay-coal-skill', 'scripts', 'lib', 'git-env-census.mjs')).href);
-const SCANNER_WHY = 'byte-equal copy of the Bankfire-sourced scanner gate test: its scratch repo gets HOME and USERPROFILE only. Its fix is made at the Bankfire source (the secret-scan test already points TEMP, TMP and TMPDIR at the sandbox since Bankfire 557a2e6) and re-copied into all three places.';
-const CHILD_ENV_PINS = [
-  ['scripts/secret-gate.test.mjs', 'bcd5ce799c8d37ca304bda13df47fdc9e70eb94a'], ['templates/article/scripts/secret-gate.test.mjs', 'bcd5ce799c8d37ca304bda13df47fdc9e70eb94a'], ['templates/published-code/scripts/secret-gate.test.mjs', 'bcd5ce799c8d37ca304bda13df47fdc9e70eb94a'],
-].map(([rel, blob]) => ({ rel, blob, why: SCANNER_WHY }));
+const CHILD_ENV_PINS = [];
 function childEnvFiles() {
   const files = [];
   for (const root of ['', 'templates/overlay-coal-skill', 'templates/article', 'templates/published-code', 'templates/private-working', 'templates/overlay-llm-deploy']) {
@@ -2141,7 +2139,7 @@ function childEnvFiles() {
   return files;
 }
 
-test('the canon\'s own tests start no child with the real environment: the child-env census over scripts/ and templates/ finds nothing beyond the three pinned scanner-gate copies -- RED before UMB3-193 round 5', () => {
+test('the canon\'s own tests start no child with the real environment: the child-env census over scripts/ and templates/ finds nothing beyond its pins (none since 21i) -- RED before UMB3-193 round 5', () => {
   const files = childEnvFiles();
   assert.ok(files.length >= 40, 'the walk finds the tests it polices: ' + files.length);
   const r = scanChildEnv(files, CHILD_ENV_PINS);
@@ -2150,7 +2148,13 @@ test('the canon\'s own tests start no child with the real environment: the child
   assert.ok(r.calls >= 80 && r.withEnv >= 60 && r.ok >= 40, 'the census reads the spawns it polices: ' + JSON.stringify({ calls: r.calls, withEnv: r.withEnv, ok: r.ok }));
 });
 
-test('the child-env pins hold only while the file is the pinned blob: the three files ARE those blobs today, and one added byte spends the pin -- RED before UMB3-193 round 5', () => {
+test('a child-env pin holds only while the file is the pinned blob, and one added byte spends it: proved on a built fixture now that no pin is left (21i) -- RED before UMB3-193 round 5', () => {
+  // the fixture hands a child the real environment; pinned by its own blob it is exempted, and one more byte reads it again
+  const text = "import { spawnSync } from 'node:child_process';\nspawnSync(process.execPath, ['-v'], { timeout: 1000, env: process.env });\n";
+  const pin = { rel: 'scripts/fixture.test.mjs', blob: gitBlobId(text), why: 'a built fixture' };
+  assert.ok(scanChildEnv([{ rel: pin.rel, text }], []).findings.length >= 1, 'the fixture is a real finding without its pin');
+  assert.equal(scanChildEnv([{ rel: pin.rel, text }], [pin]).exempted, 1, 'pinned by its blob, it is exempted');
+  assert.ok(scanChildEnv([{ rel: pin.rel, text: text + '\n' }], [pin]).findings.length >= 1, 'one added byte spends the pin');
   const files = childEnvFiles();
   for (const p of CHILD_ENV_PINS) {
     const f = files.find((x) => x.rel === p.rel);
