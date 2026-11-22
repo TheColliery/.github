@@ -85,5 +85,21 @@ export default {
     { id: 'claude-dev-blog', name: 'Claude builder blog (claude.dev)', url: 'https://claude.dev/rss.xml', kind: 'rss', everyHours: 12 },
     { id: 'supabase-changelog', name: 'Supabase changelog', url: 'https://supabase.com/changelog-rss.xml', kind: 'rss', everyHours: 12 },
     { id: 'anthropic-engineering', name: 'Anthropic engineering', url: 'https://www.anthropic.com/engineering', kind: 'headings', everyHours: 24, tier: 'cold' },
+    // The house's new ground (the owner 2026-11-23: "ดูเรื่องข่าวสารด้วยนะ (Cloudflare cron) เพิ่มสถานที่ใหม่ที่ตอบโจทย์เรา"): Google Cloud (Compute Engine, Cloud Run, BigQuery),
+    // Colab, the paid Gemini API's prices, and the fully open model makers a Kolwen base must come from (training data published), plus the Open Source Initiative.
+    // Each URL read by main on 2026-11-23 (HTTP 200); the GCP feeds and the pricing page are written at the address they redirect to (one fetch, no hop). The Hub lists follow the rows above (newest 2, by creation); swiss-ai and allenai are already listed above.
+    // Not added: the all-products GCP feed (942 KB); EleutherAI, LLM360, Marin and Pleias site feeds (404).
+    { id: 'gcp-compute-notes', name: 'Google Cloud · Compute Engine release notes', url: 'https://docs.cloud.google.com/feeds/compute-release-notes.xml', kind: 'atom', everyHours: 12 },
+    { id: 'gcp-run-notes', name: 'Google Cloud · Cloud Run release notes', url: 'https://docs.cloud.google.com/feeds/run-release-notes.xml', kind: 'atom', everyHours: 12 },
+    { id: 'gcp-bigquery-notes', name: 'Google Cloud · BigQuery release notes', url: 'https://docs.cloud.google.com/feeds/bigquery-release-notes.xml', kind: 'atom', everyHours: 12 },
+    { id: 'colab-blog', name: 'Google Colab · blog', url: 'https://medium.com/feed/google-colab', kind: 'rss', everyHours: 24 },
+    { id: 'gemini-api-pricing', name: 'Google · Gemini API pricing', url: 'https://aistudio.google.com/docs/pricing.md', kind: 'raw', everyHours: 12 },
+    { id: 'osi-news', name: 'Open Source Initiative · news', url: 'https://opensource.org/feed', kind: 'rss', everyHours: 24 },
+    { id: 'hfapi-common-pile', name: 'Common Pile · newest model on the Hub', url: 'https://huggingface.co/api/models?author=common-pile&sort=createdAt&direction=-1&limit=2&expand[]=createdAt', kind: 'raw', everyHours: 24 },
+    { id: 'hfapi-pleias', name: 'Pleias · newest model on the Hub', url: 'https://huggingface.co/api/models?author=PleIAs&sort=createdAt&direction=-1&limit=2&expand[]=createdAt', kind: 'raw', everyHours: 24 },
+    { id: 'hfapi-huggingfacetb', name: 'Hugging Face TB (SmolLM) · newest model on the Hub', url: 'https://huggingface.co/api/models?author=HuggingFaceTB&sort=createdAt&direction=-1&limit=2&expand[]=createdAt', kind: 'raw', everyHours: 24 },
+    { id: 'hfapi-eleutherai', name: 'EleutherAI · newest model on the Hub', url: 'https://huggingface.co/api/models?author=EleutherAI&sort=createdAt&direction=-1&limit=2&expand[]=createdAt', kind: 'raw', everyHours: 24 },
+    { id: 'hfapi-marin', name: 'Marin · newest model on the Hub', url: 'https://huggingface.co/api/models?author=marin-community&sort=createdAt&direction=-1&limit=2&expand[]=createdAt', kind: 'raw', everyHours: 24 },
+    { id: 'marin-releases', name: 'Marin · releases', url: 'https://github.com/marin-community/marin/releases.atom', kind: 'atom', everyHours: 24 },
   ],
 };

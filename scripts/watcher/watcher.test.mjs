@@ -513,12 +513,12 @@ test('kolwen.mjs: the beat\'s rows and the two status watches stand after the al
   assert.strictEqual(byId['anthropic-news'].kind, 'headings');
   assert.strictEqual(byId['anthropic-status'].kind, 'atom');
   const hf = c.sources.filter((s) => s.id.startsWith('hfapi-'));
-  assert.strictEqual(hf.length, 13, 'the 13 Hugging Face organisation rows');
+  assert.strictEqual(hf.length, 18, 'the 13 Hugging Face organisation rows of the beat and the 5 fully open makers of 2026-11-23');
   for (const s of hf) {
     assert.match(s.url, /^https:\/\/huggingface\.co\/api\/models\?author=[A-Za-z0-9._-]+&sort=createdAt&direction=-1&limit=2&expand\[\]=createdAt$/, s.id);
-    assert.strictEqual(s.kind, 'raw'); assert.strictEqual(s.everyHours, 12);
+    assert.strictEqual(s.kind, 'raw'); assert.ok([12, 24].includes(s.everyHours), s.id);
   }
-  assert.strictEqual(new Set(hf.map((s) => s.url)).size, 13);
+  assert.strictEqual(new Set(hf.map((s) => s.url)).size, 18);
   const at = idsOf(c).indexOf('cloudflare-status');
   const tail = c.sources.slice(at, at + 2);
   assert.deepStrictEqual(tail.map((s) => [s.id, s.kind, s.url]), [
@@ -1140,4 +1140,18 @@ test('thecolliery.mjs, the editor\'s survey of 2026-11-19: Claude Code\'s raw CH
   for (const title of ['JetBrains 7.2.1-rc.8', 'jetbrains/v7.2.1-rc.5: Merge pull request #16138 from Kilo-Org/glowing-badger']) assert.ok(skips('kilo-code', title), title);
   assert.ok(skips('goose', 'gdk-v0.1.0-alpha.14: chore(GDK): release v0.1.0-alpha.14 (#13468)'));
   for (const [id, title] of [['opencode', 'v2.3.2'], ['kilo-code', 'v7.8.27 (release)'], ['goose', 'v1.60.1']]) assert.ok(!skips(id, title), id + ' still reads ' + title);
+});
+
+// The house's new ground (2026-11-23): Google Cloud, Colab, the Gemini API's prices, the Open Source Initiative and the fully open model makers close the Kolwen list,
+// appended at the END so no earlier slot moves; each at the address it serves from (no redirect hop), slow sources at 12 or 24 hours.
+test('kolwen.mjs, 2026-11-23: the Google Cloud, Colab, Gemini pricing, OSI and fully open maker rows close the list, each read at its final address -- RED before 2026-11-23', async () => {
+  const c = await load('kolwen.mjs');
+  const want = ['gcp-compute-notes', 'gcp-run-notes', 'gcp-bigquery-notes', 'colab-blog', 'gemini-api-pricing', 'osi-news', 'hfapi-common-pile', 'hfapi-pleias', 'hfapi-huggingfacetb', 'hfapi-eleutherai', 'hfapi-marin', 'marin-releases'];
+  assert.deepStrictEqual(idsOf(c).slice(-want.length), want);
+  const byId = Object.fromEntries(c.sources.map((s) => [s.id, s]));
+  for (const id of want) assert.ok([12, 24].includes(byId[id].everyHours), id);
+  for (const id of ['gcp-compute-notes', 'gcp-run-notes', 'gcp-bigquery-notes']) assert.match(byId[id].url, /^https:\/\/docs\.cloud\.google\.com\/feeds\//, id + ' is read where cloud.google.com redirects');
+  assert.strictEqual(byId['gemini-api-pricing'].url, 'https://aistudio.google.com/docs/pricing.md', 'the pricing page at the end of its two redirects');
+  assert.strictEqual(byId['hfapi-swiss-ai'] && byId['hfapi-allenai'] ? 1 : 0, 1, 'swiss-ai and allenai were already rows, not added twice');
+  assert.strictEqual(idsOf(c).indexOf('anthropic-engineering'), idsOf(c).length - want.length - 1, 'no earlier slot moved');
 });
