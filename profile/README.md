@@ -19,8 +19,19 @@
   <img src="https://img.shields.io/badge/License-Per_Zone-lightgrey?style=for-the-badge" alt="Licence: per zone, see below">
 </p>
 
+## ⚡ Quick install
+
+All seven tools in one go (needs `node` + `git` on PATH; the `claude` CLI for the plugins):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/TheColliery/.github/main/install.mjs -o colliery-install.mjs
+node colliery-install.mjs all
+```
+
+To pick single tools, see the Install section below.
+
 <p align="center">
-  📖 <a href="https://thecolliery.org/docs">Full documentation</a>
+  📖 <a href="https://thecolliery.org/docs/tools">Per-tool documentation</a>
 </p>
 
 <p align="center">

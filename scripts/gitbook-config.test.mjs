@@ -172,3 +172,27 @@ test('no front door points at the deleted old TheColliery GitBook site (hetcreep
   assert.match(read('README.md'), /https:\/\/thecolliery\.org\/docs\b/);
   assert.match(read('profile/README.md'), /https:\/\/thecolliery\.org\/docs\b/);
 });
+
+// 23d (card BB-566, the Product Hunt launch): profile/README.md is the first screen of BOTH front doors (the GitHub org
+// page and the GitBook Home, gitbook-docs.yaml ./profile), so it carries a Quick install block under the badges, above
+// "What is TheColliery?". It is a second copy of the Install section's commands, so every command in it must be
+// byte-identical to a line of that section's code block, and the top docs link must not send the docs site to itself.
+test('the landing opens with a Quick install whose commands are copies of the Install section, above What is', () => {
+  const md = read('profile/README.md');
+  const quick = md.indexOf('## ⚡ Quick install');
+  const whatIs = md.indexOf('## 🏗️ What is TheColliery?');
+  const full = md.indexOf('## 📦 Install');
+  assert.ok(quick > 0 && quick < whatIs && whatIs < full, 'Quick install sits above What is, the full Install section below');
+  const fence = (from) => {
+    const open = md.indexOf('```bash\n', from);
+    return md.slice(open + 8, md.indexOf('\n```', open)).split('\n');
+  };
+  const quickCmds = fence(quick);
+  assert.ok(quickCmds.length > 0 && quickCmds.every((l) => l.trim() !== ''), 'the Quick install has commands');
+  const fullCmds = fence(full).map((l) => l.replace(/\s+#.*$/, ''));
+  for (const c of quickCmds) assert.ok(fullCmds.includes(c), `not in the Install section: ${c}`);
+  assert.deepEqual(quickCmds, [fullCmds[0], 'node colliery-install.mjs all']);
+  assert.match(md.slice(quick, whatIs), /`node`.*`git`.*`claude`/, 'the prerequisites are named');
+  const top = md.slice(0, whatIs);
+  assert.doesNotMatch(top, /href="https:\/\/thecolliery\.org\/docs"/, 'the top docs link would point the docs Home at itself');
+});
