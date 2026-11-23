@@ -18,7 +18,7 @@ export default {
     { id: 'anthropic-status', name: 'Anthropic · Claude status', url: 'https://status.claude.com/history.atom', kind: 'atom', everyHours: 2 },
     { id: 'openai-news', name: 'OpenAI · news', url: 'https://openai.com/news/rss.xml', kind: 'rss', everyHours: 2 },
     { id: 'openai-status', name: 'OpenAI · status', url: 'https://status.openai.com/history.atom', kind: 'atom', everyHours: 2 },
-    { id: 'gemini-api-changelog', name: 'Google · Gemini API changelog', url: 'https://ai.google.dev/gemini-api/docs/changelog.md.txt', kind: 'raw', everyHours: 2 },
+    { id: 'gemini-api-changelog', name: 'Google · Gemini API changelog', url: 'https://aistudio.google.com/docs/changelog.md', kind: 'raw', everyHours: 2 },
     { id: 'google-ai-blog', name: 'Google · AI blog', url: 'https://blog.google/innovation-and-ai/technology/ai/rss/', kind: 'rss', everyHours: 6 },
     { id: 'google-developers-blog', name: 'Google · developers blog', url: 'https://developers.googleblog.com/feeds/posts/default/', kind: 'rss', everyHours: 6 },
     { id: 'mistral-news', name: 'Mistral · news', url: 'https://mistral.ai/news/rss', kind: 'rss', everyHours: 6 },

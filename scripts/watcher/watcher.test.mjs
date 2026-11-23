@@ -1152,6 +1152,8 @@ test('kolwen.mjs, 2026-11-23: the Google Cloud, Colab, Gemini pricing, OSI and f
   for (const id of want) assert.ok([12, 24].includes(byId[id].everyHours), id);
   for (const id of ['gcp-compute-notes', 'gcp-run-notes', 'gcp-bigquery-notes']) assert.match(byId[id].url, /^https:\/\/docs\.cloud\.google\.com\/feeds\//, id + ' is read where cloud.google.com redirects');
   assert.strictEqual(byId['gemini-api-pricing'].url, 'https://aistudio.google.com/docs/pricing.md', 'the pricing page at the end of its two redirects');
+  // 23b (the LLM chief's c221): the changelog row of the beat redirected the same way (ai.google.dev .md.txt -> aistudio .md.txt -> aistudio .md); its slot and kind stay
+  assert.deepStrictEqual([byId['gemini-api-changelog'].url, byId['gemini-api-changelog'].kind, idsOf(c).indexOf('gemini-api-changelog')], ['https://aistudio.google.com/docs/changelog.md', 'raw', 10], 'the changelog at the end of its two redirects, same kind and slot');
   assert.strictEqual(byId['hfapi-swiss-ai'] && byId['hfapi-allenai'] ? 1 : 0, 1, 'swiss-ai and allenai were already rows, not added twice');
   assert.strictEqual(idsOf(c).indexOf('anthropic-engineering'), idsOf(c).length - want.length - 1, 'no earlier slot moved');
 });
