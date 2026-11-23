@@ -350,7 +350,8 @@ test('checkFiles: a github.com repository or account link that stays 5xx is read
     assert.match(r.findings[0].message, /HTTP 504/, 'an API that does not answer 2xx or 404 leaves the 504 standing');
   }
   m = apiStub(() => 504, () => 200);
-  r = await checkFiles(oneLink('https://github.com/TheColliery/CoalMine/blob/main/README.md'), { fetchFn: m.fetchFn, retryMs: 0, token: 'T-123' });
+  // 23e: a blob link now has a REST twin (the contents API, tested below), so the deep page without one is an issue
+  r = await checkFiles(oneLink('https://github.com/TheColliery/CoalMine/issues/1'), { fetchFn: m.fetchFn, retryMs: 0, token: 'T-123' });
   assert.match(r.findings[0].message, /HTTP 504/, 'a deep page has no REST twin here: its 504 stands');
   assert.ok(!m.calls.some((c) => c.u.startsWith('https://api.github.com/')), 'and the API is not asked');
   m = apiStub(() => 504, () => 200);
@@ -396,4 +397,33 @@ test('apiRouteOf: github.com/community is an organisation (asked of the API), an
   for (const u of ['https://github.com/home', 'https://github.com/mcp', 'https://github.com/sitemap', 'https://github.com/status', 'https://github.com/status/incidents']) assert.strictEqual(apiRouteOf(u), null, u);
   assert.ok(!RESERVED_ROUTES.has('community'));
   assert.match(fs.readFileSync(new URL('./lib/front-door-links.mjs', import.meta.url), 'utf8'), /THE LIST IS OURS AND INCOMPLETE/, 'the code says whose list it is');
+});
+
+// 2026-11-23e: run 45182146410 went red on 24 github.com/<owner>/<repo>/blob/<ref>/<path> links that answered 503 to the runner while every file was there
+// (the re-run went green). A blob link that stays 5xx after the retry is now asked of the contents API, the same rails as the repository fallback.
+test('checkFiles: a github.com blob link that stays 5xx is read through the contents API at its ref, with the token on the API host only -- RED before 23e', async () => {
+  const { apiRouteOf } = await import('./lib/front-door-links.mjs');
+  let m = apiStub(() => 503, () => 200);
+  let r = await checkFiles(oneLink('https://github.com/TheColliery/.github/blob/main/benchmarks/CoalMine/RESULTS.md'), { fetchFn: m.fetchFn, retryMs: 0, token: 'T-123' });
+  assert.deepEqual(r.findings, [], 'the contents answer is the page answer');
+  assert.deepEqual(m.calls.map((c) => c.u), ['https://github.com/TheColliery/.github/blob/main/benchmarks/CoalMine/RESULTS.md', 'https://github.com/TheColliery/.github/blob/main/benchmarks/CoalMine/RESULTS.md',
+    'https://api.github.com/repos/TheColliery/.github/contents/benchmarks/CoalMine/RESULTS.md?ref=main'], 'the ordinary check runs first, twice, then the API');
+  assert.deepEqual(m.calls.map((c) => c.auth), [undefined, undefined, 'Bearer T-123'], 'the token reaches the API host only');
+  m = apiStub(() => 503, () => 200);
+  r = await checkFiles(oneLink('https://github.com/TheColliery/.github/blob/main/DOC-PATTERN.md#platform-tiers'), { fetchFn: m.fetchFn, retryMs: 0, token: 'T-123' });
+  assert.deepEqual(r.findings, []);
+  assert.equal(m.calls[2].u, 'https://api.github.com/repos/TheColliery/.github/contents/DOC-PATTERN.md?ref=main', 'the fragment is the page, not the file');
+  assert.strictEqual(apiRouteOf('https://github.com/a/b/blob/main/docs/My%20File.md?plain=1'), '/repos/a/b/contents/docs/My%20File.md?ref=main', 'the path stays encoded, the page query is dropped');
+  for (const u of ['https://github.com/a/b/blob/main', 'https://github.com/a/b/blob', 'https://github.com/pricing/b/blob/main/x.md']) assert.strictEqual(apiRouteOf(u), null, u + ' names no file');
+});
+
+test('checkFiles: a blob link to a missing file stays a finding: the contents API 404 is the answer, and a page that answers 404 is never asked of the API -- RED before 23e', async () => {
+  let m = apiStub(() => 503, () => 404);
+  let r = await checkFiles(oneLink('https://github.com/TheColliery/.github/blob/main/NO-SUCH-FILE.md'), { fetchFn: m.fetchFn, retryMs: 0, token: 'T-123' });
+  assert.equal(r.findings.length, 1);
+  assert.match(r.findings[0].message, /HTTP 404/, 'the file is not there');
+  m = apiStub(() => 404, () => 200);
+  r = await checkFiles(oneLink('https://github.com/TheColliery/.github/blob/main/NO-SUCH-FILE.md'), { fetchFn: m.fetchFn, retryMs: 0, token: 'T-123' });
+  assert.match(r.findings[0].message, /HTTP 404/);
+  assert.ok(!m.calls.some((c) => c.u.startsWith('https://api.github.com/')), 'a 404 is not transient, so the API is not asked');
 });

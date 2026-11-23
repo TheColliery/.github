@@ -7,7 +7,7 @@
 // Example: node scripts/front-door-links.mjs README.md SECURITY.md
 // Exit:    0 every link answers · 1 a finding, or a file that cannot be read · 64 usage error
 // Env:     FRONT_DOOR_LINKS_TIMEOUT_MS (per request, default 10000) · FRONT_DOOR_LINKS_RETRY_MS (the pause before the one retry, default 2000)
-//          GITHUB_TOKEN (read by name, optional): a github.com repository or account link that still answers 5xx after the retry is asked once of the REST API with it
+//          GITHUB_TOKEN (read by name, optional): a github.com repository, account or file (blob) link that still answers 5xx after the retry is asked once of the REST API with it
 // Output:  one `FAIL <file>:<line>: <url>: <why>` line per finding, then the summary line. Report a problem: the repository's issues.
 // Node builtins only at the top level (node/runtime.md section 1): the engine is imported inside the try, so a missing engine is a FAIL line, never a stack.
 import fs from 'node:fs';

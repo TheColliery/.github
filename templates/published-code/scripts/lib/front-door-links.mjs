@@ -121,8 +121,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const transient = (r) => r.status === 0 || (r.status >= 500 && r.status < 600);
 
 export const API_HOST = 'https://api.github.com';
-/** The REST route that answers for a github.com page that is a bare repository (/owner/repo) or a bare account (/owner), or null for any other page: a deep page
- * (a file, an issue, a release) has no cheap REST twin here, so its anonymous answer stands. */
+/** The REST route that answers for a github.com page that is a bare repository (/owner/repo), a bare account (/owner) or a file (/owner/repo/blob/<ref>/<path>, asked of
+ * the contents API at that ref; the page's query and fragment are not the file), or null for any other page: an issue, a release or a tree has no REST twin here, so its
+ * anonymous answer stands. A ref with a slash in it reads as ref plus path, so the API answers 404 and the link stays a finding, as its 5xx would have (order 23e). */
 // github.com's own top-level routes: a one- or two-segment path that starts with one of these is a product page (/pricing, /sponsors/<user>, /orgs/<org>, /topics/<topic>), never an account or a
 // repository, so the REST API has no twin for it and its anonymous answer stands. THE LIST IS OURS AND INCOMPLETE: GitHub publishes no list of its reserved names (searched 2026-11-17; the lists on the
 // web are third-party), so these are the product routes the house has seen. The two ways it can be wrong are not alike. A name that is here and is a real account or organisation (a second route
@@ -140,11 +141,13 @@ export function apiRouteOf(url) {
   const segs = u.pathname.split('/').filter(Boolean);
   if (segs.length && RESERVED_ROUTES.has(segs[0].toLowerCase())) return null;
   if (segs.length === 1 && /^[A-Za-z0-9-]+$/.test(segs[0])) return `/users/${segs[0]}`;
-  if (segs.length === 2 && /^[A-Za-z0-9._-]+$/.test(segs[0]) && /^[A-Za-z0-9._-]+$/.test(segs[1])) return `/repos/${segs[0]}/${segs[1]}`;
+  const repo = segs.length >= 2 && /^[A-Za-z0-9._-]+$/.test(segs[0]) && /^[A-Za-z0-9._-]+$/.test(segs[1]);
+  if (repo && segs.length === 2) return `/repos/${segs[0]}/${segs[1]}`;
+  if (repo && segs.length >= 5 && segs[2] === 'blob') return `/repos/${segs[0]}/${segs[1]}/contents/${segs.slice(4).join('/')}?ref=${segs[3]}`;
   return null;
 }
 /** GitHub's own word in the incident of 2026-11-09 (05:59Z, "Increased timeouts due to surge in anonymous users"; update 08:16Z): "Logged-in users and authenticated requests are
- * unaffected." So a github.com repository or account link whose anonymous answer stayed 5xx after the retry is asked once of the REST API with the caller's token: a 2xx or a 404 there
+ * unaffected." So a github.com repository, account or file link whose anonymous answer stayed 5xx after the retry is asked once of the REST API with the caller's token: a 2xx or a 404 there
  * is the page's real answer. Anything else (the API's own 5xx, a 401 or 403, no answer, a redirect) returns null and the anonymous answer stands: a 504 that persists stays a finding.
  * The token goes to the one fixed API host, in a header, never into a URL, and a redirect is not followed with it. */
 export async function viaApi(fetchFn, target, token, timeoutMs = DEFAULT_TIMEOUT_MS) {
