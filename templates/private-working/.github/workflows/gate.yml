@@ -9,9 +9,10 @@ on:
   push:
     branches: [main]
     paths-ignore: ['**/*.png', 'LICENSE', 'NOTICE']
+  # NO path filter on pull_request, MUST: a ruleset that requires `gate` would leave the check of a workflow a path filter skipped
+  # "Pending", blocking the merge (GitHub, troubleshooting required status checks, read 2026-11-27; SKILL-REPO-PATTERN.md, CW-103 (c)).
   pull_request:
     branches: [main]
-    paths-ignore: ['**/*.png', 'LICENSE', 'NOTICE']
 
 permissions:
   contents: read

@@ -183,6 +183,66 @@ test('every job in every template workflow, and in this repo\'s own, declares ti
   assert.deepEqual(missing, [], 'a job with no timeout-minutes can hold a runner for 360 minutes');
 });
 
+// CW-103 (c), order 27a: a REQUIRED workflow carries no path filter on its pull_request trigger. GitHub's troubleshooting page for
+// required status checks (read 2026-11-27, the "Handling skipped but required checks" table): "A workflow is skipped by path filtering,
+// branch filtering, or a commit message" -> "Associated checks stay in a "Pending" state and block merging" -> "Avoid requiring workflows
+// that can be skipped"; "A job is skipped by a conditional" -> "The job reports "Success"". So the docs-only skip of a required workflow
+// lives in a job-level gate inside a run that started, never on the trigger (SKILL-REPO-PATTERN.md, the required-workflow MUST).
+// The contexts the house requires: SWEEP-MARKS.md's dependabot-auto-merge-gate row (all-green and analyze (javascript); verify for this
+// repository) and SKILL-REPO-PATTERN.md's link-check line (check, or gate). A job counts by the name it REPORTS (its name: line, else its id), or by its id.
+const REQUIRED_CONTEXTS = new Set(['all-green', 'analyze (javascript)', 'verify', 'check', 'gate']);
+function requiredJobsOf(ls) {
+  const jobsAt = ls.indexOf('jobs:');
+  const out = [];
+  if (jobsAt < 0) return out;
+  for (let i = jobsAt + 1; i < ls.length; i++) {
+    const id = ls[i].match(/^  ([a-z][a-z0-9_-]*):$/);
+    if (!id) continue;
+    let reported = id[1];
+    for (let j = i + 1; j < ls.length && !/^  \S/.test(ls[j]); j++) {
+      const n = ls[j].match(/^    name: (.+?)\s*$/);
+      if (n) { reported = n[1].replace(/^(['"])(.*)\1$/, '$2'); break; }
+    }
+    // a name built by an expression (verify-landing.yml's matrix legs) is read by its id; counting too many workflows is the safe side
+    if (REQUIRED_CONTEXTS.has(reported)) out.push(reported);
+    else if (REQUIRED_CONTEXTS.has(id[1])) out.push(id[1]);
+  }
+  return out;
+}
+// The 1-based line of a paths/paths-ignore key under the pull_request trigger, or 0 when there is none.
+function pullRequestPathFilterLine(ls) {
+  const onAt = ls.findIndex((l) => /^on:\s*$/.test(l));
+  if (onAt < 0) return 0; // the one-line `on: pull_request` form carries no filter
+  let inPr = false;
+  for (let i = onAt + 1; i < ls.length && !/^\S/.test(ls[i]); i++) {
+    if (/^  \S/.test(ls[i])) { inPr = /^  pull_request:/.test(ls[i]); continue; }
+    if (inPr && /^    (paths|paths-ignore):/.test(ls[i])) return i + 1;
+  }
+  return 0;
+}
+test('the required-workflow scan reads what it must: a pull_request filter is found, a push-only filter is not, and the required jobs are named by what they report (not vacuous)', () => {
+  const wf = (...xs) => xs.join('\n').split('\n');
+  assert.equal(pullRequestPathFilterLine(wf('on:', '  push:', '    paths-ignore:', "      - 'README.md'", '  pull_request:', '    branches: [main]', 'jobs:')), 0, 'a push-only filter is allowed');
+  assert.equal(pullRequestPathFilterLine(wf('on:', '  push:', '  pull_request:', '    branches: [main]', '    paths-ignore:', "      - 'README.md'", 'jobs:')), 5, 'a pull_request filter is found');
+  assert.equal(pullRequestPathFilterLine(wf('on:', '  pull_request:', '    paths:', "      - '**.md'")), 3);
+  assert.equal(pullRequestPathFilterLine(wf('on: pull_request', 'jobs:')), 0);
+  assert.deepEqual(requiredJobsOf(wf('jobs:', '  gate:', '    name: gate (${{ matrix.os }})', '  all-green:', '    name: all-green', '  analyze:', '    name: analyze (javascript)', '  verify:', '    runs-on: x')), ['gate', 'all-green', 'analyze (javascript)', 'verify']);
+  const carriers = ALL_WORKFLOWS().filter((f) => requiredJobsOf(lines(f)).length).map(rel);
+  for (const want of ['templates/published-code/.github/workflows/ci.yml', 'templates/published-code/.github/workflows/codeql.yml', 'templates/private-working/.github/workflows/gate.yml', 'templates/article/.github/workflows/check.yml', '.github/workflows/verify-landing.yml']) {
+    assert.ok(carriers.includes(want), `${want} carries a required job, so the scan must see it -- got ${carriers.join(', ')}`);
+  }
+});
+test('no workflow that carries a required check filters its pull_request trigger by path: a skipped workflow leaves the check Pending and blocks the merge (RED before 27a, CW-103 (c))', () => {
+  const offenders = [];
+  for (const f of ALL_WORKFLOWS()) {
+    const ls = lines(f);
+    const req = requiredJobsOf(ls);
+    const at = pullRequestPathFilterLine(ls);
+    if (req.length && at) offenders.push(`${rel(f)}:${at} (requires ${req.join(', ')})`);
+  }
+  assert.deepEqual(offenders, [], 'a required workflow skips its docs-only work in a job-level gate inside the run, never with a trigger-level path filter on pull_request');
+});
+
 test('every checkout in a workflow that pushes nothing sets persist-credentials: false; the pushing one keeps its token (RED before UMB-216 (d))', () => {
   const bad = [];
   for (const f of ALL_WORKFLOWS()) {

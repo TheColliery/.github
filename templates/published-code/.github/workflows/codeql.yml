@@ -8,13 +8,11 @@ on:
       - '**.md'
       - 'LICENSE'
       - 'NOTICE'
+  # NO path filter on pull_request, MUST: the gate ruleset requires `analyze (javascript)`, and GitHub leaves the check of a workflow a
+  # path filter skipped "Pending", blocking the merge (troubleshooting required status checks, read 2026-11-27). A room that skips
+  # the analysis on a doc-only pull request does it inside the run, in a job-level gate (SKILL-REPO-PATTERN.md, CW-103 (c)).
   pull_request:
     branches: [main]
-    paths-ignore:
-      # CodeQL analyzes js/ts only — NO markdown needs a security scan, so skip ALL docs (a doc-only commit doesn't run CodeQL). Shipped SKILL.md/commands consistency is ci.yml's job (verify dist-sync), not CodeQL's.
-      - '**.md'
-      - 'LICENSE'
-      - 'NOTICE'
   schedule:
     - cron: '0 6 * * 1'
 
