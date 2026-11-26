@@ -96,8 +96,13 @@ async function main() {
   const { frontmatterField } = await import('./lib/desc-cap.mjs');
   const { trimDescription, CLAUDE_AI_DESC_CAP } = await import('./lib/claude-ai-trim.mjs');
 
-  if (!fs.existsSync(pluginSkills)) {
-    console.error(`FAIL: ${pluginSkills} does not exist — run node scripts/build-plugin.mjs first.`);
+  // 27a (code scanning alert 36's class): the folder is listed once, before anything is deleted, and "does not exist" is read from the listing's own
+  // ENOENT; the existsSync that stood here judged the name before the listing did. Any other failure to list it is a named FAIL too, never a raw crash.
+  let listed;
+  try { listed = fs.readdirSync(pluginSkills, { withFileTypes: true }); } catch (e) {
+    console.error(e.code === 'ENOENT'
+      ? `FAIL: ${pluginSkills} does not exist — run node scripts/build-plugin.mjs first.`
+      : `FAIL: ${pluginSkills} could not be listed (${e.code || e.message}) — run node scripts/build-plugin.mjs first.`);
     process.exitCode = 1;
     return;
   }
@@ -113,7 +118,7 @@ async function main() {
   // A dot name is not a skill: it is not staged, and the run names it on a `skipped <name>` line; a plain file is not a skill; a folder is one; a symlink,
   // junction or special entry is refused by name below, never skipped and never followed.
   const skills = [];
-  for (const entry of fs.readdirSync(pluginSkills, { withFileTypes: true }).sort(byCodeUnit)) {
+  for (const entry of listed.sort(byCodeUnit)) {
     if (entry.name.startsWith('.')) { console.log(`skipped ${entry.name}`); continue; } // named, never silent: a dot folder is not a skill
     const st = fs.lstatSync(path.join(pluginSkills, entry.name));
     if (st.isDirectory()) skills.push({ name: entry.name, refused: false });

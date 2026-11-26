@@ -144,7 +144,11 @@ function main(argv) {
 }
 
 // Run only as an entry point, never on import (scripts/lcov-to-cobertura.test.mjs in the canon repo imports parseLcov and toCobertura above).
+// 27a (code scanning alert 36's class): the entry is resolved once and a path that does not resolve is "not this file"; the existsSync that stood before the
+// realpath judged the name before the realpath did.
 const entry = process.argv[1] && path.resolve(process.argv[1]);
-if (entry && fs.existsSync(entry) && fs.realpathSync.native(entry) === fs.realpathSync.native(fileURLToPath(import.meta.url))) {
+let entryReal = null;
+if (entry) { try { entryReal = fs.realpathSync.native(entry); } catch { /* an entry that does not resolve is not this file */ } }
+if (entryReal && entryReal === fs.realpathSync.native(fileURLToPath(import.meta.url))) {
   main(process.argv);
 }

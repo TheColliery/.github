@@ -154,3 +154,19 @@ test('sandboxEnv: one literal of named keys with GIT_CONFIG_NOSYSTEM the literal
   assert.deepEqual(spreads, ['...Object.fromEntries(BASE_ENV_KEYS.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]])),']);
   assert.ok(/GIT_CONFIG_NOSYSTEM: '1'/.test(body));
 });
+
+// 27a (the alert-36 class, js/file-system-race): the earlier sums file is read once and its failure is judged by its code. A folder at that path was
+// "exists" to the old check, so the read after it threw a raw EISDIR; now anything but "not found" is a named refusal, exit 2, never read as "no earlier upload".
+test('decide-upload.mjs: the existing sums path is a folder -- a named refusal, exit 2, never a raw crash and never read as no prior upload', () => {
+  const dir = scratchWithLib();
+  const fresh = path.join(dir, 'fresh.txt');
+  fs.writeFileSync(fresh, 'abc  X.zip\n');
+  const folder = path.join(dir, 'existing-is-a-folder');
+  fs.mkdirSync(folder);
+  const res = run([fresh, folder]);
+  assert.equal(res.status, 2, res.stderr);
+  assert.match(res.stderr, /^decide-upload: could not read the earlier sums file /m);
+  assert.doesNotMatch(res.stderr, /\n\s+at /, 'no stack trace');
+  assert.equal(res.stdout, '', 'no action is printed for a run that could not decide');
+  fs.rmSync(dir, { recursive: true, force: true });
+});

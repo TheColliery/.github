@@ -243,6 +243,43 @@ test('no workflow that carries a required check filters its pull_request trigger
   assert.deepEqual(offenders, [], 'a required workflow skips its docs-only work in a job-level gate inside the run, never with a trigger-level path filter on pull_request');
 });
 
+// Code scanning alert 36 (js/file-system-race, 27a): a template script that checks a path (existsSync, accessSync, statSync, lstatSync) and then
+// uses the same name (reads, opens, lists, resolves or writes it) answers from a state that may have changed in between, and the check adds nothing
+// the use's own error does not already say. The use is attempted once and its error judged by its code (ENOENT is "absent"), or the type is
+// read from the listing itself (a Dirent). The class as written in the templates: one identifier checked then used within a short window, and a
+// listing filtered by a stat of each name. lib/wave-run.mjs's existsSync(path.resolve(cwd, f)) is NOT this shape and is left: it decides
+// which row reads "missing" before a later child process runs the file, which no single use in this script can replace.
+const CHECK_THEN_USE = /\b(?:existsSync|accessSync|statSync|lstatSync)\(\s*([A-Za-z_$][\w$]*)\s*[,)][\s\S]{0,1200}?\b(?:readFileSync|openSync|readdirSync|realpathSync(?:\.native)?|writeFileSync)\(\s*\1\s*[,)]/g;
+const LIST_THEN_STAT = /readdirSync\([^)]*\)\s*\.filter\([^)]*\bstatSync\(/g;
+function raceShapes(text) {
+  const t = text.replace(/^\s*\/\/.*$/gm, '');
+  const hits = [];
+  for (const re of [CHECK_THEN_USE, LIST_THEN_STAT]) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(t))) hits.push(m[0].split(/\r?\n/)[0].trim());
+  }
+  return hits;
+}
+test('the file-race shape scan finds a check followed by a use of the same name, and passes the read-once and Dirent forms (not vacuous)', () => {
+  assert.equal(raceShapes("const x = p && fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null;").length, 1);
+  assert.equal(raceShapes("try { fs.accessSync(f, fs.constants.W_OK); fs.closeSync(fs.openSync(f, 'r+')); } catch {}").length, 1);
+  assert.equal(raceShapes("if (!fs.existsSync(dir)) { fail(); }\nfor (const e of fs.readdirSync(dir)) {}").length, 1);
+  assert.equal(raceShapes("const files = readdirSync(D).filter(f => statSync(`${D}/${f}`).isFile());").length, 1);
+  assert.equal(raceShapes("let x = null; try { x = fs.readFileSync(p, 'utf8'); } catch (e) { if (e.code !== 'ENOENT') throw e; }").length, 0);
+  assert.equal(raceShapes("const files = readdirSync(D, { withFileTypes: true }).filter((d) => d.isFile()).map((d) => d.name);").length, 0);
+  assert.equal(raceShapes("// fs.existsSync(p) ? fs.readFileSync(p) is the old form").length, 0, 'a comment is not code');
+});
+test('no template script checks a path and then uses the same name: the read is attempted once and judged by its error code (RED before 27a, code scanning alert 36)', () => {
+  const scripts = [];
+  const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else if (/\.m?js$/.test(e.name) && !/\.test\.m?js$/.test(e.name)) scripts.push(p); } };
+  walk(TEMPLATES);
+  assert.ok(scripts.length > 20, `the walk reads the template scripts (${scripts.length})`);
+  const offenders = [];
+  for (const f of scripts.sort()) for (const h of raceShapes(fs.readFileSync(f, 'utf8'))) offenders.push(`${rel(f)}: ${h.slice(0, 80)}`);
+  assert.deepEqual(offenders, []);
+});
+
 test('every checkout in a workflow that pushes nothing sets persist-credentials: false; the pushing one keeps its token (RED before UMB-216 (d))', () => {
   const bad = [];
   for (const f of ALL_WORKFLOWS()) {
