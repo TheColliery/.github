@@ -606,6 +606,35 @@ test('annotationFile: printable runs before the property escape: a newline in a 
   assert.equal(annotationFile(`a${NL}::error::x,y%.md`), `a${BS}u{a}%3A%3Aerror%3A%3Ax%2Cy%25.md`);
   assert.equal(annotationData(`u${NL}##[error]v%`), `u${BS}u{a}#${BS}u{23}[error]v%25`, 'the data: printable first, then %, CR and LF');
 });
+// 28a unit 3 (main's ruling on the auditor's 27h hole 5 and its 27i point A): under GitHub Actions the CLI prints its count as ONE notice of its own,
+// `::notice title=front-door-links-count::N finding(s), M warning(s)`, before any warning, with BOTH numbers always (the summary line leaves the warnings
+// part out at zero). Notices have their own budget of ten per step (actions/runner ExecutionContext.cs), so the count survives ten warnings, and the weekly
+// watcher reads it from the run's annotations, never from the log.
+test('CLI under GitHub Actions: exactly one count notice, both numbers always, printed before the first warning; outside Actions none -- RED before 28a', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fdl-'));
+  try {
+    const NOTICE = /^::notice title=front-door-links-count::(\d+) finding\(s\), (\d+) warning\(s\)$/;
+    const mixed = path.join(dir, 'README.md');
+    fs.writeFileSync(mixed, `![b](${base}/always-503)\n[m](${base}/missing)\n[o](${base}/ok)\n`);
+    const r = await run([mixed], { GITHUB_ACTIONS: 'true' });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    const lines = r.stdout.split(/\r?\n/);
+    const notes = lines.filter((l) => l.startsWith('::notice '));
+    assert.equal(notes.length, 1, r.stdout);
+    assert.deepEqual(notes[0].match(NOTICE)?.slice(1), ['1', '1'], notes[0]);
+    assert.ok(lines.indexOf(notes[0]) < lines.findIndex((l) => l.startsWith('::warning ')), 'the count comes before the warnings');
+    // zero warnings: both numbers still printed; an unreadable file counts as a finding, as it does in the summary line
+    const clean = path.join(dir, 'SECURITY.md');
+    fs.writeFileSync(clean, `[o](${base}/ok)\n`);
+    const z = await run([clean, path.join(dir, 'absent.md')], { GITHUB_ACTIONS: 'true' });
+    assert.equal(z.status, 1, z.stdout + z.stderr);
+    const zn = z.stdout.split(/\r?\n/).filter((l) => l.startsWith('::notice '));
+    assert.deepEqual(zn.map((l) => l.match(NOTICE)?.slice(1)), [['1', '0']], z.stdout);
+    const plain = await run([mixed]);
+    assert.ok(!plain.stdout.includes('::notice'), 'outside GitHub Actions no workflow command is printed');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 // 28c (the umbrella auditor's 28a findings 1 and 2 on #254): the entry-point guard never answers "not the entry" by failing. When the platform's realpath
 // throws (a volume whose final path it cannot name), the check still runs and still fails loud; a run that read nothing and passed is the worst outcome
 // this file has. And the realpath half is pinned: a CLI run through a folder link (a junction on Windows), without the preserve flags, still runs.
