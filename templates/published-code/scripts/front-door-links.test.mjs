@@ -591,3 +591,18 @@ test('CLI under GitHub Actions: a front door whose file name holds ##[ never pri
     assert.ok(note.slice(0, note.indexOf('::', 2)).includes(`x#${BS}u{23}[error]y.md`), `the file property shows the broken mark: ${note}`);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+// 28a (the umbrella auditor's 27i LOW notes on #253). (1) The family is matched case-sensitively: the codes are the runtimes' own spellings, and a
+// lower-case near miss is no timeout (its case-blind mutant, n4, survived the suite).
+test('checkFiles: the timeout family is matched case-sensitively: etimedout is a finding, never a warning -- pins the case (the auditor\'s n4)', async () => {
+  const r = await checkFiles([{ name: 'R.md', text: `![b](${BADGE})\n` }], { fetchFn: failsWith('etimedout'), retryMs: 0 });
+  assert.equal(r.findings.length, 1, 'etimedout is not ETIMEDOUT');
+  assert.deepEqual(r.warnings, []);
+});
+// (2) The order of printable and the property escape on the annotation's file= (its swapped mutant, f2, survived): printable first makes a control
+// character a visible code point, and only then are `%`, `:` and `,` escaped. A unit test of the CLI's own helper, so no such file is needed on disk.
+test('annotationFile: printable runs before the property escape: a newline in a file name is shown as its code point, then : , % are escaped -- RED before 28a', async () => {
+  const { annotationFile, annotationData } = await import(pathToFileURL(CLI).href);
+  const NL = String.fromCharCode(10);
+  assert.equal(annotationFile(`a${NL}::error::x,y%.md`), `a${BS}u{a}%3A%3Aerror%3A%3Ax%2Cy%25.md`);
+  assert.equal(annotationData(`u${NL}##[error]v%`), `u${BS}u{a}#${BS}u{23}[error]v%25`, 'the data: printable first, then %, CR and LF');
+});

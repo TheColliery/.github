@@ -69,6 +69,10 @@ const printable = (s) => Array.from(String(s), (ch) => {
 // `%` CR LF, a property also `:` and `,`. So a file name or a URL can neither end the annotation early nor change its file or line.
 const escData = (s) => String(s).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
 const escProp = (s) => escData(s).replace(/:/g, '%3A').replace(/,/g, '%2C');
+// 27g (the auditor's LOW 3) and 28a (its 27i LOW 2, the order pinned): an annotation's file and data pass printable FIRST, so a control character is a
+// visible code point before the toolkit's escaping guards `%` (and, in a property, `:` and `,`). Exported so a unit test can hold the order.
+export const annotationFile = (f) => escProp(printable(f));
+export const annotationData = (s) => escData(printable(s));
 
 async function main(argv) {
   if (argv.includes('-h') || argv.includes('--help')) { console.log(USAGE); return 0; }
@@ -96,7 +100,7 @@ async function main(argv) {
     for (const x of r.warnings) {
       console.log(`WARN ${printable(x.file)}:${x.line}: ${printable(x.url)}: ${printable(x.message)}${why}`);
       // 27g (the auditor's LOW 3): the annotation passes the same printable rule as the plain lines first, then the toolkit's escaping
-      if (process.env.GITHUB_ACTIONS === 'true') console.log(`::warning file=${escProp(printable(x.file))},line=${x.line},title=front-door-links::${escData(printable(`${x.url}: ${x.message}${why}`))}`);
+      if (process.env.GITHUB_ACTIONS === 'true') console.log(`::warning file=${annotationFile(x.file)},line=${x.line},title=front-door-links::${annotationData(`${x.url}: ${x.message}${why}`)}`);
     }
     warned = r.warnings.length;
     summary = `${r.links} link(s) in ${texts.length} file(s), ${r.fetched} fetched${r.skipped.length ? `, ${r.skipped.length} skipped by host` : ''}`;
@@ -108,4 +112,9 @@ async function main(argv) {
   return fails ? 1 : 0;
 }
 
-process.exitCode = await main(process.argv.slice(2));
+// 28a: run only as the entry point, so a test can import the helpers above without running the check. The two paths are compared after realpath
+// (an 8.3 short name or a symlinked folder must not read as another file); a path that cannot be resolved is not this file.
+const isEntry = (() => {
+  try { return Boolean(process.argv[1]) && fs.realpathSync.native(process.argv[1]) === fs.realpathSync.native(fileURLToPath(import.meta.url)); } catch { return false; }
+})();
+if (isEntry) process.exitCode = await main(process.argv.slice(2));
