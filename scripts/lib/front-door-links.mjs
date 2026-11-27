@@ -34,7 +34,8 @@ export function extractLinks(text, counter) {
     if (fenced) continue;
     const line = raw.replace(/`[^`]*`/g, '`');
     // a markdown link or image destination, an autolink, an HTML href: the three shapes a front door uses
-    for (const url of linkUrls(line, counter)) out.push({ url, line: i + 1, lineText: raw });
+    const images = [];
+    linkUrls(line, counter, images).forEach((url, k) => out.push({ url, line: i + 1, lineText: raw, image: images[k] }));
   }
   return out;
 }
@@ -43,18 +44,23 @@ const MARKDOWN_DEST = /\]\((https?:\/\/[^\s)>]+)/y;
 const HREF_DEST = /href=["'](https?:\/\/[^"']+)["']/y;
 const isStop = (c) => c === undefined || c === '>' || /\s/.test(c);
 
-/** The URLs of one line's three shapes, read left to right in one pass; a failed autolink run is skipped, because a < inside it stops at the same character. */
-export function linkUrls(line, counter) {
+/** The URLs of one line's three shapes, read left to right in one pass; a failed autolink run is skipped, because a < inside it stops at the same character.
+ * `images`, when given, receives one boolean per URL: true for a markdown IMAGE destination (`![alt](url)`), whose [ follows a ! (27d: a badge wrapped in a
+ * link gives its image first, then the link). */
+export function linkUrls(line, counter, images) {
   const urls = [];
+  const brackets = []; // one entry per open [: does it open an image?
   let skipAutolinkUntil = -1;
   let p = 0;
   while (p < line.length) {
     if (counter) counter.steps++;
     let hit = null;
-    if (line[p] === ']') {
+    if (line[p] === '[') brackets.push(p > 0 && line[p - 1] === '!');
+    else if (line[p] === ']') {
+      const image = brackets.pop() === true;
       MARKDOWN_DEST.lastIndex = p;
       const m = MARKDOWN_DEST.exec(line);
-      if (m) hit = { url: m[1], end: p + m[0].length };
+      if (m) hit = { url: m[1], end: p + m[0].length, image };
     } else if (line[p] === 'h') {
       HREF_DEST.lastIndex = p;
       const m = HREF_DEST.exec(line);
@@ -69,7 +75,7 @@ export function linkUrls(line, counter) {
         else skipAutolinkUntil = e;
       }
     }
-    if (hit) { urls.push(hit.url); p = hit.end; } else p++;
+    if (hit) { urls.push(hit.url); if (images) images.push(hit.image === true); p = hit.end; } else p++;
   }
   return urls;
 }
@@ -163,11 +169,15 @@ export async function viaApi(fetchFn, target, token, timeoutMs = DEFAULT_TIMEOUT
 }
 
 /**
- * Check the outward links of named texts. `files` = [{ name, text }]. Returns { findings: [{ file, line, url, message }], links: n } with one fetch per
- * distinct URL per run. `skipHosts` is an array of host names (lower-case) to leave alone, reported as skipped.
+ * Check the outward links of named texts. `files` = [{ name, text }]. Returns { findings: [{ file, line, url, message }], warnings: [same shape], links: n }
+ * with one fetch per distinct URL per run. `skipHosts` is an array of host names (lower-case) to leave alone, reported as skipped.
+ * An IMAGE destination whose host gave no answer, a 5xx or a 429 after the retry is a WARNING, never a finding (main's ruling, order 27d): a badge image says
+ * nothing about the repository (shields.io answers 200 for a repository that does not exist, measured 2026-11-27), so only its transport can fail, and a
+ * slow badge host turned rooms red with nothing broken in them. An image that answers 4xx, and every link, still fail the run.
  */
 export async function checkFiles(files, { fetchFn = globalThis.fetch, timeoutMs = DEFAULT_TIMEOUT_MS, retryMs = DEFAULT_RETRY_MS, maxHops = MAX_HOPS, skipHosts = [], token = '' } = {}) {
   const findings = [];
+  const warnings = [];
   const seen = new Map();
   const skipped = [];
   let links = 0;
@@ -186,8 +196,10 @@ export async function checkFiles(files, { fetchFn = globalThis.fetch, timeoutMs 
       }
       if (result.skippedHost) { skipped.push(link.url); continue; }
       const message = judge(link, result);
-      if (message) findings.push({ file: name, line: link.line, url: link.url, message });
+      if (!message) continue;
+      const hostTrouble = transient(result) || result.status === 429;
+      (link.image && hostTrouble ? warnings : findings).push({ file: name, line: link.line, url: link.url, message });
     }
   }
-  return { findings, links, fetched: seen.size, skipped };
+  return { findings, warnings, links, fetched: seen.size, skipped };
 }

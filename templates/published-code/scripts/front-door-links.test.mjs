@@ -27,6 +27,8 @@ const routes = (req, res) => {
     case '/loop': return redirect('/loop');
     case '/flaky': flakyHits++; if (flakyHits % 2 === 1) { res.writeHead(503); return res.end(); } return ok();
     case '/limited': res.writeHead(429); return res.end();
+    case '/always-503': res.writeHead(503); return res.end(); // 27d: a host that never recovers within the retry
+
     case '/bad-location': res.writeHead(302, { location: 'http://' }); return res.end();
     default: res.writeHead(404); return res.end();
   }
@@ -426,4 +428,65 @@ test('checkFiles: a blob link to a missing file stays a finding: the contents AP
   r = await checkFiles(oneLink('https://github.com/TheColliery/.github/blob/main/NO-SUCH-FILE.md'), { fetchFn: m.fetchFn, retryMs: 0, token: 'T-123' });
   assert.match(r.findings[0].message, /HTTP 404/);
   assert.ok(!m.calls.some((c) => c.u.startsWith('https://api.github.com/')), 'a 404 is not transient, so the API is not asked');
+});
+
+// 27d (main's ruling on the 27b unit 3 study, the class "a link checker's verdict on an IMAGE a rendering service draws"): a badge image says nothing about
+// the repository. shields.io answers 200 even for a repository that does not exist (measured 2026-11-27), so a badge can only fail this check on transport,
+// and a slow badge host turned rooms red with nothing broken in them (CoalFace run 45917054673, CoalLedger 45924433003, this repo 44878552404). So an IMAGE
+// destination whose host gives no answer, a 5xx or a 429 is a WARNING that does not fail the run; an image that answers 4xx, and every link, still fail it.
+const timeoutsFor = (prefixes, table = {}) => async (url) => {
+  const u = String(url);
+  if (prefixes.some((h) => u.startsWith(h))) throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
+  const status = Object.entries(table).find(([h]) => u.startsWith(h))?.[1] ?? 200;
+  return { status, headers: { get: () => null }, body: null };
+};
+const BADGE = 'https://img.shields.io/github/v/tag/TheColliery/CoalLedger?label=version&color=blue';
+test('extractLinks: an image destination is marked as one, a link is not, a badge wrapped in a link gives both -- RED before 27d', () => {
+  const ls = extractLinks(`[![version](${BADGE})](https://github.com/TheColliery/CoalLedger/releases)\n![plain](https://img.example.test/a.png)\n[page](https://docs.example.test/p)\n`);
+  assert.deepEqual(ls.map((l) => [l.url, l.image === true]), [
+    [BADGE, true], ['https://github.com/TheColliery/CoalLedger/releases', false], ['https://img.example.test/a.png', true], ['https://docs.example.test/p', false],
+  ]);
+});
+test('checkFiles: a badge IMAGE whose host times out is a warning, never a finding (the 27b witness) -- RED before 27d', async () => {
+  const r = await checkFiles([{ name: 'README.md', text: `[![version](${BADGE})](https://github.com/TheColliery/CoalLedger/releases)\n` }], { fetchFn: timeoutsFor(['https://img.shields.io/']), retryMs: 0 });
+  assert.deepEqual(r.findings, [], 'a slow badge host turned the run red');
+  assert.equal(r.warnings.length, 1);
+  assert.deepEqual([r.warnings[0].file, r.warnings[0].line, r.warnings[0].url], ['README.md', 1, BADGE]);
+  assert.match(r.warnings[0].message, /no answer \(timeout\)/);
+});
+test('checkFiles: an image whose host answers 5xx or 429 after the retry is a warning; an image that answers 404 is still a finding -- RED before 27d', async () => {
+  for (const status of [503, 504, 429]) {
+    const r = await checkFiles([{ name: 'R.md', text: `![b](${BADGE})\n` }], { fetchFn: timeoutsFor([], { 'https://img.shields.io/': status }), retryMs: 0 });
+    assert.deepEqual(r.findings, [], `an image answering ${status} is not a finding`);
+    assert.equal(r.warnings.length, 1, `an image answering ${status} is a warning`);
+  }
+  const r404 = await checkFiles([{ name: 'R.md', text: `![b](${BADGE})\n` }], { fetchFn: timeoutsFor([], { 'https://img.shields.io/': 404 }), retryMs: 0 });
+  assert.equal(r404.findings.length, 1);
+  assert.match(r404.findings[0].message, /HTTP 404/);
+  assert.deepEqual(r404.warnings, []);
+});
+test('checkFiles: a page LINK whose host times out or answers 503 is still a finding, the same URL as an image beside it notwithstanding -- kept by 27d', async () => {
+  let r = await checkFiles([{ name: 'R.md', text: '[docs](https://docs.example.test/page)\n' }], { fetchFn: timeoutsFor(['https://docs.example.test/']), retryMs: 0 });
+  assert.equal(r.findings.length, 1);
+  assert.match(r.findings[0].message, /no answer \(timeout\)/);
+  assert.deepEqual(r.warnings, []);
+  r = await checkFiles([{ name: 'R.md', text: '![i](https://docs.example.test/x)\n[p](https://docs.example.test/x)\n' }], { fetchFn: timeoutsFor([], { 'https://docs.example.test/': 503 }), retryMs: 0 });
+  assert.deepEqual(r.findings.map((f) => f.line), [2], 'the link fails; the image beside it at the same URL only warns');
+  assert.deepEqual(r.warnings.map((w) => w.line), [1]);
+});
+test('CLI: an image warning is a WARN line, counted in the summary, and leaves the exit 0; a link at the same failing host still exits 1 -- RED before 27d', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fdl-'));
+  try {
+    const img = path.join(dir, 'README.md');
+    fs.writeFileSync(img, `![badge](${base}/always-503)\n[a](${base}/ok)\n`);
+    const r = await run([img]);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, new RegExp(`^WARN ${img.replace(/[\\]/g, '\\\\')}:1: ${base}/always-503: HTTP 503 \\(an image: its host's answer says nothing about this repository, so it does not fail the run\\)$`, 'm'));
+    assert.match(r.stdout, /^0 finding\(s\), 1 warning\(s\); 2 link\(s\) in 1 file\(s\), 2 fetched$/m);
+    const link = path.join(dir, 'SECURITY.md');
+    fs.writeFileSync(link, `[page](${base}/always-503)\n`);
+    const l = await run([link]);
+    assert.equal(l.status, 1, l.stdout + l.stderr);
+    assert.match(l.stdout, /^FAIL .*SECURITY\.md:1: .*\/always-503: HTTP 503$/m);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

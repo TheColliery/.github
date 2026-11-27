@@ -8,7 +8,8 @@
 // Exit:    0 every link answers · 1 a finding, or a file that cannot be read · 64 usage error
 // Env:     FRONT_DOOR_LINKS_TIMEOUT_MS (per request, default 10000) · FRONT_DOOR_LINKS_RETRY_MS (the pause before the one retry, default 2000)
 //          GITHUB_TOKEN (read by name, optional): a github.com repository, account or file (blob) link that still answers 5xx after the retry is asked once of the REST API with it
-// Output:  one `FAIL <file>:<line>: <url>: <why>` line per finding, then the summary line. Report a problem: the repository's issues.
+// Output:  one `FAIL <file>:<line>: <url>: <why>` line per finding, one `WARN ...` line per image whose host gave no answer, a 5xx or a 429 (a warning
+//          never fails the run: a badge image says nothing about the repository, order 27d), then the summary line. Report a problem: the repository's issues.
 // Node builtins only at the top level (node/runtime.md section 1): the engine is imported inside the try, so a missing engine is a FAIL line, never a stack.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -76,17 +77,20 @@ async function main(argv) {
     try { texts.push({ name: f, text: readBounded(f) }); } catch (e) { console.log(`FAIL ${printable(f)}: cannot be read (${printable(e.code || e.message)})`); fails++; }
   }
   let summary = '';
+  let warned = 0;
   try {
     const lib = await import(pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), 'lib', 'front-door-links.mjs')).href);
     const r = await lib.checkFiles(texts, { timeoutMs: env('FRONT_DOOR_LINKS_TIMEOUT_MS', lib.DEFAULT_TIMEOUT_MS), retryMs: env('FRONT_DOOR_LINKS_RETRY_MS', lib.DEFAULT_RETRY_MS), skipHosts, token: process.env.GITHUB_TOKEN || '' });
     for (const x of r.findings) console.log(`FAIL ${printable(x.file)}:${x.line}: ${printable(x.url)}: ${printable(x.message)}`);
     fails += r.findings.length;
+    for (const x of r.warnings) console.log(`WARN ${printable(x.file)}:${x.line}: ${printable(x.url)}: ${printable(x.message)} (an image: its host's answer says nothing about this repository, so it does not fail the run)`);
+    warned = r.warnings.length;
     summary = `${r.links} link(s) in ${texts.length} file(s), ${r.fetched} fetched${r.skipped.length ? `, ${r.skipped.length} skipped by host` : ''}`;
   } catch (e) {
     console.log(`FAIL front-door-links: the engine could not run (${printable(e && e.message ? e.message : e)})`);
     fails++;
   }
-  console.log(`${fails} finding(s)${summary ? `; ${summary}` : ''}`);
+  console.log(`${fails} finding(s)${warned ? `, ${warned} warning(s)` : ''}${summary ? `; ${summary}` : ''}`);
   return fails ? 1 : 0;
 }
 
