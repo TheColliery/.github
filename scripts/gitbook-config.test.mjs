@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { extractLinks } from './lib/front-door-links.mjs';
 
 // UMB-165 (the new GitBook home). This repo carries TWO GitBook configurations on purpose:
 //   - gitbook-docs.yaml, the SITE-level structure (sections + one space per benchmark). It is what the site
@@ -169,8 +170,28 @@ test('no front door points at the deleted old TheColliery GitBook site (hetcreep
   const MAY_NAME = ['scripts/gitbook-config.test.mjs', 'scripts/lib/skeleton-check-lib.mjs', 'scripts/skeleton-check.test.mjs'];
   const named = files.filter((f) => !MAY_NAME.includes(f) && gitbookHosts.test(read(f)));
   assert.deepEqual(named, [], 'these files publish a GitBook host; the stable link is https://thecolliery.org/docs');
-  assert.match(read('README.md'), /https:\/\/thecolliery\.org\/docs\b/);
-  assert.match(read('profile/README.md'), /https:\/\/thecolliery\.org\/docs\b/);
+  assert.ok(linksToStableDocs(read('README.md')), 'README.md links the stable docs address https://thecolliery.org/docs');
+  assert.ok(linksToStableDocs(read('profile/README.md')), 'profile/README.md links the stable docs address https://thecolliery.org/docs');
+});
+
+// 27b (code scanning alert 37, js/regex/missing-regexp-anchor, on the two assert.match lines this replaces): an unanchored URL pattern
+// is satisfied by the address written anywhere in the text, inside another link's query string included, so it said "the front door
+// links the stable docs" when it might not. The check now reads the front door's own link targets (extractLinks, the front-door-links
+// canon) and compares the parsed URL's scheme, host and path: a link to https://thecolliery.org/docs or a page under it.
+function linksToStableDocs(text) {
+  return extractLinks(text).some(({ url }) => {
+    let u;
+    try { u = new URL(url); } catch { return false; }
+    return u.protocol === 'https:' && u.host === 'thecolliery.org' && (u.pathname === '/docs' || u.pathname.startsWith('/docs/'));
+  });
+}
+test('the stable-docs check reads link targets: the address inside another link, or a longer path, does not count (RED before 27b, code scanning alert 37)', () => {
+  assert.equal(linksToStableDocs('[x](https://evil.example/?next=https://thecolliery.org/docs)'), false, 'the address in another link\'s query');
+  assert.equal(linksToStableDocs('[x](https://thecolliery.org/docsx)'), false, 'a longer path');
+  assert.equal(linksToStableDocs('[x](https://thecolliery.org.evil.example/docs)'), false, 'a look-alike host');
+  assert.equal(linksToStableDocs('[docs](https://thecolliery.org/docs)'), true);
+  assert.equal(linksToStableDocs('<a href="https://thecolliery.org/docs/tools">x</a>'), true, 'a page under the docs address');
+  assert.equal(linksToStableDocs('```\n[docs](https://thecolliery.org/docs)\n```'), false, 'an example in a fenced block is not a link the page makes');
 });
 
 // 23d (card BB-566, the Product Hunt launch): profile/README.md is the first screen of BOTH front doors (the GitHub org
