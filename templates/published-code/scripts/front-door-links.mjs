@@ -117,8 +117,11 @@ async function main(argv) {
 }
 
 // 28a: run only as the entry point, so a test can import the helpers above without running the check. The two paths are compared after realpath
-// (an 8.3 short name or a symlinked folder must not read as another file); a path that cannot be resolved is not this file.
+// (an 8.3 short name or a symlinked folder must not read as another file). 28c (the auditor's 28a finding 1): when the platform cannot resolve a path,
+// the guard answers "the entry", so the check runs and fails loud; answering "not the entry" made a run that read nothing exit 0 in silence. Node's
+// import.meta.main was weighed and not taken: it exists only from 22.18.0 and 24.2.0 (Stability 1.0), and an older Node 22 would read it as false, silent again.
 const isEntry = (() => {
-  try { return Boolean(process.argv[1]) && fs.realpathSync.native(process.argv[1]) === fs.realpathSync.native(fileURLToPath(import.meta.url)); } catch { return false; }
+  if (!process.argv[1]) return false;
+  try { return fs.realpathSync.native(process.argv[1]) === fs.realpathSync.native(fileURLToPath(import.meta.url)); } catch { return true; }
 })();
 if (isEntry) process.exitCode = await main(process.argv.slice(2));
