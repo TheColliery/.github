@@ -5,10 +5,13 @@
 //
 // Usage:   node scripts/front-door-links.mjs [--skip-host=<host>]... <file.md> [<file.md> ...]
 // Example: node scripts/front-door-links.mjs README.md SECURITY.md
-// Exit:    0 every link answers · 1 a finding, or a file that cannot be read · 64 usage error
+// Exit:    0 every link answers, or only images warn · 1 a finding, or a file that cannot be read · 64 usage error
 // Env:     FRONT_DOOR_LINKS_TIMEOUT_MS (per request, default 10000) · FRONT_DOOR_LINKS_RETRY_MS (the pause before the one retry, default 2000)
 //          GITHUB_TOKEN (read by name, optional): a github.com repository, account or file (blob) link that still answers 5xx after the retry is asked once of the REST API with it
-// Output:  one `FAIL <file>:<line>: <url>: <why>` line per finding, then the summary line. Report a problem: the repository's issues.
+// Output:  one `FAIL <file>:<line>: <url>: <why>` line per finding, one `WARN ...` line per image whose host gave no answer, a 5xx or a 429 (a warning
+//          never fails the run: an image says nothing about the repository, orders 27d and 27e), then the summary line. Under GitHub Actions
+//          (GITHUB_ACTIONS=true) each WARN line is also printed as a `::warning file=<file>,line=<line>::` workflow command, so a warning shows on the
+//          run page and the pull request of a green run. Report a problem: the repository's issues.
 // Node builtins only at the top level (node/runtime.md section 1): the engine is imported inside the try, so a missing engine is a FAIL line, never a stack.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const USAGE = 'usage: node scripts/front-door-links.mjs [--skip-host=<host>]... <file.md> [<file.md> ...] | -h\n'
   + '  fetches every http(s) link of the files (fenced and inline code excluded) and fails on one that does not answer at the page it names\n'
   + '  example: node scripts/front-door-links.mjs README.md SECURITY.md\n'
-  + '  exit 0 every link answers · 1 a finding or an unreadable file · 64 usage error';
+  + '  exit 0 every link answers, or only images warn · 1 a finding or an unreadable file · 64 usage error';
 
 const env = (k, d) => (Number(process.env[k]) > 0 ? Number(process.env[k]) : d);
 
@@ -59,6 +62,10 @@ const printable = (s) => Array.from(String(s), (ch) => {
   const c = ch.codePointAt(0);
   return c < 0x20 || (c >= 0x7f && c <= 0x9f) || c === 0x2028 || c === 0x2029 ? `${BACKSLASH}u{${c.toString(16)}}` : ch;
 }).join('');
+// A GitHub Actions workflow command carries its values escaped the way the runner's own toolkit escapes them (@actions/core command.ts): data
+// `%` CR LF, a property also `:` and `,`. So a file name or a URL can neither end the annotation early nor change its file or line.
+const escData = (s) => String(s).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+const escProp = (s) => escData(s).replace(/:/g, '%3A').replace(/,/g, '%2C');
 
 async function main(argv) {
   if (argv.includes('-h') || argv.includes('--help')) { console.log(USAGE); return 0; }
@@ -76,17 +83,24 @@ async function main(argv) {
     try { texts.push({ name: f, text: readBounded(f) }); } catch (e) { console.log(`FAIL ${printable(f)}: cannot be read (${printable(e.code || e.message)})`); fails++; }
   }
   let summary = '';
+  let warned = 0;
   try {
     const lib = await import(pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), 'lib', 'front-door-links.mjs')).href);
     const r = await lib.checkFiles(texts, { timeoutMs: env('FRONT_DOOR_LINKS_TIMEOUT_MS', lib.DEFAULT_TIMEOUT_MS), retryMs: env('FRONT_DOOR_LINKS_RETRY_MS', lib.DEFAULT_RETRY_MS), skipHosts, token: process.env.GITHUB_TOKEN || '' });
     for (const x of r.findings) console.log(`FAIL ${printable(x.file)}:${x.line}: ${printable(x.url)}: ${printable(x.message)}`);
     fails += r.findings.length;
+    const why = ' (an image: its host\'s answer says nothing about this repository, so it does not fail the run)';
+    for (const x of r.warnings) {
+      console.log(`WARN ${printable(x.file)}:${x.line}: ${printable(x.url)}: ${printable(x.message)}${why}`);
+      if (process.env.GITHUB_ACTIONS === 'true') console.log(`::warning file=${escProp(x.file)},line=${x.line},title=front-door-links::${escData(`${x.url}: ${x.message}${why}`)}`);
+    }
+    warned = r.warnings.length;
     summary = `${r.links} link(s) in ${texts.length} file(s), ${r.fetched} fetched${r.skipped.length ? `, ${r.skipped.length} skipped by host` : ''}`;
   } catch (e) {
     console.log(`FAIL front-door-links: the engine could not run (${printable(e && e.message ? e.message : e)})`);
     fails++;
   }
-  console.log(`${fails} finding(s)${summary ? `; ${summary}` : ''}`);
+  console.log(`${fails} finding(s)${warned ? `, ${warned} warning(s)` : ''}${summary ? `; ${summary}` : ''}`);
   return fails ? 1 : 0;
 }
 

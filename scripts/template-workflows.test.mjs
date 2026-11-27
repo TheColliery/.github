@@ -199,6 +199,8 @@ const indentOf = (l) => l.match(/^ */)[0].length;
 const unquote = (s) => s.replace(/^(['"])(.*)\1$/, '$2');
 function requiredJobsOf(ls) {
   const out = [];
+  // 27d (the auditor's 27e LOW 4): jobs written as a flow mapping on the jobs: line are not read, so they count as carrying a required job (the safe side)
+  if (ls.some((l) => /^(["']?)jobs\1\s*:\s*\{/.test(stripComment(l)))) return ['(jobs in flow form: not read, counted as required)'];
   const jobsAt = ls.findIndex((l) => /^(["']?)jobs\1\s*:\s*(#.*)?$/.test(l));
   if (jobsAt < 0) return out;
   let jobIndent = -1;
@@ -235,11 +237,41 @@ function requiredJobsOf(ls) {
 // too, so it is held to the same rule; a paths key under no trigger the scan can name, or in a flow mapping on the on: line, counts as one.
 const PR_TRIGGERS = new Set(['pull_request', 'pull_request_target']);
 const PATHS_ANYWHERE = /(^|[\s{,])["']?paths(-ignore)?["']?\s*:/;
+const MERGE_KEY = /(^|[\s{,])<<\s*:/;
+// 27d (the auditor's 27e LOW 2 and 3): a flow mapping on the on: line is read by trigger, so a filter on push alone stays fine, while a filter on a
+// pull request trigger, an alias or a merge key there, or a mapping the scan cannot balance, counts against the workflow.
+function flowHasPrFilter(text) {
+  let depth = 0;
+  for (const ch of text) {
+    if (ch === '{' || ch === '[') depth++;
+    else if (ch === '}' || ch === ']') depth--;
+    if (depth < 0) return true;
+  }
+  if (depth !== 0) return true;
+  for (const t of PR_TRIGGERS) {
+    const re = new RegExp(`(^|[{,\\s])["']?${t}["']?\\s*:\\s*`, 'g');
+    let m;
+    while ((m = re.exec(text))) {
+      const at = m.index + m[0].length;
+      if (text[at] === '*') return true;
+      if (text[at] !== '{') continue;
+      let d = 0;
+      let end = at;
+      for (; end < text.length; end++) {
+        if (text[end] === '{' || text[end] === '[') d++;
+        else if ((text[end] === '}' || text[end] === ']') && --d === 0) break;
+      }
+      const value = text.slice(at, end + 1);
+      if (PATHS_ANYWHERE.test(value) || MERGE_KEY.test(value)) return true;
+    }
+  }
+  return false;
+}
 function pullRequestPathFilterLine(ls) {
   const onAt = ls.findIndex((l) => /^(["']?)on\1\s*:/.test(stripComment(l)));
   if (onAt < 0) return 0;
   const rest = stripComment(ls[onAt]).replace(/^(["']?)on\1\s*:/, '').trim();
-  if (rest) return PATHS_ANYWHERE.test(rest) ? onAt + 1 : 0; // `on: pull_request`, `on: [push, pull_request]`, or a flow mapping
+  if (rest) return flowHasPrFilter(rest) ? onAt + 1 : 0; // `on: pull_request`, `on: [push, pull_request]`, or a flow mapping
   let triggerIndent = -1;
   let trigger = null;
   for (let i = onAt + 1; i < ls.length; i++) {
@@ -249,14 +281,17 @@ function pullRequestPathFilterLine(ls) {
     if (ind === 0) break;
     if (triggerIndent < 0) triggerIndent = ind;
     if (ind === triggerIndent) {
+      // 27d (the auditor's 27e LOW 1): an event list item (`- push`) names an event and can carry no filter
+      if (/^-\s+["']?[A-Za-z_]+["']?$/.test(line.trim())) { trigger = null; continue; }
       const m = line.trim().match(/^(["']?)([A-Za-z_]+)\1\s*:(.*)$/);
       trigger = m && !/^paths(-ignore)?$/.test(m[2]) ? m[2] : null;
       if (trigger === null) return i + 1; // a paths key, or a line the scan cannot read, at trigger level
-      if (PR_TRIGGERS.has(trigger) && PATHS_ANYWHERE.test(m[3])) return i + 1; // `pull_request: { paths: [...] }`
+      // `pull_request: { paths: [...] }`, and an alias the scan cannot resolve (`pull_request: *docs`, the auditor's F1)
+      if (PR_TRIGGERS.has(trigger) && flowHasPrFilter(`${trigger}: ${m[3].trim()}`)) return i + 1;
       continue;
     }
     if (ind < triggerIndent) trigger = null;
-    if (PATHS_ANYWHERE.test(line) && (trigger === null || PR_TRIGGERS.has(trigger))) return i + 1;
+    if ((PATHS_ANYWHERE.test(line) || MERGE_KEY.test(line)) && (trigger === null || PR_TRIGGERS.has(trigger))) return i + 1;
   }
   return 0;
 }
@@ -275,7 +310,7 @@ test('the required-workflow scan reads what it must: a pull_request filter is fo
 // 27b (the umbrella auditor's INSPECT of PR #244, findings 1 and 2): the scan read the on: block by exact two-space indentation and the job ids by an
 // exact line, so a filtered required workflow written another legal way passed it. Each shape below is a real YAML form GitHub accepts. The scan now
 // fails CLOSED: a paths key it cannot attribute to a trigger it knows is an offender, and a job name built by an expression counts as required.
-test('the required-workflow scan catches a pull_request filter in every form GitHub reads, and a required job however it is written (RED before 27b: M1 to M9)', () => {
+test('the required-workflow scan catches a pull_request filter in every form the house writes, and a required job in the forms it reads (RED before 27b: M1 to M9)', () => {
   const wf = (...xs) => xs.join('\n').split('\n');
   const jobs = ['jobs:', '  all-green:', '    runs-on: ubuntu-latest'];
   const caught = (name, ls) => {
@@ -299,6 +334,22 @@ test('the required-workflow scan catches a pull_request filter in every form Git
   assert.equal(pullRequestPathFilterLine(wf('on: [push, pull_request]', ...jobs)), 0);
   assert.equal(pullRequestPathFilterLine(wf('on:', '  push:', '    branches: [main]', '  pull_request:', '    branches: [main]', '  workflow_dispatch:', ...jobs)), 0);
   assert.deepEqual(requiredJobsOf(wf('jobs:', '  lint:', '    name: lint', '  front-door-links:', '    runs-on: x')), [], 'a job no ruleset names is not counted');
+});
+// 27d (the umbrella auditor's 27e LOW notes 1 to 4): two legitimate shapes the 27b scan cried on, and two filtered forms it missed.
+test('the required-workflow scan reads an event list and a flow mapping by trigger, and fails closed on an alias and on jobs it cannot read (RED before 27d: L1, L2, F1, F2)', () => {
+  const wf = (...xs) => xs.join('\n').split('\n');
+  const jobs = ['jobs:', '  all-green:', '    runs-on: ubuntu-latest'];
+  // L1 and L2: no path filter on pull_request, so no offender
+  assert.equal(pullRequestPathFilterLine(wf('on:', '  - push', '  - pull_request', ...jobs)), 0, 'L1 an event list in block form');
+  assert.equal(pullRequestPathFilterLine(wf("on: { push: { paths-ignore: ['README.md'] }, pull_request: {} }", ...jobs)), 0, 'L2 a flow mapping whose filter is on push only');
+  assert.equal(pullRequestPathFilterLine(wf("on: { push: {}, pull_request: { branches: [main], paths-ignore: ['README.md'] } }", ...jobs)), 1, 'the same flow form with the filter on pull_request is still caught');
+  assert.equal(pullRequestPathFilterLine(wf("on: { push: {}, pull_request: { branches: [main", ...jobs)), 1, 'a flow mapping the scan cannot balance counts against the workflow');
+  // F1: an alias on a pull request trigger cannot be resolved here, so it counts
+  assert.ok(pullRequestPathFilterLine(wf('on:', '  push: &docs', '    paths-ignore:', "      - 'README.md'", '  pull_request: *docs', ...jobs)) > 0, 'F1 pull_request: *docs');
+  assert.ok(pullRequestPathFilterLine(wf('on:', '  pull_request:', '    <<: *docs', ...jobs)) > 0, 'F1 a merge key under pull_request');
+  assert.equal(pullRequestPathFilterLine(wf('on:', '  push: &docs', '    paths-ignore:', "      - 'README.md'", '  pull_request:', '    branches: [main]', ...jobs)), 0, 'an anchor under push alone stays fine');
+  // F2: jobs written as a one-line flow mapping cannot be read here, so they count as carrying a required job
+  assert.ok(requiredJobsOf(wf('on:', '  pull_request:', '    paths-ignore:', "      - 'x'", 'jobs: { all-green: { runs-on: ubuntu-latest } }')).length > 0, 'F2 jobs in flow form');
 });
 test('no workflow that carries a required check filters its pull_request trigger by path: a skipped workflow leaves the check Pending and blocks the merge (RED before 27a, CW-103 (c))', () => {
   const offenders = [];

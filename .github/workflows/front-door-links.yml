@@ -4,6 +4,7 @@ name: front-door-links
 # This is the org repository's own copy of templates/published-code/.github/workflows/front-door-links.yml: the same engine, run on the org's
 # front doors, which are the org README, the landing (profile/README.md) and the org-default community files under .github/. The engine fails
 # loud on a 404, a page that no longer answers, a redirect that drops the page a deep link names, and a "publishing soon" note beside a live page.
+# An image whose host times out, answers a server error or rate limits is a WARN line and a ::warning annotation that does not fail the run (27d, 27e).
 on:
   push:
     branches: [main]

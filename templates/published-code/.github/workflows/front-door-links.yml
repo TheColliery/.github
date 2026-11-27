@@ -4,7 +4,8 @@ name: front-door-links
 # link-check.yml checks the links INSIDE the repository; this one reads the links that LEAVE it, on every change to a front door and on a weekly
 # clock, because a docs page rots while the README stands still (six READMEs said "publishing soon" about pages that were live). The engine,
 # scripts/front-door-links.mjs, fails loud on a 404, a page that no longer answers, a redirect that drops the page a deep link names, and a
-# "publishing soon" note beside a page that is live. It is copied from the canon (TheColliery/.github, templates/published-code) by blob.
+# "publishing soon" note beside a page that is live. An image whose host times out, answers a server error or rate limits is a WARN line and a
+# ::warning annotation that does not fail the run. It is copied from the canon (TheColliery/.github, templates/published-code) by blob.
 on:
   push:
     branches: [main]
