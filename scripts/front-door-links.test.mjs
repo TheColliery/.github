@@ -490,3 +490,40 @@ test('CLI: an image warning is a WARN line, counted in the summary, and leaves t
     assert.match(l.stdout, /^FAIL .*SECURITY\.md:1: .*\/always-503: HTTP 503$/m);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+// 27e (the umbrella auditor's 27f INSPECT of #249, findings 1, 2 and 5): only a host that times out, answers a 5xx or answers 429 makes an image a
+// warning. A name that does not resolve, a refused connection or a bad certificate says the host is gone or broken, and the run fails on it.
+const failsWith = (code) => async () => { throw Object.assign(new TypeError('fetch failed'), { cause: Object.assign(new Error(code), { code }) }); };
+test('checkFiles: an image whose host name does not resolve, refuses the connection or shows an expired certificate is a finding, never a warning -- RED before 27e', async () => {
+  for (const code of ['ENOTFOUND', 'ECONNREFUSED', 'CERT_HAS_EXPIRED']) {
+    const r = await checkFiles([{ name: 'R.md', text: `![b](${BADGE})\n` }], { fetchFn: failsWith(code), retryMs: 0 });
+    assert.equal(r.findings.length, 1, `an image whose fetch fails with ${code} is a finding`);
+    assert.match(r.findings[0].message, new RegExp(`no answer \\(${code}\\)`));
+    assert.deepEqual(r.warnings, [], `an image whose fetch fails with ${code} is not a warning`);
+  }
+});
+test('extractLinks: an escaped bang is text, so the link after it is a link, not an image; an escaped backslash before a bang leaves the image -- RED before 27e', () => {
+  const ls = extractLinks('Read this\\![the guide](https://docs.example.test/guide)\nA path \\\\![b](https://img.example.test/b.png)\n');
+  assert.deepEqual(ls.map((l) => [l.url, l.image === true]), [['https://docs.example.test/guide', false], ['https://img.example.test/b.png', true]]);
+});
+test('checkFiles: a link after an escaped bang whose host answers 503 is a finding (the auditor\'s P5) -- RED before 27e', async () => {
+  const r = await checkFiles([{ name: 'R.md', text: 'Read this\\![the guide](https://docs.example.test/guide)\n' }], { fetchFn: timeoutsFor([], { 'https://docs.example.test/': 503 }), retryMs: 0 });
+  assert.equal(r.findings.length, 1);
+  assert.deepEqual(r.warnings, []);
+});
+test('CLI under GitHub Actions: each WARN line also goes out as a ::warning annotation naming the file and the line, its values escaped; outside Actions no annotation is printed -- RED before 27e', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fdl-'));
+  try {
+    const img = path.join(dir, 'a,b.md');
+    fs.writeFileSync(img, `x\n![badge](${base}/always-503?q=%41)\n`);
+    const esc = (s, prop) => { let o = s.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A'); if (prop) o = o.replace(/:/g, '%3A').replace(/,/g, '%2C'); return o; };
+    const r = await run([img], { GITHUB_ACTIONS: 'true' });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    const lines = r.stdout.split(/\r?\n/);
+    const want = `::warning file=${esc(img, true)},line=2,title=front-door-links::${esc(`${base}/always-503?q=%41: HTTP 503 (an image: its host's answer says nothing about this repository, so it does not fail the run)`)}`;
+    assert.ok(lines.includes(want), `missing the annotation line\n${want}\nin\n${r.stdout}`);
+    assert.ok(lines.some((l) => l.startsWith('WARN ')), 'the WARN line stays');
+    const plain = await run([img]);
+    assert.equal(plain.status, 0, plain.stdout + plain.stderr);
+    assert.ok(!plain.stdout.includes('::warning'), 'outside GitHub Actions no workflow command is printed');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

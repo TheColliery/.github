@@ -5,10 +5,14 @@
 // and one redirected to the docs root with the tool's own page dropped. A visitor reads the README before anything else, so its outward links are
 // claims the repository makes. They are checked on every change to a front door and on a weekly clock: a page rots while the README stands still.
 //
-// A FINDING: a final status outside 2xx after at most MAX_HOPS redirects · no answer (a network error, a timeout) · HTTP 429 (reported, never retried)
+// A FINDING: a final status outside 2xx after at most MAX_HOPS redirects · no answer (a network error, a timeout) · HTTP 429 (reported, never retried),
+// each except an image's host trouble (the WARNING below)
 // · a redirect chain whose final path lost the last segment of a link TWO OR MORE segments deep (docs.example/tools/x -> docs.example/, the deep link
 // lost; a one-segment link may land on a site root, the shape of a stable entry link) · a "publishing soon" or "coming soon" note on the line of a link
 // whose page answers.
+// A WARNING, never a finding (main's ruling, orders 27d and 27e): an IMAGE destination (`![alt](url)`) whose host times out, answers a 5xx or answers
+// 429 after the retry. An image says nothing about the repository and only its host's transport can fail, so a slow host must not turn a run red; an
+// image that answers 4xx, or whose host name does not resolve, refuses the connection or shows a bad certificate, is still a finding, and so is every link.
 // NOT a finding: a link inside a fenced code block or an inline code span (an example, not a claim) · a mailto:, a relative path, a bare anchor (the
 // room's own link check) · a host on the caller's skip list (a placeholder or a host that refuses robots), whether the link names it or a redirect leads into it · a redirect to a sign-in page whose query
 // names the asked page (GitHub's /login?return_to=<the page>: a wall in front of the page, not a page that is gone).
@@ -43,6 +47,10 @@ export function extractLinks(text, counter) {
 const MARKDOWN_DEST = /\]\((https?:\/\/[^\s)>]+)/y;
 const HREF_DEST = /href=["'](https?:\/\/[^"']+)["']/y;
 const isStop = (c) => c === undefined || c === '>' || /\s/.test(c);
+// 27e (the auditor's 27f finding 5): CommonMark reads a character after an ODD run of backslashes as text, so `\![x](u)` is a bang and a link, and
+// `\\![x](u)` is a backslash and an image. The backslash is built from its code point, so no tool on the way can halve it.
+const BACKSLASH = String.fromCharCode(92);
+const escaped = (line, i) => { let n = 0; while (i - 1 - n >= 0 && line[i - 1 - n] === BACKSLASH) n++; return n % 2 === 1; };
 
 /** The URLs of one line's three shapes, read left to right in one pass; a failed autolink run is skipped, because a < inside it stops at the same character.
  * `images`, when given, receives one boolean per URL: true for a markdown IMAGE destination (`![alt](url)`), whose [ follows a ! (27d: a badge wrapped in a
@@ -55,7 +63,7 @@ export function linkUrls(line, counter, images) {
   while (p < line.length) {
     if (counter) counter.steps++;
     let hit = null;
-    if (line[p] === '[') brackets.push(p > 0 && line[p - 1] === '!');
+    if (line[p] === '[') brackets.push(p > 0 && line[p - 1] === '!' && !escaped(line, p - 1));
     else if (line[p] === ']') {
       const image = brackets.pop() === true;
       MARKDOWN_DEST.lastIndex = p;
@@ -197,7 +205,9 @@ export async function checkFiles(files, { fetchFn = globalThis.fetch, timeoutMs 
       if (result.skippedHost) { skipped.push(link.url); continue; }
       const message = judge(link, result);
       if (!message) continue;
-      const hostTrouble = transient(result) || result.status === 429;
+      // 27e (the auditor's 27f finding 1): only a host that times out, answers a 5xx or answers 429 is trouble an image may ride out. A name that does
+      // not resolve, a refused connection or a bad certificate says the host is gone or broken, so the image fails the run like a link.
+      const hostTrouble = (result.status === 0 && result.error === 'timeout') || (result.status >= 500 && result.status < 600) || result.status === 429;
       (link.image && hostTrouble ? warnings : findings).push({ file: name, line: link.line, url: link.url, message });
     }
   }
