@@ -563,3 +563,31 @@ test('CLI: a URL holding ##[ never prints ##[ in a WARN, FAIL or ::warning line,
     assert.ok(notes.some((l) => l.includes(`${BS}u{1b}x`)), 'the escape character is written as its code point');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+// 27i (the umbrella auditor's 27h LOW notes on #251). (a) Node's own connect timeout: when address-family selection has tried every address and holds no
+// error, net.js destroys the socket with ERR_SOCKET_CONNECTION_TIMEOUT (lib/net.js on v22.x and v24.x, the auditor's reading), a timeout like the others. And
+// the family is matched WHOLE: a code that only contains a family name is no timeout.
+test('checkFiles: an image whose connect times out in Node\'s own address selection (ERR_SOCKET_CONNECTION_TIMEOUT) is a warning; a code that only CONTAINS a family name is a finding -- RED before 27i', async () => {
+  const r = await checkFiles([{ name: 'R.md', text: `![b](${BADGE})\n` }], { fetchFn: failsWith('ERR_SOCKET_CONNECTION_TIMEOUT'), retryMs: 0 });
+  assert.deepEqual(r.findings, [], 'ERR_SOCKET_CONNECTION_TIMEOUT is a timeout');
+  assert.equal(r.warnings.length, 1);
+  for (const near of ['XETIMEDOUT', 'ETIMEDOUT_X', 'UND_ERR_CONNECT_TIMEOUT_RETRY', 'timeouts']) {
+    const n = await checkFiles([{ name: 'R.md', text: `![b](${BADGE})\n` }], { fetchFn: failsWith(near), retryMs: 0 });
+    assert.equal(n.findings.length, 1, `${near} only contains a family name, so it is a finding`);
+    assert.deepEqual(n.warnings, []);
+  }
+});
+// (b) the annotation's file property passes printable too: a file whose name holds ##[ (Windows allows it) never prints the legacy mark on any line.
+test('CLI under GitHub Actions: a front door whose file name holds ##[ never prints ##[, the annotation\'s file= included -- RED before 27i (pins printable on file=)', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fdl-'));
+  try {
+    const odd = path.join(dir, 'x##[error]y.md');
+    fs.writeFileSync(odd, `![b](${base}/always-503)\n`);
+    const r = await run([odd], { GITHUB_ACTIONS: 'true' });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    const lines = r.stdout.split(/\r?\n/);
+    for (const l of lines) assert.ok(!l.includes('##['), `a line carries ##[: ${l}`);
+    const note = lines.find((l) => l.startsWith('::warning '));
+    assert.ok(note, r.stdout);
+    assert.ok(note.slice(0, note.indexOf('::', 2)).includes(`x#${BS}u{23}[error]y.md`), `the file property shows the broken mark: ${note}`);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
