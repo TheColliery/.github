@@ -1129,7 +1129,8 @@ test('thecolliery.mjs, the editor\'s survey of 2026-11-19: Claude Code\'s raw CH
   assert.ok(cc, 'the raw CHANGELOG row exists');
   assert.strictEqual(cc.url, 'https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md');
   assert.strictEqual(cc.kind, 'raw'); assert.notStrictEqual(cc.tier, 'cold', 'read by the cron: the releases feed (cold) omits the hook and -p lines');
-  assert.strictEqual(idsOf(c).indexOf('claude-code-changelog'), c.sources.length - 1, 'appended at the end (the stagger rule)');
+  // 27e: this pinned "last" while it was the newest row; the SkillEvaluator row now follows it, so it pins the slot it was appended at, which no later row moves
+  assert.strictEqual(idsOf(c).indexOf('claude-code-changelog'), 37, 'appended at the end of the list as it stood (the stagger rule), and no later row moved it');
   const k = await keyFor(cc, '# Changelog\n\n## 2.1.328\n\n- Added a hook line\n\n## 2.1.327\n- older\n');
   assert.strictEqual(k.title, '## 2.1.328');
   assert.strictEqual((await keyFor(cc, '# Changelog\n\n## 2.1.328\n\n- Added a hook line, edited\n')).key, k.key, 'an edit inside the newest entry is not a new version');
@@ -1156,4 +1157,22 @@ test('kolwen.mjs, 2026-11-23: the Google Cloud, Colab, Gemini pricing, OSI and f
   assert.deepStrictEqual([byId['gemini-api-changelog'].url, byId['gemini-api-changelog'].kind, idsOf(c).indexOf('gemini-api-changelog')], ['https://aistudio.google.com/docs/changelog.md', 'raw', 10], 'the changelog at the end of its two redirects, same kind and slot');
   assert.strictEqual(byId['hfapi-swiss-ai'] && byId['hfapi-allenai'] ? 1 : 0, 1, 'swiss-ai and allenai were already rows, not added twice');
   assert.strictEqual(idsOf(c).indexOf('anthropic-engineering'), idsOf(c).length - want.length - 1, 'no earlier slot moved');
+});
+// 27e (CWK3-020 (a), main's ruling 2026-11-27; the row as the umbrella auditor's 27f return gives it): the detector for the SkillEvaluator mover. The feed holds
+// three kinds of entry today (read 2026-11-27): a release (`SkillEvaluator v1.2.1`), a `stable:` channel commit and a bare tag (`v1.1.0: feat...`). Only a
+// release is news; the pattern ignores every title that does not open `SkillEvaluator v` and a digit.
+test('thecolliery.mjs: the SkillEvaluator release watcher reads the releases feed once a day, reports a release and stays quiet on a stable: commit and a bare tag -- RED before 27e', async () => {
+  const c = await load('thecolliery.mjs');
+  const s = c.sources.find((x) => x.id === 'skillevaluator');
+  assert.ok(s, 'the skillevaluator row is in the registry');
+  assert.deepStrictEqual([s.name, s.url, s.kind, s.everyHours, s.tier], ['NVIDIA SkillEvaluator', 'https://github.com/NVIDIA/SkillEvaluator/releases.atom', 'atom', 24, undefined]);
+  assert.strictEqual(idsOf(c).indexOf('skillevaluator'), c.sources.length - 1, 'appended at the end (the stagger rule)');
+  assert.strictEqual(idsOf(c).indexOf('claude-code-changelog'), c.sources.length - 2, 'no earlier slot moved');
+  const pick = (...titles) => parseFeed(atom(...titles), { ignoreTitle: s.ignoreTitle })?.title;
+  const STABLE = 'stable: chore(ci): pin the verified SkillEvaluator 1.2.1 bundle (#895)';
+  const BARE = 'v1.1.0: feat(reporting): add a GitHub Actions annotations report format (#794)';
+  assert.strictEqual(pick(STABLE, BARE, 'SkillEvaluator v1.2.1', 'SkillEvaluator v1.2.0'), 'SkillEvaluator v1.2.1', 'a release under a stable: commit and a bare tag is the one reported');
+  assert.strictEqual(pick('SkillEvaluator v1.3.0', STABLE), 'SkillEvaluator v1.3.0', 'a release at the top is reported');
+  assert.strictEqual(pick(STABLE, BARE), undefined, 'a feed whose entries are a stable: commit and a bare tag reports nothing');
+  assert.strictEqual(pick('skillevaluator v2.0.0'), 'skillevaluator v2.0.0', 'the pattern is read case-blind, as the watcher builds it');
 });

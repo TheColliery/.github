@@ -52,5 +52,7 @@ export default {
     { id: 'gitbook-changelog', name: 'GitBook changelog', url: 'https://gitbook.com/docs/changelog/rss.xml', kind: 'rss', everyHours: 24, tier: 'cold' },
     // the Coal* editor's survey (2026-11-19a): the releases feed (claude-code, cold) omits the hook and -p lines that CHANGELOG.md carries; keyed on its newest version heading, so an edit inside an entry is no news
     { id: 'claude-code-changelog', name: 'Claude Code (CHANGELOG.md)', url: 'https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md', kind: 'raw', keyPattern: '## \\d+\\.\\d+\\.\\d+', everyHours: 24 },
+    // CWK3-020 (a), main's ruling 2026-11-27 (order 27e): the detector for the SkillEvaluator mover row; only a release title is news, a `stable:` channel commit and a bare tag are not
+    { id: 'skillevaluator', name: 'NVIDIA SkillEvaluator', url: 'https://github.com/NVIDIA/SkillEvaluator/releases.atom', kind: 'atom', everyHours: 24, ignoreTitle: '^(?!SkillEvaluator v\\d)' },
   ],
 };
