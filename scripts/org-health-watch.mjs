@@ -180,6 +180,125 @@ export function buildReport(findings, counts) {
   return `${head}\n\n${findings.length} finding${findings.length === 1 ? '' : 's'} (report only; nothing was re-enabled, re-run or changed):\n\n${rows.join('\n')}\n`;
 }
 
+// ---- 28b: the front doors' scheduled warnings (main's ruling (1) on 27g; the 27i/28a design with the umbrella auditor's points A to E) --------------
+// Public rooms only: the org list above is read with type=public, and a public room's check-run annotations answer without any token (the auditor's
+// reads, 27i); a private room would need a credential of its own, which is the owner's question. ONE read of the annotations per room, never the log.
+export const FRONT_DOOR_WORKFLOW = '.github/workflows/front-door-links.yml';
+const WARN_TITLE = 'front-door-links';
+const COUNT_TITLE = 'front-door-links-count';
+// A: the ONE place the CLI's count notice shape lives (scripts/front-door-links.mjs prints `::notice title=front-door-links-count::N finding(s), M warning(s)`);
+// if that shape changes, this line is the only one that moves.
+export const COUNT_SHAPE = /^(\d{1,6}) finding\(s\), (\d{1,6}) warning\(s\)$/;
+// B: the watcher's OWN declared variable, a number of ours (the weekly cadence plus a day): a newest run older than this is stale, never current.
+export const STALE_AFTER_DAYS = 8;
+// The cap is the runner's, not ours: ten annotations per type per step (actions/runner, ExecutionContext.cs, _maxCountPerIssueType).
+export const QUOTE_MAX = 10;
+// D: the bounds of what is quoted into an issue body (65,536 characters): a URL, a line, the whole section.
+export const URL_MAX = 120;
+export const LINE_MAX = 300;
+export const SECTION_MAX = 60000;
+const PATH_MAX = 80;
+// D: an image URL's own alphabet; it leaves out the backtick (it would close the code span), `|`, `<`, `>` and whitespace.
+const IMAGE_URL = /^[A-Za-z0-9._~:/?#[\]@!$&'()*+,;=%-]{1,4096}$/;
+const FINISHED = new Set(['success', 'failure']); // C: only these carry a count
+
+/** The newest run of a page by created_at, whatever order the API gives it (the order is undocumented); null when none has a readable date. */
+export function newestRun(runs) {
+  let best = null;
+  for (const r of runs || []) {
+    const at = r && typeof r.created_at === 'string' && SAFE_DATE.test(r.created_at) ? Date.parse(r.created_at) : NaN;
+    if (Number.isFinite(at) && (!best || at > best.at)) best = { at, run: r };
+  }
+  return best ? best.run : null;
+}
+
+/** D: a URL inside a code span, cut BEFORE the span is closed, the cut said in words outside it; outside the alphabet, a fixed fallback. */
+export function quoteUrl(url) {
+  const s = String(url ?? '');
+  if (!IMAGE_URL.test(s)) return '(address not shown: outside the safe alphabet)';
+  const tick = '`';
+  return tick + s.slice(0, URL_MAX) + tick + (s.length > URL_MAX ? ' (cut)' : '');
+}
+
+/** E: the reason's leading class only; a redirect target, the fixed suffix and anything else are left out. */
+function reasonClass(text) {
+  let m = /^no answer \(([A-Za-z0-9_]{1,40})\)/.exec(text);
+  if (m) return `no answer (${m[1]})`;
+  m = /^HTTP (5\d\d|429)\b/.exec(text);
+  if (m) return `HTTP ${m[1]}`;
+  return '(reason not shown)';
+}
+
+/** E: one quoted warning line: the annotation's data split at the first ": " (a URL holds no space), its URL in a code span (D), its reason's class,
+ *  its file and line. Every part is bounded, so the line stays within LINE_MAX. */
+export function quoteWarning(a) {
+  const msg = String(a?.message ?? '');
+  const where = `${safeName(String(a?.path ?? '')).slice(0, PATH_MAX)}:${Number.isInteger(a?.start_line) && a.start_line >= 0 && a.start_line < 1e6 ? a.start_line : '?'}`;
+  const i = msg.indexOf(': ');
+  if (i <= 0) return `- (warning not readable) (${where})`;
+  return `- ${quoteUrl(msg.slice(0, i))}: ${reasonClass(msg.slice(i + 2))} (${where})`;
+}
+
+/** One public room's newest completed scheduled run, read as data. States: no-run (a), stale (B), unfinished (C), no-count (neighbour c: a checker that
+ *  does not report yet), unreadable (A: not exactly one count notice of the whole shape), read. */
+export function frontDoorRoom({ repo, run, annotations, now = Date.now() }) {
+  const room = { repo: safeName(repo) };
+  if (!run) return { ...room, state: 'no-run' };
+  const date = safeDate(run.created_at);
+  const url = safeUrl(run.html_url);
+  if (!(now - Date.parse(run.created_at) <= STALE_AFTER_DAYS * DAY_MS)) return { ...room, state: 'stale', date, url };
+  if (!FINISHED.has(run.conclusion)) return { ...room, state: 'unfinished', conclusion: safeName(String(run.conclusion)), date, url };
+  const list = Array.isArray(annotations) ? annotations : [];
+  const notes = list.filter((x) => x && x.annotation_level === 'notice' && x.title === COUNT_TITLE);
+  const warns = list.filter((x) => x && x.annotation_level === 'warning' && x.title === WARN_TITLE);
+  if (notes.length === 0 && warns.length === 0) return { ...room, state: 'no-count', date, url };
+  const m = notes.length === 1 ? COUNT_SHAPE.exec(String(notes[0].message ?? '')) : null;
+  if (!m) return { ...room, state: 'unreadable', why: notes.length === 1 ? 'a count notice of another shape' : `${notes.length} count notices`, date, url };
+  return { ...room, state: 'read', conclusion: run.conclusion, date, url, findings: Number(m[1]), warnings: Number(m[2]), quotes: warns.slice(0, QUOTE_MAX).map(quoteWarning) };
+}
+
+/** The report section and its findings. Only a room with warnings, a failed run, a stale run or an unreadable count is a finding; (a), (c), (d) and an
+ *  unfinished run are header lines that never open the issue by themselves. The section is cut at line ends only (D). */
+export function frontDoorSection(rooms, missing = []) {
+  const by = (state) => rooms.filter((r) => r.state === state);
+  const names = (list) => list.map((r) => r.repo).join(', ');
+  const findings = [];
+  const head = [
+    '## front-door-links: the newest completed scheduled run of each public room',
+    '',
+    `The watcher reads on Monday 02:30 UTC and the check runs on Monday 06:17 UTC, so each run below is about six days and twenty hours old. A newest run older than the watcher's own staleness limit (${STALE_AFTER_DAYS} days, a number of ours) is reported as stale and its warnings are not quoted.`,
+    '',
+  ];
+  const read = by('read');
+  head.push(`- ${read.length} room(s) read; ${read.filter((r) => r.warnings > 0).length} with warnings.`);
+  if (by('no-run').length) head.push(`- no completed scheduled run in the retention period: ${names(by('no-run'))}`);
+  if (by('unfinished').length) head.push(`- the newest run did not finish: ${by('unfinished').map((r) => `${r.repo} (${r.conclusion})`).join(', ')}`);
+  if (by('no-count').length) head.push(`- ${by('no-count').length} room(s) whose checker does not report warnings yet (re-copy owed): ${names(by('no-count'))}`);
+  if (missing.length) head.push(`- rooms without the check: ${missing.map((n) => safeName(n)).join(', ')}`);
+  for (const r of by('stale')) findings.push({ repo: r.repo, kind: 'front-door', text: `front-door-links: the newest scheduled run is from ${r.date}, older than the watcher's own staleness limit of ${STALE_AFTER_DAYS} days`, url: r.url });
+  for (const r of by('unreadable')) findings.push({ repo: r.repo, kind: 'unreadable', text: `could not read the front-door-links count (${r.why}); this run did NOT check it`, url: r.url });
+  const body = [];
+  for (const r of read) {
+    if (r.warnings > 0) findings.push({ repo: r.repo, kind: 'front-door', text: `front-door-links: ${r.warnings} warning(s) on the newest scheduled run (${r.date})`, url: r.url });
+    if (r.conclusion === 'failure') findings.push({ repo: r.repo, kind: 'front-door', text: `front-door-links: the newest scheduled run failed (${r.date})`, url: r.url });
+    if (r.warnings === 0 && r.conclusion !== 'failure') continue;
+    body.push(`- [${r.repo}] run of ${r.date}: ${r.warnings} warning(s), ${r.findings} finding(s)${r.conclusion === 'failure' ? ' (the run failed)' : ''}${r.url ? ` — ${r.url}` : ''}`);
+    for (const q of r.quotes) body.push(`  ${q}`);
+    if (r.quotes.length >= QUOTE_MAX) body.push(`  - ${QUOTE_MAX} shown: the runner records at most ${QUOTE_MAX} warnings per step (actions/runner ExecutionContext.cs); the run's log holds them all.`);
+  }
+  // D: cut at line ends only, with room kept for the line that says so
+  const lines = [...head, '', ...body];
+  const out = [];
+  let size = 0;
+  const reserve = 100;
+  for (let i = 0; i < lines.length; i++) {
+    if (size + lines[i].length + 1 > SECTION_MAX - reserve) { out.push(`- (section cut at a line end: ${lines.length - i} line(s) not shown)`); break; }
+    out.push(lines[i]);
+    size += lines[i].length + 1;
+  }
+  return { text: out.join('\n') + '\n', findings };
+}
+
 async function get(p) {
   const headers = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
   if (process.env.GH_TOKEN) headers.Authorization = `Bearer ${process.env.GH_TOKEN}`;
@@ -209,6 +328,8 @@ async function main() {
   const runsByRepo = {};
   const signalByRepo = {};
   const findings = [];
+  const frontDoorRooms = [];
+  const frontDoorMissing = [];
   if (list.partial) findings.push(unreadable(ORG, "the organization's public repository list", pageNote(list)));
   let workflowCount = 0;
   for (const r of repos) {
@@ -217,6 +338,27 @@ async function main() {
     if (wf.partial) findings.push(unreadable(r.name, 'the workflow list', pageNote(wf)));
     workflowsByRepo[r.name] = wf.items;
     workflowCount += workflowsByRepo[r.name].length;
+    // 28b: the newest completed scheduled front-door-links run and its annotations (ONE read of the annotations, per_page=100: a job's other steps add their own)
+    const fdw = wf.items.find((w) => w && w.path === FRONT_DOOR_WORKFLOW && Number.isInteger(w.id));
+    if (!fdw) { if (!wf.partial) frontDoorMissing.push(r.name); } else {
+      const fdRuns = await get(`${base}/actions/workflows/${fdw.id}/runs?event=schedule&status=completed&per_page=10`);
+      if (fdRuns.status !== 200) findings.push(unreadable(r.name, 'the front-door-links scheduled runs', fdRuns.status));
+      else {
+        const run = newestRun(fdRuns.json?.workflow_runs);
+        let annotations = [];
+        if (run && Number.isInteger(run.id) && FINISHED.has(run.conclusion)) {
+          const jobs = await get(`${base}/actions/runs/${run.id}/jobs`);
+          if (jobs.status !== 200) { findings.push(unreadable(r.name, 'the front-door-links jobs', jobs.status)); annotations = null; }
+          for (const j of annotations ? jobs.json?.jobs ?? [] : []) {
+            if (!Number.isInteger(j?.id)) continue;
+            const a = await get(`${base}/check-runs/${j.id}/annotations?per_page=100`);
+            if (a.status !== 200) { findings.push(unreadable(r.name, 'the front-door-links annotations', a.status)); annotations = null; break; }
+            if (Array.isArray(a.json)) annotations.push(...a.json);
+          }
+        }
+        if (annotations) frontDoorRooms.push(frontDoorRoom({ repo: r.name, run, annotations, now: Date.now() }));
+      }
+    }
     const runs = await getAllPages(get, `${base}/actions/runs?status=queued`, (j) => j?.workflow_runs);
     if (runs.partial) findings.push(unreadable(r.name, 'the queued runs', pageNote(runs)));
     runsByRepo[r.name] = runs.items;
@@ -240,8 +382,9 @@ async function main() {
     const touches = touchesSynced(Array.isArray(head.json?.files) ? head.json.files.map((x) => x && x.filename) : undefined, gitbookSyncedFiles(cfgText, summaryText));
     signalByRepo[r.name] = { headAge: Date.now() - headDate, touches, statuses: status.json?.statuses ?? [] };
   }
-  findings.push(...disabledWorkflows(workflowsByRepo), ...staleQueuedRuns(runsByRepo), ...gitbookSignal(signalByRepo));
-  const report = buildReport(findings, { repos: repos.length, workflows: workflowCount, synced: Object.keys(signalByRepo).length });
+  const frontDoor = frontDoorSection(frontDoorRooms, frontDoorMissing);
+  findings.push(...disabledWorkflows(workflowsByRepo), ...staleQueuedRuns(runsByRepo), ...gitbookSignal(signalByRepo), ...frontDoor.findings);
+  const report = `${buildReport(findings, { repos: repos.length, workflows: workflowCount, synced: Object.keys(signalByRepo).length })}\n${frontDoor.text}`;
   fs.writeFileSync('org-health-report.md', report);
   process.stdout.write(report);
   for (const f of findings) console.log(`::warning title=org-health-watch ${f.repo}::${f.text}`);

@@ -313,3 +313,158 @@ test('gitbookSyncedFiles: a parent-relative summary link resolves against the su
   const atRoot = gitbookSyncedFiles('root: ./\nstructure:\n  summary: SUMMARY.md\n', '* [up](../x.md)\n* [ok](a/../b.md)\n').exact;
   assert.deepEqual(atRoot.filter((p) => !['SUMMARY.md', 'README.md'].includes(p)), ['b.md'], 'README.md and SUMMARY.md are the defaults a config with a summary names');
 });
+// ---- 28b: the front doors' scheduled warnings (main's ruling (1) on 27g; the 27i/28a design with the umbrella auditor's points A to E, unit 4 of its
+// 27i return). Each test name says which point it pins, so a mutant maps to a point. Public rooms only: the org list is read with type=public, and an
+// annotation read of a public room needs no token (the auditor's reads, 27i).
+import { newestRun, quoteUrl, quoteWarning, frontDoorRoom, frontDoorSection, COUNT_SHAPE, STALE_AFTER_DAYS, QUOTE_MAX, URL_MAX, LINE_MAX, SECTION_MAX, FRONT_DOOR_WORKFLOW } from './org-health-watch.mjs';
+
+const FD_NOW = Date.parse('2026-11-30T02:30:00Z'); // a Monday read; the check ran on the Monday before at 06:17
+const fdRun = (over = {}) => ({ id: 501, status: 'completed', conclusion: 'success', created_at: '2026-11-23T06:17:00Z', html_url: 'https://github.com/TheColliery/CoalFace/actions/runs/501', ...over });
+const NOTE = (message = '0 finding(s), 2 warning(s)') => ({ annotation_level: 'notice', title: 'front-door-links-count', message, path: '.github', start_line: 1 });
+const WARN = (url = 'https://img.shields.io/badge/x-y-blue', reason = 'no answer (timeout)', p = 'README.md', line = 3) => ({
+  annotation_level: 'warning', title: 'front-door-links', path: p, start_line: line,
+  message: `${url}: ${reason} (an image: its host's answer says nothing about this repository, so it does not fail the run)`,
+});
+
+test('newest run: the largest created_at of a shuffled page wins, whatever order the API gives (the list order is undocumented) -- RED before 28b', () => {
+  const page = ['2026-11-09T06:17:00Z', '2026-11-23T06:17:00Z', '2026-11-02T06:17:00Z', '2026-11-16T06:17:00Z'].map((created_at, i) => fdRun({ id: 600 + i, created_at }));
+  assert.equal(newestRun(page).id, 601);
+  assert.equal(newestRun([...page].reverse()).id, 601);
+  assert.equal(newestRun([]), null);
+  assert.equal(newestRun([fdRun({ created_at: 'not a date' })]), null, 'a run with no readable date is never "newest"');
+});
+
+test('A: exactly ONE count notice of the whole shape reads the counts; none beside warnings, two, or another shape reads as unreadable -- RED before 28b', () => {
+  const read = frontDoorRoom({ repo: 'CoalFace', run: fdRun(), annotations: [NOTE(), WARN(), WARN()], now: FD_NOW });
+  assert.deepEqual([read.state, read.findings, read.warnings, read.quotes.length], ['read', 0, 2, 2]);
+  assert.match('0 finding(s), 0 warning(s)', COUNT_SHAPE, 'the CLI\'s own notice, as GitHub recorded it on #255\'s run, matches the one shape');
+  for (const [anns, why] of [[[WARN()], 'warnings and no count notice'], [[NOTE(), NOTE()], 'two count notices'], [[NOTE('2 findings, 1 warning')], 'a notice of another shape'], [[NOTE('0 finding(s)')], 'a notice that leaves out a number']]) {
+    assert.equal(frontDoorRoom({ repo: 'CoalFace', run: fdRun(), annotations: anns, now: FD_NOW }).state, 'unreadable', why);
+  }
+});
+
+test('A: only a notice and warnings carrying the checker\'s own titles AND levels count; a failure or an error annotation with the same title is ignored -- RED before 28b', () => {
+  const r = frontDoorRoom({ repo: 'CoalFace', run: fdRun(), now: FD_NOW, annotations: [NOTE('0 finding(s), 1 warning(s)'), WARN(), { ...WARN(), annotation_level: 'failure' }, { ...NOTE(), annotation_level: 'warning' }, { ...WARN(), title: 'other' }] });
+  assert.equal(r.state, 'read');
+  assert.equal(r.quotes.length, 1);
+});
+
+test('B: a newest run older than the watcher\'s own staleness limit (8 days, a number of ours) is stale and its warnings are not quoted; 7 days is current -- RED before 28b', () => {
+  assert.equal(STALE_AFTER_DAYS, 8);
+  const day = 24 * 60 * 60 * 1000;
+  assert.equal(frontDoorRoom({ repo: 'CoalFace', run: fdRun({ created_at: new Date(FD_NOW - 7 * day).toISOString() }), annotations: [NOTE(), WARN(), WARN()], now: FD_NOW }).state, 'read');
+  const stale = frontDoorRoom({ repo: 'CoalFace', run: fdRun({ created_at: new Date(FD_NOW - 9 * day).toISOString() }), annotations: [NOTE(), WARN(), WARN()], now: FD_NOW });
+  assert.equal(stale.state, 'stale');
+  const s = frontDoorSection([stale], []);
+  assert.equal(s.findings.length, 1, 'a stale run is a finding: the weekly check did not run');
+  assert.match(s.findings[0].text, /staleness limit of 8 days/);
+  assert.match(s.text, /staleness limit \(8 days, a number of ours\)/);
+  assert.doesNotMatch(s.text, /img\.shields\.io/, 'a stale run\'s warnings are not quoted as current');
+});
+
+test('C: only success and failure carry a count; a run cancelled by its own concurrency group, timed out or skipped "did not finish"; a failure is quoted AND is a finding -- RED before 28b', () => {
+  for (const conclusion of ['cancelled', 'timed_out', 'skipped']) {
+    const r = frontDoorRoom({ repo: 'CoalFace', run: fdRun({ conclusion }), annotations: [], now: FD_NOW });
+    assert.deepEqual([r.state, r.conclusion], ['unfinished', conclusion], conclusion);
+  }
+  const s = frontDoorSection([frontDoorRoom({ repo: 'CoalFace', run: fdRun({ conclusion: 'cancelled' }), annotations: [], now: FD_NOW })], []);
+  assert.match(s.text, /the newest run did not finish: CoalFace \(cancelled\)/);
+  assert.equal(s.findings.length, 0, 'a cancelled run is named, not a finding');
+  const failed = frontDoorSection([frontDoorRoom({ repo: 'CoalFace', run: fdRun({ conclusion: 'failure' }), annotations: [NOTE('1 finding(s), 1 warning(s)'), WARN()], now: FD_NOW })], []);
+  assert.ok(failed.findings.some((f) => /failed/.test(f.text)), 'the failure is a finding of its own');
+  assert.match(failed.text, /img\.shields\.io/, 'a failed run\'s warnings are still quoted');
+});
+
+test('D: a URL is cut BEFORE its code span is closed, the cut is marked in words outside it, and an @name stays inside the span -- RED before 28b', () => {
+  const tick = String.fromCharCode(96);
+  const long = 'https://img.shields.io/' + 'a'.repeat(URL_MAX + 40);
+  const q = quoteUrl(long);
+  assert.ok(q.startsWith(tick) && q.indexOf(tick, 1) === URL_MAX + 1, 'the span opens, holds the cut URL and closes');
+  assert.ok(q.endsWith(' (cut)'));
+  const pct = quoteUrl('https://x.example/' + 'b'.repeat(URL_MAX - 20) + '%2Fend');
+  assert.equal(pct.split(tick).length, 3, 'a cut inside a percent escape still leaves a closed span');
+  assert.equal(quoteUrl('https://x.example/@someone/badge.svg'), `${tick}https://x.example/@someone/badge.svg${tick}`, 'an @name is inside the span, where it notifies nobody');
+  for (const bad of [`https://x.example/a${tick}b`, 'https://x.example/a b', 'https://x.example/a|b', 'https://x.example/<b>']) {
+    assert.doesNotMatch(quoteUrl(bad), /x\.example/, `outside the alphabet: ${bad}`);
+  }
+});
+
+test('D: every quoted line stays within its bound, and the section is cut at line ends only, the cut said in words -- RED before 28b', () => {
+  const huge = WARN('https://img.shields.io/' + 'c'.repeat(400), 'no answer (UND_ERR_CONNECT_TIMEOUT)', 'docs/' + 'p'.repeat(200) + '.md', 99999);
+  assert.ok(quoteWarning(huge).length <= LINE_MAX, quoteWarning(huge));
+  const rooms = Array.from({ length: 400 }, (_, i) => frontDoorRoom({ repo: 'Room' + i, run: fdRun(), now: FD_NOW, annotations: [NOTE('0 finding(s), 10 warning(s)'), ...Array.from({ length: 10 }, () => WARN('https://img.shields.io/' + 'd'.repeat(110)))] }));
+  const s = frontDoorSection(rooms, []);
+  assert.ok(s.text.length <= SECTION_MAX, String(s.text.length));
+  assert.match(s.text, /section cut at a line end: \d+ line\(s\) not shown/);
+  const tick = String.fromCharCode(96);
+  for (const line of s.text.split('\n')) assert.equal(line.split(tick).length % 2, 1, `an unclosed span: ${line}`);
+});
+
+test('E: a warning is split at the first ": ", the fixed suffix is dropped, only the reason\'s leading class is kept, and a redirect target is left out -- RED before 28b', () => {
+  const tick = String.fromCharCode(96);
+  const red = quoteWarning(WARN('https://img.shields.io/a', 'HTTP 503 after a redirect to https://evil.example/@someone'));
+  assert.match(red, /: HTTP 503 \(README\.md:3\)$/);
+  assert.doesNotMatch(red, /evil|@someone|an image: its host/);
+  assert.match(quoteWarning(WARN('https://img.shields.io/a', 'no answer (UND_ERR_CONNECT_TIMEOUT)')), /: no answer \(UND_ERR_CONNECT_TIMEOUT\) /);
+  assert.match(quoteWarning(WARN('https://img.shields.io/a', 'HTTP 429, rate limited: not retried, read it by hand')), /: HTTP 429 /);
+  assert.match(quoteWarning(WARN('https://img.shields.io/a', 'something else')), /\(reason not shown\)/);
+  assert.match(quoteWarning({ ...WARN(), message: 'nocolonhere' }), /warning not readable/);
+  assert.ok(red.startsWith(`- ${tick}https://img.shields.io/a${tick}`));
+});
+
+test('the cap: at ten recorded warnings the room says "10 shown" and cites the runner, with the notice\'s count as the true number; an eleventh is not quoted -- RED before 28b', () => {
+  assert.equal(QUOTE_MAX, 10);
+  const anns = [NOTE('0 finding(s), 14 warning(s)'), ...Array.from({ length: 11 }, (_, i) => WARN(`https://img.shields.io/n${i}`))];
+  const r = frontDoorRoom({ repo: 'CoalFace', run: fdRun(), annotations: anns, now: FD_NOW });
+  assert.deepEqual([r.warnings, r.quotes.length], [14, 10]);
+  const s = frontDoorSection([r], []);
+  assert.match(s.text, /14 warning\(s\)/);
+  assert.match(s.text, /10 shown: the runner records at most 10 warnings per step \(actions\/runner ExecutionContext\.cs\)/);
+  assert.doesNotMatch(s.text, /n10/);
+});
+
+test('neighbours (a), (c), (d): no run in the retention period, a checker that does not report yet, a room without the check: header lines only, never a finding -- RED before 28b', () => {
+  const rooms = [
+    frontDoorRoom({ repo: 'CoalNew', run: null, annotations: [], now: FD_NOW }),
+    frontDoorRoom({ repo: 'CoalMine', run: fdRun(), annotations: [], now: FD_NOW }),
+    frontDoorRoom({ repo: 'CoalWash', run: fdRun(), annotations: [], now: FD_NOW }),
+  ];
+  assert.deepEqual(rooms.map((r) => r.state), ['no-run', 'no-count', 'no-count']);
+  const s = frontDoorSection(rooms, ['template-article']);
+  assert.deepEqual(s.findings, [], 'none of these opens the issue');
+  assert.match(s.text, /no completed scheduled run in the retention period: CoalNew/);
+  const c = s.text.split('\n').filter((l) => /does not report warnings yet/.test(l));
+  assert.equal(c.length, 1, 'ONE header line for (c)');
+  assert.match(c[0], /2 room\(s\) whose checker does not report warnings yet \(re-copy owed\): CoalMine, CoalWash/);
+  assert.match(s.text, /rooms without the check: template-article/);
+});
+
+test('a room with warnings is ONE finding naming the count and the run\'s date; its quotes go in the section with the run\'s link and the lag in words -- RED before 28b', () => {
+  const s = frontDoorSection([frontDoorRoom({ repo: 'CoalFace', run: fdRun(), annotations: [NOTE(), WARN(), WARN()], now: FD_NOW })], []);
+  assert.equal(s.findings.length, 1);
+  assert.match(s.findings[0].text, /front-door-links: 2 warning\(s\) on the newest scheduled run \(2026-11-23T06:17:00Z\)/);
+  assert.equal(s.findings[0].url, 'https://github.com/TheColliery/CoalFace/actions/runs/501');
+  assert.match(s.text, /about six days and twenty hours old/);
+  assert.match(s.text, /run of 2026-11-23T06:17:00Z: 2 warning\(s\), 0 finding\(s\)/);
+});
+
+const FD_STATE = (annotationsStatus = 200) => ({
+  '/orgs/TheColliery/repos': [{ name: 'CoalFace', default_branch: 'main' }],
+  '/repos/TheColliery/CoalFace/actions/workflows': { workflows: [{ id: 77, path: FRONT_DOOR_WORKFLOW, state: 'active' }] },
+  '/repos/TheColliery/CoalFace/actions/workflows/77/runs': { workflow_runs: [fdRun({ created_at: new Date(Date.now() - 2 * 86400000).toISOString() })] },
+  '/repos/TheColliery/CoalFace/actions/runs': { workflow_runs: [] },
+  '/repos/TheColliery/CoalFace/actions/runs/501/jobs': { jobs: [{ id: 9001, name: 'front-door-links' }] },
+  '/repos/TheColliery/CoalFace/check-runs/9001/annotations': annotationsStatus === 200 ? [NOTE('0 finding(s), 1 warning(s)'), WARN()] : { __status: annotationsStatus },
+});
+
+test('org-health-watch.mjs: the front-door read asks for the newest completed SCHEDULED runs and the annotations at per_page=100 (A), quotes the warning, and a failed annotations read is unreadable -- RED before 28b', () => {
+  let r = runCli(FD_STATE());
+  assert.equal(r.res.status, 0, r.res.stdout + r.res.stderr);
+  assert.ok(r.calls.some((c) => c.startsWith('/repos/TheColliery/CoalFace/actions/workflows/77/runs?') && c.includes('event=schedule') && c.includes('status=completed')), r.calls.join('\n'));
+  assert.ok(r.calls.some((c) => c === '/repos/TheColliery/CoalFace/check-runs/9001/annotations?per_page=100'), r.calls.join('\n'));
+  assert.match(r.output, /has_findings=true/);
+  assert.match(r.report, /\[CoalFace\] front-door-links: 1 warning\(s\)/);
+  assert.match(r.report, /img\.shields\.io/);
+  r = runCli(FD_STATE(403));
+  assert.match(r.report, /\[CoalFace\] could not read the front-door-links annotations \(HTTP 403\)/);
+});
