@@ -690,3 +690,66 @@ test('org-health-watch.mjs: main measures the REAL first part before it cuts the
   assert.ok(first.length > BODY_MAX, `the fixture's first part is ${first.length}, not past the limit`);
   assert.ok(r.report.endsWith('- (section not shown: the findings above fill the issue body)\n'), r.report.slice(-300));
 });
+// ---- 28g: the pins (the auditor's 28c LOW 8 on #256; item 7 of 28f's list). Each test names the survivor it holds -------------------------------
+
+test('pin x4: the count shape is anchored at its end; trailing text or a trailing newline is another shape and reads as unreadable -- 28g', () => {
+  for (const msg of ['0 finding(s), 1 warning(s) and more', '0 finding(s), 1 warning(s)\n', '0 finding(s), 1 warning(s)7']) {
+    const r = frontDoorRoom({ repo: 'CoalFace', run: fdRun(), annotations: [NOTE(msg), WARN()], now: FD_NOW });
+    assert.deepEqual([r.state, r.why], ['unreadable', 'a count notice of another shape'], JSON.stringify(msg));
+  }
+});
+
+test('pins x15 and x38: the reason printed outside a span keeps only a code of letters, digits and underscore, and only HTTP 5xx or 429 -- 28g', () => {
+  const reason = (text) => quoteWarning(WARN('https://img.shields.io/x', text));
+  for (const text of ['no answer (a@b)', 'no answer (x/y)', 'HTTP 404', 'HTTP 403 Forbidden', 'HTTP 499']) {
+    assert.ok(reason(text).includes(': (reason not shown) ('), `${text}: ${reason(text)}`);
+  }
+  assert.ok(reason('HTTP 503').includes(': HTTP 503 ('), reason('HTTP 503'));
+  assert.ok(reason('no answer (UND_ERR_SOCKET)').includes(': no answer (UND_ERR_SOCKET) ('));
+});
+
+test('pins x36 and x12: the line number is a whole number from 0 to 999999 or "?", and a file name with @ is not shown -- 28g', () => {
+  for (const line of [-1, 1e6, 2.5, '7', null]) {
+    assert.ok(quoteWarning(WARN(undefined, undefined, 'README.md', line)).endsWith('`README.md`:?)'), String(line));
+  }
+  assert.ok(quoteWarning(WARN(undefined, undefined, 'README.md', 999999)).endsWith('`README.md`:999999)'));
+  assert.equal(quotePath('docs/@someone.md'), '(file not shown)');
+});
+
+test('pins x31, x32 and x37: the run\'s link, conclusion and date are parsed at the boundary into the safe forms, never echoed -- 28g', () => {
+  const link = frontDoorRoom({ repo: 'CoalFace', run: fdRun({ html_url: 'https://evil.example/TheColliery/runs/1' }), annotations: [NOTE(), WARN(), WARN()], now: FD_NOW });
+  assert.deepEqual([link.state, link.url], ['read', '']);
+  const cancelled = frontDoorRoom({ repo: 'CoalFace', run: fdRun({ conclusion: 'cancelled\n## forged' }), annotations: [], now: FD_NOW });
+  assert.deepEqual([cancelled.state, cancelled.conclusion], ['unfinished', '(name outside the safe alphabet)']);
+  const offset = frontDoorRoom({ repo: 'CoalFace', run: fdRun({ created_at: '2026-11-23T06:17:00+00:00' }), annotations: [NOTE(), WARN(), WARN()], now: FD_NOW });
+  assert.deepEqual([offset.state, offset.date], ['read', '(unreadable date)']);
+});
+
+test('pin x27: main counts a room as carrying the template\'s checker only when the copy\'s blob id equals the template\'s -- 28g', () => {
+  const template = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'templates', 'published-code', 'scripts', 'front-door-links.mjs');
+  const same = { ...FD_STATE(), '/repos/TheColliery/CoalFace/contents/scripts/front-door-links.mjs': { sha: gitBlobOf(fs.readFileSync(template)), encoding: 'base64', content: Buffer.from("console.log('::notice title=front-door-links-count::')").toString('base64') } };
+  let r = runCli(same);
+  assert.equal(r.res.status, 0, r.res.stdout + r.res.stderr);
+  assert.match(r.report, /1 room\(s\) carry the template's current checker: CoalFace/);
+  r = runCli(FD_STATE());
+  assert.doesNotMatch(r.report, /carry the template's current checker/);
+});
+
+test('pin x29: main reads the annotations of the job NAMED front-door-links, never the first job of the run -- 28g', () => {
+  const state = { ...FD_STATE(), '/repos/TheColliery/CoalFace/actions/runs/501/jobs': { jobs: [{ id: 9002, name: 'lint' }, { id: 9001, name: 'front-door-links' }] } };
+  const r = runCli(state);
+  assert.equal(r.res.status, 0, r.res.stdout + r.res.stderr);
+  assert.ok(r.calls.includes('/repos/TheColliery/CoalFace/check-runs/9001/annotations?per_page=100'), r.calls.join('\n'));
+  assert.ok(!r.calls.some((c) => c.startsWith('/repos/TheColliery/CoalFace/check-runs/9002')), r.calls.join('\n'));
+  assert.match(r.report, /- 1 room\(s\) read; 1 with warnings\./);
+});
+
+test('pins x33 and x34: a failed jobs read or annotations read is unreadable and never read as an empty list of annotations -- 28g', () => {
+  for (const [key, what] of [['/repos/TheColliery/CoalFace/actions/runs/501/jobs', 'the front-door-links jobs'], ['/repos/TheColliery/CoalFace/check-runs/9001/annotations', 'the front-door-links annotations']]) {
+    const r = runCli({ ...FD_STATE(), [key]: { __status: 502 } });
+    assert.equal(r.res.status, 0, r.res.stdout + r.res.stderr);
+    assert.ok(r.report.includes(`could not read ${what} (HTTP 502)`), r.report);
+    assert.ok(!r.report.includes('the run printed none'), `${what}: a failed read became an empty list\n${r.report}`);
+    assert.ok(!r.calls.some((c) => c.includes('/contents/scripts/front-door-links.mjs')), `${what}: the checker was read after a failed read`);
+  }
+});

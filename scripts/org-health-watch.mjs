@@ -47,7 +47,8 @@ export function safeDate(v) { return typeof v === 'string' && SAFE_DATE.test(v) 
 const ORG = process.env.ORG_HEALTH_ORG || 'TheColliery';
 const API = 'https://api.github.com';
 
-/** Workflows in `disabled_inactivity`. `disabled_manually` is a decision someone made, not a finding. */
+/** Workflows in `disabled_inactivity`, the first class. A workflow someone disabled by hand is a decision, not a finding here, with one exception
+ *  ruled in 28d: `front-door-links.yml` in any state but `active`, `disabled_manually` included, is a finding by name in the front-door section. */
 export function disabledWorkflows(workflowsByRepo) {
   const out = [];
   for (const [repo, list] of Object.entries(workflowsByRepo)) {
