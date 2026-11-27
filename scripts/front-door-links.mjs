@@ -11,7 +11,8 @@
 // Output:  one `FAIL <file>:<line>: <url>: <why>` line per finding, one `WARN ...` line per image whose host timed out, answered a 5xx or a 429 (a warning
 //          never fails the run: an image says nothing about the repository, orders 27d and 27e), then the summary line. Under GitHub Actions
 //          (GITHUB_ACTIONS=true) each WARN line is also printed as a `::warning file=<file>,line=<line>::` workflow command, so a warning shows on the
-//          run page and the pull request of a green run. Report a problem: the repository's issues.
+//          run page and the pull request of a green run; before the warnings it prints ONE `::notice title=front-door-links-count::N finding(s),
+//          M warning(s)` with both numbers always, the count the weekly watcher reads (28a). Report a problem: the repository's issues.
 // Node builtins only at the top level (node/runtime.md section 1): the engine is imported inside the try, so a missing engine is a FAIL line, never a stack.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -94,6 +95,9 @@ async function main(argv) {
   try {
     const lib = await import(pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), 'lib', 'front-door-links.mjs')).href);
     const r = await lib.checkFiles(texts, { timeoutMs: env('FRONT_DOOR_LINKS_TIMEOUT_MS', lib.DEFAULT_TIMEOUT_MS), retryMs: env('FRONT_DOOR_LINKS_RETRY_MS', lib.DEFAULT_RETRY_MS), skipHosts, token: process.env.GITHUB_TOKEN || '' });
+    // 28a: the count as ONE notice of its own, before any warning, both numbers always: the weekly watcher reads it from the run's annotations (a
+    // warning past the runner's ten per step never becomes an annotation; notices have their own ten)
+    if (process.env.GITHUB_ACTIONS === 'true') console.log(`::notice title=front-door-links-count::${fails + r.findings.length} finding(s), ${r.warnings.length} warning(s)`);
     for (const x of r.findings) console.log(`FAIL ${printable(x.file)}:${x.line}: ${printable(x.url)}: ${printable(x.message)}`);
     fails += r.findings.length;
     const why = ' (an image: its host\'s answer says nothing about this repository, so it does not fail the run)';
