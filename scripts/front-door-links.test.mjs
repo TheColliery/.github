@@ -606,3 +606,36 @@ test('annotationFile: printable runs before the property escape: a newline in a 
   assert.equal(annotationFile(`a${NL}::error::x,y%.md`), `a${BS}u{a}%3A%3Aerror%3A%3Ax%2Cy%25.md`);
   assert.equal(annotationData(`u${NL}##[error]v%`), `u${BS}u{a}#${BS}u{23}[error]v%25`, 'the data: printable first, then %, CR and LF');
 });
+// 28c (the umbrella auditor's 28a findings 1 and 2 on #254): the entry-point guard never answers "not the entry" by failing. When the platform's realpath
+// throws (a volume whose final path it cannot name), the check still runs and still fails loud; a run that read nothing and passed is the worst outcome
+// this file has. And the realpath half is pinned: a CLI run through a folder link (a junction on Windows), without the preserve flags, still runs.
+const runAt = (script, args, env = {}) => new Promise((resolve) => {
+  const child = spawn(process.execPath, ['--max-old-space-size=512', script, ...args], { timeout: 60000, env: childEnv(env) });
+  let stdout = ''; let stderr = '';
+  child.stdout.on('data', (d) => { stdout += d; }); child.stderr.on('data', (d) => { stderr += d; });
+  child.on('close', (status) => resolve({ status, stdout, stderr }));
+});
+test('CLI: when fs.realpathSync.native throws, the check still runs: it prints its summary line and exits by its findings -- RED before 28c (finding 1)', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fdl-'));
+  try {
+    const preload = path.join(dir, 'realpath-throws.mjs');
+    fs.writeFileSync(preload, "import fs from 'node:fs';" + String.fromCharCode(10) + "fs.realpathSync.native = () => { throw Object.assign(new Error('injected: no final path'), { code: 'EIO' }); };" + String.fromCharCode(10));
+    const doc = path.join(dir, 'README.md');
+    fs.writeFileSync(doc, `[m](${base}/missing)\n`);
+    const r = await run([doc], { NODE_OPTIONS: '--import ' + pathToFileURL(preload).href });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /^1 finding\(s\); 1 link\(s\) in 1 file\(s\), 1 fetched$/m, r.stdout + r.stderr);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+test('CLI: run through a folder link (a junction on Windows, a directory symlink elsewhere) without the preserve flags, the check still runs and prints its summary -- pins the realpath half (finding 2, the auditor\'s g2)', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fdl-'));
+  try {
+    const link = path.join(dir, 'scripts-link');
+    try { fs.symlinkSync(path.dirname(CLI), link, 'junction'); } catch (e) { t.skip('this volume or account cannot make a folder link: ' + e.code); return; }
+    const doc = path.join(dir, 'README.md');
+    fs.writeFileSync(doc, `[m](${base}/missing)\n`);
+    const r = await runAt(path.join(link, 'front-door-links.mjs'), [doc]);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /^1 finding\(s\); 1 link\(s\) in 1 file\(s\), 1 fetched$/m, r.stdout + r.stderr);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
