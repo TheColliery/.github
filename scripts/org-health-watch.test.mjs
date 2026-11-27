@@ -318,6 +318,9 @@ test('gitbookSyncedFiles: a parent-relative summary link resolves against the su
 // annotation read of a public room needs no token (the auditor's reads, 27i).
 import { newestRun, quoteUrl, quoteWarning, frontDoorRoom, frontDoorSection, COUNT_SHAPE, STALE_AFTER_DAYS, QUOTE_MAX, URL_MAX, LINE_MAX, SECTION_MAX, FRONT_DOOR_WORKFLOW } from './org-health-watch.mjs';
 
+// a quoted warning is a line that opens with two spaces, a dash and a code span: counted structurally, never by matching a host (CodeQL's
+// js/regex/missing-regexp-anchor read three host regexes here as URL checks, alerts 38 to 40 on #256)
+const quotedLines = (text) => text.split('\n').filter((l) => l.startsWith('  - ' + String.fromCharCode(96))).length;
 const FD_NOW = Date.parse('2026-11-30T02:30:00Z'); // a Monday read; the check ran on the Monday before at 06:17
 const fdRun = (over = {}) => ({ id: 501, status: 'completed', conclusion: 'success', created_at: '2026-11-23T06:17:00Z', html_url: 'https://github.com/TheColliery/CoalFace/actions/runs/501', ...over });
 const NOTE = (message = '0 finding(s), 2 warning(s)') => ({ annotation_level: 'notice', title: 'front-door-links-count', message, path: '.github', start_line: 1 });
@@ -359,7 +362,7 @@ test('B: a newest run older than the watcher\'s own staleness limit (8 days, a n
   assert.equal(s.findings.length, 1, 'a stale run is a finding: the weekly check did not run');
   assert.match(s.findings[0].text, /staleness limit of 8 days/);
   assert.match(s.text, /staleness limit \(8 days, a number of ours\)/);
-  assert.doesNotMatch(s.text, /img\.shields\.io/, 'a stale run\'s warnings are not quoted as current');
+  assert.equal(quotedLines(s.text), 0, 'a stale run\'s warnings are not quoted as current');
 });
 
 test('C: only success and failure carry a count; a run cancelled by its own concurrency group, timed out or skipped "did not finish"; a failure is quoted AND is a finding -- RED before 28b', () => {
@@ -372,7 +375,7 @@ test('C: only success and failure carry a count; a run cancelled by its own conc
   assert.equal(s.findings.length, 0, 'a cancelled run is named, not a finding');
   const failed = frontDoorSection([frontDoorRoom({ repo: 'CoalFace', run: fdRun({ conclusion: 'failure' }), annotations: [NOTE('1 finding(s), 1 warning(s)'), WARN()], now: FD_NOW })], []);
   assert.ok(failed.findings.some((f) => /failed/.test(f.text)), 'the failure is a finding of its own');
-  assert.match(failed.text, /img\.shields\.io/, 'a failed run\'s warnings are still quoted');
+  assert.equal(quotedLines(failed.text), 1, 'a failed run\'s warnings are still quoted');
 });
 
 test('D: a URL is cut BEFORE its code span is closed, the cut is marked in words outside it, and an @name stays inside the span -- RED before 28b', () => {
@@ -464,7 +467,7 @@ test('org-health-watch.mjs: the front-door read asks for the newest completed SC
   assert.ok(r.calls.some((c) => c === '/repos/TheColliery/CoalFace/check-runs/9001/annotations?per_page=100'), r.calls.join('\n'));
   assert.match(r.output, /has_findings=true/);
   assert.match(r.report, /\[CoalFace\] front-door-links: 1 warning\(s\)/);
-  assert.match(r.report, /img\.shields\.io/);
+  assert.equal(quotedLines(r.report), 1, 'the one warning is quoted in the report');
   r = runCli(FD_STATE(403));
   assert.match(r.report, /\[CoalFace\] could not read the front-door-links annotations \(HTTP 403\)/);
 });
