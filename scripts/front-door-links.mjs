@@ -116,12 +116,30 @@ async function main(argv) {
   return fails ? 1 : 0;
 }
 
-// 28a: run only as the entry point, so a test can import the helpers above without running the check. The two paths are compared after realpath
-// (an 8.3 short name or a symlinked folder must not read as another file). 28c (the auditor's 28a finding 1): when the platform cannot resolve a path,
-// the guard answers "the entry", so the check runs and fails loud; answering "not the entry" made a run that read nothing exit 0 in silence. Node's
-// import.meta.main was weighed and not taken: it exists only from 22.18.0 and 24.2.0 (Stability 1.0), and an older Node 22 would read it as false, silent again.
-const isEntry = (() => {
+// 28a: run only as the entry point, so a test can import the helpers above without running the check. 28e: the shape six scripts here already carry
+// (e0eba02; copied from templates/overlay-coal-skill/scripts/lib/machine-reading.mjs, isMainModule): Node realpaths the module, argv[1] keeps the caller's
+// spelling (a link's), so both sides go through one resolver; where a real path cannot be resolved, file identity (stat follows a link, so a symlinked
+// folder still matches; a zero inode is no identity); last, the plain resolved paths. A path that names no file matches nothing, so an import never runs
+// the check (28c's `catch { return true; }` ran it on import, the shape e0eba02 retired). Node's import.meta.main was weighed and not taken: it exists
+// only from 22.18.0 and 24.2.0 (Stability 1.0).
+// dev:ino of what a path names, or null where the volume gives none (stat fails, or answers ino 0: a zero id would make any two files one)
+function fileIdentity(p) {
+  try {
+    const s = fs.statSync(p, { bigint: true });
+    return s.ino === 0n ? null : `${s.dev}:${s.ino}`;
+  } catch {
+    return null;
+  }
+}
+function isMainModule(url) {
   if (!process.argv[1]) return false;
-  try { return fs.realpathSync.native(process.argv[1]) === fs.realpathSync.native(fileURLToPath(import.meta.url)); } catch { return true; }
-})();
-if (isEntry) process.exitCode = await main(process.argv.slice(2));
+  const self = fileURLToPath(url);
+  try {
+    return fs.realpathSync.native(self) === fs.realpathSync.native(process.argv[1]);
+  } catch {
+    const a = fileIdentity(self);
+    const b = fileIdentity(process.argv[1]);
+    return a !== null && b !== null ? a === b : path.resolve(self) === path.resolve(process.argv[1]);
+  }
+}
+if (isMainModule(import.meta.url)) process.exitCode = await main(process.argv.slice(2));

@@ -658,13 +658,58 @@ test('CLI: when fs.realpathSync.native throws, the check still runs: it prints i
 });
 test('CLI: run through a folder link (a junction on Windows, a directory symlink elsewhere) without the preserve flags, the check still runs and prints its summary -- pins the realpath half (finding 2, the auditor\'s g2)', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fdl-'));
+  const link = path.join(dir, 'scripts-link');
   try {
-    const link = path.join(dir, 'scripts-link');
     try { fs.symlinkSync(path.dirname(CLI), link, 'junction'); } catch (e) { t.skip('this volume or account cannot make a folder link: ' + e.code); return; }
     const doc = path.join(dir, 'README.md');
     fs.writeFileSync(doc, `[m](${base}/missing)\n`);
     const r = await runAt(path.join(link, 'front-door-links.mjs'), [doc]);
     assert.equal(r.status, 1, r.stdout + r.stderr);
     assert.match(r.stdout, /^1 finding\(s\); 1 link\(s\) in 1 file\(s\), 1 fetched$/m, r.stdout + r.stderr);
+  } finally { unlinkFolderLink(link); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+// 28e (the umbrella auditor's 28b return, its finding 1 and LOW 1 to 3; main's ruling (a)): the guard takes the shape six scripts here already carry
+// (e0eba02, 2026-11-16): realpath on both sides; if that throws, file identity; last, the plain paths. An import never runs the check.
+// LOW 3: a folder link is removed by itself before its sandbox, so no recursive remove is ever asked to walk through it.
+function unlinkFolderLink(link) {
+  try { fs.rmdirSync(link); } catch { try { fs.unlinkSync(link); } catch { /* not there: the test skipped before making it */ } }
+}
+// An import of the CLI through `node -e`, as e0eba02's test imports the five scripts; awaited, since the server it might fetch from is this process's.
+const importRun = (args) => new Promise((resolve) => {
+  const child = spawn(process.execPath, ['--max-old-space-size=512', '--input-type=module', '-e', `await import(${JSON.stringify(pathToFileURL(CLI).href)})`, ...args], { timeout: 60000, cwd: os.tmpdir(), env: childEnv() });
+  let out = '';
+  child.stdout.on('data', (d) => { out += d; }); child.stderr.on('data', (d) => { out += d; });
+  child.on('close', (status) => resolve({ status, out }));
+});
+test('CLI imported with an argv path that names no file does not run, even when a later argument is a markdown file: the guard asks file identity before it answers -- RED before 28e (finding 1, e0eba02\'s pin)', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fdl-'));
+  try {
+    const doc = path.join(dir, 'README.md');
+    fs.writeFileSync(doc, `[m](${base}/missing)\n`);
+    const one = await importRun(['nosuchfile']);
+    assert.deepEqual([one.status, one.out], [0, ''], 'the import ran the check: ' + one.out.slice(0, 160));
+    const two = await importRun(['nosuchfile', doc]);
+    assert.deepEqual([two.status, two.out], [0, ''], 'the import checked the importer\'s own file: ' + two.out.slice(0, 160));
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+test('CLI imported from node -e with no argument does not run (LOW 1: the argv[1] line pinned, the auditor\'s m3)', async () => {
+  const r = await importRun([]);
+  assert.deepEqual([r.status, r.out], [0, '']);
+});
+test('CLI run through a folder link WITH --preserve-symlinks-main still runs: both sides go through realpath (LOW 2, the auditor\'s m7)', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fdl-'));
+  const link = path.join(dir, 'scripts-link');
+  try {
+    try { fs.symlinkSync(path.dirname(CLI), link, 'junction'); } catch (e) { t.skip('this volume or account cannot make a folder link: ' + e.code); return; }
+    const doc = path.join(dir, 'README.md');
+    fs.writeFileSync(doc, `[m](${base}/missing)\n`);
+    const r = await new Promise((resolve) => {
+      const child = spawn(process.execPath, ['--max-old-space-size=512', '--preserve-symlinks-main', path.join(link, 'front-door-links.mjs'), doc], { timeout: 60000, env: childEnv() });
+      let stdout = ''; let stderr = '';
+      child.stdout.on('data', (d) => { stdout += d; }); child.stderr.on('data', (d) => { stderr += d; });
+      child.on('close', (status) => resolve({ status, stdout, stderr }));
+    });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /^1 finding\(s\); 1 link\(s\) in 1 file\(s\), 1 fetched$/m, r.stdout + r.stderr);
+  } finally { unlinkFolderLink(link); fs.rmSync(dir, { recursive: true, force: true }); }
 });
