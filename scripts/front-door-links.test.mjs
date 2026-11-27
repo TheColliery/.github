@@ -591,3 +591,125 @@ test('CLI under GitHub Actions: a front door whose file name holds ##[ never pri
     assert.ok(note.slice(0, note.indexOf('::', 2)).includes(`x#${BS}u{23}[error]y.md`), `the file property shows the broken mark: ${note}`);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+// 28a (the umbrella auditor's 27i LOW notes on #253). (1) The family is matched case-sensitively: the codes are the runtimes' own spellings, and a
+// lower-case near miss is no timeout (its case-blind mutant, n4, survived the suite).
+test('checkFiles: the timeout family is matched case-sensitively: etimedout is a finding, never a warning -- pins the case (the auditor\'s n4)', async () => {
+  const r = await checkFiles([{ name: 'R.md', text: `![b](${BADGE})\n` }], { fetchFn: failsWith('etimedout'), retryMs: 0 });
+  assert.equal(r.findings.length, 1, 'etimedout is not ETIMEDOUT');
+  assert.deepEqual(r.warnings, []);
+});
+// (2) The order of printable and the property escape on the annotation's file= (its swapped mutant, f2, survived): printable first makes a control
+// character a visible code point, and only then are `%`, `:` and `,` escaped. A unit test of the CLI's own helper, so no such file is needed on disk.
+test('annotationFile: printable runs before the property escape: a newline in a file name is shown as its code point, then : , % are escaped -- RED before 28a', async () => {
+  const { annotationFile, annotationData } = await import(pathToFileURL(CLI).href);
+  const NL = String.fromCharCode(10);
+  assert.equal(annotationFile(`a${NL}::error::x,y%.md`), `a${BS}u{a}%3A%3Aerror%3A%3Ax%2Cy%25.md`);
+  assert.equal(annotationData(`u${NL}##[error]v%`), `u${BS}u{a}#${BS}u{23}[error]v%25`, 'the data: printable first, then %, CR and LF');
+});
+// 28a unit 3 (main's ruling on the auditor's 27h hole 5 and its 27i point A): under GitHub Actions the CLI prints its count as ONE notice of its own,
+// `::notice title=front-door-links-count::N finding(s), M warning(s)`, before any warning, with BOTH numbers always (the summary line leaves the warnings
+// part out at zero). Notices have their own budget of ten per step (actions/runner ExecutionContext.cs), so the count survives ten warnings, and the weekly
+// watcher reads it from the run's annotations, never from the log.
+test('CLI under GitHub Actions: exactly one count notice, both numbers always, printed before the first warning; outside Actions none -- RED before 28a', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fdl-'));
+  try {
+    const NOTICE = /^::notice title=front-door-links-count::(\d+) finding\(s\), (\d+) warning\(s\)$/;
+    const mixed = path.join(dir, 'README.md');
+    fs.writeFileSync(mixed, `![b](${base}/always-503)\n[m](${base}/missing)\n[o](${base}/ok)\n`);
+    const r = await run([mixed], { GITHUB_ACTIONS: 'true' });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    const lines = r.stdout.split(/\r?\n/);
+    const notes = lines.filter((l) => l.startsWith('::notice '));
+    assert.equal(notes.length, 1, r.stdout);
+    assert.deepEqual(notes[0].match(NOTICE)?.slice(1), ['1', '1'], notes[0]);
+    assert.ok(lines.indexOf(notes[0]) < lines.findIndex((l) => l.startsWith('::warning ')), 'the count comes before the warnings');
+    // zero warnings: both numbers still printed; an unreadable file counts as a finding, as it does in the summary line
+    const clean = path.join(dir, 'SECURITY.md');
+    fs.writeFileSync(clean, `[o](${base}/ok)\n`);
+    const z = await run([clean, path.join(dir, 'absent.md')], { GITHUB_ACTIONS: 'true' });
+    assert.equal(z.status, 1, z.stdout + z.stderr);
+    const zn = z.stdout.split(/\r?\n/).filter((l) => l.startsWith('::notice '));
+    assert.deepEqual(zn.map((l) => l.match(NOTICE)?.slice(1)), [['1', '0']], z.stdout);
+    const plain = await run([mixed]);
+    assert.ok(!plain.stdout.includes('::notice'), 'outside GitHub Actions no workflow command is printed');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// 28c (the umbrella auditor's 28a findings 1 and 2 on #254): the entry-point guard never answers "not the entry" by failing. When the platform's realpath
+// throws (a volume whose final path it cannot name), the check still runs and still fails loud; a run that read nothing and passed is the worst outcome
+// this file has. And the realpath half is pinned: a CLI run through a folder link (a junction on Windows), without the preserve flags, still runs.
+const runAt = (script, args, env = {}) => new Promise((resolve) => {
+  const child = spawn(process.execPath, ['--max-old-space-size=512', script, ...args], { timeout: 60000, env: childEnv(env) });
+  let stdout = ''; let stderr = '';
+  child.stdout.on('data', (d) => { stdout += d; }); child.stderr.on('data', (d) => { stderr += d; });
+  child.on('close', (status) => resolve({ status, stdout, stderr }));
+});
+test('CLI: when fs.realpathSync.native throws, the check still runs: it prints its summary line and exits by its findings -- RED before 28c (finding 1)', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fdl-'));
+  try {
+    const preload = path.join(dir, 'realpath-throws.mjs');
+    fs.writeFileSync(preload, "import fs from 'node:fs';" + String.fromCharCode(10) + "fs.realpathSync.native = () => { throw Object.assign(new Error('injected: no final path'), { code: 'EIO' }); };" + String.fromCharCode(10));
+    const doc = path.join(dir, 'README.md');
+    fs.writeFileSync(doc, `[m](${base}/missing)\n`);
+    const r = await run([doc], { NODE_OPTIONS: '--import ' + pathToFileURL(preload).href });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /^1 finding\(s\); 1 link\(s\) in 1 file\(s\), 1 fetched$/m, r.stdout + r.stderr);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+test('CLI: run through a folder link (a junction on Windows, a directory symlink elsewhere) without the preserve flags, the check still runs and prints its summary -- pins the realpath half (finding 2, the auditor\'s g2)', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fdl-'));
+  const link = path.join(dir, 'scripts-link');
+  try {
+    try { fs.symlinkSync(path.dirname(CLI), link, 'junction'); } catch (e) { t.skip('this volume or account cannot make a folder link: ' + e.code); return; }
+    const doc = path.join(dir, 'README.md');
+    fs.writeFileSync(doc, `[m](${base}/missing)\n`);
+    const r = await runAt(path.join(link, 'front-door-links.mjs'), [doc]);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /^1 finding\(s\); 1 link\(s\) in 1 file\(s\), 1 fetched$/m, r.stdout + r.stderr);
+  } finally { unlinkFolderLink(link); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+// 28e (the umbrella auditor's 28b return, its finding 1 and LOW 1 to 3; main's ruling (a)): the guard takes the shape six scripts here already carry
+// (e0eba02, 2026-11-16): realpath on both sides; if that throws, file identity; last, the plain paths. An import never runs the check.
+// LOW 3: a folder link is removed by itself before its sandbox, so no recursive remove is ever asked to walk through it.
+function unlinkFolderLink(link) {
+  try { fs.rmdirSync(link); } catch { try { fs.unlinkSync(link); } catch { /* not there: the test skipped before making it */ } }
+}
+// An import of the CLI through `node -e`, as e0eba02's test imports the five scripts; awaited, since the server it might fetch from is this process's.
+const importRun = (args) => new Promise((resolve) => {
+  const child = spawn(process.execPath, ['--max-old-space-size=512', '--input-type=module', '-e', `await import(${JSON.stringify(pathToFileURL(CLI).href)})`, ...args], { timeout: 60000, cwd: os.tmpdir(), env: childEnv() });
+  let out = '';
+  child.stdout.on('data', (d) => { out += d; }); child.stderr.on('data', (d) => { out += d; });
+  child.on('close', (status) => resolve({ status, out }));
+});
+test('CLI imported with an argv path that names no file does not run, even when a later argument is a markdown file: the guard asks file identity before it answers -- RED before 28e (finding 1, e0eba02\'s pin)', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fdl-'));
+  try {
+    const doc = path.join(dir, 'README.md');
+    fs.writeFileSync(doc, `[m](${base}/missing)\n`);
+    const one = await importRun(['nosuchfile']);
+    assert.deepEqual([one.status, one.out], [0, ''], 'the import ran the check: ' + one.out.slice(0, 160));
+    const two = await importRun(['nosuchfile', doc]);
+    assert.deepEqual([two.status, two.out], [0, ''], 'the import checked the importer\'s own file: ' + two.out.slice(0, 160));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+test('CLI imported from node -e with no argument does not run (LOW 1: the argv[1] line pinned, the auditor\'s m3)', async () => {
+  const r = await importRun([]);
+  assert.deepEqual([r.status, r.out], [0, '']);
+});
+test('CLI run through a folder link WITH --preserve-symlinks-main still runs: both sides go through realpath (LOW 2, the auditor\'s m7)', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fdl-'));
+  const link = path.join(dir, 'scripts-link');
+  try {
+    try { fs.symlinkSync(path.dirname(CLI), link, 'junction'); } catch (e) { t.skip('this volume or account cannot make a folder link: ' + e.code); return; }
+    const doc = path.join(dir, 'README.md');
+    fs.writeFileSync(doc, `[m](${base}/missing)\n`);
+    const r = await new Promise((resolve) => {
+      const child = spawn(process.execPath, ['--max-old-space-size=512', '--preserve-symlinks-main', path.join(link, 'front-door-links.mjs'), doc], { timeout: 60000, env: childEnv() });
+      let stdout = ''; let stderr = '';
+      child.stdout.on('data', (d) => { stdout += d; }); child.stderr.on('data', (d) => { stderr += d; });
+      child.on('close', (status) => resolve({ status, stdout, stderr }));
+    });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /^1 finding\(s\); 1 link\(s\) in 1 file\(s\), 1 fetched$/m, r.stdout + r.stderr);
+  } finally { unlinkFolderLink(link); fs.rmSync(dir, { recursive: true, force: true }); }
+});
