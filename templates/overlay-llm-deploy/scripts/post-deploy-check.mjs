@@ -57,8 +57,11 @@ const sha = b => createHash('sha256').update(b).digest('hex').slice(0, 16);
 // never looked at it.
 const ASSETS_DIR = '{{ASSETS_DIR}}';
 // 27a (code scanning alert 36's class): the file type comes from the listing itself (a Dirent), never a second stat of each name before it is read.
-// A symlinked entry is not a file here and is not walked: an assets folder holds built files, and a statSync used to follow such a link.
-const files = readdirSync(ASSETS_DIR, { withFileTypes: true }).filter(d => d.isFile()).map(d => d.name);
+// A symlinked entry is not a file here and is not walked: an assets folder holds built files, and a statSync used to follow such a link. 27b (the umbrella
+// auditor's finding 9): an entry that is not walked is named on its own line, so "deploy confirmed" never covers a file this check did not look at.
+const listed = readdirSync(ASSETS_DIR, { withFileTypes: true });
+for (const d of listed) if (!d.isFile() && !d.isDirectory()) console.log(`skipped ${JSON.stringify(d.name)}: not a regular file (a link is not followed)`);
+const files = listed.filter(d => d.isFile()).map(d => d.name);
 const TEXT = /\.(html|xml|txt|svg|json)$/i;
 
 async function probe(origin) {

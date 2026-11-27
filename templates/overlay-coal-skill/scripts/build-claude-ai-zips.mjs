@@ -45,10 +45,36 @@ function copyDirRecursive(src, dest) {
     const s = path.join(src, entry.name);
     const d = path.join(dest, entry.name);
     if (hasControlChar(entry.name)) throw new Error(`${JSON.stringify(entry.name)} has a control character in its name`);
-    const st = fs.lstatSync(s); // lstat: a symlink or junction is seen as itself, never followed
-    if (st.isSymbolicLink() || !(st.isDirectory() || st.isFile())) throw new Error(`${s} is neither a regular file nor a folder (a symlink or special file is refused, not followed)`);
-    if (st.isDirectory()) copyDirRecursive(s, d);
-    else fs.copyFileSync(s, d);
+    // The listing's own type: a symlink or junction is seen as itself (Node reads a junction as a link), never followed.
+    if (entry.isSymbolicLink() || !(entry.isDirectory() || entry.isFile())) throw new Error(`${s} ${NOT_FILE_OR_FOLDER}`);
+    if (entry.isDirectory()) {
+      if (!fs.lstatSync(s).isDirectory()) throw new Error(`${s} ${NOT_FILE_OR_FOLDER}`);
+      copyDirRecursive(s, d);
+    } else copyFileOnce(s, d);
+  }
+}
+
+// 27b (the umbrella auditor's finding 3 on PR #244, code scanning alert 36's class): a file is copied from ONE descriptor. It is opened without following
+// a link where the platform can, the descriptor is judged by fstat, and the name is pinned AFTER the open: it must still be the file the descriptor
+// holds (no link, same device and inode), or the stage refuses. The lstat-then-copyFileSync that stood here judged the name before the copy opened it,
+// so a name swapped between the two was followed. The release-notes.mjs readChangelog shape, used here for the same refusal.
+const NOT_FILE_OR_FOLDER = 'is neither a regular file nor a folder (a symlink or special file is refused, not followed)';
+const OPEN_FLAGS = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0);
+const LINK_OPEN_ERRORS = new Set(['ELOOP', 'EMLINK', 'EFTYPE']);
+function copyFileOnce(from, to) {
+  let fd;
+  try { fd = fs.openSync(from, OPEN_FLAGS); } catch (e) {
+    if (e && LINK_OPEN_ERRORS.has(e.code)) throw new Error(`${from} ${NOT_FILE_OR_FOLDER}`);
+    throw e;
+  }
+  try {
+    const open = fs.fstatSync(fd, { bigint: true });
+    if (!open.isFile()) throw new Error(`${from} ${NOT_FILE_OR_FOLDER}`);
+    const named = fs.lstatSync(from, { bigint: true });
+    if (named.isSymbolicLink() || named.dev !== open.dev || named.ino !== open.ino) throw new Error(`${from} changed while it was staged: refused, not followed`);
+    fs.writeFileSync(to, fs.readFileSync(fd), { mode: Number(open.mode & 0o777n) });
+  } finally {
+    fs.closeSync(fd);
   }
 }
 

@@ -20,7 +20,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, existsSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, existsSync, rmSync, symlinkSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -95,6 +95,37 @@ test('post-deploy-check.mjs: the pause between retry rounds never exceeds the re
     const delays = readFileSync(log, 'utf8').split('\n').filter(Boolean).map(Number);
     assert.ok(delays.length >= 1);
     assert.ok(Math.max(...delays) <= 1000, 'a pause longer than the 1000 ms budget was requested: ' + Math.max(...delays));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// 27b (the umbrella auditor's finding 9 on PR #244): since 27a the assets listing is read by Dirent, so a link in the assets folder is not walked. A file
+// this check never looked at must not hide under "deploy confirmed": the skipped entry is named on its own line. A junction is used because Windows makes
+// one without privilege; on POSIX the same call makes a folder symlink. Red before 27b: the run confirmed and said nothing about the link.
+test('post-deploy-check.mjs: a link in the assets folder is named as skipped, never passed over in silence (spawn, filled copy) -- RED before 27b', (t) => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pdc-'));
+  try {
+    const assets = path.join(dir, 'public');
+    mkdirSync(assets);
+    writeFileSync(path.join(assets, 'index.html'), 'the committed page');
+    mkdirSync(path.join(dir, 'elsewhere'));
+    try { symlinkSync(path.join(dir, 'elsewhere'), path.join(assets, 'linked'), 'junction'); } catch (e) { t.skip(`no link can be made here (${e.code})`); return; }
+    let src = readFileSync(SCRIPT, 'utf8');
+    src = src.replaceAll('{{ASSETS_DIR}}', assets.replaceAll('\\', '/'))
+      .replaceAll('{{PLACEHOLDER-primary-domain}}', 'primary.invalid')
+      .replaceAll('{{PLACEHOLDER-fallback-workers-dev-domain}}', 'fallback.invalid');
+    const filled = path.join(dir, 'post-deploy-check.mjs');
+    writeFileSync(filled, src);
+    const stub = path.join(dir, 'stub.mjs');
+    writeFileSync(stub, "globalThis.fetch = async () => ({ ok: true, text: async () => 'the committed page', arrayBuffer: async () => new TextEncoder().encode('the committed page').buffer });\n");
+    const res = spawnSync(process.execPath, [filled, '--wait', '1'], {
+      encoding: 'utf8',
+      timeout: 60000,
+      env: { ...process.env, NODE_OPTIONS: '--import=' + pathToFileURL(stub).href },
+    });
+    assert.equal(res.status, 0, 'the committed page is served, so the check confirms: ' + res.stderr + res.stdout);
+    assert.match(res.stdout, /^skipped "linked": not a regular file/m, 'the link is named: ' + res.stdout);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
