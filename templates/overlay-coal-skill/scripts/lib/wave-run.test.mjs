@@ -437,6 +437,12 @@ const SLOW_START_MS = 1500;
 const SLOW_START_LOG = path.join(SANDBOX, 'slow-start.log');
 fs.writeFileSync(path.join(SANDBOX, 'slow-start.preload.mjs'), "import fs from 'node:fs';" + String.fromCharCode(10) + 'fs.appendFileSync(' + JSON.stringify(SLOW_START_LOG) + ', JSON.stringify(process.argv.slice(1)) + String.fromCharCode(10));' + String.fromCharCode(10) + 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ' + SLOW_START_MS + ');' + String.fromCharCode(10));
 const SLOW_START_ENV = { NODE_OPTIONS: '--import ' + pathToFileURL(path.join(SANDBOX, 'slow-start.preload.mjs')).href };
+// 27h (the red on #251's Windows Node 24 leg): a slow RUNNER spends time in node's own start before any preload runs, and on a hosted Windows runner that time
+// passed the 1,000 ms file clock, so the passing file was killed before the preload wrote its log line. That start made deterministic: a preload that sleeps
+// past the clock BEFORE the logging one, so every node of the run is still starting when the clock fires.
+const SLOW_RUNNER_MS = 1200;
+fs.writeFileSync(path.join(SANDBOX, 'slow-runner.preload.mjs'), 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ' + SLOW_RUNNER_MS + ');' + String.fromCharCode(10));
+const SLOW_RUNNER_ENV = { NODE_OPTIONS: '--import ' + pathToFileURL(path.join(SANDBOX, 'slow-runner.preload.mjs')).href + ' ' + SLOW_START_ENV.NODE_OPTIONS };
 const STDOUT_SYNC_URL = pathToFileURL(path.join(HERE, 'stdout-sync.mjs')).href;
 
 test('the simulation is faithful: with no preload a force-exited file of 300 tests loses the end of its TAP and reads VACUOUS (the control for the fix below)', () => {
@@ -585,12 +591,17 @@ test('the command line: --file-clock-ms is accepted, shown in the usage, and kil
 // file 74 to 79 s on Node 24): past the 60 s that Node 22 gives a whole file when a room passes --test-timeout=60000, CoalGob's red after the 07b re-copy. The kill of a hang under the slow start
 // is the fixed run's witness; since 19c a passing file spared by its clock is the injected-clock test's above, so this run keeps only the fixed clock that kills both files.
 test('the command line under a slow node start: a fixed file clock below the node start kills the hang and the passing file too (the flake a wall clock causes; the policy is the injected-clock test above)', () => {
+  // 27h: the reach is proved in a run with NO file clock, so nothing can kill the passing file before its preload writes the log line; until 27h it was read
+  // from the clocked run below, where a runner whose own node start passed the clock killed the file first (the red on #251's Windows Node 24 leg)
   fs.rmSync(SLOW_START_LOG, { force: true });
-  const fixed = cli(['--heap-mb', '512', '--file-timeout-ms', '20000', '--deadline-ms', '40000', '--file-clock-ms', '1000', '--serial', '--', ...fx('hang-top', 'pass')], SLOW_START_ENV);
+  const reach = cli(['--heap-mb', '512', '--file-timeout-ms', '20000', '--deadline-ms', '40000', '--serial', '--', ...fx('pass')], SLOW_START_ENV);
+  assert.equal(reach.status, 0, reach.stdout + reach.stderr);
   const started = fs.existsSync(SLOW_START_LOG) ? fs.readFileSync(SLOW_START_LOG, 'utf8').split(String.fromCharCode(10)).map((l) => l.trim()).filter(Boolean) : [];
   // a node whose script IS the passing file (node takes the runner's --test flags as its own, so its arguments are the file alone), never the command line's node,
   // whose script is wave-run.mjs and whose arguments name the file too
   assert.ok(started.map((l) => JSON.parse(l)).some((a) => String(a[0]).endsWith('pass.fixture.mjs')), 'the preload reached the node of the passing file, so the slow start is its own: ' + JSON.stringify(started));
+  // the clocked run asserts only the kills, and runs under the slow runner's start too: every node is still starting when the 1,000 ms clock fires
+  const fixed = cli(['--heap-mb', '512', '--file-timeout-ms', '20000', '--deadline-ms', '40000', '--file-clock-ms', '1000', '--serial', '--', ...fx('hang-top', 'pass')], SLOW_RUNNER_ENV);
   assert.equal(fixed.status, 1, fixed.stdout + fixed.stderr);
   assert.match(fixed.stdout, /^FAIL .*hang-top\.fixture\.mjs: killed at the file clock \(1000 ms\)/m, fixed.stdout);
   assert.match(fixed.stdout, /^FAIL .*pass\.fixture\.mjs: killed at the file clock \(1000 ms\)/m, 'the slow start did not reach the children, so this witness proves nothing: ' + fixed.stdout);
