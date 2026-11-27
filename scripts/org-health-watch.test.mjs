@@ -316,7 +316,7 @@ test('gitbookSyncedFiles: a parent-relative summary link resolves against the su
 // ---- 28b: the front doors' scheduled warnings (main's ruling (1) on 27g; the 27i/28a design with the umbrella auditor's points A to E, unit 4 of its
 // 27i return). Each test name says which point it pins, so a mutant maps to a point. Public rooms only: the org list is read with type=public, and an
 // annotation read of a public room needs no token (the auditor's reads, 27i).
-import { newestRun, quoteUrl, quoteWarning, frontDoorRoom, frontDoorSection, COUNT_SHAPE, STALE_AFTER_DAYS, QUOTE_MAX, URL_MAX, LINE_MAX, SECTION_MAX, FRONT_DOOR_WORKFLOW } from './org-health-watch.mjs';
+import { newestRun, quoteUrl, quoteWarning, frontDoorRoom, frontDoorSection, COUNT_SHAPE, STALE_AFTER_DAYS, QUOTE_MAX, URL_MAX, LINE_MAX, SECTION_MAX, BODY_MAX, FRONT_DOOR_WORKFLOW } from './org-health-watch.mjs';
 
 // a quoted warning is a line that opens with two spaces, a dash and a code span: counted structurally, never by matching a host (CodeQL's
 // js/regex/missing-regexp-anchor read three host regexes here as URL checks, alerts 38 to 40 on #256)
@@ -625,4 +625,68 @@ test('org-health-watch.mjs (28f items 2 and 3): main asks the copy\'s TEXT for t
   r = runCli(old);
   assert.doesNotMatch(r.report, /could not read the front-door-links count/);
   assert.match(r.report, /does not report warnings yet \(re-copy owed\): CoalFace/);
+});
+// ---- 28g: the bounds change (the auditor's 28c finding 4 and LOW 6 and 7 on #256; items 4 and 6 of 28f's list) ---------------------------------
+
+test('item 4: a URL that holds the runner\'s legacy mark ##[ gets the fixed fallback, so the mark never reaches the watcher\'s own stdout -- RED before 28g', () => {
+  for (const url of ['https://img.shields.io/badge/a##[error]b-x-blue', 'https://x.example/c?d=##[stop-commands]e']) {
+    assert.equal(quoteUrl(url), '(address not shown: outside the safe alphabet)', url);
+    const line = quoteWarning(WARN(url));
+    assert.ok(!line.includes('##['), line);
+  }
+  const s = frontDoorSection([frontDoorRoom({ repo: 'CoalFace', run: fdRun(), annotations: [NOTE('0 finding(s), 1 warning(s)'), WARN('https://x.example/##[error]')], now: FD_NOW })], []);
+  assert.ok(!s.text.includes('##['), s.text);
+  const tick = String.fromCharCode(96);
+  assert.equal(quoteUrl('https://x.example/a#b'), `${tick}https://x.example/a#b${tick}`, 'a fragment # alone is still quoted');
+});
+
+test('item 6: a room\'s own line is bounded too: its name shown whole up to its bound or a fixed fallback, its link shown whole up to URL_MAX or left out in words -- RED before 28g', () => {
+  const roomLine = (s) => s.text.split('\n').find((l) => l.startsWith('- ['));
+  const worst = frontDoorRoom({ repo: 'R'.repeat(120), run: fdRun({ conclusion: 'failure', html_url: 'https://github.com/' + 'a'.repeat(200) }), annotations: [NOTE('999999 finding(s), 999999 warning(s)')], now: FD_NOW });
+  const line = roomLine(frontDoorSection([worst], []));
+  assert.ok(line.length <= LINE_MAX, `${line.length}: ${line}`);
+  assert.ok(line.startsWith('- [(name not shown)]'), line);
+  assert.ok(line.endsWith(' (link not shown)'), line);
+  const fits = frontDoorRoom({ repo: 'N'.repeat(80), run: fdRun({ conclusion: 'failure', created_at: '2026-11-23T06:17:00.123Z', html_url: 'https://github.com/' + 'b'.repeat(URL_MAX - 19) }), annotations: [NOTE('999999 finding(s), 999999 warning(s)')], now: FD_NOW });
+  const whole = roomLine(frontDoorSection([fits], []));
+  assert.ok(whole.length <= LINE_MAX, `${whole.length}: ${whole}`);
+  assert.ok(whole.startsWith(`- [${'N'.repeat(80)}]`), whole);
+  assert.ok(whole.endsWith('https://github.com/' + 'b'.repeat(URL_MAX - 19)), whole);
+});
+
+test('item 6: the BODY is the bound: the section is cut so the measured first part plus the section stays under GitHub\'s limit -- RED before 28g', () => {
+  assert.equal(BODY_MAX, 65536, 'the platform\'s number, never ours');
+  const rooms = Array.from({ length: 20 }, (_, i) => frontDoorRoom({ repo: 'Room' + i, run: fdRun(), now: FD_NOW, annotations: [NOTE('0 finding(s), 10 warning(s)'), ...Array.from({ length: 10 }, () => WARN('https://img.shields.io/' + 'd'.repeat(110)))] }));
+  const alone = frontDoorSection(rooms, []);
+  assert.ok(!alone.text.includes('section cut'), 'with no first part the 20 rooms fit');
+  const first = 'x'.repeat(64000);
+  const cut = frontDoorSection(rooms, [], [], first);
+  assert.ok(first.length + 1 + cut.text.length <= BODY_MAX, String(first.length + 1 + cut.text.length));
+  assert.match(cut.text, /section cut at a line end: \d+ line\(s\) not shown/);
+  assert.deepEqual(cut.findings, alone.findings, 'the cut never drops a finding');
+  const full = frontDoorSection(rooms, [], [], 'y'.repeat(BODY_MAX));
+  assert.equal(full.text, '- (section not shown: the findings above fill the issue body)\n');
+  assert.deepEqual(full.findings, alone.findings);
+  assert.equal(frontDoorSection(rooms, [], [], 'short first part').text, alone.text, 'a small first part changes nothing');
+});
+test('item 6: for every first-part length across a line\'s span, the first part plus the section, cut line included, stays under BODY_MAX (a sweep, not one point) -- 28g', () => {
+  const rooms = Array.from({ length: 20 }, (_, i) => frontDoorRoom({ repo: 'Room' + i, run: fdRun(), now: FD_NOW, annotations: [NOTE('0 finding(s), 10 warning(s)'), ...Array.from({ length: 10 }, () => WARN('https://img.shields.io/' + 'd'.repeat(110)))] }));
+  let cuts = 0;
+  for (let n = 64000; n < 64400; n++) {
+    const s = frontDoorSection(rooms, [], [], 'x'.repeat(n));
+    assert.ok(n + 1 + s.text.length <= BODY_MAX, `first part ${n}: ${n + 1 + s.text.length}`);
+    if (s.text.includes('section cut')) cuts++;
+  }
+  assert.equal(cuts, 400, 'every length in the sweep forced a cut');
+});
+
+test('org-health-watch.mjs: main measures the REAL first part before it cuts the section: a first part past the limit leaves the section one line -- 28g', () => {
+  const old = new Date(Date.now() - 5 * 86400000).toISOString();
+  const page = (p) => ({ workflow_runs: Array.from({ length: 100 }, (_, i) => ({ id: p * 100 + i, name: 'ci', status: 'queued', created_at: old, html_url: `https://github.com/TheColliery/CoalFace/actions/runs/${p * 100 + i}` })) });
+  const state = { ...FD_STATE(), '/repos/TheColliery/CoalFace/actions/runs': { __pages: [page(1), page(2), page(3), page(4), page(5)] } };
+  const r = runCli(state);
+  assert.equal(r.res.status, 0, r.res.stdout + r.res.stderr);
+  const first = r.report.split('## front-door-links')[0];
+  assert.ok(first.length > BODY_MAX, `the fixture's first part is ${first.length}, not past the limit`);
+  assert.ok(r.report.endsWith('- (section not shown: the findings above fill the issue body)\n'), r.report.slice(-300));
 });

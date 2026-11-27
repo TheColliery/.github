@@ -196,13 +196,19 @@ export const COUNT_SHAPE = /^(\d{1,6}) finding\(s\), (\d{1,6}) warning\(s\)$/;
 export const STALE_AFTER_DAYS = 8;
 // The cap is the runner's, not ours: ten annotations per type per step (actions/runner, ExecutionContext.cs, _maxCountPerIssueType).
 export const QUOTE_MAX = 10;
-// D: the bounds of what is quoted into an issue body (65,536 characters): a URL, a line, the whole section. LINE_MAX is met by the SIZES of a line's
-// parts, never by cutting the assembled line: "- " + the URL span (URL_MAX + 2) + " (cut)" + ": " + the longest reason (52) + " (" + the file span
-// (PATH_MAX + 2) + ":" + a line of six digits + ")" = 284.
-export const URL_MAX = 120;
-export const LINE_MAX = 300;
-export const SECTION_MAX = 60000;
-const PATH_MAX = 80;
+// D: the bounds of what is quoted into an issue body. BODY_MAX is the PLATFORM's: GitHub refuses an issue body or comment over 65,536 characters
+// with a 422 (github/docs, .github/workflows/link-check-internal.yml: "GitHub rejects issue bodies over 65536 characters with a 422"). The other
+// four are numbers of OURS, sized so a line and the section fit inside it. LINE_MAX is met by the SIZES of a line's parts, never by cutting the
+// assembled line. A warning line: "- " (2) + the URL span (URL_MAX + 2) + " (cut)" (6) + ": " (2) + the longest reason (52) + " (" (2) + the file
+// span (PATH_MAX + 2) + ":" (1) + a line of six digits (6) + ")" (1) = 276, or 278 with the two spaces the section indents it by. A room's own line
+// (28g): "- [" (3) + the name (ROOM_NAME_MAX) + "] run of " (9) + the date (24) + ": " (2) + six digits + " warning(s), " (13) + six digits +
+// " finding(s)" (11) + " (the run failed)" (17) + " — " (3) + the link (URL_MAX) = 294.
+export const BODY_MAX = 65536;
+export const URL_MAX = 120; // ours
+export const LINE_MAX = 300; // ours
+export const SECTION_MAX = 60000; // ours: the section's own cap; the body's limit is met below by measuring the first part
+const PATH_MAX = 80; // ours
+const ROOM_NAME_MAX = 80; // ours (28g): a room's name in its own line, shown whole or as a fixed fallback
 // D: an image URL's own alphabet; it leaves out the backtick (it would close the code span), `|`, `<`, `>` and whitespace.
 const IMAGE_URL = /^[A-Za-z0-9._~:/?#[\]@!$&'()*+,;=%-]{1,4096}$/;
 // D (28d): a warning's file name has its own alphabet and bound, shown whole in a code span or not at all
@@ -242,10 +248,11 @@ export function newestRun(runs) {
   return best ? best.run : null;
 }
 
-/** D: a URL inside a code span, cut BEFORE the span is closed, the cut said in words outside it; outside the alphabet, a fixed fallback. */
+/** D: a URL inside a code span, cut BEFORE the span is closed, the cut said in words outside it; outside the alphabet, a fixed fallback.
+ *  28g (finding 4): a URL that holds `##[`, the runner's legacy command mark, gets the same fallback, so it never reaches the watcher's own stdout. */
 export function quoteUrl(url) {
   const s = String(url ?? '');
-  if (!IMAGE_URL.test(s)) return '(address not shown: outside the safe alphabet)';
+  if (!IMAGE_URL.test(s) || s.includes('##[')) return '(address not shown: outside the safe alphabet)';
   const tick = '`';
   return tick + s.slice(0, URL_MAX) + tick + (s.length > URL_MAX ? ' (cut)' : '');
 }
@@ -306,8 +313,9 @@ export function frontDoorRoom({ repo, workflowState = ACTIVE, run, annotations, 
 
 /** The report section and its findings. A room with warnings, a failed, stale or unfinished run, a workflow that is not active, or an unreadable
  *  count is a finding (28d: stale and unfinished, header lines in 28b, are findings for a room that carries the workflow); (a), (c) and (d) are header
- *  lines that never open the issue by themselves. The section is cut at line ends only (D). */
-export function frontDoorSection(rooms, missing = [], templateCurrent = []) {
+ *  lines that never open the issue by themselves. The section is cut at line ends only (D), to fit beside `firstPart`, the report text that comes
+ *  before it in the issue body (28g). The findings never depend on `firstPart`. */
+export function frontDoorSection(rooms, missing = [], templateCurrent = [], firstPart = '') {
   const by = (state) => rooms.filter((r) => r.state === state);
   const names = (list) => list.map((r) => r.repo).join(', ');
   const findings = [];
@@ -337,17 +345,24 @@ export function frontDoorSection(rooms, missing = [], templateCurrent = []) {
   for (const r of read) {
     if (r.warnings > 0) findings.push({ repo: r.repo, kind: 'front-door', text: `front-door-links: ${r.warnings} warning(s) on the newest scheduled run (${r.date})`, url: r.url });
     if (r.warnings === 0 && r.conclusion !== 'failure') continue;
-    body.push(`- [${r.repo}] run of ${r.date}: ${r.warnings} warning(s), ${r.findings} finding(s)${r.conclusion === 'failure' ? ' (the run failed)' : ''}${r.url ? ` — ${r.url}` : ''}`);
+    // 28g (LOW 7): the room's own line is bounded by its parts (the size comment at the constants): a name past its bound or a link past URL_MAX is
+    // never cut, it is replaced in words
+    const name = r.repo.length <= ROOM_NAME_MAX ? r.repo : '(name not shown)';
+    const link = !r.url ? '' : ` — ${r.url.length <= URL_MAX ? r.url : '(link not shown)'}`;
+    body.push(`- [${name}] run of ${r.date}: ${r.warnings} warning(s), ${r.findings} finding(s)${r.conclusion === 'failure' ? ' (the run failed)' : ''}${link}`);
     for (const q of r.quotes) body.push(`  ${q}`);
     if (r.quotes.length >= QUOTE_MAX) body.push(`  - ${QUOTE_MAX} shown: the runner records at most ${QUOTE_MAX} warnings per step (actions/runner ExecutionContext.cs); the run's log holds them all.`);
   }
-  // D: cut at line ends only, with room kept for the line that says so
+  // D: cut at line ends only, with room kept for the line that says so. 28g (LOW 6): the bound that matters is the issue BODY's, so the budget is
+  // what the MEASURED first part (and the newline that joins it) leaves under BODY_MAX, never a first part assumed small
   const lines = [...head, '', ...body];
   const out = [];
   let size = 0;
   const reserve = 100;
+  const budget = Math.min(SECTION_MAX, BODY_MAX - String(firstPart).length - 1) - reserve;
+  if (budget <= 0) return { text: '- (section not shown: the findings above fill the issue body)\n', findings };
   for (let i = 0; i < lines.length; i++) {
-    if (size + lines[i].length + 1 > SECTION_MAX - reserve) { out.push(`- (section cut at a line end: ${lines.length - i} line(s) not shown)`); break; }
+    if (size + lines[i].length + 1 > budget) { out.push(`- (section cut at a line end: ${lines.length - i} line(s) not shown)`); break; }
     out.push(lines[i]);
     size += lines[i].length + 1;
   }
@@ -458,9 +473,11 @@ async function main() {
     const touches = touchesSynced(Array.isArray(head.json?.files) ? head.json.files.map((x) => x && x.filename) : undefined, gitbookSyncedFiles(cfgText, summaryText));
     signalByRepo[r.name] = { headAge: Date.now() - headDate, touches, statuses: status.json?.statuses ?? [] };
   }
-  const frontDoor = frontDoorSection(frontDoorRooms, frontDoorMissing, frontDoorCurrent);
-  findings.push(...disabledWorkflows(workflowsByRepo), ...staleQueuedRuns(runsByRepo), ...gitbookSignal(signalByRepo), ...frontDoor.findings);
-  const report = `${buildReport(findings, { repos: repos.length, workflows: workflowCount, synced: Object.keys(signalByRepo).length })}\n${frontDoor.text}`;
+  // 28g: the section's findings feed the first part, and the first part's measured length bounds the section's text, so the section is asked twice
+  // (a pure function of the same rooms; the findings are the same both times)
+  findings.push(...disabledWorkflows(workflowsByRepo), ...staleQueuedRuns(runsByRepo), ...gitbookSignal(signalByRepo), ...frontDoorSection(frontDoorRooms, frontDoorMissing, frontDoorCurrent).findings);
+  const first = buildReport(findings, { repos: repos.length, workflows: workflowCount, synced: Object.keys(signalByRepo).length });
+  const report = `${first}\n${frontDoorSection(frontDoorRooms, frontDoorMissing, frontDoorCurrent, first).text}`;
   fs.writeFileSync('org-health-report.md', report);
   process.stdout.write(report);
   for (const f of findings) console.log(`::warning title=org-health-watch ${f.repo}::${f.text}`);
