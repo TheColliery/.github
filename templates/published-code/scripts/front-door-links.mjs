@@ -69,6 +69,10 @@ const printable = (s) => Array.from(String(s), (ch) => {
 // `%` CR LF, a property also `:` and `,`. So a file name or a URL can neither end the annotation early nor change its file or line.
 const escData = (s) => String(s).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
 const escProp = (s) => escData(s).replace(/:/g, '%3A').replace(/,/g, '%2C');
+// 27g (the auditor's LOW 3) and 28a (its 27i LOW 2, the order pinned): an annotation's file and data pass printable FIRST, so a control character is a
+// visible code point before the toolkit's escaping guards `%` (and, in a property, `:` and `,`). Exported so a unit test can hold the order.
+export const annotationFile = (f) => escProp(printable(f));
+export const annotationData = (s) => escData(printable(s));
 
 async function main(argv) {
   if (argv.includes('-h') || argv.includes('--help')) { console.log(USAGE); return 0; }
@@ -96,7 +100,7 @@ async function main(argv) {
     for (const x of r.warnings) {
       console.log(`WARN ${printable(x.file)}:${x.line}: ${printable(x.url)}: ${printable(x.message)}${why}`);
       // 27g (the auditor's LOW 3): the annotation passes the same printable rule as the plain lines first, then the toolkit's escaping
-      if (process.env.GITHUB_ACTIONS === 'true') console.log(`::warning file=${escProp(printable(x.file))},line=${x.line},title=front-door-links::${escData(printable(`${x.url}: ${x.message}${why}`))}`);
+      if (process.env.GITHUB_ACTIONS === 'true') console.log(`::warning file=${annotationFile(x.file)},line=${x.line},title=front-door-links::${annotationData(`${x.url}: ${x.message}${why}`)}`);
     }
     warned = r.warnings.length;
     summary = `${r.links} link(s) in ${texts.length} file(s), ${r.fetched} fetched${r.skipped.length ? `, ${r.skipped.length} skipped by host` : ''}`;
@@ -108,4 +112,30 @@ async function main(argv) {
   return fails ? 1 : 0;
 }
 
-process.exitCode = await main(process.argv.slice(2));
+// 28a: run only as the entry point, so a test can import the helpers above without running the check. 28e: the shape six scripts here already carry
+// (e0eba02; copied from templates/overlay-coal-skill/scripts/lib/machine-reading.mjs, isMainModule): Node realpaths the module, argv[1] keeps the caller's
+// spelling (a link's), so both sides go through one resolver; where a real path cannot be resolved, file identity (stat follows a link, so a symlinked
+// folder still matches; a zero inode is no identity); last, the plain resolved paths. A path that names no file matches nothing, so an import never runs
+// the check (28c's `catch { return true; }` ran it on import, the shape e0eba02 retired). Node's import.meta.main was weighed and not taken: it exists
+// only from 22.18.0 and 24.2.0 (Stability 1.0).
+// dev:ino of what a path names, or null where the volume gives none (stat fails, or answers ino 0: a zero id would make any two files one)
+function fileIdentity(p) {
+  try {
+    const s = fs.statSync(p, { bigint: true });
+    return s.ino === 0n ? null : `${s.dev}:${s.ino}`;
+  } catch {
+    return null;
+  }
+}
+function isMainModule(url) {
+  if (!process.argv[1]) return false;
+  const self = fileURLToPath(url);
+  try {
+    return fs.realpathSync.native(self) === fs.realpathSync.native(process.argv[1]);
+  } catch {
+    const a = fileIdentity(self);
+    const b = fileIdentity(process.argv[1]);
+    return a !== null && b !== null ? a === b : path.resolve(self) === path.resolve(process.argv[1]);
+  }
+}
+if (isMainModule(import.meta.url)) process.exitCode = await main(process.argv.slice(2));
