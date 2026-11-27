@@ -183,6 +183,174 @@ test('every job in every template workflow, and in this repo\'s own, declares ti
   assert.deepEqual(missing, [], 'a job with no timeout-minutes can hold a runner for 360 minutes');
 });
 
+// CW-103 (c), order 27a: a REQUIRED workflow carries no path filter on its pull_request trigger. GitHub's troubleshooting page for
+// required status checks (read 2026-11-27, the "Handling skipped but required checks" table): "A workflow is skipped by path filtering,
+// branch filtering, or a commit message" -> "Associated checks stay in a "Pending" state and block merging" -> "Avoid requiring workflows
+// that can be skipped"; "A job is skipped by a conditional" -> "The job reports "Success"". So the docs-only skip of a required workflow
+// lives in a job-level gate inside a run that started, never on the trigger (SKILL-REPO-PATTERN.md, the required-workflow MUST).
+// The contexts the house requires: SWEEP-MARKS.md's dependabot-auto-merge-gate row (all-green and analyze (javascript); verify for this
+// repository) and SKILL-REPO-PATTERN.md's link-check line (check, or gate). A job counts by the name it REPORTS (its name: line, else its id), or by its id.
+const REQUIRED_CONTEXTS = new Set(['all-green', 'analyze (javascript)', 'verify', 'check', 'gate']);
+// The scan reads YAML as lines, so it fails CLOSED (27b, the auditor's findings 1 and 2): a comment line is skipped before indentation is read, the
+// indentation of a block is learned from its first line instead of assumed, and what it cannot attribute counts against the workflow.
+const isBlankOrComment = (l) => /^\s*(#.*)?$/.test(l);
+const stripComment = (l) => l.replace(/\s+#.*$/, '');
+const indentOf = (l) => l.match(/^ */)[0].length;
+const unquote = (s) => s.replace(/^(['"])(.*)\1$/, '$2');
+function requiredJobsOf(ls) {
+  const out = [];
+  const jobsAt = ls.findIndex((l) => /^(["']?)jobs\1\s*:\s*(#.*)?$/.test(l));
+  if (jobsAt < 0) return out;
+  let jobIndent = -1;
+  for (let i = jobsAt + 1; i < ls.length; i++) {
+    if (isBlankOrComment(ls[i])) continue;
+    const line = stripComment(ls[i]);
+    const ind = indentOf(line);
+    if (ind === 0) break;
+    if (jobIndent < 0) jobIndent = ind;
+    if (ind !== jobIndent) continue;
+    const id = line.trim().match(/^(["']?)([A-Za-z_][\w-]*)\1\s*:\s*(\{.*)?$/);
+    if (!id) continue;
+    let name = null;
+    let bodyIndent = -1;
+    for (let j = i + 1; j < ls.length; j++) {
+      if (isBlankOrComment(ls[j])) continue;
+      const b = stripComment(ls[j]);
+      const bi = indentOf(b);
+      if (bi <= jobIndent) break;
+      if (bodyIndent < 0) bodyIndent = bi;
+      if (bi !== bodyIndent) continue;
+      const n = b.trim().match(/^name\s*:\s*(.+)$/);
+      if (n) { name = unquote(n[1].trim()); break; }
+    }
+    const reported = name ?? id[2];
+    // a name built by an expression cannot be read here, so it counts as required: counting too many workflows is the safe side
+    if (REQUIRED_CONTEXTS.has(reported)) out.push(reported);
+    else if (REQUIRED_CONTEXTS.has(id[2])) out.push(id[2]);
+    else if (reported.includes('${{')) out.push(reported);
+  }
+  return out;
+}
+// The 1-based line of a paths or paths-ignore key that can skip a pull request run, or 0 when there is none. pull_request_target runs on a pull request
+// too, so it is held to the same rule; a paths key under no trigger the scan can name, or in a flow mapping on the on: line, counts as one.
+const PR_TRIGGERS = new Set(['pull_request', 'pull_request_target']);
+const PATHS_ANYWHERE = /(^|[\s{,])["']?paths(-ignore)?["']?\s*:/;
+function pullRequestPathFilterLine(ls) {
+  const onAt = ls.findIndex((l) => /^(["']?)on\1\s*:/.test(stripComment(l)));
+  if (onAt < 0) return 0;
+  const rest = stripComment(ls[onAt]).replace(/^(["']?)on\1\s*:/, '').trim();
+  if (rest) return PATHS_ANYWHERE.test(rest) ? onAt + 1 : 0; // `on: pull_request`, `on: [push, pull_request]`, or a flow mapping
+  let triggerIndent = -1;
+  let trigger = null;
+  for (let i = onAt + 1; i < ls.length; i++) {
+    if (isBlankOrComment(ls[i])) continue;
+    const line = stripComment(ls[i]);
+    const ind = indentOf(line);
+    if (ind === 0) break;
+    if (triggerIndent < 0) triggerIndent = ind;
+    if (ind === triggerIndent) {
+      const m = line.trim().match(/^(["']?)([A-Za-z_]+)\1\s*:(.*)$/);
+      trigger = m && !/^paths(-ignore)?$/.test(m[2]) ? m[2] : null;
+      if (trigger === null) return i + 1; // a paths key, or a line the scan cannot read, at trigger level
+      if (PR_TRIGGERS.has(trigger) && PATHS_ANYWHERE.test(m[3])) return i + 1; // `pull_request: { paths: [...] }`
+      continue;
+    }
+    if (ind < triggerIndent) trigger = null;
+    if (PATHS_ANYWHERE.test(line) && (trigger === null || PR_TRIGGERS.has(trigger))) return i + 1;
+  }
+  return 0;
+}
+test('the required-workflow scan reads what it must: a pull_request filter is found, a push-only filter is not, and the required jobs are named by what they report (not vacuous)', () => {
+  const wf = (...xs) => xs.join('\n').split('\n');
+  assert.equal(pullRequestPathFilterLine(wf('on:', '  push:', '    paths-ignore:', "      - 'README.md'", '  pull_request:', '    branches: [main]', 'jobs:')), 0, 'a push-only filter is allowed');
+  assert.equal(pullRequestPathFilterLine(wf('on:', '  push:', '  pull_request:', '    branches: [main]', '    paths-ignore:', "      - 'README.md'", 'jobs:')), 5, 'a pull_request filter is found');
+  assert.equal(pullRequestPathFilterLine(wf('on:', '  pull_request:', '    paths:', "      - '**.md'")), 3);
+  assert.equal(pullRequestPathFilterLine(wf('on: pull_request', 'jobs:')), 0);
+  assert.deepEqual(requiredJobsOf(wf('jobs:', '  gate:', '    name: gate (${{ matrix.os }})', '  all-green:', '    name: all-green', '  analyze:', '    name: analyze (javascript)', '  verify:', '    runs-on: x')), ['gate', 'all-green', 'analyze (javascript)', 'verify']);
+  const carriers = ALL_WORKFLOWS().filter((f) => requiredJobsOf(lines(f)).length).map(rel);
+  for (const want of ['templates/published-code/.github/workflows/ci.yml', 'templates/published-code/.github/workflows/codeql.yml', 'templates/private-working/.github/workflows/gate.yml', 'templates/article/.github/workflows/check.yml', '.github/workflows/verify-landing.yml']) {
+    assert.ok(carriers.includes(want), `${want} carries a required job, so the scan must see it -- got ${carriers.join(', ')}`);
+  }
+});
+// 27b (the umbrella auditor's INSPECT of PR #244, findings 1 and 2): the scan read the on: block by exact two-space indentation and the job ids by an
+// exact line, so a filtered required workflow written another legal way passed it. Each shape below is a real YAML form GitHub accepts. The scan now
+// fails CLOSED: a paths key it cannot attribute to a trigger it knows is an offender, and a job name built by an expression counts as required.
+test('the required-workflow scan catches a pull_request filter in every form GitHub reads, and a required job however it is written (RED before 27b: M1 to M9)', () => {
+  const wf = (...xs) => xs.join('\n').split('\n');
+  const jobs = ['jobs:', '  all-green:', '    runs-on: ubuntu-latest'];
+  const caught = (name, ls) => {
+    assert.ok(requiredJobsOf(ls).length > 0, `${name}: the required job is seen`);
+    assert.ok(pullRequestPathFilterLine(ls) > 0, `${name}: the pull_request filter is found`);
+  };
+  caught('B0 block form', wf('on:', '  push:', '  pull_request:', '    branches: [main]', '    paths-ignore:', "      - 'README.md'", ...jobs));
+  caught('M1 flow-form filter', wf('on:', '  push:', '  pull_request: { branches: [main], paths-ignore: [README.md] }', ...jobs));
+  caught('M2 four-space indent', wf('on:', '    push:', '    pull_request:', '        paths-ignore:', "            - 'README.md'", ...jobs));
+  caught('M3 quoted on key', wf('"on":', '  pull_request:', '    paths-ignore:', "      - 'README.md'", ...jobs));
+  caught('M4 job id with a trailing comment', wf('on:', '  pull_request:', '    paths-ignore:', "      - 'README.md'", 'jobs:', '  all-green: # the gate', '    runs-on: ubuntu-latest'));
+  caught('M5 a column-0 comment inside the on block', wf('on:', '  pull_request:', '# why', '    paths-ignore:', "      - 'README.md'", ...jobs));
+  caught('M6 a required job named by an expression', wf('on:', '  pull_request:', '    paths-ignore:', "      - '**.md'", 'jobs:', '  analyze:', '    name: analyze (${{ matrix.language }})', '    runs-on: ubuntu-latest'));
+  caught('M7 pull_request_target', wf('on:', '  pull_request_target:', '    paths:', "      - 'x'", ...jobs));
+  caught('M8 a two-space comment between pull_request and its filter', wf('on:', '  pull_request:', '  # docs never run the gate', '    paths-ignore:', "      - 'README.md'", ...jobs));
+  caught('M9 on: after jobs:', wf('jobs:', '  all-green:', '    runs-on: x', 'on:', '  pull_request:', '    paths-ignore:', "      - 'README.md'"));
+  caught('M10 a flow-mapping on: line', wf('on: { pull_request: { paths: [README.md] } }', ...jobs));
+  caught('M11 a paths key no trigger owns', wf('on:', '    paths-ignore:', "      - 'README.md'", '  pull_request:', ...jobs));
+  // and the forms that are fine stay fine
+  assert.equal(pullRequestPathFilterLine(wf('on:', '  push:', '    # docs only', '    paths-ignore:', "      - 'README.md'", '  pull_request:', '    branches: [main]', ...jobs)), 0, 'a push-only filter with a comment');
+  assert.equal(pullRequestPathFilterLine(wf('on: [push, pull_request]', ...jobs)), 0);
+  assert.equal(pullRequestPathFilterLine(wf('on:', '  push:', '    branches: [main]', '  pull_request:', '    branches: [main]', '  workflow_dispatch:', ...jobs)), 0);
+  assert.deepEqual(requiredJobsOf(wf('jobs:', '  lint:', '    name: lint', '  front-door-links:', '    runs-on: x')), [], 'a job no ruleset names is not counted');
+});
+test('no workflow that carries a required check filters its pull_request trigger by path: a skipped workflow leaves the check Pending and blocks the merge (RED before 27a, CW-103 (c))', () => {
+  const offenders = [];
+  for (const f of ALL_WORKFLOWS()) {
+    const ls = lines(f);
+    const req = requiredJobsOf(ls);
+    const at = pullRequestPathFilterLine(ls);
+    if (req.length && at) offenders.push(`${rel(f)}:${at} (requires ${req.join(', ')})`);
+  }
+  assert.deepEqual(offenders, [], 'a required workflow skips its docs-only work in a job-level gate inside the run, never with a trigger-level path filter on pull_request');
+});
+
+// Code scanning alert 36 (js/file-system-race, 27a): a template script that checks a path (existsSync, accessSync, statSync, lstatSync) and then
+// uses the same name (reads, opens, lists, resolves or writes it) answers from a state that may have changed in between, and the check adds nothing
+// the use's own error does not already say. The use is attempted once and its error judged by its code (ENOENT is "absent"), or the type is
+// read from the listing itself (a Dirent). The class as written in the templates: one identifier checked then used within a short window, and a
+// listing filtered by a stat of each name. lib/wave-run.mjs's existsSync(path.resolve(cwd, f)) is NOT this shape and is left: it decides
+// which row reads "missing" before a later child process runs the file, which no single use in this script can replace.
+// What the scan does NOT see (27b, the auditor's finding 3): a check and a use on a path written inline (path.join(...)) or held under two names, and a
+// folder listed by a recursive call after an lstat. It reads the shape by identifier, so it is a guard on the template scripts, not a proof.
+const CHECK_THEN_USE = /\b(?:existsSync|accessSync|statSync|lstatSync)\(\s*([A-Za-z_$][\w$]*)\s*[,)][\s\S]{0,1200}?\b(?:readFileSync|openSync|readdirSync|realpathSync(?:\.native)?|writeFileSync|copyFileSync|createReadStream|createWriteStream)\(\s*\1\s*[,)]/g;
+const LIST_THEN_STAT = /readdirSync\([^)]*\)\s*\.filter\([^)]*\bstatSync\(/g;
+function raceShapes(text) {
+  const t = text.replace(/^\s*\/\/.*$/gm, '');
+  const hits = [];
+  for (const re of [CHECK_THEN_USE, LIST_THEN_STAT]) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(t))) hits.push(m[0].split(/\r?\n/)[0].trim());
+  }
+  return hits;
+}
+test('the file-race shape scan finds a check followed by a use of the same name, and passes the read-once and Dirent forms (not vacuous)', () => {
+  assert.equal(raceShapes("const x = p && fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null;").length, 1);
+  assert.equal(raceShapes("try { fs.accessSync(f, fs.constants.W_OK); fs.closeSync(fs.openSync(f, 'r+')); } catch {}").length, 1);
+  assert.equal(raceShapes("if (!fs.existsSync(dir)) { fail(); }\nfor (const e of fs.readdirSync(dir)) {}").length, 1);
+  assert.equal(raceShapes("const files = readdirSync(D).filter(f => statSync(`${D}/${f}`).isFile());").length, 1);
+  assert.equal(raceShapes("let x = null; try { x = fs.readFileSync(p, 'utf8'); } catch (e) { if (e.code !== 'ENOENT') throw e; }").length, 0);
+  assert.equal(raceShapes("const files = readdirSync(D, { withFileTypes: true }).filter((d) => d.isFile()).map((d) => d.name);").length, 0);
+  assert.equal(raceShapes("const st = fs.lstatSync(s); if (st.isFile()) fs.copyFileSync(s, d);").length, 1, 'a copy is a use (27b, finding 3)');
+  assert.equal(raceShapes("// fs.existsSync(p) ? fs.readFileSync(p) is the old form").length, 0, 'a comment is not code');
+});
+test('no template script checks a path and then uses the same name: the read is attempted once and judged by its error code (RED before 27a, code scanning alert 36)', () => {
+  const scripts = [];
+  const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else if (/\.m?js$/.test(e.name) && !/\.test\.m?js$/.test(e.name)) scripts.push(p); } };
+  walk(TEMPLATES);
+  assert.ok(scripts.length > 20, `the walk reads the template scripts (${scripts.length})`);
+  const offenders = [];
+  for (const f of scripts.sort()) for (const h of raceShapes(fs.readFileSync(f, 'utf8'))) offenders.push(`${rel(f)}: ${h.slice(0, 80)}`);
+  assert.deepEqual(offenders, []);
+});
+
 test('every checkout in a workflow that pushes nothing sets persist-credentials: false; the pushing one keeps its token (RED before UMB-216 (d))', () => {
   const bad = [];
   for (const f of ALL_WORKFLOWS()) {

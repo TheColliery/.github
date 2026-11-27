@@ -12,17 +12,11 @@ on:
       - 'SECURITY.md'
       - 'LICENSE'
       - 'NOTICE'
+  # NO path filter on pull_request, MUST: the gate ruleset requires `all-green`, and GitHub leaves the check of a workflow a path
+  # filter skipped "Pending", blocking the merge (troubleshooting required status checks, read 2026-11-27). A room that skips
+  # work on a doc-only pull request does it inside the run, in a job-level gate (SKILL-REPO-PATTERN.md, CW-103 (c)).
   pull_request:
     branches: [main]
-    paths-ignore:
-      # skip verify/test only for NON-shipped docs — a SHIPPED markdown artifact (skills/**/SKILL.md, commands/*.md) MUST run CI (verify checks dist-sync)
-      - 'README.md'
-      - 'CHANGELOG.md'
-      - 'CONTRIBUTING.md'
-      - 'PRIVACY.md'
-      - 'SECURITY.md'
-      - 'LICENSE'
-      - 'NOTICE'
 
 permissions:
   contents: read

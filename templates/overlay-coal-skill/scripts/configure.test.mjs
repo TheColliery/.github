@@ -189,8 +189,9 @@ test('a junction at the config path is refused, and nothing is written through i
 
 // 21e item 3 (the 21d review's MEDIUM, suspected on POSIX), ruled: REFUSE. A rename replaces the directory entry, so a config its user made read-only was replaced on POSIX,
 // where the old in-place write refused; on Windows the rename failed with a sentence that did not name the cause. An existing config that is not writable is now refused
-// with a sentence before anything is backed up or written, on every system: accessSync(W_OK) sees the read-only bits on POSIX and the read-only attribute on Windows. The
-// test skips visibly only where the owner writes past the bits anyway (root).
+// with a sentence before anything is backed up or written, on every system: an open for writing (r+) is refused by the read-only bits on POSIX and by the read-only
+// attribute on Windows (27a dropped the accessSync(W_OK) that stood before that open, code scanning alert 36). The test skips visibly only where the owner writes past
+// the bits anyway (root).
 test('an existing config that is read-only is refused by name before anything is backed up or written -- RED before 21e', (t) => {
   const { dir, cfg } = project();
   fs.writeFileSync(cfg, '{"mode":"off"}\n');

@@ -96,19 +96,19 @@ function main() {
   let cfg = {};
   let rawConfig = null;
   let rawBytes = null; // the bytes the bounded read took (21e): the backup is written from them
-  // 21d: a folder at the config path is refused with a reason before anything is read or written (never a raw EISDIR at the write), and the read is bounded
-  // (lib/repo-fs.mjs readConfigBounded: one descriptor, its type and size judged before it is read); a leading byte-order mark is read past by its code point
-  let st = null;
-  try { st = fs.lstatSync(readPath); } catch {}
-  if (st && st.isDirectory()) {
-    console.error(`FAIL ${readPath}: it is a folder, not a config file -- remove or rename that folder and re-run; nothing was written`);
-    process.exit(1);
-  }
+  // 21d: a folder at the config path is refused with a reason before anything is written (never a raw EISDIR at the write), and the read is bounded
+  // (lib/repo-fs.mjs readConfigBounded: one descriptor, its type and size judged before it is read); a leading byte-order mark is read past by its code point.
+  // 27a (code scanning alert 36, js/file-system-race): the folder is told by the read's own EISDIR, not by an lstat of the name before it, so nothing is judged
+  // on a state the read did not see.
   try {
     rawBytes = readConfigBounded(readPath);
     rawConfig = rawBytes.toString('utf8');
     if (rawConfig.charCodeAt(0) === 0xfeff) rawConfig = rawConfig.slice(1);
   } catch (e) {
+    if (e.code === 'EISDIR') {
+      console.error(`FAIL ${readPath}: it is a folder, not a config file -- remove or rename that folder and re-run; nothing was written`);
+      process.exit(1);
+    }
     if (e.code === 'ECONFIGTOOLARGE') {
       console.error(`FAIL ${readPath}: config is larger than 1 MiB, so it is not read; nothing was written`);
       process.exit(1);
@@ -122,11 +122,12 @@ function main() {
   }
   // 21e (the 21d review's MEDIUM on read-only configs), ruled REFUSE: the write is a rename, which replaces the directory entry, so a config its user made read-only
   // would be replaced on POSIX where the old in-place write refused (and on Windows the rename failed with a sentence that did not name the cause). An existing config that is
-  // not writable is refused here, before anything is backed up or written; accessSync(W_OK) sees the read-only bits on POSIX and the read-only attribute on Windows.
-  // 21i (the 21d review's LOW): on Windows accessSync sees only the read-only attribute, never an ACL that denies write, and the rename needs DELETE, not WRITE, so the
-  // file is also opened for writing (r+: nothing created, nothing truncated, closed at once), which an ACL deny refuses.
+  // not writable is refused here, before anything is backed up or written: the file is opened for writing (r+: nothing created, nothing truncated, closed at once),
+  // which the read-only bits refuse on POSIX, and the read-only attribute and an ACL that denies write refuse on Windows (21i: the rename needs DELETE, not WRITE).
+  // 27a (code scanning alert 36, js/file-system-race): the accessSync(W_OK) that stood before this open is gone; it judged the name before the open did, and the
+  // open's own refusal already says everything the check did.
   if (rawBytes !== null) {
-    try { fs.accessSync(readPath, fs.constants.W_OK); fs.closeSync(fs.openSync(readPath, 'r+')); } catch {
+    try { fs.closeSync(fs.openSync(readPath, 'r+')); } catch {
       console.error(`FAIL ${readPath}: it is read-only -- make it writable (chmod u+w on Linux and macOS, clear the read-only attribute or a write deny in its permissions on Windows) and re-run; nothing was written`);
       process.exit(1);
     }

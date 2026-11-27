@@ -28,7 +28,20 @@ function main() {
     process.exitCode = 2;
     return;
   }
-  const existing = existingPath && fs.existsSync(existingPath) ? fs.readFileSync(existingPath, 'utf8') : null;
+  // 27a (code scanning alert 36's class): read once, judge the error by its code. Only "not found" means no earlier upload; a folder, a denied read or any other
+  // failure is a named refusal, never read as "absent" (which would answer upload-clobber over an asset this run could not compare).
+  let existing = null;
+  if (existingPath) {
+    try {
+      existing = fs.readFileSync(existingPath, 'utf8');
+    } catch (e) {
+      if (e.code !== 'ENOENT') {
+        console.error(`decide-upload: could not read the earlier sums file ${existingPath}: ${e.code || e.message}`);
+        process.exitCode = 2;
+        return;
+      }
+    }
+  }
 
   const { action, reason } = decideUpload(existing, fresh);
   console.error(`decide-upload: ${action} -- ${reason}`);
