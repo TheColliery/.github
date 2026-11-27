@@ -342,7 +342,9 @@ test('A: exactly ONE count notice of the whole shape reads the counts; none besi
   assert.deepEqual([read.state, read.findings, read.warnings, read.quotes.length], ['read', 0, 2, 2]);
   assert.match('0 finding(s), 0 warning(s)', COUNT_SHAPE, 'the CLI\'s own notice, as GitHub recorded it on #255\'s run, matches the one shape');
   for (const [anns, why] of [[[WARN()], 'warnings and no count notice'], [[NOTE(), NOTE()], 'two count notices'], [[NOTE('2 findings, 1 warning')], 'a notice of another shape'], [[NOTE('0 finding(s)')], 'a notice that leaves out a number']]) {
-    assert.equal(frontDoorRoom({ repo: 'CoalFace', run: fdRun(), annotations: anns, now: FD_NOW }).state, 'unreadable', why);
+    // 28f, TURNED ON PURPOSE (main's ruling on the auditor's 28c finding 3): "warnings and no count notice" is unreadable only when the copy the run ran
+    // holds the count title; the case is now stated with that copy (an older copy is neighbour (c), pinned in the 28f tests)
+    assert.equal(frontDoorRoom({ repo: 'CoalFace', run: fdRun(), annotations: anns, copyHoldsCount: true, now: FD_NOW }).state, 'unreadable', why);
   }
 });
 
@@ -454,15 +456,15 @@ test('a room with warnings is ONE finding naming the count and the run\'s date; 
   assert.match(s.text, /run of 2026-11-23T06:17:00Z: 2 warning\(s\), 0 finding\(s\)/);
 });
 
-const FD_STATE = (annotationsStatus = 200) => ({
+const FD_STATE = (annotationsStatus = 200, headSha = 'a'.repeat(40)) => ({
   '/orgs/TheColliery/repos': [{ name: 'CoalFace', default_branch: 'main' }],
   '/repos/TheColliery/CoalFace/actions/workflows': { workflows: [{ id: 77, path: FRONT_DOOR_WORKFLOW, state: 'active' }] },
-  '/repos/TheColliery/CoalFace/actions/workflows/77/runs': { workflow_runs: [fdRun({ created_at: new Date(Date.now() - 2 * 86400000).toISOString() })] },
+  '/repos/TheColliery/CoalFace/actions/workflows/77/runs': { workflow_runs: [fdRun({ created_at: new Date(Date.now() - 2 * 86400000).toISOString(), head_sha: headSha })] },
   '/repos/TheColliery/CoalFace/actions/runs': { workflow_runs: [] },
   '/repos/TheColliery/CoalFace/actions/runs/501/jobs': { jobs: [{ id: 9001, name: 'front-door-links' }] },
   '/repos/TheColliery/CoalFace/check-runs/9001/annotations': annotationsStatus === 200 ? [NOTE('0 finding(s), 1 warning(s)'), WARN()] : { __status: annotationsStatus },
-  // 28d item 2: the room's checker, read once for its blob id
-  '/repos/TheColliery/CoalFace/contents/scripts/front-door-links.mjs': { sha: '0'.repeat(40) },
+  // 28d item 2, 28f: the room's checker at the run's commit, read once: its text holds the count title
+  '/repos/TheColliery/CoalFace/contents/scripts/front-door-links.mjs': { sha: '0'.repeat(40), encoding: 'base64', content: Buffer.from("console.log('::notice title=front-door-links-count::')").toString('base64') },
 });
 
 test('org-health-watch.mjs: the front-door read asks for the newest completed SCHEDULED runs and the annotations at per_page=100 (A), quotes the warning, and a failed annotations read is unreadable -- RED before 28b', () => {
@@ -473,7 +475,7 @@ test('org-health-watch.mjs: the front-door read asks for the newest completed SC
   assert.match(r.output, /has_findings=true/);
   assert.match(r.report, /\[CoalFace\] front-door-links: 1 warning\(s\)/);
   assert.equal(quotedLines(r.report), 1, 'the one warning is quoted in the report');
-  assert.ok(r.calls.includes('/repos/TheColliery/CoalFace/contents/scripts/front-door-links.mjs'), 'item 2: one read of the room\'s checker');
+  assert.ok(r.calls.includes(`/repos/TheColliery/CoalFace/contents/scripts/front-door-links.mjs?ref=${'a'.repeat(40)}`), 'item 2 (28f): one read of the room\'s checker, at the commit the run ran');
   assert.doesNotMatch(r.report, /could not read the room/);
   r = runCli(FD_STATE(403));
   assert.match(r.report, /\[CoalFace\] could not read the front-door-links annotations \(HTTP 403\)/);
@@ -481,15 +483,17 @@ test('org-health-watch.mjs: the front-door read asks for the newest completed SC
 // ---- 28d: the auditor's 28a unit 3 on #256, with main's rulings (each test names its item) -------------------------------------------------------
 import { pickFrontDoorJob, gitBlobOf, quotePath } from './org-health-watch.mjs';
 
-test('item 1 + 2 (A\'s collision, when (c) ends): zero count notices is (c) only while the room\'s CLI copy differs from the template\'s; a CURRENT copy that printed no count is unreadable -- RED before 28d', () => {
+// 28f, TURNED ON PURPOSE (main's ruling (a) on the auditor's 28c findings 2 and 3): the input was "the copy equals the template" (cliCurrent) and is now
+// "the copy the run ran holds the count title" (copyHoldsCount); the verdicts it pins are kept
+test('item 1 + 2 (A\'s collision, when (c) ends): zero count notices is (c) while the copy the run ran holds no count title; a copy that holds it and printed none is unreadable -- RED before 28d, re-keyed 28f', () => {
   const base = { repo: 'CoalFace', workflowState: 'active', run: fdRun(), annotations: [], now: FD_NOW };
-  assert.equal(frontDoorRoom({ ...base, cliCurrent: false }).state, 'no-count', 'an older copy: the header line');
-  assert.equal(frontDoorRoom({ ...base, cliCurrent: null }).state, 'no-count', 'a copy that could not be compared stays the header line');
-  const cur = frontDoorRoom({ ...base, cliCurrent: true });
+  assert.equal(frontDoorRoom({ ...base, copyHoldsCount: false }).state, 'no-count', 'a copy without the count title: the header line');
+  assert.equal(frontDoorRoom({ ...base, copyHoldsCount: null }).state, 'no-count', 'a copy that could not be read stays the header line');
+  const cur = frontDoorRoom({ ...base, copyHoldsCount: true });
   assert.equal(cur.state, 'unreadable');
-  assert.match(cur.why, /a current checker printed no count notice/);
+  assert.match(cur.why, /the checker the run ran prints the count, and the run printed none/);
   const s = frontDoorSection([cur], []);
-  assert.equal(s.findings.length, 1, 'a current copy with no count is a finding');
+  assert.equal(s.findings.length, 1, 'a counting copy with no count is a finding');
 });
 
 test('item 2: gitBlobOf is git\'s own blob id (sha1 over "blob <size>\\0" and the bytes), so a room\'s copy compares with the template by the id the contents API reports -- RED before 28d', () => {
@@ -513,6 +517,8 @@ test('item 5: a workflow whose state is anything but active is a finding by name
     const r = frontDoorRoom({ repo: 'CoalNew', workflowState: state, run: null, annotations: [], now: FD_NOW });
     assert.equal(r.state, 'workflow-off', state);
     const s = frontDoorSection([r], []);
+    // 28f, TURNED ON PURPOSE (LOW 5, one row for one fact): disabled_inactivity is reported by the watcher's first class (disabledWorkflows), not twice
+    if (state === 'disabled_inactivity') { assert.deepEqual(s.findings, [], state); continue; }
     assert.equal(s.findings.length, 1, state);
     assert.match(s.findings[0].text, new RegExp(`front-door-links\\.yml is ${state}`), state);
   }
@@ -567,4 +573,56 @@ test('item 9 (E exact): the code in "no answer (<code>)" is letters, digits and 
   assert.match(r('no answer (' + 'A'.repeat(41) + ')'), /\(reason not shown\)/);
   assert.match(r('no answer (a-b)'), /\(reason not shown\)/);
   assert.match(r('no answer (ETIMEDOUT)'), /: no answer \(ETIMEDOUT\) \(/);
+});
+// ---- 28f: the auditor's 28c INSPECT of #256 (head 729421c), with main's rulings -------------------------------------------------------------------
+test('28f item 1 (finding 1, HIGH): a failure run is a finding whatever the room\'s copy printed; a failed run, nothing printed, a copy without the count is (c) AND a failure -- RED before 28f', () => {
+  const r = frontDoorRoom({ repo: 'CoalMine', workflowState: 'active', run: fdRun({ conclusion: 'failure' }), annotations: [], copyHoldsCount: false, now: FD_NOW });
+  assert.equal(r.state, 'no-count');
+  const s = frontDoorSection([r], []);
+  assert.equal(s.findings.length, 1, 'the failure is a finding');
+  assert.match(s.findings[0].text, /the newest scheduled run failed/);
+  assert.match(s.text, /does not report warnings yet \(re-copy owed\): CoalMine/, 'the room is on the (c) line as well');
+  // a failed run whose counting copy printed none: unreadable AND a failure
+  const u = frontDoorSection([frontDoorRoom({ repo: 'CoalTipple', workflowState: 'active', run: fdRun({ conclusion: 'failure' }), annotations: [], copyHoldsCount: true, now: FD_NOW })], []);
+  assert.deepEqual(u.findings.map((f) => f.kind).sort(), ['front-door', 'unreadable']);
+});
+
+test('28f items 2 and 3: the copy at the run\'s commit decides: a room re-copied this week whose run ran the old copy is (c), no false finding; a named divergence that prints the count reads normally; zero notices beside warnings is (c) or unreadable by the copy -- RED before 28f', () => {
+  const base = { repo: 'CoalFace', workflowState: 'active', run: fdRun(), now: FD_NOW };
+  const recopied = frontDoorRoom({ ...base, annotations: [], copyHoldsCount: false });
+  assert.equal(recopied.state, 'no-count');
+  assert.deepEqual(frontDoorSection([recopied], []).findings, [], 'the old copy the run ran is (c), not a false finding');
+  const divergent = frontDoorRoom({ ...base, annotations: [NOTE('0 finding(s), 1 warning(s)'), WARN()], copyHoldsCount: true });
+  assert.deepEqual([divergent.state, divergent.warnings], ['read', 1], 'a room whose copy differs from the template but prints the count reads normally');
+  assert.equal(frontDoorRoom({ ...base, annotations: [WARN()], copyHoldsCount: false }).state, 'no-count', 'warnings without a count from a copy that cannot print one: (c)');
+  assert.equal(frontDoorRoom({ ...base, annotations: [WARN()], copyHoldsCount: true }).state, 'unreadable', 'warnings without a count from a copy that prints one: unreadable');
+});
+
+test('28f item 2: the header counts the rooms that carry the template\'s current checker, a count and never a verdict -- RED before 28f', () => {
+  const s = frontDoorSection([frontDoorRoom({ repo: 'CoalFace', workflowState: 'active', run: fdRun(), annotations: [NOTE(), WARN(), WARN()], copyHoldsCount: true, now: FD_NOW })], [], ['CoalFace']);
+  assert.match(s.text, /- 1 room\(s\) carry the template's current checker: CoalFace/);
+});
+
+test('28f item 5 (LOW 5): a workflow disabled for inactivity is reported once, by the watcher\'s first class; the other states stay this section\'s findings -- RED before 28f', () => {
+  const inactive = frontDoorSection([frontDoorRoom({ repo: 'CoalNew', workflowState: 'disabled_inactivity', run: null, annotations: [], now: FD_NOW })], []);
+  assert.deepEqual(inactive.findings, [], 'disabledWorkflows already names it, with its link and its reason');
+  const manual = frontDoorSection([frontDoorRoom({ repo: 'CoalNew', workflowState: 'disabled_manually', run: null, annotations: [], now: FD_NOW })], []);
+  assert.equal(manual.findings.length, 1);
+});
+
+test('org-health-watch.mjs (28f items 2 and 3): a run whose head_sha is not 40 hex is unreadable and the room\'s checker is not read -- RED before 28f', () => {
+  const r = runCli(FD_STATE(200, 'not-a-sha'));
+  assert.equal(r.res.status, 0, r.res.stdout + r.res.stderr);
+  assert.ok(!r.calls.some((c) => c.includes('/contents/scripts/front-door-links.mjs')), r.calls.join('\n'));
+  assert.match(r.report, /\[CoalFace\] could not read the run's commit \(head_sha is not 40 hex\)/);
+});
+test('org-health-watch.mjs (28f items 2 and 3): main asks the copy\'s TEXT for the count title: a run that printed nothing beside a copy that holds it is unreadable, beside one that does not it is the (c) line -- pins the read (f7)', () => {
+  const quiet = { ...FD_STATE(), '/repos/TheColliery/CoalFace/check-runs/9001/annotations': [] };
+  let r = runCli(quiet);
+  assert.equal(r.res.status, 0, r.res.stdout + r.res.stderr);
+  assert.match(r.report, /\[CoalFace\] could not read the front-door-links count \(the checker the run ran prints the count, and the run printed none\)/);
+  const old = { ...quiet, '/repos/TheColliery/CoalFace/contents/scripts/front-door-links.mjs': { sha: '1'.repeat(40), encoding: 'base64', content: Buffer.from("console.log('FAIL ...')").toString('base64') } };
+  r = runCli(old);
+  assert.doesNotMatch(r.report, /could not read the front-door-links count/);
+  assert.match(r.report, /does not report warnings yet \(re-copy owed\): CoalFace/);
 });

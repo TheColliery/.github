@@ -271,10 +271,12 @@ export function quoteWarning(a) {
 }
 
 /** One public room's newest completed scheduled run, read as data. States: workflow-off (item 5: a state other than active), no-run (a), stale (B),
- *  unfinished (C), no-count (neighbour c: a checker copy that differs from the template's and printed no count), unreadable (A: not exactly one count
- *  notice of the whole shape, a CURRENT copy that printed none, or counts the CLI could not have printed), read. `cliCurrent` is true when the room's
- *  scripts/front-door-links.mjs has the template's blob id, false when it differs, null when it could not be compared. */
-export function frontDoorRoom({ repo, workflowState = ACTIVE, run, annotations, cliCurrent = null, now = Date.now() }) {
+ *  unfinished (C), no-count (neighbour c: the copy the run ran holds no count title, so it cannot print one), unreadable (A: not exactly one count
+ *  notice of the whole shape, a copy that holds the count title but whose run printed none, or counts the CLI could not have printed), read.
+ *  28f (the auditor's 28c findings 2 and 3, main's ruling (a)): `copyHoldsCount` is the room's scripts/front-door-links.mjs AT THE RUN'S COMMIT asked
+ *  whether its text holds COUNT_TITLE (true, false, or null when it could not be read); byte equality with the template is a header count only. A
+ *  `failure` conclusion rides on the room in every state below it, so the section names the failure whatever the copy printed (finding 1). */
+export function frontDoorRoom({ repo, workflowState = ACTIVE, run, annotations, copyHoldsCount = null, now = Date.now() }) {
   const room = { repo: safeName(repo) };
   if (workflowState !== ACTIVE) return { ...room, state: 'workflow-off', workflowState: safeName(String(workflowState)) };
   if (!run) return { ...room, state: 'no-run' };
@@ -285,25 +287,27 @@ export function frontDoorRoom({ repo, workflowState = ACTIVE, run, annotations, 
   const list = Array.isArray(annotations) ? annotations : [];
   const notes = list.filter((x) => x && x.annotation_level === 'notice' && x.title === COUNT_TITLE);
   const warns = list.filter((x) => x && x.annotation_level === 'warning' && x.title === WARN_TITLE);
-  // items 1 and 2: zero count notices is (c) only while the room's copy is not the template's; a current copy that printed none is unreadable
-  if (notes.length === 0 && warns.length === 0) {
-    if (cliCurrent === true) return { ...room, state: 'unreadable', why: 'a current checker printed no count notice', date, url };
-    return { ...room, state: 'no-count', date, url };
+  const conclusion = run.conclusion;
+  // 28f items 2 and 3: zero count notices, with or without warnings, is (c) while the copy the run ran holds no count title; a copy that holds it and
+  // printed none is unreadable
+  if (notes.length === 0) {
+    if (copyHoldsCount === true) return { ...room, state: 'unreadable', why: 'the checker the run ran prints the count, and the run printed none', conclusion, date, url };
+    return { ...room, state: 'no-count', conclusion, date, url };
   }
   const m = notes.length === 1 ? COUNT_SHAPE.exec(String(notes[0].message ?? '')) : null;
-  if (!m) return { ...room, state: 'unreadable', why: notes.length === 1 ? 'a count notice of another shape' : `${notes.length} count notices`, date, url };
+  if (!m) return { ...room, state: 'unreadable', why: notes.length === 1 ? 'a count notice of another shape' : `${notes.length} count notices`, conclusion, date, url };
   const findings = Number(m[1]);
   const warnings = Number(m[2]);
   // item 6 (new point 4): counts the CLI cannot have printed
-  if (warns.length > warnings) return { ...room, state: 'unreadable', why: 'more warning annotations than the count', date, url };
-  if (run.conclusion === 'success' && findings > 0) return { ...room, state: 'unreadable', why: 'findings on a successful run', date, url };
-  return { ...room, state: 'read', conclusion: run.conclusion, date, url, findings, warnings, quotes: warns.slice(0, QUOTE_MAX).map(quoteWarning) };
+  if (warns.length > warnings) return { ...room, state: 'unreadable', why: 'more warning annotations than the count', conclusion, date, url };
+  if (conclusion === 'success' && findings > 0) return { ...room, state: 'unreadable', why: 'findings on a successful run', conclusion, date, url };
+  return { ...room, state: 'read', conclusion, date, url, findings, warnings, quotes: warns.slice(0, QUOTE_MAX).map(quoteWarning) };
 }
 
 /** The report section and its findings. A room with warnings, a failed, stale or unfinished run, a workflow that is not active, or an unreadable
  *  count is a finding (28d: stale and unfinished, header lines in 28b, are findings for a room that carries the workflow); (a), (c) and (d) are header
  *  lines that never open the issue by themselves. The section is cut at line ends only (D). */
-export function frontDoorSection(rooms, missing = []) {
+export function frontDoorSection(rooms, missing = [], templateCurrent = []) {
   const by = (state) => rooms.filter((r) => r.state === state);
   const names = (list) => list.map((r) => r.repo).join(', ');
   const findings = [];
@@ -318,15 +322,20 @@ export function frontDoorSection(rooms, missing = []) {
   if (by('no-run').length) head.push(`- no completed scheduled run in the retention period: ${names(by('no-run'))}`);
   if (by('no-count').length) head.push(`- ${by('no-count').length} room(s) whose checker does not report warnings yet (re-copy owed): ${names(by('no-count'))}`);
   if (missing.length) head.push(`- rooms without the check: ${missing.map((n) => safeName(n)).join(', ')}`);
-  for (const r of by('workflow-off')) findings.push({ repo: r.repo, kind: 'front-door', text: `front-door-links: the workflow front-door-links.yml is ${r.workflowState}, so its weekly check does not run`, url: '' });
+  // 28f (main's ruling on finding 3): byte equality with the template is a count in the header, never a verdict on a room
+  if (templateCurrent.length) head.push(`- ${templateCurrent.length} room(s) carry the template's current checker: ${templateCurrent.map((n) => safeName(n)).join(', ')}`);
+  // 28f (LOW 5): one row for one fact. A workflow GitHub disabled for inactivity is already the watcher's first class (disabledWorkflows, with the run's
+  // link and the 60-day reason); that line stays, and this section names only the other states, which nothing else reports
+  for (const r of by('workflow-off').filter((x) => x.workflowState !== 'disabled_inactivity')) findings.push({ repo: r.repo, kind: 'front-door', text: `front-door-links: the workflow front-door-links.yml is ${r.workflowState}, so its weekly check does not run`, url: '' });
   // C (28d): the line's words say why a cancelled scheduled run is no cause for alarm by itself
   for (const r of by('unfinished')) findings.push({ repo: r.repo, kind: 'front-door', text: `front-door-links: the newest scheduled run did not finish (${r.conclusion}); a scheduled run cancelled by a push was followed by that push's own run (${r.date})`, url: r.url });
   for (const r of by('stale')) findings.push({ repo: r.repo, kind: 'front-door', text: `front-door-links: the newest scheduled run is from ${r.date}, older than the watcher's own staleness limit of ${STALE_AFTER_DAYS} days`, url: r.url });
   for (const r of by('unreadable')) findings.push({ repo: r.repo, kind: 'unreadable', text: `could not read the front-door-links count (${r.why}); this run did NOT check it`, url: r.url });
+  // 28f (finding 1, HIGH): a failed run is a finding in every state that carries it (read, no-count, unreadable), whatever the room's copy printed
+  for (const r of rooms.filter((x) => x.conclusion === 'failure')) findings.push({ repo: r.repo, kind: 'front-door', text: `front-door-links: the newest scheduled run failed (${r.date})`, url: r.url });
   const body = [];
   for (const r of read) {
     if (r.warnings > 0) findings.push({ repo: r.repo, kind: 'front-door', text: `front-door-links: ${r.warnings} warning(s) on the newest scheduled run (${r.date})`, url: r.url });
-    if (r.conclusion === 'failure') findings.push({ repo: r.repo, kind: 'front-door', text: `front-door-links: the newest scheduled run failed (${r.date})`, url: r.url });
     if (r.warnings === 0 && r.conclusion !== 'failure') continue;
     body.push(`- [${r.repo}] run of ${r.date}: ${r.warnings} warning(s), ${r.findings} finding(s)${r.conclusion === 'failure' ? ' (the run failed)' : ''}${r.url ? ` — ${r.url}` : ''}`);
     for (const q of r.quotes) body.push(`  ${q}`);
@@ -376,6 +385,7 @@ async function main() {
   const findings = [];
   const frontDoorRooms = [];
   const frontDoorMissing = [];
+  const frontDoorCurrent = [];
   // the template's blob id, read once from this repository's own checkout; unreadable here means every room's copy reads as "not compared"
   let templateBlob = null;
   try { templateBlob = gitBlobOf(fs.readFileSync(TEMPLATE_CLI)); } catch (e) { findings.push(unreadable(ORG, 'the template scripts/front-door-links.mjs', e.code || 'error')); }
@@ -406,14 +416,23 @@ async function main() {
             else if (Array.isArray(a.json)) annotations.push(...a.json);
           }
         }
-        // item 2 (28d): one public read of the room's checker, compared by blob id with the template's (null when either side cannot be read)
-        let cliCurrent = null;
-        if (annotations && templateBlob) {
-          const c = await get(`${base}/contents/scripts/front-door-links.mjs`);
-          if (c.status === 200 && typeof c.json?.sha === 'string') cliCurrent = c.json.sha === templateBlob;
-          else findings.push(unreadable(r.name, "the room's scripts/front-door-links.mjs", c.status));
+        // 28f (findings 2 and 3): ONE public read of the room's checker AT THE COMMIT THE RUN RAN, its text asked for COUNT_TITLE; a head_sha that is not
+        // 40 hex is unreadable and the read is not made. Byte equality with the template only feeds the header count.
+        let copyHoldsCount = null;
+        if (annotations && run) {
+          const headSha = typeof run.head_sha === 'string' && /^[0-9a-f]{40}$/.test(run.head_sha) ? run.head_sha : null;
+          if (!headSha) findings.push(unreadable(r.name, "the run's commit (head_sha is not 40 hex), so the room's checker", 'not read'));
+          else {
+            const c = await get(`${base}/contents/scripts/front-door-links.mjs?ref=${headSha}`);
+            const text = c.status === 200 && c.json?.encoding === 'base64' && typeof c.json.content === 'string' ? Buffer.from(c.json.content, 'base64').toString('utf8') : null;
+            if (text === null) findings.push(unreadable(r.name, "the room's scripts/front-door-links.mjs at the run's commit", c.status));
+            else {
+              copyHoldsCount = text.includes(COUNT_TITLE);
+              if (templateBlob && c.json.sha === templateBlob) frontDoorCurrent.push(r.name);
+            }
+          }
         }
-        if (annotations) frontDoorRooms.push(frontDoorRoom({ repo: r.name, workflowState: fdw.state, run, annotations, cliCurrent, now: Date.now() }));
+        if (annotations) frontDoorRooms.push(frontDoorRoom({ repo: r.name, workflowState: fdw.state, run, annotations, copyHoldsCount, now: Date.now() }));
       }
     }
     const runs = await getAllPages(get, `${base}/actions/runs?status=queued`, (j) => j?.workflow_runs);
@@ -439,7 +458,7 @@ async function main() {
     const touches = touchesSynced(Array.isArray(head.json?.files) ? head.json.files.map((x) => x && x.filename) : undefined, gitbookSyncedFiles(cfgText, summaryText));
     signalByRepo[r.name] = { headAge: Date.now() - headDate, touches, statuses: status.json?.statuses ?? [] };
   }
-  const frontDoor = frontDoorSection(frontDoorRooms, frontDoorMissing);
+  const frontDoor = frontDoorSection(frontDoorRooms, frontDoorMissing, frontDoorCurrent);
   findings.push(...disabledWorkflows(workflowsByRepo), ...staleQueuedRuns(runsByRepo), ...gitbookSignal(signalByRepo), ...frontDoor.findings);
   const report = `${buildReport(findings, { repos: repos.length, workflows: workflowCount, synced: Object.keys(signalByRepo).length })}\n${frontDoor.text}`;
   fs.writeFileSync('org-health-report.md', report);
