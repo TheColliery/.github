@@ -527,3 +527,39 @@ test('CLI under GitHub Actions: each WARN line also goes out as a ::warning anno
     assert.ok(!plain.stdout.includes('::warning'), 'outside GitHub Actions no workflow command is printed');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+// 27g (the umbrella auditor's 27g attack on #249, LOW 1 to 3). LOW 1: a timeout reaches the engine under several names (the abort signal's own, undici's
+// connect, headers and body timeouts, the system's ETIMEDOUT); each is the one cause the ruling names, so each makes an image a warning. A name that
+// does not resolve right now (EAI_AGAIN) is not a timeout and still fails.
+test('checkFiles: an image whose host times out under any of the timeout family\'s names is a warning; EAI_AGAIN is still a finding -- RED before 27g', async () => {
+  for (const code of ['UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT', 'ETIMEDOUT']) {
+    const r = await checkFiles([{ name: 'R.md', text: `![b](${BADGE})\n` }], { fetchFn: failsWith(code), retryMs: 0 });
+    assert.deepEqual(r.findings, [], `an image whose fetch fails with ${code} is not a finding`);
+    assert.equal(r.warnings.length, 1, `an image whose fetch fails with ${code} is a warning`);
+    assert.match(r.warnings[0].message, new RegExp(`no answer \\(${code}\\)`));
+  }
+  const again = await checkFiles([{ name: 'R.md', text: `![b](${BADGE})\n` }], { fetchFn: failsWith('EAI_AGAIN'), retryMs: 0 });
+  assert.equal(again.findings.length, 1, 'EAI_AGAIN is not a timeout');
+  assert.deepEqual(again.warnings, []);
+});
+// LOW 2: the runner's older command parser reads `##[` ANYWHERE in a line (actions/runner ActionCommand.cs, TryParse), so a URL that holds it would turn a
+// WARN or FAIL line into a legacy runner command. LOW 3: the annotation's data passes the same printable rule as the plain lines, so no control
+// character reaches the log raw.
+const BS = String.fromCharCode(92);
+test('CLI: a URL holding ##[ never prints ##[ in a WARN, FAIL or ::warning line, and a control character in a URL never reaches the annotation raw -- RED before 27g', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fdl-'));
+  try {
+    const ESC = String.fromCharCode(27);
+    const img = path.join(dir, 'README.md');
+    fs.writeFileSync(img, `![b](${base}/always-503?x=##[error]legacy)\n![c](${base}/always-503?e=${ESC}x)\n[m](${base}/missing?y=##[error]gone)\n`);
+    const r = await run([img], { GITHUB_ACTIONS: 'true' });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    const lines = r.stdout.split(/\r?\n/);
+    for (const l of lines) assert.ok(!l.includes('##['), `a line carries ##[: ${l}`);
+    assert.ok(lines.some((l) => l.startsWith('WARN ') && l.includes(`#${BS}u{23}[error]legacy`)), 'the WARN line shows the broken mark');
+    assert.ok(lines.some((l) => l.startsWith('FAIL ') && l.includes(`#${BS}u{23}[error]gone`)), 'the FAIL line shows the broken mark');
+    const notes = lines.filter((l) => l.startsWith('::warning '));
+    assert.equal(notes.length, 2, r.stdout);
+    for (const l of notes) assert.ok(![...l].some((ch) => ch.charCodeAt(0) < 0x20 || ch.charCodeAt(0) === 0x7f), `a control character reached the annotation: ${JSON.stringify(l)}`);
+    assert.ok(notes.some((l) => l.includes(`${BS}u{1b}x`)), 'the escape character is written as its code point');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

@@ -131,6 +131,10 @@ export function judge(link, result) {
   return null;
 }
 
+// 27g (the auditor's LOW 1): a timeout reaches the engine under several names: the abort signal's own (`timeout`), undici's connect, headers and body
+// timeouts (its connect timeout defaults to 10 s, the engine's own figure, so a room that raises FRONT_DOOR_LINKS_TIMEOUT_MS meets it first) and the
+// system's ETIMEDOUT. Each is the one cause the ruling names. EAI_AGAIN (a name that does not resolve right now) is not one of them.
+const TIMEOUT_NAMES = /^(timeout|UND_ERR_(CONNECT|HEADERS|BODY)_TIMEOUT|ETIMEDOUT)$/;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const transient = (r) => r.status === 0 || (r.status >= 500 && r.status < 600);
 
@@ -179,7 +183,8 @@ export async function viaApi(fetchFn, target, token, timeoutMs = DEFAULT_TIMEOUT
 /**
  * Check the outward links of named texts. `files` = [{ name, text }]. Returns { findings: [{ file, line, url, message }], warnings: [same shape], links: n }
  * with one fetch per distinct URL per run. `skipHosts` is an array of host names (lower-case) to leave alone, reported as skipped.
- * An IMAGE destination whose host gave no answer, a 5xx or a 429 after the retry is a WARNING, never a finding (main's ruling, order 27d): a badge image says
+ * An IMAGE destination whose host timed out (any name in TIMEOUT_NAMES), answered a 5xx or a 429 after the retry is a WARNING, never a finding (main's
+ * ruling, orders 27d, 27e, 27g); any other no-answer (a name that does not resolve, a refused connection, a bad certificate) is a finding: a badge image says
  * nothing about the repository (shields.io answers 200 for a repository that does not exist, measured 2026-11-27), so only its transport can fail, and a
  * slow badge host turned rooms red with nothing broken in them. An image that answers 4xx, and every link, still fail the run.
  */
@@ -207,7 +212,7 @@ export async function checkFiles(files, { fetchFn = globalThis.fetch, timeoutMs 
       if (!message) continue;
       // 27e (the auditor's 27f finding 1): only a host that times out, answers a 5xx or answers 429 is trouble an image may ride out. A name that does
       // not resolve, a refused connection or a bad certificate says the host is gone or broken, so the image fails the run like a link.
-      const hostTrouble = (result.status === 0 && result.error === 'timeout') || (result.status >= 500 && result.status < 600) || result.status === 429;
+      const hostTrouble = (result.status === 0 && TIMEOUT_NAMES.test(result.error)) || (result.status >= 500 && result.status < 600) || result.status === 429;
       (link.image && hostTrouble ? warnings : findings).push({ file: name, line: link.line, url: link.url, message });
     }
   }
