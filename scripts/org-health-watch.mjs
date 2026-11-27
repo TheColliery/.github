@@ -23,6 +23,9 @@
 // has_findings=true|false. Zero-dependency (Phoenix #2); anonymous reads suffice for public repos,
 // GH_TOKEN raises the rate limit when set.
 import fs from 'node:fs';
+import crypto from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { getAllPages, pageNote } from './lib/paginate.mjs';
 
 export { getAllPages };
@@ -193,14 +196,41 @@ export const COUNT_SHAPE = /^(\d{1,6}) finding\(s\), (\d{1,6}) warning\(s\)$/;
 export const STALE_AFTER_DAYS = 8;
 // The cap is the runner's, not ours: ten annotations per type per step (actions/runner, ExecutionContext.cs, _maxCountPerIssueType).
 export const QUOTE_MAX = 10;
-// D: the bounds of what is quoted into an issue body (65,536 characters): a URL, a line, the whole section.
+// D: the bounds of what is quoted into an issue body (65,536 characters): a URL, a line, the whole section. LINE_MAX is met by the SIZES of a line's
+// parts, never by cutting the assembled line: "- " + the URL span (URL_MAX + 2) + " (cut)" + ": " + the longest reason (52) + " (" + the file span
+// (PATH_MAX + 2) + ":" + a line of six digits + ")" = 284.
 export const URL_MAX = 120;
 export const LINE_MAX = 300;
 export const SECTION_MAX = 60000;
 const PATH_MAX = 80;
 // D: an image URL's own alphabet; it leaves out the backtick (it would close the code span), `|`, `<`, `>` and whitespace.
 const IMAGE_URL = /^[A-Za-z0-9._~:/?#[\]@!$&'()*+,;=%-]{1,4096}$/;
+// D (28d): a warning's file name has its own alphabet and bound, shown whole in a code span or not at all
+const FILE_PATH = new RegExp(`^[A-Za-z0-9._/-]{1,${PATH_MAX}}$`);
 const FINISHED = new Set(['success', 'failure']); // C: only these carry a count
+// item 5 (28d): GitHub's REST reference for workflows (docs.github.com/en/rest/actions/workflows, read 2026-11-28) names a workflow's state as one of
+// active, deleted, disabled_fork, disabled_inactivity, disabled_manually; anything but active is a finding by name.
+const ACTIVE = 'active';
+// item 2 (28d): the template the rooms copy, whose git blob id says whether a room's checker is current
+const TEMPLATE_CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'templates', 'published-code', 'scripts', 'front-door-links.mjs');
+
+/** git's own blob id of some bytes: sha1 over "blob <size>", a NUL and the bytes (the id the contents API reports as `sha`). */
+export function gitBlobOf(buf) {
+  return crypto.createHash('sha1').update(`blob ${buf.length}${String.fromCharCode(0)}`).update(buf).digest('hex');
+}
+
+/** item 6 (new point 5): the job is picked by its name; none or more than one is unreadable. */
+export function pickFrontDoorJob(jobs) {
+  const named = (Array.isArray(jobs) ? jobs : []).filter((j) => j && j.name === WARN_TITLE);
+  if (named.length === 1) return { job: named[0] };
+  return { why: named.length === 0 ? `no job named ${WARN_TITLE}` : `${named.length} jobs named ${WARN_TITLE}` };
+}
+
+/** D (28d): a file name in a code span under its own alphabet, whole, or a fixed fallback; never cut. */
+export function quotePath(p) {
+  const s = String(p ?? '');
+  return FILE_PATH.test(s) ? '`' + s + '`' : '(file not shown)';
+}
 
 /** The newest run of a page by created_at, whatever order the API gives it (the order is undocumented); null when none has a readable date. */
 export function newestRun(runs) {
@@ -222,9 +252,10 @@ export function quoteUrl(url) {
 
 /** E: the reason's leading class only; a redirect target, the fixed suffix and anything else are left out. */
 function reasonClass(text) {
+  // E exact (28d): the code is letters, digits and underscore, at most 40; the kept number is exactly 5xx or 429, never followed by another digit or letter
   let m = /^no answer \(([A-Za-z0-9_]{1,40})\)/.exec(text);
   if (m) return `no answer (${m[1]})`;
-  m = /^HTTP (5\d\d|429)\b/.exec(text);
+  m = /^HTTP (5\d\d|429)(?![A-Za-z0-9_])/.exec(text);
   if (m) return `HTTP ${m[1]}`;
   return '(reason not shown)';
 }
@@ -233,16 +264,19 @@ function reasonClass(text) {
  *  its file and line. Every part is bounded, so the line stays within LINE_MAX. */
 export function quoteWarning(a) {
   const msg = String(a?.message ?? '');
-  const where = `${safeName(String(a?.path ?? '')).slice(0, PATH_MAX)}:${Number.isInteger(a?.start_line) && a.start_line >= 0 && a.start_line < 1e6 ? a.start_line : '?'}`;
+  const where = `${quotePath(a?.path)}:${Number.isInteger(a?.start_line) && a.start_line >= 0 && a.start_line < 1e6 ? a.start_line : '?'}`;
   const i = msg.indexOf(': ');
   if (i <= 0) return `- (warning not readable) (${where})`;
   return `- ${quoteUrl(msg.slice(0, i))}: ${reasonClass(msg.slice(i + 2))} (${where})`;
 }
 
-/** One public room's newest completed scheduled run, read as data. States: no-run (a), stale (B), unfinished (C), no-count (neighbour c: a checker that
- *  does not report yet), unreadable (A: not exactly one count notice of the whole shape), read. */
-export function frontDoorRoom({ repo, run, annotations, now = Date.now() }) {
+/** One public room's newest completed scheduled run, read as data. States: workflow-off (item 5: a state other than active), no-run (a), stale (B),
+ *  unfinished (C), no-count (neighbour c: a checker copy that differs from the template's and printed no count), unreadable (A: not exactly one count
+ *  notice of the whole shape, a CURRENT copy that printed none, or counts the CLI could not have printed), read. `cliCurrent` is true when the room's
+ *  scripts/front-door-links.mjs has the template's blob id, false when it differs, null when it could not be compared. */
+export function frontDoorRoom({ repo, workflowState = ACTIVE, run, annotations, cliCurrent = null, now = Date.now() }) {
   const room = { repo: safeName(repo) };
+  if (workflowState !== ACTIVE) return { ...room, state: 'workflow-off', workflowState: safeName(String(workflowState)) };
   if (!run) return { ...room, state: 'no-run' };
   const date = safeDate(run.created_at);
   const url = safeUrl(run.html_url);
@@ -251,14 +285,24 @@ export function frontDoorRoom({ repo, run, annotations, now = Date.now() }) {
   const list = Array.isArray(annotations) ? annotations : [];
   const notes = list.filter((x) => x && x.annotation_level === 'notice' && x.title === COUNT_TITLE);
   const warns = list.filter((x) => x && x.annotation_level === 'warning' && x.title === WARN_TITLE);
-  if (notes.length === 0 && warns.length === 0) return { ...room, state: 'no-count', date, url };
+  // items 1 and 2: zero count notices is (c) only while the room's copy is not the template's; a current copy that printed none is unreadable
+  if (notes.length === 0 && warns.length === 0) {
+    if (cliCurrent === true) return { ...room, state: 'unreadable', why: 'a current checker printed no count notice', date, url };
+    return { ...room, state: 'no-count', date, url };
+  }
   const m = notes.length === 1 ? COUNT_SHAPE.exec(String(notes[0].message ?? '')) : null;
   if (!m) return { ...room, state: 'unreadable', why: notes.length === 1 ? 'a count notice of another shape' : `${notes.length} count notices`, date, url };
-  return { ...room, state: 'read', conclusion: run.conclusion, date, url, findings: Number(m[1]), warnings: Number(m[2]), quotes: warns.slice(0, QUOTE_MAX).map(quoteWarning) };
+  const findings = Number(m[1]);
+  const warnings = Number(m[2]);
+  // item 6 (new point 4): counts the CLI cannot have printed
+  if (warns.length > warnings) return { ...room, state: 'unreadable', why: 'more warning annotations than the count', date, url };
+  if (run.conclusion === 'success' && findings > 0) return { ...room, state: 'unreadable', why: 'findings on a successful run', date, url };
+  return { ...room, state: 'read', conclusion: run.conclusion, date, url, findings, warnings, quotes: warns.slice(0, QUOTE_MAX).map(quoteWarning) };
 }
 
-/** The report section and its findings. Only a room with warnings, a failed run, a stale run or an unreadable count is a finding; (a), (c), (d) and an
- *  unfinished run are header lines that never open the issue by themselves. The section is cut at line ends only (D). */
+/** The report section and its findings. A room with warnings, a failed, stale or unfinished run, a workflow that is not active, or an unreadable
+ *  count is a finding (28d: stale and unfinished, header lines in 28b, are findings for a room that carries the workflow); (a), (c) and (d) are header
+ *  lines that never open the issue by themselves. The section is cut at line ends only (D). */
 export function frontDoorSection(rooms, missing = []) {
   const by = (state) => rooms.filter((r) => r.state === state);
   const names = (list) => list.map((r) => r.repo).join(', ');
@@ -272,9 +316,11 @@ export function frontDoorSection(rooms, missing = []) {
   const read = by('read');
   head.push(`- ${read.length} room(s) read; ${read.filter((r) => r.warnings > 0).length} with warnings.`);
   if (by('no-run').length) head.push(`- no completed scheduled run in the retention period: ${names(by('no-run'))}`);
-  if (by('unfinished').length) head.push(`- the newest run did not finish: ${by('unfinished').map((r) => `${r.repo} (${r.conclusion})`).join(', ')}`);
   if (by('no-count').length) head.push(`- ${by('no-count').length} room(s) whose checker does not report warnings yet (re-copy owed): ${names(by('no-count'))}`);
   if (missing.length) head.push(`- rooms without the check: ${missing.map((n) => safeName(n)).join(', ')}`);
+  for (const r of by('workflow-off')) findings.push({ repo: r.repo, kind: 'front-door', text: `front-door-links: the workflow front-door-links.yml is ${r.workflowState}, so its weekly check does not run`, url: '' });
+  // C (28d): the line's words say why a cancelled scheduled run is no cause for alarm by itself
+  for (const r of by('unfinished')) findings.push({ repo: r.repo, kind: 'front-door', text: `front-door-links: the newest scheduled run did not finish (${r.conclusion}); a scheduled run cancelled by a push was followed by that push's own run (${r.date})`, url: r.url });
   for (const r of by('stale')) findings.push({ repo: r.repo, kind: 'front-door', text: `front-door-links: the newest scheduled run is from ${r.date}, older than the watcher's own staleness limit of ${STALE_AFTER_DAYS} days`, url: r.url });
   for (const r of by('unreadable')) findings.push({ repo: r.repo, kind: 'unreadable', text: `could not read the front-door-links count (${r.why}); this run did NOT check it`, url: r.url });
   const body = [];
@@ -330,6 +376,9 @@ async function main() {
   const findings = [];
   const frontDoorRooms = [];
   const frontDoorMissing = [];
+  // the template's blob id, read once from this repository's own checkout; unreadable here means every room's copy reads as "not compared"
+  let templateBlob = null;
+  try { templateBlob = gitBlobOf(fs.readFileSync(TEMPLATE_CLI)); } catch (e) { findings.push(unreadable(ORG, 'the template scripts/front-door-links.mjs', e.code || 'error')); }
   if (list.partial) findings.push(unreadable(ORG, "the organization's public repository list", pageNote(list)));
   let workflowCount = 0;
   for (const r of repos) {
@@ -348,15 +397,23 @@ async function main() {
         let annotations = [];
         if (run && Number.isInteger(run.id) && FINISHED.has(run.conclusion)) {
           const jobs = await get(`${base}/actions/runs/${run.id}/jobs`);
+          const picked = jobs.status === 200 ? pickFrontDoorJob(jobs.json?.jobs) : null;
           if (jobs.status !== 200) { findings.push(unreadable(r.name, 'the front-door-links jobs', jobs.status)); annotations = null; }
-          for (const j of annotations ? jobs.json?.jobs ?? [] : []) {
-            if (!Number.isInteger(j?.id)) continue;
-            const a = await get(`${base}/check-runs/${j.id}/annotations?per_page=100`);
-            if (a.status !== 200) { findings.push(unreadable(r.name, 'the front-door-links annotations', a.status)); annotations = null; break; }
-            if (Array.isArray(a.json)) annotations.push(...a.json);
+          else if (picked.why || !Number.isInteger(picked.job.id)) { findings.push(unreadable(r.name, `the front-door-links job (${picked.why || 'its id'})`, 'not one job')); annotations = null; }
+          else {
+            const a = await get(`${base}/check-runs/${picked.job.id}/annotations?per_page=100`);
+            if (a.status !== 200) { findings.push(unreadable(r.name, 'the front-door-links annotations', a.status)); annotations = null; }
+            else if (Array.isArray(a.json)) annotations.push(...a.json);
           }
         }
-        if (annotations) frontDoorRooms.push(frontDoorRoom({ repo: r.name, run, annotations, now: Date.now() }));
+        // item 2 (28d): one public read of the room's checker, compared by blob id with the template's (null when either side cannot be read)
+        let cliCurrent = null;
+        if (annotations && templateBlob) {
+          const c = await get(`${base}/contents/scripts/front-door-links.mjs`);
+          if (c.status === 200 && typeof c.json?.sha === 'string') cliCurrent = c.json.sha === templateBlob;
+          else findings.push(unreadable(r.name, "the room's scripts/front-door-links.mjs", c.status));
+        }
+        if (annotations) frontDoorRooms.push(frontDoorRoom({ repo: r.name, workflowState: fdw.state, run, annotations, cliCurrent, now: Date.now() }));
       }
     }
     const runs = await getAllPages(get, `${base}/actions/runs?status=queued`, (j) => j?.workflow_runs);

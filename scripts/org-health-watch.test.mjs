@@ -371,8 +371,10 @@ test('C: only success and failure carry a count; a run cancelled by its own conc
     assert.deepEqual([r.state, r.conclusion], ['unfinished', conclusion], conclusion);
   }
   const s = frontDoorSection([frontDoorRoom({ repo: 'CoalFace', run: fdRun({ conclusion: 'cancelled' }), annotations: [], now: FD_NOW })], []);
-  assert.match(s.text, /the newest run did not finish: CoalFace \(cancelled\)/);
-  assert.equal(s.findings.length, 0, 'a cancelled run is named, not a finding');
+  // 28d, TURNED ON PURPOSE (main's ruling on the auditor's 28a unit 3): "did not finish" was a header line in 28b and is now a FINDING for a room that
+  // carries the workflow, its words saying that a scheduled run cancelled by a push was followed by that push's own run
+  assert.equal(s.findings.length, 1, 'a cancelled run is a finding');
+  assert.match(s.findings[0].text, /the newest scheduled run did not finish \(cancelled\); a scheduled run cancelled by a push was followed by that push's own run/);
   const failed = frontDoorSection([frontDoorRoom({ repo: 'CoalFace', run: fdRun({ conclusion: 'failure' }), annotations: [NOTE('1 finding(s), 1 warning(s)'), WARN()], now: FD_NOW })], []);
   assert.ok(failed.findings.some((f) => /failed/.test(f.text)), 'the failure is a finding of its own');
   assert.equal(quotedLines(failed.text), 1, 'a failed run\'s warnings are still quoted');
@@ -406,7 +408,8 @@ test('D: every quoted line stays within its bound, and the section is cut at lin
 test('E: a warning is split at the first ": ", the fixed suffix is dropped, only the reason\'s leading class is kept, and a redirect target is left out -- RED before 28b', () => {
   const tick = String.fromCharCode(96);
   const red = quoteWarning(WARN('https://img.shields.io/a', 'HTTP 503 after a redirect to https://evil.example/@someone'));
-  assert.match(red, /: HTTP 503 \(README\.md:3\)$/);
+  // 28d, TURNED ON PURPOSE (item 8): the file name is now shown in its own code span, so the line ends `(<span>README.md</span>:3)`
+  assert.ok(red.endsWith(`: HTTP 503 (${tick}README.md${tick}:3)`), red);
   assert.doesNotMatch(red, /evil|@someone|an image: its host/);
   assert.match(quoteWarning(WARN('https://img.shields.io/a', 'no answer (UND_ERR_CONNECT_TIMEOUT)')), /: no answer \(UND_ERR_CONNECT_TIMEOUT\) /);
   assert.match(quoteWarning(WARN('https://img.shields.io/a', 'HTTP 429, rate limited: not retried, read it by hand')), /: HTTP 429 /);
@@ -458,6 +461,8 @@ const FD_STATE = (annotationsStatus = 200) => ({
   '/repos/TheColliery/CoalFace/actions/runs': { workflow_runs: [] },
   '/repos/TheColliery/CoalFace/actions/runs/501/jobs': { jobs: [{ id: 9001, name: 'front-door-links' }] },
   '/repos/TheColliery/CoalFace/check-runs/9001/annotations': annotationsStatus === 200 ? [NOTE('0 finding(s), 1 warning(s)'), WARN()] : { __status: annotationsStatus },
+  // 28d item 2: the room's checker, read once for its blob id
+  '/repos/TheColliery/CoalFace/contents/scripts/front-door-links.mjs': { sha: '0'.repeat(40) },
 });
 
 test('org-health-watch.mjs: the front-door read asks for the newest completed SCHEDULED runs and the annotations at per_page=100 (A), quotes the warning, and a failed annotations read is unreadable -- RED before 28b', () => {
@@ -468,6 +473,98 @@ test('org-health-watch.mjs: the front-door read asks for the newest completed SC
   assert.match(r.output, /has_findings=true/);
   assert.match(r.report, /\[CoalFace\] front-door-links: 1 warning\(s\)/);
   assert.equal(quotedLines(r.report), 1, 'the one warning is quoted in the report');
+  assert.ok(r.calls.includes('/repos/TheColliery/CoalFace/contents/scripts/front-door-links.mjs'), 'item 2: one read of the room\'s checker');
+  assert.doesNotMatch(r.report, /could not read the room/);
   r = runCli(FD_STATE(403));
   assert.match(r.report, /\[CoalFace\] could not read the front-door-links annotations \(HTTP 403\)/);
+});
+// ---- 28d: the auditor's 28a unit 3 on #256, with main's rulings (each test names its item) -------------------------------------------------------
+import { pickFrontDoorJob, gitBlobOf, quotePath } from './org-health-watch.mjs';
+
+test('item 1 + 2 (A\'s collision, when (c) ends): zero count notices is (c) only while the room\'s CLI copy differs from the template\'s; a CURRENT copy that printed no count is unreadable -- RED before 28d', () => {
+  const base = { repo: 'CoalFace', workflowState: 'active', run: fdRun(), annotations: [], now: FD_NOW };
+  assert.equal(frontDoorRoom({ ...base, cliCurrent: false }).state, 'no-count', 'an older copy: the header line');
+  assert.equal(frontDoorRoom({ ...base, cliCurrent: null }).state, 'no-count', 'a copy that could not be compared stays the header line');
+  const cur = frontDoorRoom({ ...base, cliCurrent: true });
+  assert.equal(cur.state, 'unreadable');
+  assert.match(cur.why, /a current checker printed no count notice/);
+  const s = frontDoorSection([cur], []);
+  assert.equal(s.findings.length, 1, 'a current copy with no count is a finding');
+});
+
+test('item 2: gitBlobOf is git\'s own blob id (sha1 over "blob <size>\\0" and the bytes), so a room\'s copy compares with the template by the id the contents API reports -- RED before 28d', () => {
+  assert.equal(gitBlobOf(Buffer.from('hello\n')), 'ce013625030ba8dba906f756967f9e9ca394464a');
+  assert.equal(gitBlobOf(Buffer.alloc(0)), 'e69de29bb2d1d6434b8b29ae775ad8c2e48c5391');
+});
+
+test('item 3: a stale run and a run that did not finish are findings for a room that carries the workflow -- RED before 28d', () => {
+  const day = 24 * 60 * 60 * 1000;
+  const stale = frontDoorRoom({ repo: 'CoalFace', workflowState: 'active', run: fdRun({ created_at: new Date(FD_NOW - 9 * day).toISOString() }), annotations: [], now: FD_NOW });
+  const unfinished = frontDoorRoom({ repo: 'CoalMine', workflowState: 'active', run: fdRun({ conclusion: 'timed_out' }), annotations: [], now: FD_NOW });
+  const s = frontDoorSection([stale, unfinished], []);
+  assert.deepEqual(s.findings.map((f) => f.repo).sort(), ['CoalFace', 'CoalMine']);
+  assert.doesNotMatch(s.text, /did not finish/, 'no longer a header line');
+});
+
+// The values are GitHub's REST reference for workflows, docs.github.com/en/rest/actions/workflows (read 2026-11-28 through the docs' article body):
+// "state: required, string, enum: active, deleted, disabled_fork, disabled_inactivity, disabled_manually".
+test('item 5: a workflow whose state is anything but active is a finding by name; only an active workflow with no scheduled run stays a header line -- RED before 28d', () => {
+  for (const state of ['deleted', 'disabled_fork', 'disabled_inactivity', 'disabled_manually']) {
+    const r = frontDoorRoom({ repo: 'CoalNew', workflowState: state, run: null, annotations: [], now: FD_NOW });
+    assert.equal(r.state, 'workflow-off', state);
+    const s = frontDoorSection([r], []);
+    assert.equal(s.findings.length, 1, state);
+    assert.match(s.findings[0].text, new RegExp(`front-door-links\\.yml is ${state}`), state);
+  }
+  const quiet = frontDoorRoom({ repo: 'CoalNew', workflowState: 'active', run: null, annotations: [], now: FD_NOW });
+  assert.equal(quiet.state, 'no-run');
+  assert.deepEqual(frontDoorSection([quiet], []).findings, []);
+});
+
+test('item 6 (new points 3 and 4): a foreign notice beside the count notice still reads as one; more warning annotations than M, or N above zero on a success run, is unreadable -- RED before 28d', () => {
+  const foreign = { annotation_level: 'notice', title: 'Due to capacity constraints', message: 'macOS arm64 runners ...', path: '.github', start_line: 1 };
+  const r = frontDoorRoom({ repo: 'CoalFace', workflowState: 'active', run: fdRun(), annotations: [foreign, NOTE('0 finding(s), 1 warning(s)'), WARN()], now: FD_NOW });
+  assert.deepEqual([r.state, r.warnings], ['read', 1]);
+  const more = frontDoorRoom({ repo: 'CoalFace', workflowState: 'active', run: fdRun(), annotations: [NOTE('0 finding(s), 1 warning(s)'), WARN(), WARN()], now: FD_NOW });
+  assert.deepEqual([more.state, more.why], ['unreadable', 'more warning annotations than the count']);
+  const ok = frontDoorRoom({ repo: 'CoalFace', workflowState: 'active', run: fdRun({ conclusion: 'success' }), annotations: [NOTE('2 finding(s), 0 warning(s)')], now: FD_NOW });
+  assert.deepEqual([ok.state, ok.why], ['unreadable', 'findings on a successful run']);
+  const failed = frontDoorRoom({ repo: 'CoalFace', workflowState: 'active', run: fdRun({ conclusion: 'failure' }), annotations: [NOTE('2 finding(s), 0 warning(s)')], now: FD_NOW });
+  assert.equal(failed.state, 'read', 'findings on a failed run are what a failed run carries');
+});
+
+test('item 6 (new point 5): the job is picked by its name front-door-links; none or more than one is unreadable -- RED before 28d', () => {
+  assert.deepEqual(pickFrontDoorJob([{ id: 1, name: 'other' }, { id: 2, name: 'front-door-links' }]), { job: { id: 2, name: 'front-door-links' } });
+  assert.deepEqual(pickFrontDoorJob([{ id: 1, name: 'other' }]), { why: 'no job named front-door-links' });
+  assert.deepEqual(pickFrontDoorJob([{ id: 1, name: 'front-door-links' }, { id: 2, name: 'front-door-links' }]), { why: '2 jobs named front-door-links' });
+  assert.deepEqual(pickFrontDoorJob(undefined), { why: 'no job named front-door-links' });
+});
+
+test('item 7 (B at the limit): just under the watcher\'s own 8 days reads current, just over reads stale, on an injected clock -- RED before 28d', () => {
+  const limit = STALE_AFTER_DAYS * 24 * 60 * 60 * 1000;
+  const at = (ms) => frontDoorRoom({ repo: 'CoalFace', workflowState: 'active', run: fdRun({ created_at: new Date(FD_NOW - ms).toISOString() }), annotations: [NOTE(), WARN(), WARN()], now: FD_NOW }).state;
+  assert.equal(at(limit - 1000), 'read');
+  assert.equal(at(limit), 'read', 'exactly the limit is not past it');
+  assert.equal(at(limit + 1000), 'stale');
+});
+
+test('item 8 (D): a quoted line meets its bound by the sizes of its parts, never by cutting the assembled line; a file name is shown in a code span under its own alphabet, or a fallback -- RED before 28d', () => {
+  const tick = String.fromCharCode(96);
+  const worst = quoteWarning(WARN('https://img.shields.io/' + 'c'.repeat(4000), 'no answer (' + 'U'.repeat(40) + ')', 'd/' + 'p'.repeat(75) + '.md', 999999));
+  assert.ok(worst.length <= LINE_MAX, worst.length);
+  assert.ok(worst.endsWith(`${tick}d/${'p'.repeat(75)}.md${tick}:999999)`), 'the whole line is there, uncut: ' + worst);
+  assert.equal(quotePath('docs/a_b-c.md'), `${tick}docs/a_b-c.md${tick}`);
+  for (const bad of [`a${tick}b.md`, 'a b.md', 'a|b.md', '<b>.md', 'x'.repeat(81)]) assert.equal(quotePath(bad), '(file not shown)', bad);
+  assert.match(quoteWarning({ ...WARN(), path: 'a b.md' }), /\(\(file not shown\):3\)$/);
+});
+
+test('item 9 (E exact): the code in "no answer (<code>)" is letters, digits and underscore, at most 40; the kept number is exactly 5xx or 429 -- RED before 28d', () => {
+  const r = (reason) => quoteWarning(WARN('https://img.shields.io/a', reason));
+  assert.match(r('HTTP 503, then more'), /: HTTP 503 \(/);
+  assert.match(r('HTTP 5034'), /\(reason not shown\)/);
+  assert.match(r('HTTP 4291'), /\(reason not shown\)/);
+  assert.match(r('HTTP 429x'), /\(reason not shown\)/);
+  assert.match(r('no answer (' + 'A'.repeat(41) + ')'), /\(reason not shown\)/);
+  assert.match(r('no answer (a-b)'), /\(reason not shown\)/);
+  assert.match(r('no answer (ETIMEDOUT)'), /: no answer \(ETIMEDOUT\) \(/);
 });
