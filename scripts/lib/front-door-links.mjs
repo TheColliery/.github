@@ -13,6 +13,9 @@
 // A WARNING, never a finding (main's ruling, orders 27d and 27e): an IMAGE destination (`![alt](url)`) whose host times out, answers a 5xx or answers
 // 429 after the retry. An image says nothing about the repository and only its host's transport can fail, so a slow host must not turn a run red; an
 // image that answers 4xx, or whose host name does not resolve, refuses the connection or shows a bad certificate, is still a finding, and so is every link.
+// A NAMED LIMIT of that rule (27i): "times out" is read from the error's code (TIMEOUT_NAMES). When a host has several addresses and every attempt fails,
+// Node raises an aggregate whose code is its FIRST error's (lib/internal/errors.js, `this.code = errors[0]?.code`), so a slow host on a runner with no
+// route for the first address family can arrive as ENETUNREACH and fail the run as a host that is gone. The engine does not open the aggregate.
 // NOT a finding: a link inside a fenced code block or an inline code span (an example, not a claim) · a mailto:, a relative path, a bare anchor (the
 // room's own link check) · a host on the caller's skip list (a placeholder or a host that refuses robots), whether the link names it or a redirect leads into it · a redirect to a sign-in page whose query
 // names the asked page (GitHub's /login?return_to=<the page>: a wall in front of the page, not a page that is gone).
@@ -134,7 +137,9 @@ export function judge(link, result) {
 // 27g (the auditor's LOW 1): a timeout reaches the engine under several names: the abort signal's own (`timeout`), undici's connect, headers and body
 // timeouts (its connect timeout defaults to 10 s, the engine's own figure, so a room that raises FRONT_DOOR_LINKS_TIMEOUT_MS meets it first) and the
 // system's ETIMEDOUT. Each is the one cause the ruling names. EAI_AGAIN (a name that does not resolve right now) is not one of them.
-const TIMEOUT_NAMES = /^(timeout|UND_ERR_(CONNECT|HEADERS|BODY)_TIMEOUT|ETIMEDOUT)$/;
+// 27i (the auditor's 27h LOW): Node's own connect timeout too; when address-family selection has tried every address and holds no error, lib/net.js
+// (v22.x and v24.x) destroys the socket with ERR_SOCKET_CONNECTION_TIMEOUT. The pattern is anchored: a code that only contains a name is no timeout.
+const TIMEOUT_NAMES = /^(timeout|UND_ERR_(CONNECT|HEADERS|BODY)_TIMEOUT|ETIMEDOUT|ERR_SOCKET_CONNECTION_TIMEOUT)$/;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const transient = (r) => r.status === 0 || (r.status >= 500 && r.status < 600);
 

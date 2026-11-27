@@ -439,7 +439,8 @@ fs.writeFileSync(path.join(SANDBOX, 'slow-start.preload.mjs'), "import fs from '
 const SLOW_START_ENV = { NODE_OPTIONS: '--import ' + pathToFileURL(path.join(SANDBOX, 'slow-start.preload.mjs')).href };
 // 27h (the red on #251's Windows Node 24 leg): a slow RUNNER spends time in node's own start before any preload runs, and on a hosted Windows runner that time
 // passed the 1,000 ms file clock, so the passing file was killed before the preload wrote its log line. That start made deterministic: a preload that sleeps
-// past the clock BEFORE the logging one, so every node of the run is still starting when the clock fires.
+// past the clock BEFORE the logging one, so every node of the run is still starting when the clock fires. It EXERCISES that variant on every run and pins
+// nothing: no assertion reads it, and the clocked run passes under the slow start alone (the auditor's 27h mutant w5). It costs about a second.
 const SLOW_RUNNER_MS = 1200;
 fs.writeFileSync(path.join(SANDBOX, 'slow-runner.preload.mjs'), 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ' + SLOW_RUNNER_MS + ');' + String.fromCharCode(10));
 const SLOW_RUNNER_ENV = { NODE_OPTIONS: '--import ' + pathToFileURL(path.join(SANDBOX, 'slow-runner.preload.mjs')).href + ' ' + SLOW_START_ENV.NODE_OPTIONS };
