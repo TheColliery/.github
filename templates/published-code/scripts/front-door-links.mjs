@@ -8,7 +8,7 @@
 // Exit:    0 every link answers, or only images warn · 1 a finding, or a file that cannot be read · 64 usage error
 // Env:     FRONT_DOOR_LINKS_TIMEOUT_MS (per request, default 10000) · FRONT_DOOR_LINKS_RETRY_MS (the pause before the one retry, default 2000)
 //          GITHUB_TOKEN (read by name, optional): a github.com repository, account or file (blob) link that still answers 5xx after the retry is asked once of the REST API with it
-// Output:  one `FAIL <file>:<line>: <url>: <why>` line per finding, one `WARN ...` line per image whose host gave no answer, a 5xx or a 429 (a warning
+// Output:  one `FAIL <file>:<line>: <url>: <why>` line per finding, one `WARN ...` line per image whose host timed out, answered a 5xx or a 429 (a warning
 //          never fails the run: an image says nothing about the repository, orders 27d and 27e), then the summary line. Under GitHub Actions
 //          (GITHUB_ACTIONS=true) each WARN line is also printed as a `::warning file=<file>,line=<line>::` workflow command, so a warning shows on the
 //          run page and the pull request of a green run. Report a problem: the repository's issues.
@@ -58,10 +58,13 @@ function readBounded(f) {
 // A file name, a link or a server's redirect target can carry a control character (C0, DEL, C1, a line or paragraph separator). Each is written as
 // its code point, so no FAIL line can be forged, split or erased on the terminal or in a log that parses these lines (CWE-117).
 const BACKSLASH = String.fromCharCode(92);
+// 27g (the auditor's LOW 2): the runner's older command parser reads `##[` ANYWHERE in a line (actions/runner, ActionCommand.cs TryParse), so a URL
+// holding it would turn a WARN or FAIL line into a legacy runner command; the second `#` is written as its code point, which leaves no `##[` behind.
+const LEGACY_MARK = '##[';
 const printable = (s) => Array.from(String(s), (ch) => {
   const c = ch.codePointAt(0);
   return c < 0x20 || (c >= 0x7f && c <= 0x9f) || c === 0x2028 || c === 0x2029 ? `${BACKSLASH}u{${c.toString(16)}}` : ch;
-}).join('');
+}).join('').split(LEGACY_MARK).join(`#${BACKSLASH}u{23}[`);
 // A GitHub Actions workflow command carries its values escaped the way the runner's own toolkit escapes them (@actions/core command.ts): data
 // `%` CR LF, a property also `:` and `,`. So a file name or a URL can neither end the annotation early nor change its file or line.
 const escData = (s) => String(s).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
@@ -92,7 +95,8 @@ async function main(argv) {
     const why = ' (an image: its host\'s answer says nothing about this repository, so it does not fail the run)';
     for (const x of r.warnings) {
       console.log(`WARN ${printable(x.file)}:${x.line}: ${printable(x.url)}: ${printable(x.message)}${why}`);
-      if (process.env.GITHUB_ACTIONS === 'true') console.log(`::warning file=${escProp(x.file)},line=${x.line},title=front-door-links::${escData(`${x.url}: ${x.message}${why}`)}`);
+      // 27g (the auditor's LOW 3): the annotation passes the same printable rule as the plain lines first, then the toolkit's escaping
+      if (process.env.GITHUB_ACTIONS === 'true') console.log(`::warning file=${escProp(printable(x.file))},line=${x.line},title=front-door-links::${escData(printable(`${x.url}: ${x.message}${why}`))}`);
     }
     warned = r.warnings.length;
     summary = `${r.links} link(s) in ${texts.length} file(s), ${r.fetched} fetched${r.skipped.length ? `, ${r.skipped.length} skipped by host` : ''}`;
