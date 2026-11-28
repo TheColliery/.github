@@ -114,8 +114,10 @@ function main() {
   }
 }
 
-// Entry only, never on import. Both sides go through realpath.native (node/runtime.md section 4): started through a junction or a symlinked folder, argv[1] is the link's spelling and
-// import.meta.url is the real file, so a guard that compares the path as typed is false and the script exits 0 having done nothing. If a side cannot be resolved the guard falls back to file identity and then to the plain paths, so a missing argv path is not this file (the overlay's shape, build-claude-ai-zips.mjs): a guard that answers true there runs the script on import.
+// ENTRY GUARD (one text in six scripts, held equal by scripts/overlay-entry-guards.test.mjs; the ruled shape of e0eba02, UMB4-115): entry only, never on import.
+// Both sides go through realpath.native (node/runtime.md section 4): a junction, a symlinked folder or a Windows 8.3 name spells one file two ways, and a guard that compares the path as typed
+// is false there and the script exits 0 having done nothing. If a side cannot be resolved the guard falls back to file identity and then to the plain paths, so a missing argv path is not this file:
+// a guard that answered "the entry" there would run the script on import. A copy, not a module: a script that must stay import-free at its top (node/runtime.md section 1) cannot share one.
 const fileIdentity = (p) => { try { const s = fs.statSync(p, { bigint: true }); return s.ino === 0n ? null : `${s.dev}:${s.ino}`; } catch { return null; } };
 const isEntry = () => {
   const self = fileURLToPath(import.meta.url);
@@ -124,4 +126,5 @@ const isEntry = () => {
     return a !== null && b !== null ? a === b : path.resolve(self) === path.resolve(process.argv[1]);
   }
 };
+// END ENTRY GUARD
 if (process.argv[1] && isEntry()) main();

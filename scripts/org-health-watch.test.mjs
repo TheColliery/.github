@@ -892,3 +892,26 @@ test('i6 pin: at a first part of 30,208 bytes the section\'s last kept line is D
   assert.ok(lines[lines.length - 3].startsWith('- [Door135] '), lines[lines.length - 3]);
   assert.ok(!lines.some((l) => l.startsWith('- [Door136] ')), 'the room line a check in characters would keep');
 });
+// ---- 28m (UMB4-115 part (a), item 4): org-health-watch.mjs asked a pattern on the NAME in argv[1] (/org-health-watch\.mjs$/), a third shape: a path that ends in that name and names no file
+// (or a differently-located file of that name) was "the entry", so an import ran the whole watcher against the API. It takes the ruled text. Imported with such an argv path, it runs nothing.
+// A fetch stub is preloaded, so a guard that wrongly runs the watcher meets no network: it logs the call, and the test reads the log.
+const IMPORT_STUB = `
+import fs from 'node:fs';
+globalThis.fetch = async (url) => { fs.appendFileSync(process.env.STUB_LOG, String(url) + '\\n'); throw new TypeError('fetch failed'); };
+`;
+test('org-health-watch.mjs imported with an argv path that ends in its name and names no file does not run: the entry guard fails closed -- RED before 28m', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ohw-import-'));
+  try {
+    const stub = path.join(dir, 'stub.mjs');
+    const log = path.join(dir, 'calls.txt');
+    fs.writeFileSync(stub, IMPORT_STUB);
+    fs.writeFileSync(log, '');
+    const r = spawnSync(process.execPath, ['--max-old-space-size=512', '--input-type=module', '-e', `await import(${JSON.stringify(pathToFileURL(SCRIPT).href)})`, path.join(dir, 'nosuchfolder', 'org-health-watch.mjs')], {
+      encoding: 'utf8', timeout: 60000, cwd: dir, env: { PATH: process.env.PATH, Path: process.env.Path, SystemRoot: process.env.SystemRoot, SYSTEMROOT: process.env.SYSTEMROOT, NODE_OPTIONS: `--import=${pathToFileURL(stub).href}`, STUB_LOG: log, GH_TOKEN: '' },
+    });
+    assert.strictEqual(fs.readFileSync(log, 'utf8'), '', 'the import ran the watcher: it asked the API');
+    assert.ok(!fs.existsSync(path.join(dir, 'org-health-report.md')), 'the import wrote a report');
+    assert.strictEqual(r.stdout + r.stderr, '', 'the import printed: ' + (r.stdout + r.stderr).slice(0, 120));
+    assert.strictEqual(r.status, 0);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

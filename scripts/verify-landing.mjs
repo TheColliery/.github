@@ -25,6 +25,8 @@
 
 import { readFileSync, readdirSync, statSync, existsSync, realpathSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = process.argv[2] ?? join(fileURLToPath(new URL('.', import.meta.url)), '..');
@@ -177,16 +179,19 @@ export function verifyLanding(root) {
 }
 
 // --- CLI entry (only when run directly, not when imported by the test) ---
+// ENTRY GUARD (one text in six scripts, held equal by scripts/overlay-entry-guards.test.mjs; the ruled shape of e0eba02, UMB4-115): entry only, never on import.
 // Both sides go through realpath.native (node/runtime.md section 4): a junction, a symlinked folder or a Windows 8.3 name spells one file two ways, and a guard that compares the path as typed
-// is false there and the script exits 0 having done nothing. If a side cannot be resolved the guard falls back to file identity and then to the plain paths, so a missing argv path is not this file (the overlay's shape, build-claude-ai-zips.mjs): a guard that answers true there runs the script on import.
-const fileIdentity = (p) => { try { const s = statSync(p, { bigint: true }); return s.ino === 0n ? null : `${s.dev}:${s.ino}`; } catch { return null; } };
+// is false there and the script exits 0 having done nothing. If a side cannot be resolved the guard falls back to file identity and then to the plain paths, so a missing argv path is not this file:
+// a guard that answered "the entry" there would run the script on import. A copy, not a module: a script that must stay import-free at its top (node/runtime.md section 1) cannot share one.
+const fileIdentity = (p) => { try { const s = fs.statSync(p, { bigint: true }); return s.ino === 0n ? null : `${s.dev}:${s.ino}`; } catch { return null; } };
 const isEntry = () => {
   const self = fileURLToPath(import.meta.url);
-  try { return realpathSync.native(self) === realpathSync.native(process.argv[1]); } catch {
+  try { return fs.realpathSync.native(self) === fs.realpathSync.native(process.argv[1]); } catch {
     const a = fileIdentity(self); const b = fileIdentity(process.argv[1]);
-    return a !== null && b !== null ? a === b : resolve(self) === resolve(process.argv[1]);
+    return a !== null && b !== null ? a === b : path.resolve(self) === path.resolve(process.argv[1]);
   }
 };
+// END ENTRY GUARD
 if (process.argv[1] && isEntry()) {
   const failures = verifyLanding(ROOT);
   if (failures.length) {

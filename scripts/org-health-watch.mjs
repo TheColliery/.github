@@ -521,6 +521,19 @@ async function main() {
   if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_findings=${findings.length > 0 ? 'true' : 'false'}\n`);
 }
 
-if (process.argv[1] && /org-health-watch\.mjs$/.test(process.argv[1].replace(/\\/g, '/'))) {
+// ENTRY GUARD (one text in six scripts, held equal by scripts/overlay-entry-guards.test.mjs; the ruled shape of e0eba02, UMB4-115): entry only, never on import.
+// Both sides go through realpath.native (node/runtime.md section 4): a junction, a symlinked folder or a Windows 8.3 name spells one file two ways, and a guard that compares the path as typed
+// is false there and the script exits 0 having done nothing. If a side cannot be resolved the guard falls back to file identity and then to the plain paths, so a missing argv path is not this file:
+// a guard that answered "the entry" there would run the script on import. A copy, not a module: a script that must stay import-free at its top (node/runtime.md section 1) cannot share one.
+const fileIdentity = (p) => { try { const s = fs.statSync(p, { bigint: true }); return s.ino === 0n ? null : `${s.dev}:${s.ino}`; } catch { return null; } };
+const isEntry = () => {
+  const self = fileURLToPath(import.meta.url);
+  try { return fs.realpathSync.native(self) === fs.realpathSync.native(process.argv[1]); } catch {
+    const a = fileIdentity(self); const b = fileIdentity(process.argv[1]);
+    return a !== null && b !== null ? a === b : path.resolve(self) === path.resolve(process.argv[1]);
+  }
+};
+// END ENTRY GUARD
+if (process.argv[1] && isEntry()) {
   main().catch((e) => { console.error(`org-health-watch: ${e.message}`); process.exitCode = 1; });
 }

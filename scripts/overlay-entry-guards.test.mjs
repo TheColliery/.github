@@ -114,3 +114,31 @@ test('no canon file compares import.meta.url with the path as typed (the command
   // machine-reading.mjs was the last one (BB-87); CoalFace's guard was re-adopted 2026-11-15 (CoalFace 87e5cfb), so none is left
   assert.deepEqual(left.map((l) => l.replace(/:\d+$/, '').split('\\').join('/')), []);
 });
+// ---- 28m (queue row UMB4-115, part (a)): the entry guard of the scripts that carry no template copy is ONE text. Six scripts hold it: the three deploy-payload.mjs, update-readme.mjs,
+// verify-landing.mjs and org-health-watch.mjs. Each copies the same bytes between two marker lines (a copy, not a module: a script that must stay import-free at its top, node/runtime.md
+// section 1, cannot share one), and this test holds the six equal. The ruled shape (e0eba02): realpath.native on both sides; if that throws, file identity; last, the plain paths.
+const GUARD_SCRIPTS = ['scripts/inbox/deploy-payload.mjs', 'scripts/mirror/deploy-payload.mjs', 'scripts/watcher/deploy-payload.mjs', 'scripts/update-readme.mjs', 'scripts/verify-landing.mjs', 'scripts/org-health-watch.mjs'];
+const GUARD_BEGIN = '// ENTRY GUARD (one text';
+const GUARD_END = '// END ENTRY GUARD';
+function sharedGuardBlock(rel) {
+  const lines = fs.readFileSync(path.join(HERE, '..', rel), 'utf8').split(/\r?\n/);
+  const a = lines.findIndex((l) => l.startsWith(GUARD_BEGIN));
+  const b = lines.findIndex((l) => l === GUARD_END);
+  return a >= 0 && b > a ? lines.slice(a, b + 1).join('\n') : null;
+}
+
+test('28m: the six scripts without a template copy carry ONE entry-guard text between the same two markers, and it is the ruled shape -- RED before 28m', () => {
+  const blocks = GUARD_SCRIPTS.map((rel) => [rel, sharedGuardBlock(rel)]);
+  for (const [rel, b] of blocks) assert.ok(b, `${rel} has no guard between the markers`);
+  const [, first] = blocks[0];
+  for (const [rel, b] of blocks) assert.strictEqual(b, first, `${rel}: its guard text differs from ${blocks[0][0]}`);
+  // the shape itself: realpath.native on both sides, then file identity, then the plain paths, and no catch that answers "the entry"
+  assert.strictEqual(first.split('fs.realpathSync.native(').length - 1, 2, 'realpath.native on both sides');
+  assert.match(first, /const a = fileIdentity\(self\); const b = fileIdentity\(process\.argv\[1\]\);/);
+  assert.match(first, /a !== null && b !== null \? a === b : path\.resolve\(self\) === path\.resolve\(process\.argv\[1\]\)/);
+  assert.doesNotMatch(first, /catch\s*\{\s*return true/);
+  for (const rel of GUARD_SCRIPTS) {
+    const src = fs.readFileSync(path.join(HERE, '..', rel), 'utf8');
+    assert.match(src, /^if \(process\.argv\[1\] && isEntry\(\)\) /m, `${rel} asks the one guard`);
+  }
+});
