@@ -316,7 +316,7 @@ test('gitbookSyncedFiles: a parent-relative summary link resolves against the su
 // ---- 28b: the front doors' scheduled warnings (main's ruling (1) on 27g; the 27i/28a design with the umbrella auditor's points A to E, unit 4 of its
 // 27i return). Each test name says which point it pins, so a mutant maps to a point. Public rooms only: the org list is read with type=public, and an
 // annotation read of a public room needs no token (the auditor's reads, 27i).
-import { newestRun, quoteUrl, quoteWarning, frontDoorRoom, frontDoorSection, COUNT_SHAPE, STALE_AFTER_DAYS, QUOTE_MAX, URL_MAX, LINE_MAX, SECTION_MAX, BODY_MAX, FRONT_DOOR_WORKFLOW } from './org-health-watch.mjs';
+import { newestRun, quoteUrl, quoteWarning, frontDoorRoom, frontDoorSection, COUNT_SHAPE, STALE_AFTER_DAYS, QUOTE_MAX, URL_MAX, LINE_MAX, SECTION_MAX, BODY_MAX, FRONT_DOOR_WORKFLOW, buildBody, SECTION_NOT_SHOWN } from './org-health-watch.mjs';
 
 // a quoted warning is a line that opens with two spaces, a dash and a code span: counted structurally, never by matching a host (CodeQL's
 // js/regex/missing-regexp-anchor read three host regexes here as URL checks, alerts 38 to 40 on #256)
@@ -680,15 +680,24 @@ test('item 6: for every first-part length across a line\'s span, the first part 
   assert.equal(cuts, 400, 'every length in the sweep forced a cut');
 });
 
-test('org-health-watch.mjs: main measures the REAL first part before it cuts the section: a first part past the limit leaves the section one line -- 28g', () => {
+// TURNED ON PURPOSE in 28h (main's ruling on the 28g ask, option 1): this fixture's first part once passed BODY_MAX whole, and the test held that
+// the section then gave way to one line. The first part is now cut at row ends too, so the same 500 queued runs give a body at or under BODY_MAX that
+// says how many rows are not shown, and the count printed equals the rows dropped.
+test('org-health-watch.mjs: main bounds the WHOLE body: 500 queued runs give a body at or under BODY_MAX, rows cut at line ends, the count of rows not shown equal to the rows dropped -- 28g, turned in 28h', () => {
   const old = new Date(Date.now() - 5 * 86400000).toISOString();
   const page = (p) => ({ workflow_runs: Array.from({ length: 100 }, (_, i) => ({ id: p * 100 + i, name: 'ci', status: 'queued', created_at: old, html_url: `https://github.com/TheColliery/CoalFace/actions/runs/${p * 100 + i}` })) });
   const state = { ...FD_STATE(), '/repos/TheColliery/CoalFace/actions/runs': { __pages: [page(1), page(2), page(3), page(4), page(5)] } };
   const r = runCli(state);
   assert.equal(r.res.status, 0, r.res.stdout + r.res.stderr);
-  const first = r.report.split('## front-door-links')[0];
-  assert.ok(first.length > BODY_MAX, `the fixture's first part is ${first.length}, not past the limit`);
-  assert.ok(r.report.endsWith('- (section not shown: the findings above fill the issue body)\n'), r.report.slice(-300));
+  assert.ok(r.report.length <= BODY_MAX, String(r.report.length));
+  const total = Number(/^(\d+) findings? \(report only/m.exec(r.report)[1]);
+  assert.ok(total > 500, String(total));
+  const notShown = /^- \((\d+) finding row\(s\) not shown/m.exec(r.report);
+  assert.ok(notShown, r.report.slice(-400));
+  const firstEnd = notShown.index;
+  const shown = r.report.slice(0, firstEnd).split('\n').filter((l) => l.startsWith('- [')).length;
+  assert.equal(shown + Number(notShown[1]), total, 'the count printed equals the rows dropped');
+  assert.ok(r.report.includes('\n## front-door-links') || r.report.endsWith(SECTION_NOT_SHOWN), 'the section keeps at least its one line');
 });
 // ---- 28g: the pins (the auditor's 28c LOW 8 on #256; item 7 of 28f's list). Each test names the survivor it holds -------------------------------
 
@@ -752,4 +761,67 @@ test('pins x33 and x34: a failed jobs read or annotations read is unreadable and
     assert.ok(!r.report.includes('the run printed none'), `${what}: a failed read became an empty list\n${r.report}`);
     assert.ok(!r.calls.some((c) => c.includes('/contents/scripts/front-door-links.mjs')), `${what}: the checker was read after a failed read`);
   }
+});
+// ---- 28h: the whole issue body is bounded (main's ruling on the 28g ask, option 1). The split rule: the front-door section gives way first, down
+// to its one SECTION_NOT_SHOWN line; only then are the first part's rows cut, at row ends, down to its header, its count line and its one line
+// naming how many rows are not shown ------------------------------------------------------------------------------------------------------------------
+
+const H_COUNTS = { repos: 11, workflows: 99, synced: 2 };
+const hFindings = (n, len) => Array.from({ length: n }, (_, i) => ({ repo: 'Room' + i, kind: 'queued', text: 'q'.repeat(len + (i % 7)), url: `https://github.com/TheColliery/Room${i}/actions/runs/${i}` }));
+const hRooms = (k) => Array.from({ length: k }, (_, i) => frontDoorRoom({ repo: 'Door' + i, run: fdRun(), now: FD_NOW, annotations: [NOTE('0 finding(s), 10 warning(s)'), ...Array.from({ length: 10 }, () => WARN('https://img.shields.io/' + 'd'.repeat(110)))] }));
+const NOT_SHOWN_ROWS = /^- \((\d+) finding row\(s\) not shown/m;
+
+test('28h: a sweep over first-part and section lengths: the body stays at or under BODY_MAX, no row or section line is cut mid-line, the count printed equals the rows dropped, and the section gives way first', () => {
+  const roomSets = [0, 3, 20, 60].map((k) => hRooms(k)).map((rooms) => ({ rooms, lines: new Set(frontDoorSection(rooms, [], [], '').text.split('\n')) }));
+  let cutFirst = 0;
+  let cutSection = 0;
+  for (const len of [40, 150, 400]) {
+    for (let n = 0; n <= 700; n += 9) {
+      const f = hFindings(n, len);
+      const rows = new Set(f.map((x) => `- [${x.repo}] ${x.text} — ${x.url}`));
+      const whole = buildReport(f, H_COUNTS);
+      for (const { rooms, lines: sectionLines } of roomSets) {
+        const body = buildBody(f, H_COUNTS, rooms);
+        const at = `len ${len}, n ${n}, rooms ${rooms.length}`;
+        assert.ok(body.length <= BODY_MAX, `${at}: ${body.length}`);
+        const ns = NOT_SHOWN_ROWS.exec(body);
+        const sectionAt = ns ? body.indexOf('\n', ns.index) + 2 : whole.length + 1;
+        const firstLines = body.slice(0, sectionAt).split('\n').filter((l) => l.startsWith('- ['));
+        for (const l of firstLines) assert.ok(rows.has(l), `${at}: a row cut mid-line: ${l.slice(0, 80)}`);
+        assert.equal(firstLines.length + (ns ? Number(ns[1]) : 0), n, `${at}: shown plus not shown`);
+        if (whole.length + 1 + SECTION_NOT_SHOWN.length <= BODY_MAX) assert.ok(!ns, `${at}: a first part that fits beside the section's one line is never cut`);
+        else cutFirst++;
+        const sectionText = body.slice(sectionAt);
+        for (const l of sectionText.split('\n')) {
+          assert.ok(sectionLines.has(l) || /^- \(section cut at a line end: \d+ line\(s\) not shown\)$/.test(l) || l + '\n' === SECTION_NOT_SHOWN, `${at}: a section line cut mid-line: ${l.slice(0, 80)}`);
+        }
+        const lead = sectionText.split('\n')[0];
+        assert.ok(lead.startsWith('## front-door-links') || lead.startsWith('- (section cut at a line end:') || lead + '\n' === SECTION_NOT_SHOWN, `${at}: the section keeps at least its one line: ${JSON.stringify(sectionText.slice(0, 80))}`);
+        if (sectionText.includes('section cut') || sectionText === SECTION_NOT_SHOWN) cutSection++;
+      }
+    }
+  }
+  assert.ok(cutFirst > 0 && cutSection > cutFirst, `the sweep reached both cuts: first ${cutFirst}, section ${cutSection}`);
+});
+
+test('28h: the first part is cut at its budget exactly: a budget equal to its whole length cuts nothing, one less cuts one row or more and stays within the budget', () => {
+  const f = hFindings(30, 100);
+  const whole = buildReport(f, H_COUNTS);
+  assert.equal(buildReport(f, H_COUNTS, whole.length), whole);
+  // every budget, one step at a time, down to where ten or more rows are dropped (a two-digit count needs the room a one-digit one does not)
+  for (let budget = whole.length - 1; budget > 400; budget -= 1) {
+    const cut = buildReport(f, H_COUNTS, budget);
+    assert.ok(cut.length <= budget, `${budget}: ${cut.length}`);
+    const ns = NOT_SHOWN_ROWS.exec(cut);
+    assert.ok(ns, String(budget));
+    assert.equal(cut.split('\n').filter((l) => l.startsWith('- [')).length + Number(ns[1]), 30);
+  }
+});
+
+test('28h: the first part\'s minimum is its header, its count line and its one not-shown line, under 400 characters even for the largest counts, so it always fits the body\'s budget for it', () => {
+  const big = { repos: Number.MAX_SAFE_INTEGER, workflows: Number.MAX_SAFE_INTEGER, synced: Number.MAX_SAFE_INTEGER };
+  const least = buildReport(hFindings(2000, 1), big, 0);
+  assert.ok(least.length < 400, `${least.length}: ${least}`);
+  assert.match(least, /^- \(2000 finding row\(s\) not shown/m);
+  assert.ok(BODY_MAX - 1 - SECTION_NOT_SHOWN.length > 400);
 });

@@ -177,11 +177,26 @@ export function gitbookSignal(signalByRepo, now = Date.now(), timeoutMs = GITBOO
   return out;
 }
 
-export function buildReport(findings, counts) {
+/** 28h: the line that says how many finding rows the body's limit left out. */
+export const rowsNotShown = (n) => `- (${n} finding row(s) not shown: the issue body's limit; every finding is still a ::warning line in the run's log)`;
+
+/** The report's first part. 28h: with a `budget`, the rows are cut at row ends so the text stays within it, and one line says how many were left
+ *  out; a row is never cut inside. The header and the count line are fixed words and three or one whole numbers, under 400 characters with the
+ *  largest safe integers, so with the not-shown line they are the first part's guaranteed minimum; a budget below that minimum is never given by
+ *  buildBody (its budget is BODY_MAX less the section's one line), and if one were, the minimum is returned whole and passes that budget. */
+export function buildReport(findings, counts, budget = Infinity) {
   const head = `org-health-watch checked ${counts.repos} public repo${counts.repos === 1 ? '' : 's'}: ${counts.workflows} workflows, queued runs, ${counts.synced} GitBook-synced repo${counts.synced === 1 ? '' : 's'}.`;
   if (findings.length === 0) return `${head}\n\nNo finding. (A clean line is stated, never left blank: silence would read the same as a run that never looked.)\n`;
   const rows = findings.map((f) => `- [${f.repo}] ${f.text}${f.url ? ` — ${f.url}` : ''}`);
-  return `${head}\n\n${findings.length} finding${findings.length === 1 ? '' : 's'} (report only; nothing was re-enabled, re-run or changed):\n\n${rows.join('\n')}\n`;
+  let text = `${head}\n\n${findings.length} finding${findings.length === 1 ? '' : 's'} (report only; nothing was re-enabled, re-run or changed):\n\n`;
+  // room for the not-shown line is kept while rows remain after this one, sized for the largest count it could print
+  const reserve = rowsNotShown(rows.length).length + 1;
+  let i = 0;
+  for (; i < rows.length; i++) {
+    if (text.length + rows[i].length + 1 + (i + 1 < rows.length ? reserve : 0) > budget) break;
+    text += `${rows[i]}\n`;
+  }
+  return i < rows.length ? `${text}${rowsNotShown(rows.length - i)}\n` : text;
 }
 
 // ---- 28b: the front doors' scheduled warnings (main's ruling (1) on 27g; the 27i/28a design with the umbrella auditor's points A to E) --------------
@@ -210,6 +225,8 @@ export const LINE_MAX = 300; // ours
 export const SECTION_MAX = 60000; // ours: the section's own cap; the body's limit is met below by measuring the first part
 const PATH_MAX = 80; // ours
 const ROOM_NAME_MAX = 80; // ours (28g): a room's name in its own line, shown whole or as a fixed fallback
+// the front-door section's one line when no room is left for it beside the first part (28g); its length is the section's guaranteed minimum (28h)
+export const SECTION_NOT_SHOWN = '- (section not shown: the findings above fill the issue body)\n';
 // D: an image URL's own alphabet; it leaves out the backtick (it would close the code span), `|`, `<`, `>` and whitespace.
 const IMAGE_URL = /^[A-Za-z0-9._~:/?#[\]@!$&'()*+,;=%-]{1,4096}$/;
 // D (28d): a warning's file name has its own alphabet and bound, shown whole in a code span or not at all
@@ -361,13 +378,23 @@ export function frontDoorSection(rooms, missing = [], templateCurrent = [], firs
   let size = 0;
   const reserve = 100;
   const budget = Math.min(SECTION_MAX, BODY_MAX - String(firstPart).length - 1) - reserve;
-  if (budget <= 0) return { text: '- (section not shown: the findings above fill the issue body)\n', findings };
+  if (budget <= 0) return { text: SECTION_NOT_SHOWN, findings };
   for (let i = 0; i < lines.length; i++) {
     if (size + lines[i].length + 1 > budget) { out.push(`- (section cut at a line end: ${lines.length - i} line(s) not shown)`); break; }
     out.push(lines[i]);
     size += lines[i].length + 1;
   }
   return { text: out.join('\n') + '\n', findings };
+}
+
+/** The issue body: the report's first part, the joining newline, the front-door section, at or under BODY_MAX for every input (28h).
+ *  THE SPLIT RULE: the front-door section gives way first, down to its one SECTION_NOT_SHOWN line; only when the whole first part would not fit
+ *  beside that line are the first part's rows cut, at row ends, down to its header, its count line and its one line naming the rows not shown.
+ *  Both minimums together are under 500 characters, so both always fit. The workflow posts this one file both ways, `gh issue create` and
+ *  `gh issue comment`, so the bound holds for both paths. */
+export function buildBody(findings, counts, rooms, missing = [], templateCurrent = []) {
+  const first = buildReport(findings, counts, BODY_MAX - 1 - SECTION_NOT_SHOWN.length);
+  return `${first}\n${frontDoorSection(rooms, missing, templateCurrent, first).text}`;
 }
 
 async function get(p) {
@@ -477,8 +504,7 @@ async function main() {
   // 28g: the section's findings feed the first part, and the first part's measured length bounds the section's text, so the section is asked twice
   // (a pure function of the same rooms; the findings are the same both times)
   findings.push(...disabledWorkflows(workflowsByRepo), ...staleQueuedRuns(runsByRepo), ...gitbookSignal(signalByRepo), ...frontDoorSection(frontDoorRooms, frontDoorMissing, frontDoorCurrent).findings);
-  const first = buildReport(findings, { repos: repos.length, workflows: workflowCount, synced: Object.keys(signalByRepo).length });
-  const report = `${first}\n${frontDoorSection(frontDoorRooms, frontDoorMissing, frontDoorCurrent, first).text}`;
+  const report = buildBody(findings, { repos: repos.length, workflows: workflowCount, synced: Object.keys(signalByRepo).length }, frontDoorRooms, frontDoorMissing, frontDoorCurrent);
   fs.writeFileSync('org-health-report.md', report);
   process.stdout.write(report);
   for (const f of findings) console.log(`::warning title=org-health-watch ${f.repo}::${f.text}`);
