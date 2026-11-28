@@ -161,6 +161,8 @@ export function apiRouteOf(url) {
   let u;
   try { u = new URL(url); } catch { return null; }
   if (u.hostname.toLowerCase() !== 'github.com') return null;
+  // T-29sw-1 (28l): an explicit non-default port has no REST twin and its page can never be fetched; the URL parser drops a default port, so port is '' for it
+  if (u.port !== '') return null;
   const segs = u.pathname.split('/').filter(Boolean);
   if (segs.length && RESERVED_ROUTES.has(segs[0].toLowerCase())) return null;
   if (segs.length === 1 && /^[A-Za-z0-9-]+$/.test(segs[0])) return `/users/${segs[0]}`;
