@@ -23,6 +23,9 @@
 // has_findings=true|false. Zero-dependency (Phoenix #2); anonymous reads suffice for public repos,
 // GH_TOKEN raises the rate limit when set.
 import fs from 'node:fs';
+import crypto from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { getAllPages, pageNote } from './lib/paginate.mjs';
 
 export { getAllPages };
@@ -44,7 +47,8 @@ export function safeDate(v) { return typeof v === 'string' && SAFE_DATE.test(v) 
 const ORG = process.env.ORG_HEALTH_ORG || 'TheColliery';
 const API = 'https://api.github.com';
 
-/** Workflows in `disabled_inactivity`. `disabled_manually` is a decision someone made, not a finding. */
+/** Workflows in `disabled_inactivity`, the first class. A workflow someone disabled by hand is a decision, not a finding here, with one exception
+ *  ruled in 28d: `front-door-links.yml` in any state but `active`, `disabled_manually` included, is a finding by name in the front-door section. */
 export function disabledWorkflows(workflowsByRepo) {
   const out = [];
   for (const [repo, list] of Object.entries(workflowsByRepo)) {
@@ -173,11 +177,224 @@ export function gitbookSignal(signalByRepo, now = Date.now(), timeoutMs = GITBOO
   return out;
 }
 
-export function buildReport(findings, counts) {
+/** 28h: the line that says how many finding rows the body's limit left out. */
+export const rowsNotShown = (n) => `- (${n} finding row(s) not shown: the issue body's limit; every finding is still a ::warning line in the run's log)`;
+
+/** The report's first part. 28h: with a `budget`, the rows are cut at row ends so the text stays within it, and one line says how many were left
+ *  out; a row is never cut inside. The header and the count line are fixed words and three or one whole numbers, under 400 characters with the
+ *  largest safe integers, so with the not-shown line they are the first part's guaranteed minimum; a budget below that minimum is never given by
+ *  buildBody (its budget is BODY_MAX less the section's one line), and if one were, the minimum is returned whole and passes that budget. */
+export function buildReport(findings, counts, budget = Infinity) {
   const head = `org-health-watch checked ${counts.repos} public repo${counts.repos === 1 ? '' : 's'}: ${counts.workflows} workflows, queued runs, ${counts.synced} GitBook-synced repo${counts.synced === 1 ? '' : 's'}.`;
   if (findings.length === 0) return `${head}\n\nNo finding. (A clean line is stated, never left blank: silence would read the same as a run that never looked.)\n`;
   const rows = findings.map((f) => `- [${f.repo}] ${f.text}${f.url ? ` — ${f.url}` : ''}`);
-  return `${head}\n\n${findings.length} finding${findings.length === 1 ? '' : 's'} (report only; nothing was re-enabled, re-run or changed):\n\n${rows.join('\n')}\n`;
+  let text = `${head}\n\n${findings.length} finding${findings.length === 1 ? '' : 's'} (report only; nothing was re-enabled, re-run or changed):\n\n`;
+  // room for the not-shown line is kept while rows remain after this one, sized for the largest count it could print
+  const reserve = rowsNotShown(rows.length).length + 1;
+  let i = 0;
+  for (; i < rows.length; i++) {
+    if (text.length + rows[i].length + 1 + (i + 1 < rows.length ? reserve : 0) > budget) break;
+    text += `${rows[i]}\n`;
+  }
+  return i < rows.length ? `${text}${rowsNotShown(rows.length - i)}\n` : text;
+}
+
+// ---- 28b: the front doors' scheduled warnings (main's ruling (1) on 27g; the 27i/28a design with the umbrella auditor's points A to E) --------------
+// Public rooms only: the org list above is read with type=public, and a public room's check-run annotations answer without any token (the auditor's
+// reads, 27i); a private room would need a credential of its own, which is the owner's question. ONE read of the annotations per room, never the log.
+export const FRONT_DOOR_WORKFLOW = '.github/workflows/front-door-links.yml';
+const WARN_TITLE = 'front-door-links';
+const COUNT_TITLE = 'front-door-links-count';
+// A: the ONE place the CLI's count notice shape lives (scripts/front-door-links.mjs prints `::notice title=front-door-links-count::N finding(s), M warning(s)`);
+// if that shape changes, this line is the only one that moves.
+export const COUNT_SHAPE = /^(\d{1,6}) finding\(s\), (\d{1,6}) warning\(s\)$/;
+// B: the watcher's OWN declared variable, a number of ours (the weekly cadence plus a day): a newest run older than this is stale, never current.
+export const STALE_AFTER_DAYS = 8;
+// The cap is the runner's, not ours: ten annotations per type per step (actions/runner, ExecutionContext.cs, _maxCountPerIssueType).
+export const QUOTE_MAX = 10;
+// D: the bounds of what is quoted into an issue body. BODY_MAX is the PLATFORM's: GitHub refuses an issue body or comment over 65,536 characters
+// with a 422 (github/docs, .github/workflows/link-check-internal.yml: "GitHub rejects issue bodies over 65536 characters with a 422"). The other
+// four are numbers of OURS, sized so a line and the section fit inside it. LINE_MAX is met by the SIZES of a line's parts, never by cutting the
+// assembled line. A warning line: "- " (2) + the URL span (URL_MAX + 2) + " (cut)" (6) + ": " (2) + the longest reason (52) + " (" (2) + the file
+// span (PATH_MAX + 2) + ":" (1) + a line of six digits (6) + ")" (1) = 276, or 278 with the two spaces the section indents it by. A room's own line
+// (28g): "- [" (3) + the name (ROOM_NAME_MAX) + "] run of " (9) + the date (24) + ": " (2) + six digits + " warning(s), " (13) + six digits +
+// " finding(s)" (11) + " (the run failed)" (17) + " — " (3) + the link (URL_MAX) = 294.
+export const BODY_MAX = 65536;
+export const URL_MAX = 120; // ours
+export const LINE_MAX = 300; // ours
+export const SECTION_MAX = 60000; // ours: the section's own cap; the body's limit is met below by measuring the first part
+const PATH_MAX = 80; // ours
+const ROOM_NAME_MAX = 80; // ours (28g): a room's name in its own line, shown whole or as a fixed fallback
+// the front-door section's one line when no room is left for it beside the first part (28g); its length is the section's guaranteed minimum (28h)
+export const SECTION_NOT_SHOWN = '- (section not shown: the findings above fill the issue body)\n';
+// D: an image URL's own alphabet; it leaves out the backtick (it would close the code span), `|`, `<`, `>` and whitespace.
+const IMAGE_URL = /^[A-Za-z0-9._~:/?#[\]@!$&'()*+,;=%-]{1,4096}$/;
+// D (28d): a warning's file name has its own alphabet and bound, shown whole in a code span or not at all
+const FILE_PATH = new RegExp(`^[A-Za-z0-9._/-]{1,${PATH_MAX}}$`);
+const FINISHED = new Set(['success', 'failure']); // C: only these carry a count
+// item 5 (28d): GitHub's REST reference for workflows (docs.github.com/en/rest/actions/workflows, read 2026-11-28) names a workflow's state as one of
+// active, deleted, disabled_fork, disabled_inactivity, disabled_manually; anything but active is a finding by name.
+const ACTIVE = 'active';
+// item 2 (28d): the template the rooms copy, whose git blob id says whether a room's checker is current
+const TEMPLATE_CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'templates', 'published-code', 'scripts', 'front-door-links.mjs');
+
+/** git's own blob id of some bytes: sha1 over "blob <size>", a NUL and the bytes (the id the contents API reports as `sha`). */
+export function gitBlobOf(buf) {
+  return crypto.createHash('sha1').update(`blob ${buf.length}${String.fromCharCode(0)}`).update(buf).digest('hex');
+}
+
+/** item 6 (new point 5): the job is picked by its name; none or more than one is unreadable. */
+export function pickFrontDoorJob(jobs) {
+  const named = (Array.isArray(jobs) ? jobs : []).filter((j) => j && j.name === WARN_TITLE);
+  if (named.length === 1) return { job: named[0] };
+  return { why: named.length === 0 ? `no job named ${WARN_TITLE}` : `${named.length} jobs named ${WARN_TITLE}` };
+}
+
+/** D (28d): a file name in a code span under its own alphabet, whole, or a fixed fallback; never cut. */
+export function quotePath(p) {
+  const s = String(p ?? '');
+  return FILE_PATH.test(s) ? '`' + s + '`' : '(file not shown)';
+}
+
+/** The newest run of a page by created_at, whatever order the API gives it (the order is undocumented); null when none has a readable date. */
+export function newestRun(runs) {
+  let best = null;
+  for (const r of runs || []) {
+    const at = r && typeof r.created_at === 'string' && SAFE_DATE.test(r.created_at) ? Date.parse(r.created_at) : NaN;
+    if (Number.isFinite(at) && (!best || at > best.at)) best = { at, run: r };
+  }
+  return best ? best.run : null;
+}
+
+/** D: a URL inside a code span, cut BEFORE the span is closed, the cut said in words outside it; outside the alphabet, a fixed fallback.
+ *  28g (finding 4): a URL that holds `##[`, the runner's legacy command mark, gets the same fallback, so it never reaches the watcher's own stdout. */
+export function quoteUrl(url) {
+  const s = String(url ?? '');
+  if (!IMAGE_URL.test(s) || s.includes('##[')) return '(address not shown: outside the safe alphabet)';
+  const tick = '`';
+  return tick + s.slice(0, URL_MAX) + tick + (s.length > URL_MAX ? ' (cut)' : '');
+}
+
+/** E: the reason's leading class only; a redirect target, the fixed suffix and anything else are left out. */
+function reasonClass(text) {
+  // E exact (28d): the code is letters, digits and underscore, at most 40; the kept number is exactly 5xx or 429, never followed by another digit or letter
+  let m = /^no answer \(([A-Za-z0-9_]{1,40})\)/.exec(text);
+  if (m) return `no answer (${m[1]})`;
+  m = /^HTTP (5\d\d|429)(?![A-Za-z0-9_])/.exec(text);
+  if (m) return `HTTP ${m[1]}`;
+  return '(reason not shown)';
+}
+
+/** E: one quoted warning line: the annotation's data split at the first ": " (a URL holds no space), its URL in a code span (D), its reason's class,
+ *  its file and line. Every part is bounded, so the line stays within LINE_MAX. */
+export function quoteWarning(a) {
+  const msg = String(a?.message ?? '');
+  const where = `${quotePath(a?.path)}:${Number.isInteger(a?.start_line) && a.start_line >= 0 && a.start_line < 1e6 ? a.start_line : '?'}`;
+  const i = msg.indexOf(': ');
+  if (i <= 0) return `- (warning not readable) (${where})`;
+  return `- ${quoteUrl(msg.slice(0, i))}: ${reasonClass(msg.slice(i + 2))} (${where})`;
+}
+
+/** One public room's newest completed scheduled run, read as data. States: workflow-off (item 5: a state other than active), no-run (a), stale (B),
+ *  unfinished (C), no-count (neighbour c: the copy the run ran holds no count title, so it cannot print one), unreadable (A: not exactly one count
+ *  notice of the whole shape, a copy that holds the count title but whose run printed none, or counts the CLI could not have printed), read.
+ *  28f (the auditor's 28c findings 2 and 3, main's ruling (a)): `copyHoldsCount` is the room's scripts/front-door-links.mjs AT THE RUN'S COMMIT asked
+ *  whether its text holds COUNT_TITLE (true, false, or null when it could not be read); byte equality with the template is a header count only. A
+ *  `failure` conclusion rides on the room in every state below it, so the section names the failure whatever the copy printed (finding 1). */
+export function frontDoorRoom({ repo, workflowState = ACTIVE, run, annotations, copyHoldsCount = null, now = Date.now() }) {
+  const room = { repo: safeName(repo) };
+  if (workflowState !== ACTIVE) return { ...room, state: 'workflow-off', workflowState: safeName(String(workflowState)) };
+  if (!run) return { ...room, state: 'no-run' };
+  const date = safeDate(run.created_at);
+  const url = safeUrl(run.html_url);
+  if (!(now - Date.parse(run.created_at) <= STALE_AFTER_DAYS * DAY_MS)) return { ...room, state: 'stale', date, url };
+  if (!FINISHED.has(run.conclusion)) return { ...room, state: 'unfinished', conclusion: safeName(String(run.conclusion)), date, url };
+  const list = Array.isArray(annotations) ? annotations : [];
+  const notes = list.filter((x) => x && x.annotation_level === 'notice' && x.title === COUNT_TITLE);
+  const warns = list.filter((x) => x && x.annotation_level === 'warning' && x.title === WARN_TITLE);
+  const conclusion = run.conclusion;
+  // 28f items 2 and 3: zero count notices, with or without warnings, is (c) while the copy the run ran holds no count title; a copy that holds it and
+  // printed none is unreadable
+  if (notes.length === 0) {
+    if (copyHoldsCount === true) return { ...room, state: 'unreadable', why: 'the checker the run ran prints the count, and the run printed none', conclusion, date, url };
+    return { ...room, state: 'no-count', conclusion, date, url };
+  }
+  const m = notes.length === 1 ? COUNT_SHAPE.exec(String(notes[0].message ?? '')) : null;
+  if (!m) return { ...room, state: 'unreadable', why: notes.length === 1 ? 'a count notice of another shape' : `${notes.length} count notices`, conclusion, date, url };
+  const findings = Number(m[1]);
+  const warnings = Number(m[2]);
+  // item 6 (new point 4): counts the CLI cannot have printed
+  if (warns.length > warnings) return { ...room, state: 'unreadable', why: 'more warning annotations than the count', conclusion, date, url };
+  if (conclusion === 'success' && findings > 0) return { ...room, state: 'unreadable', why: 'findings on a successful run', conclusion, date, url };
+  return { ...room, state: 'read', conclusion, date, url, findings, warnings, quotes: warns.slice(0, QUOTE_MAX).map(quoteWarning) };
+}
+
+/** The report section and its findings. A room with warnings, a failed, stale or unfinished run, a workflow that is not active, or an unreadable
+ *  count is a finding (28d: stale and unfinished, header lines in 28b, are findings for a room that carries the workflow); (a), (c) and (d) are header
+ *  lines that never open the issue by themselves. The section is cut at line ends only (D), to fit beside `firstPart`, the report text that comes
+ *  before it in the issue body (28g). The findings never depend on `firstPart`. */
+export function frontDoorSection(rooms, missing = [], templateCurrent = [], firstPart = '') {
+  const by = (state) => rooms.filter((r) => r.state === state);
+  const names = (list) => list.map((r) => r.repo).join(', ');
+  const findings = [];
+  const head = [
+    '## front-door-links: the newest completed scheduled run of each public room',
+    '',
+    `The watcher reads on Monday 02:30 UTC and the check runs on Monday 06:17 UTC, so each run below is about six days and twenty hours old. A newest run older than the watcher's own staleness limit (${STALE_AFTER_DAYS} days, a number of ours) is reported as stale and its warnings are not quoted.`,
+    '',
+  ];
+  const read = by('read');
+  head.push(`- ${read.length} room(s) read; ${read.filter((r) => r.warnings > 0).length} with warnings.`);
+  if (by('no-run').length) head.push(`- no completed scheduled run in the retention period: ${names(by('no-run'))}`);
+  if (by('no-count').length) head.push(`- ${by('no-count').length} room(s) whose checker does not report warnings yet (re-copy owed): ${names(by('no-count'))}`);
+  if (missing.length) head.push(`- rooms without the check: ${missing.map((n) => safeName(n)).join(', ')}`);
+  // 28f (main's ruling on finding 3): byte equality with the template is a count in the header, never a verdict on a room
+  if (templateCurrent.length) head.push(`- ${templateCurrent.length} room(s) carry the template's current checker: ${templateCurrent.map((n) => safeName(n)).join(', ')}`);
+  // 28f (LOW 5): one row for one fact. A workflow GitHub disabled for inactivity is already the watcher's first class (disabledWorkflows, with the run's
+  // link and the 60-day reason); that line stays, and this section names only the other states, which nothing else reports
+  for (const r of by('workflow-off').filter((x) => x.workflowState !== 'disabled_inactivity')) findings.push({ repo: r.repo, kind: 'front-door', text: `front-door-links: the workflow front-door-links.yml is ${r.workflowState}, so its weekly check does not run`, url: '' });
+  // C (28d): the line's words say why a cancelled scheduled run is no cause for alarm by itself
+  for (const r of by('unfinished')) findings.push({ repo: r.repo, kind: 'front-door', text: `front-door-links: the newest scheduled run did not finish (${r.conclusion}); a scheduled run cancelled by a push was followed by that push's own run (${r.date})`, url: r.url });
+  for (const r of by('stale')) findings.push({ repo: r.repo, kind: 'front-door', text: `front-door-links: the newest scheduled run is from ${r.date}, older than the watcher's own staleness limit of ${STALE_AFTER_DAYS} days`, url: r.url });
+  for (const r of by('unreadable')) findings.push({ repo: r.repo, kind: 'unreadable', text: `could not read the front-door-links count (${r.why}); this run did NOT check it`, url: r.url });
+  // 28f (finding 1, HIGH): a failed run is a finding in every state that carries it (read, no-count, unreadable), whatever the room's copy printed
+  for (const r of rooms.filter((x) => x.conclusion === 'failure')) findings.push({ repo: r.repo, kind: 'front-door', text: `front-door-links: the newest scheduled run failed (${r.date})`, url: r.url });
+  const body = [];
+  for (const r of read) {
+    if (r.warnings > 0) findings.push({ repo: r.repo, kind: 'front-door', text: `front-door-links: ${r.warnings} warning(s) on the newest scheduled run (${r.date})`, url: r.url });
+    if (r.warnings === 0 && r.conclusion !== 'failure') continue;
+    // 28g (LOW 7): the room's own line is bounded by its parts (the size comment at the constants): a name past its bound or a link past URL_MAX is
+    // never cut, it is replaced in words
+    const name = r.repo.length <= ROOM_NAME_MAX ? r.repo : '(name not shown)';
+    const link = !r.url ? '' : ` — ${r.url.length <= URL_MAX ? r.url : '(link not shown)'}`;
+    body.push(`- [${name}] run of ${r.date}: ${r.warnings} warning(s), ${r.findings} finding(s)${r.conclusion === 'failure' ? ' (the run failed)' : ''}${link}`);
+    for (const q of r.quotes) body.push(`  ${q}`);
+    if (r.quotes.length >= QUOTE_MAX) body.push(`  - ${QUOTE_MAX} shown: the runner records at most ${QUOTE_MAX} warnings per step (actions/runner ExecutionContext.cs); the run's log holds them all.`);
+  }
+  // D: cut at line ends only, with room kept for the line that says so. 28g (LOW 6): the bound that matters is the issue BODY's, so the budget is
+  // what the MEASURED first part (and the newline that joins it) leaves under BODY_MAX, never a first part assumed small
+  const lines = [...head, '', ...body];
+  const out = [];
+  let size = 0;
+  const reserve = 100;
+  const budget = Math.min(SECTION_MAX, BODY_MAX - String(firstPart).length - 1) - reserve;
+  if (budget <= 0) return { text: SECTION_NOT_SHOWN, findings };
+  for (let i = 0; i < lines.length; i++) {
+    if (size + lines[i].length + 1 > budget) { out.push(`- (section cut at a line end: ${lines.length - i} line(s) not shown)`); break; }
+    out.push(lines[i]);
+    size += lines[i].length + 1;
+  }
+  return { text: out.join('\n') + '\n', findings };
+}
+
+/** The issue body: the report's first part, the joining newline, the front-door section, at or under BODY_MAX for every input (28h).
+ *  THE SPLIT RULE: the front-door section gives way first, down to its one SECTION_NOT_SHOWN line; only when the whole first part would not fit
+ *  beside that line are the first part's rows cut, at row ends, down to its header, its count line and its one line naming the rows not shown.
+ *  Both minimums together are under 500 characters, so both always fit. The workflow posts this one file both ways, `gh issue create` and
+ *  `gh issue comment`, so the bound holds for both paths. */
+export function buildBody(findings, counts, rooms, missing = [], templateCurrent = []) {
+  const first = buildReport(findings, counts, BODY_MAX - 1 - SECTION_NOT_SHOWN.length);
+  return `${first}\n${frontDoorSection(rooms, missing, templateCurrent, first).text}`;
 }
 
 async function get(p) {
@@ -209,6 +426,12 @@ async function main() {
   const runsByRepo = {};
   const signalByRepo = {};
   const findings = [];
+  const frontDoorRooms = [];
+  const frontDoorMissing = [];
+  const frontDoorCurrent = [];
+  // the template's blob id, read once from this repository's own checkout; unreadable here means every room's copy reads as "not compared"
+  let templateBlob = null;
+  try { templateBlob = gitBlobOf(fs.readFileSync(TEMPLATE_CLI)); } catch (e) { findings.push(unreadable(ORG, 'the template scripts/front-door-links.mjs', e.code || 'error')); }
   if (list.partial) findings.push(unreadable(ORG, "the organization's public repository list", pageNote(list)));
   let workflowCount = 0;
   for (const r of repos) {
@@ -217,6 +440,44 @@ async function main() {
     if (wf.partial) findings.push(unreadable(r.name, 'the workflow list', pageNote(wf)));
     workflowsByRepo[r.name] = wf.items;
     workflowCount += workflowsByRepo[r.name].length;
+    // 28b: the newest completed scheduled front-door-links run and its annotations (ONE read of the annotations, per_page=100: a job's other steps add their own)
+    const fdw = wf.items.find((w) => w && w.path === FRONT_DOOR_WORKFLOW && Number.isInteger(w.id));
+    if (!fdw) { if (!wf.partial) frontDoorMissing.push(r.name); } else {
+      const fdRuns = await get(`${base}/actions/workflows/${fdw.id}/runs?event=schedule&status=completed&per_page=10`);
+      if (fdRuns.status !== 200) findings.push(unreadable(r.name, 'the front-door-links scheduled runs', fdRuns.status));
+      else {
+        const run = newestRun(fdRuns.json?.workflow_runs);
+        let annotations = [];
+        if (run && Number.isInteger(run.id) && FINISHED.has(run.conclusion)) {
+          const jobs = await get(`${base}/actions/runs/${run.id}/jobs`);
+          const picked = jobs.status === 200 ? pickFrontDoorJob(jobs.json?.jobs) : null;
+          if (jobs.status !== 200) { findings.push(unreadable(r.name, 'the front-door-links jobs', jobs.status)); annotations = null; }
+          else if (picked.why || !Number.isInteger(picked.job.id)) { findings.push(unreadable(r.name, `the front-door-links job (${picked.why || 'its id'})`, 'not one job')); annotations = null; }
+          else {
+            const a = await get(`${base}/check-runs/${picked.job.id}/annotations?per_page=100`);
+            if (a.status !== 200) { findings.push(unreadable(r.name, 'the front-door-links annotations', a.status)); annotations = null; }
+            else if (Array.isArray(a.json)) annotations.push(...a.json);
+          }
+        }
+        // 28f (findings 2 and 3): ONE public read of the room's checker AT THE COMMIT THE RUN RAN, its text asked for COUNT_TITLE; a head_sha that is not
+        // 40 hex is unreadable and the read is not made. Byte equality with the template only feeds the header count.
+        let copyHoldsCount = null;
+        if (annotations && run) {
+          const headSha = typeof run.head_sha === 'string' && /^[0-9a-f]{40}$/.test(run.head_sha) ? run.head_sha : null;
+          if (!headSha) findings.push(unreadable(r.name, "the run's commit (head_sha is not 40 hex), so the room's checker", 'not read'));
+          else {
+            const c = await get(`${base}/contents/scripts/front-door-links.mjs?ref=${headSha}`);
+            const text = c.status === 200 && c.json?.encoding === 'base64' && typeof c.json.content === 'string' ? Buffer.from(c.json.content, 'base64').toString('utf8') : null;
+            if (text === null) findings.push(unreadable(r.name, "the room's scripts/front-door-links.mjs at the run's commit", c.status));
+            else {
+              copyHoldsCount = text.includes(COUNT_TITLE);
+              if (templateBlob && c.json.sha === templateBlob) frontDoorCurrent.push(r.name);
+            }
+          }
+        }
+        if (annotations) frontDoorRooms.push(frontDoorRoom({ repo: r.name, workflowState: fdw.state, run, annotations, copyHoldsCount, now: Date.now() }));
+      }
+    }
     const runs = await getAllPages(get, `${base}/actions/runs?status=queued`, (j) => j?.workflow_runs);
     if (runs.partial) findings.push(unreadable(r.name, 'the queued runs', pageNote(runs)));
     runsByRepo[r.name] = runs.items;
@@ -240,8 +501,10 @@ async function main() {
     const touches = touchesSynced(Array.isArray(head.json?.files) ? head.json.files.map((x) => x && x.filename) : undefined, gitbookSyncedFiles(cfgText, summaryText));
     signalByRepo[r.name] = { headAge: Date.now() - headDate, touches, statuses: status.json?.statuses ?? [] };
   }
-  findings.push(...disabledWorkflows(workflowsByRepo), ...staleQueuedRuns(runsByRepo), ...gitbookSignal(signalByRepo));
-  const report = buildReport(findings, { repos: repos.length, workflows: workflowCount, synced: Object.keys(signalByRepo).length });
+  // 28g: the section's findings feed the first part, and the first part's measured length bounds the section's text, so the section is asked twice
+  // (a pure function of the same rooms; the findings are the same both times)
+  findings.push(...disabledWorkflows(workflowsByRepo), ...staleQueuedRuns(runsByRepo), ...gitbookSignal(signalByRepo), ...frontDoorSection(frontDoorRooms, frontDoorMissing, frontDoorCurrent).findings);
+  const report = buildBody(findings, { repos: repos.length, workflows: workflowCount, synced: Object.keys(signalByRepo).length }, frontDoorRooms, frontDoorMissing, frontDoorCurrent);
   fs.writeFileSync('org-health-report.md', report);
   process.stdout.write(report);
   for (const f of findings) console.log(`::warning title=org-health-watch ${f.repo}::${f.text}`);
