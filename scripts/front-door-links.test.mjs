@@ -713,3 +713,23 @@ test('CLI run through a folder link WITH --preserve-symlinks-main still runs: bo
     assert.match(r.stdout, /^1 finding\(s\); 1 link\(s\) in 1 file\(s\), 1 fetched$/m, r.stdout + r.stderr);
   } finally { unlinkFolderLink(link); fs.rmSync(dir, { recursive: true, force: true }); }
 });
+// T-29sw-1 (CoalTipple's E1 at v1.8.16, a canon courier, 28l): apiRouteOf looked only at the hostname, so github.com:1/<owner>/<repo> got the same REST route as the
+// default port, and the API's 200 cleared a link whose page can never be fetched (a fetch of that URL throws "bad port", so the page probe reads status 0). A link with an
+// explicit non-default port has no REST twin: the page's own answer stands. WHATWG URL drops a default port (:443 on https), so port is empty for it.
+test('apiRouteOf: a github.com URL with an explicit non-default port has no REST route; the default port, written out, still has one -- RED before 28l', async () => {
+  const { apiRouteOf } = await import('./lib/front-door-links.mjs');
+  for (const u of ['https://github.com:1/TheColliery/CoalMine', 'https://github.com:8080/TheColliery', 'https://github.com:1/a/b/blob/main/x.md', 'https://github.com:65535/TheColliery/CoalMine/']) {
+    assert.strictEqual(apiRouteOf(u), null, u);
+  }
+  assert.strictEqual(apiRouteOf('https://github.com:443/TheColliery/CoalMine'), '/repos/TheColliery/CoalMine', 'the default port, written out, is the same page');
+  assert.strictEqual(apiRouteOf('https://github.com/TheColliery/CoalMine'), '/repos/TheColliery/CoalMine');
+  assert.strictEqual(apiRouteOf('https://github.com:443/a/b/blob/main/x.md'), '/repos/a/b/contents/x.md?ref=main');
+});
+
+test('checkFiles: a github.com link on a non-default port that stays 5xx is never asked of the API, and stays a finding -- RED before 28l', async () => {
+  const m = apiStub(() => 503, () => 200);
+  const r = await checkFiles(oneLink('https://github.com:1/TheColliery/CoalMine'), { fetchFn: m.fetchFn, retryMs: 0, token: 'T-123' });
+  assert.equal(r.findings.length, 1, JSON.stringify(r.findings));
+  assert.ok(!m.calls.some((c) => c.u.startsWith('https://api.github.com/')), 'no API call for a page that cannot be fetched');
+  assert.ok(!m.calls.some((c) => c.auth), 'the token was not used');
+});
