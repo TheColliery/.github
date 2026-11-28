@@ -4,10 +4,10 @@ name: org-health-watch
 # otherwise stay silent: a workflow GitHub disabled for inactivity (a scheduled job stops after
 # 60 days without repository activity and looks like a quiet week), a run left queued for more
 # than a day, and a GitBook Git Sync stall read from the commit status GitBook posts on the
-# commits it imports. Since 28i (PR #256) it also reads each public room's newest scheduled
-# front-door-links run and gives it a section of its own: the image warnings that do not fail the
-# run, and as findings a failed, stale or unfinished run, a workflow that is not active, or a count
-# it could not read. The issue body stays at or under GitHub's limit (65,536): the finding rows come
+# commits it imports. Since PR #256 it also reads each public room's newest scheduled
+# front-door-links run and gives it a section of its own, quoting the image warnings that do not
+# fail the run; its findings are a room with such warnings, a failed, stale or unfinished run, a
+# workflow that is not active, or a count it could not read. The issue body stays at or under GitHub's limit (65,536): the finding rows come
 # first and the front-door section takes what they leave, each part keeping one line that says what
 # is not shown.
 # It opens ONE issue on this repo and never fixes anything; the mechanism is
