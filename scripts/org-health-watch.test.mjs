@@ -881,3 +881,14 @@ test('LOW 3: a row that cannot fit ends the list, so the rows shown are always t
   assert.deepEqual(shown.map((l) => l.slice(3, l.indexOf(']'))), ['S0'], 'the rows after the one that cannot fit are not shown, even the small ones');
   assert.equal(Number(NOT_SHOWN_ROWS.exec(cut)[1]), 3);
 });
+// ---- 28j: the auditor's i6 (28f on #261): a section line is checked in UTF-8 bytes, not characters. At this boundary the character check would keep
+// one more line, Door136's room line with its three-byte dash; the byte check keeps Door135's quoted warning as the last line --------------------
+
+test('i6 pin: at a first part of 30,208 bytes the section\'s last kept line is Door135\'s quoted warning, never Door136\'s room line, which only a check in characters would keep -- 28j', () => {
+  const rooms = Array.from({ length: 150 }, (_, i) => frontDoorRoom({ repo: 'Door' + i, run: fdRun(), now: FD_NOW, annotations: [NOTE('0 finding(s), 1 warning(s)'), WARN('https://img.shields.io/' + 'd'.repeat(60))] }));
+  const lines = frontDoorSection(rooms, [], [], 'x'.repeat(30208)).text.split('\n').filter(Boolean);
+  assert.match(lines[lines.length - 1], /^- \(section cut at a line end: \d+ line\(s\) not shown\)$/);
+  assert.equal(lines[lines.length - 2], '  - `https://img.shields.io/' + 'd'.repeat(60) + '`: no answer (timeout) (`README.md`:3)');
+  assert.ok(lines[lines.length - 3].startsWith('- [Door135] '), lines[lines.length - 3]);
+  assert.ok(!lines.some((l) => l.startsWith('- [Door136] ')), 'the room line a check in characters would keep');
+});
