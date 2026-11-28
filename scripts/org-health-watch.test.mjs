@@ -689,7 +689,7 @@ test('org-health-watch.mjs: main bounds the WHOLE body: 500 queued runs give a b
   const state = { ...FD_STATE(), '/repos/TheColliery/CoalFace/actions/runs': { __pages: [page(1), page(2), page(3), page(4), page(5)] } };
   const r = runCli(state);
   assert.equal(r.res.status, 0, r.res.stdout + r.res.stderr);
-  assert.ok(r.report.length <= BODY_MAX, String(r.report.length));
+  assert.ok(bytesOf(r.report) <= BODY_MAX, String(bytesOf(r.report))); // 28i: in UTF-8 bytes
   const total = Number(/^(\d+) findings? \(report only/m.exec(r.report)[1]);
   assert.ok(total > 500, String(total));
   const notShown = /^- \((\d+) finding row\(s\) not shown/m.exec(r.report);
@@ -697,7 +697,8 @@ test('org-health-watch.mjs: main bounds the WHOLE body: 500 queued runs give a b
   const firstEnd = notShown.index;
   const shown = r.report.slice(0, firstEnd).split('\n').filter((l) => l.startsWith('- [')).length;
   assert.equal(shown + Number(notShown[1]), total, 'the count printed equals the rows dropped');
-  assert.ok(r.report.includes('\n## front-door-links') || r.report.endsWith(SECTION_NOT_SHOWN), 'the section keeps at least its one line');
+  // 28i: the section's minimum may also be its cut line, the case the 28h sweep already allows
+  assert.ok(r.report.includes('\n## front-door-links') || r.report.endsWith(SECTION_NOT_SHOWN) || /\n- \(section cut at a line end: \d+ line\(s\) not shown\)\n$/.test(r.report), 'the section keeps at least its one line');
 });
 // ---- 28g: the pins (the auditor's 28c LOW 8 on #256; item 7 of 28f's list). Each test names the survivor it holds -------------------------------
 
@@ -783,13 +784,13 @@ test('28h: a sweep over first-part and section lengths: the body stays at or und
       for (const { rooms, lines: sectionLines } of roomSets) {
         const body = buildBody(f, H_COUNTS, rooms);
         const at = `len ${len}, n ${n}, rooms ${rooms.length}`;
-        assert.ok(body.length <= BODY_MAX, `${at}: ${body.length}`);
+        assert.ok(bytesOf(body) <= BODY_MAX, `${at}: ${bytesOf(body)}`);
         const ns = NOT_SHOWN_ROWS.exec(body);
         const sectionAt = ns ? body.indexOf('\n', ns.index) + 2 : whole.length + 1;
         const firstLines = body.slice(0, sectionAt).split('\n').filter((l) => l.startsWith('- ['));
         for (const l of firstLines) assert.ok(rows.has(l), `${at}: a row cut mid-line: ${l.slice(0, 80)}`);
         assert.equal(firstLines.length + (ns ? Number(ns[1]) : 0), n, `${at}: shown plus not shown`);
-        if (whole.length + 1 + SECTION_NOT_SHOWN.length <= BODY_MAX) assert.ok(!ns, `${at}: a first part that fits beside the section's one line is never cut`);
+        if (bytesOf(whole) + 1 + bytesOf(SECTION_NOT_SHOWN) <= BODY_MAX) assert.ok(!ns, `${at}: a first part that fits beside the section's one line is never cut`);
         else cutFirst++;
         const sectionText = body.slice(sectionAt);
         for (const l of sectionText.split('\n')) {
@@ -807,11 +808,12 @@ test('28h: a sweep over first-part and section lengths: the body stays at or und
 test('28h: the first part is cut at its budget exactly: a budget equal to its whole length cuts nothing, one less cuts one row or more and stays within the budget', () => {
   const f = hFindings(30, 100);
   const whole = buildReport(f, H_COUNTS);
-  assert.equal(buildReport(f, H_COUNTS, whole.length), whole);
+  // 28i: the budget is in UTF-8 bytes (every row carries a three-byte dash)
+  assert.equal(buildReport(f, H_COUNTS, bytesOf(whole)), whole);
   // every budget, one step at a time, down to where ten or more rows are dropped (a two-digit count needs the room a one-digit one does not)
-  for (let budget = whole.length - 1; budget > 400; budget -= 1) {
+  for (let budget = bytesOf(whole) - 1; budget > 400; budget -= 1) {
     const cut = buildReport(f, H_COUNTS, budget);
-    assert.ok(cut.length <= budget, `${budget}: ${cut.length}`);
+    assert.ok(bytesOf(cut) <= budget, `${budget}: ${bytesOf(cut)}`);
     const ns = NOT_SHOWN_ROWS.exec(cut);
     assert.ok(ns, String(budget));
     assert.equal(cut.split('\n').filter((l) => l.startsWith('- [')).length + Number(ns[1]), 30);
@@ -824,4 +826,58 @@ test('28h: the first part\'s minimum is its header, its count line and its one n
   assert.ok(least.length < 400, `${least.length}: ${least}`);
   assert.match(least, /^- \(2000 finding row\(s\) not shown/m);
   assert.ok(BODY_MAX - 1 - SECTION_NOT_SHOWN.length > 400);
+});
+// ---- 28i: the auditor's three LOW notes on the bound (28e on #256). LOW 1: the body is measured in UTF-8 bytes, the safe reading of a platform unit
+// no primary source states; LOW 2: the split rule reads as the code runs; LOW 3: a row that cannot fit ends the list (kept, pinned) ------------------
+
+const bytesOf = (s) => Buffer.byteLength(s, 'utf8');
+const mbFindings = (n, len) => Array.from({ length: n }, (_, i) => ({ repo: 'Room' + i, kind: 'queued', text: 'é'.repeat(len + (i % 5)), url: `https://github.com/TheColliery/Room${i}/actions/runs/${i}` }));
+
+test('LOW 1: rows of two-byte characters that fit in JavaScript characters and not in UTF-8 bytes still give a body at or under BODY_MAX in bytes, the count printed equal to the rows dropped -- RED before 28i', () => {
+  const f = mbFindings(285, 150);
+  const whole = buildReport(f, H_COUNTS);
+  assert.ok(whole.length + 1 + SECTION_NOT_SHOWN.length <= BODY_MAX, `the fixture fits in characters: ${whole.length}`);
+  assert.ok(bytesOf(whole) > BODY_MAX, `the fixture is over in bytes: ${bytesOf(whole)}`);
+  const body = buildBody(f, H_COUNTS, []);
+  assert.ok(bytesOf(body) <= BODY_MAX, String(bytesOf(body)));
+  const ns = NOT_SHOWN_ROWS.exec(body);
+  assert.ok(ns, body.slice(-300));
+  const rows = new Set(f.map((x) => `- [${x.repo}] ${x.text} — ${x.url}`));
+  const shown = body.slice(0, ns.index).split('\n').filter((l) => l.startsWith('- ['));
+  for (const l of shown) assert.ok(rows.has(l), `a row cut mid-line: ${l.slice(0, 60)}`);
+  assert.equal(shown.length + Number(ns[1]), 285);
+});
+
+test('LOW 1: a sweep in bytes: multi-byte first parts beside sections of many rooms stay at or under BODY_MAX in UTF-8 bytes, the section too when the first part is long in bytes -- RED before 28i', () => {
+  const rooms = Array.from({ length: 150 }, (_, i) => frontDoorRoom({ repo: 'Door' + i, run: fdRun(), now: FD_NOW, annotations: [NOTE('0 finding(s), 1 warning(s)'), WARN('https://img.shields.io/' + 'd'.repeat(60))] }));
+  for (const len of [40, 150]) {
+    for (let n = 0; n <= 400; n += 11) {
+      for (const set of [[], rooms]) {
+        const body = buildBody(mbFindings(n, len), H_COUNTS, set);
+        assert.ok(bytesOf(body) <= BODY_MAX, `len ${len}, n ${n}, rooms ${set.length}: ${bytesOf(body)}`);
+      }
+    }
+  }
+  const first = 'é'.repeat(30000);
+  const s = frontDoorSection(rooms, [], [], first);
+  assert.ok(bytesOf(first) + 1 + bytesOf(s.text) <= BODY_MAX, String(bytesOf(first) + 1 + bytesOf(s.text)));
+  // the section's own lines carry a multi-byte dash, so its size is counted in bytes too: every first-part length across a span where the body's
+  // bound, not SECTION_MAX, binds the section
+  for (let n = 5500; n < 6500; n++) {
+    const part = 'x'.repeat(n);
+    const t = frontDoorSection(rooms, [], [], part).text;
+    assert.ok(n + 1 + bytesOf(t) <= BODY_MAX, `first part ${n}: ${n + 1 + bytesOf(t)}`);
+  }
+});
+
+test('LOW 3: a row that cannot fit ends the list, so the rows shown are always the first ones in order and the count names the rest, a smaller row after it included -- 28i', () => {
+  const small = (i) => ({ repo: 'S' + i, kind: 'queued', text: 's'.repeat(50), url: '' });
+  const f = [small(0), { repo: 'Big', kind: 'queued', text: 'b'.repeat(2000), url: '' }, small(1), small(2)];
+  const lead = buildReport(f, H_COUNTS, 0).split('\n- (')[0];
+  const budget = bytesOf(lead) + 3 * 80 + 200;
+  const cut = buildReport(f, H_COUNTS, budget);
+  assert.ok(bytesOf(cut) <= budget, String(bytesOf(cut)));
+  const shown = cut.split('\n').filter((l) => l.startsWith('- ['));
+  assert.deepEqual(shown.map((l) => l.slice(3, l.indexOf(']'))), ['S0'], 'the rows after the one that cannot fit are not shown, even the small ones');
+  assert.equal(Number(NOT_SHOWN_ROWS.exec(cut)[1]), 3);
 });
