@@ -180,21 +180,29 @@ export function gitbookSignal(signalByRepo, now = Date.now(), timeoutMs = GITBOO
 /** 28h: the line that says how many finding rows the body's limit left out. */
 export const rowsNotShown = (n) => `- (${n} finding row(s) not shown: the issue body's limit; every finding is still a ::warning line in the run's log)`;
 
-/** The report's first part. 28h: with a `budget`, the rows are cut at row ends so the text stays within it, and one line says how many were left
- *  out; a row is never cut inside. The header and the count line are fixed words and three or one whole numbers, under 400 characters with the
- *  largest safe integers, so with the not-shown line they are the first part's guaranteed minimum; a budget below that minimum is never given by
- *  buildBody (its budget is BODY_MAX less the section's one line), and if one were, the minimum is returned whole and passes that budget. */
+/** 28i (LOW 1): the unit every bound of the issue body is measured in. */
+export const bytesOf = (s) => Buffer.byteLength(String(s), 'utf8');
+
+/** The report's first part. 28h: with a `budget` (UTF-8 bytes, 28i), the rows are cut at row ends so the text stays within it, and one line says
+ *  how many were left out; a row is never cut inside. 28i (LOW 3): the first row that cannot fit ENDS the list, even when a smaller row after it
+ *  would fit, so the rows shown are always the first ones in their order and the count names exactly the rest; filling the last few hundred
+ *  bytes with later rows would make "N not shown" name rows a reader cannot find. The header and the count line are fixed words and three or one
+ *  whole numbers, under 400 bytes with the largest safe integers, so with the not-shown line they are the first part's guaranteed minimum; a budget
+ *  below that minimum is never given by buildBody, and if one were, the minimum is returned whole and passes that budget. */
 export function buildReport(findings, counts, budget = Infinity) {
   const head = `org-health-watch checked ${counts.repos} public repo${counts.repos === 1 ? '' : 's'}: ${counts.workflows} workflows, queued runs, ${counts.synced} GitBook-synced repo${counts.synced === 1 ? '' : 's'}.`;
   if (findings.length === 0) return `${head}\n\nNo finding. (A clean line is stated, never left blank: silence would read the same as a run that never looked.)\n`;
   const rows = findings.map((f) => `- [${f.repo}] ${f.text}${f.url ? ` — ${f.url}` : ''}`);
   let text = `${head}\n\n${findings.length} finding${findings.length === 1 ? '' : 's'} (report only; nothing was re-enabled, re-run or changed):\n\n`;
+  let size = bytesOf(text);
   // room for the not-shown line is kept while rows remain after this one, sized for the largest count it could print
-  const reserve = rowsNotShown(rows.length).length + 1;
+  const reserve = bytesOf(rowsNotShown(rows.length)) + 1;
   let i = 0;
   for (; i < rows.length; i++) {
-    if (text.length + rows[i].length + 1 + (i + 1 < rows.length ? reserve : 0) > budget) break;
+    const row = bytesOf(rows[i]) + 1;
+    if (size + row + (i + 1 < rows.length ? reserve : 0) > budget) break;
     text += `${rows[i]}\n`;
+    size += row;
   }
   return i < rows.length ? `${text}${rowsNotShown(rows.length - i)}\n` : text;
 }
@@ -212,9 +220,11 @@ export const COUNT_SHAPE = /^(\d{1,6}) finding\(s\), (\d{1,6}) warning\(s\)$/;
 export const STALE_AFTER_DAYS = 8;
 // The cap is the runner's, not ours: ten annotations per type per step (actions/runner, ExecutionContext.cs, _maxCountPerIssueType).
 export const QUOTE_MAX = 10;
-// D: the bounds of what is quoted into an issue body. BODY_MAX is the PLATFORM's: GitHub refuses an issue body or comment over 65,536 characters
-// with a 422 (github/docs, .github/workflows/link-check-internal.yml: "GitHub rejects issue bodies over 65536 characters with a 422"). The other
-// four are numbers of OURS, sized so a line and the section fit inside it. LINE_MAX is met by the SIZES of a line's parts, never by cutting the
+// D: the bounds of what is quoted into an issue body. BODY_MAX is the PLATFORM's: GitHub refuses an issue body or comment over 65,536 with a 422
+// (github/docs, .github/workflows/link-check-internal.yml: "GitHub rejects issue bodies over 65536 characters with a 422"). 28i (LOW 1): the UNIT
+// is not stated at any primary source we have read (that line says characters; the umbrella auditor's longest passing body was 65,536 characters
+// and 66,630 bytes), so every bound of the body, its reserves and its "not shown" lines is measured in UTF-8 bytes (bytesOf), which holds under
+// either reading. The other four are numbers of OURS, sized so a line and the section fit inside it (SECTION_MAX in bytes too). LINE_MAX is met by the SIZES of a line's parts, never by cutting the
 // assembled line. A warning line: "- " (2) + the URL span (URL_MAX + 2) + " (cut)" (6) + ": " (2) + the longest reason (52) + " (" (2) + the file
 // span (PATH_MAX + 2) + ":" (1) + a line of six digits (6) + ")" (1) = 276, or 278 with the two spaces the section indents it by. A room's own line
 // (28g): "- [" (3) + the name (ROOM_NAME_MAX) + "] run of " (9) + the date (24) + ": " (2) + six digits + " warning(s), " (13) + six digits +
@@ -377,23 +387,23 @@ export function frontDoorSection(rooms, missing = [], templateCurrent = [], firs
   const out = [];
   let size = 0;
   const reserve = 100;
-  const budget = Math.min(SECTION_MAX, BODY_MAX - String(firstPart).length - 1) - reserve;
+  const budget = Math.min(SECTION_MAX, BODY_MAX - bytesOf(firstPart) - 1) - reserve;
   if (budget <= 0) return { text: SECTION_NOT_SHOWN, findings };
   for (let i = 0; i < lines.length; i++) {
-    if (size + lines[i].length + 1 > budget) { out.push(`- (section cut at a line end: ${lines.length - i} line(s) not shown)`); break; }
+    if (size + bytesOf(lines[i]) + 1 > budget) { out.push(`- (section cut at a line end: ${lines.length - i} line(s) not shown)`); break; }
     out.push(lines[i]);
-    size += lines[i].length + 1;
+    size += bytesOf(lines[i]) + 1;
   }
   return { text: out.join('\n') + '\n', findings };
 }
 
-/** The issue body: the report's first part, the joining newline, the front-door section, at or under BODY_MAX for every input (28h).
- *  THE SPLIT RULE: the front-door section gives way first, down to its one SECTION_NOT_SHOWN line; only when the whole first part would not fit
- *  beside that line are the first part's rows cut, at row ends, down to its header, its count line and its one line naming the rows not shown.
- *  Both minimums together are under 500 characters, so both always fit. The workflow posts this one file both ways, `gh issue create` and
- *  `gh issue comment`, so the bound holds for both paths. */
+/** The issue body: the report's first part, the joining newline, the front-door section, at or under BODY_MAX UTF-8 bytes for every input (28h, 28i).
+ *  THE SPLIT RULE (28i, LOW 2, as the code runs): the first part comes first, with every byte of the body except the joining newline and the
+ *  section's one SECTION_NOT_SHOWN line, its rows cut at row ends down to its header, its count line and its one line naming the rows not shown;
+ *  the section takes what the first part leaves, down to that one line. Both minimums together are under 500 bytes, so both always fit. The
+ *  workflow posts this one file both ways, `gh issue create` and `gh issue comment`, so the bound holds for both paths. */
 export function buildBody(findings, counts, rooms, missing = [], templateCurrent = []) {
-  const first = buildReport(findings, counts, BODY_MAX - 1 - SECTION_NOT_SHOWN.length);
+  const first = buildReport(findings, counts, BODY_MAX - 1 - bytesOf(SECTION_NOT_SHOWN));
   return `${first}\n${frontDoorSection(rooms, missing, templateCurrent, first).text}`;
 }
 
